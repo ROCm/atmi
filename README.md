@@ -41,5 +41,5 @@ cloc: Convert an OpenCL file to brig, hsail, or .o (object)
 
    (C) Copyright 2014 AMD 
 
-Note: HSBEPATH must be set to the binaries of HSAIL_LLVM_BACKEND (https://github.com/HSAFoundation/HSAIL_LLVM_Backend)
+Note: HSBEPATH must be set to the path containing the binaries of HSAIL_LLVM_BACKEND (https://github.com/HSAFoundation/HSAIL_LLVM_Backend)
 

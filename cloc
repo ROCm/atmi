@@ -1,0 +1,394 @@
+#!/bin/bash
+#
+#  cloc:  Convert OpenCL file to brig, hsail, or .o  file
+#         using the LLVM to HSAIL backend compiler.
+#
+#  Written by Greg Rodgers  Gregory.Rodgers@amd.com
+#  (C) Copyright 2014 AMD 
+#
+PROGVERSION=0.5
+
+function usage(){
+/bin/cat 2>&1 <<"EOF" 
+
+   cloc: Convert an OpenCL file to brig, hsail, or .o (object) 
+         file using the LLVM to HSAIL backend compiler.
+
+   Usage: cloc [ options ] filename.cl
+
+   Options without values:
+    -hsail  Generate hsail instead of brig 
+    -c      Compile hsail or brig to .o object file 
+    -v      Display version of cloc then exit
+    -q      Run quietly, no messages 
+    -n      Dryrun, do nothing, show commands that would execute
+    -h      Print this help message
+    -k      Keep temporary files
+    -nq     Shortcut for -n -q, Show commands without messages. 
+
+   Options with values:
+    -clopts <cl compiler options> CLOPTS, Default="--opencl=1.2"
+    -lkopts <linker options> LKOPTS, Read cloc script for defaults
+    -s      <symbolname> , Default=filename (only with -c)
+    -t      <tdir> Temporary directory, Default=/tmp/cloc$$
+    -p      <path> HSBEPATH, Default=$HSBEPATH or /usr/local/HSAIL_LLVM_Backend/bin
+    -o      <outfilename>, Default=<filename>.<ft> where ft is brig, hsail, or o
+
+   Examples:
+      cloc mykernel.cl              /* creates mykernel.brig  */
+      cloc -c mykernel.cl           /* creates mykernel.o     */
+      cloc -hsail mykernel.cl       /* creates mykernel.hsail */
+      cloc -c -hsail mykernel.cl    /* creates mykernel.o     */
+      cloc -t /tmp/foo mykernel.cl  /* automatically sets -k  */
+      cloc -c -nq -clopts "--opencl=2.0" mykernel.cl
+
+   You may set environment variables HSBEPATH, CLOPTS, or LKOPTS instead 
+   of using the command line options -p, -clopts, or -lkopts.  
+   Command line options take precedence over the environment variables. 
+
+   (C) Copyright 2014 AMD 
+
+EOF
+   exit 1 
+}
+
+DEADRC=12
+
+#  Utility Functions
+function do_err(){
+   if [ ! $KEEPTDIR ] ; then 
+      rm -rf $TMPDIR
+   fi
+   exit $1
+}
+function version(){
+   echo $PROGVERSION
+   exit 0
+}
+function getdname(){
+   local __DIRN=`dirname "$1"`
+   if [ "$__DIRN" = "." ] ; then 
+      __DIRN=$PWD; 
+   else
+      if [ ${__DIRN:0:1} != "/" ] ; then 
+         if [ ${__DIRN:0:1} = "." ] ; then 
+            __DIRN=$PWD/${__DIRN:2}
+         else
+            __DIRN=$PWD/$__DIRN
+         fi
+      fi
+   fi
+   echo $__DIRN
+}
+
+#  --------  The main code starts here -----
+
+#  Argument processing
+while [ $# -gt 0 ] ; do 
+   case "$1" in 
+      -q)               QUIET=true;;
+      --quiet)          QUIET=true;;
+      -k) 		KEEPTDIR=true;; 
+      --keep) 		KEEPTDIR=true;; 
+      -n) 		DRYRUN=true;; 
+      -nq) 		DRYRUN=true;QUIET=true;;
+      -qn) 		DRYRUN=true;QUIET=true;; 
+      -c) 		MAKEOBJ=true;; 
+      -hsail) 		HSAIL=true;; 
+      -clopts) 		CLOPTS=$2; shift ;; 
+      -lkopts) 		LKOPTS=$2; shift ;; 
+      -s) 		SYMBOLNAME=$2; shift ;; 
+      -o) 		OUTFILE=$2; shift ;; 
+      -t) 		TMPDIR=$2; shift ;; 
+      -p) 		HSBEPATH=$2; shift ;; 
+      -h) 		usage ;; 
+      -help) 		usage ;; 
+      --help) 		usage ;; 
+      -v) 		version ;; 
+      --version) 	version ;; 
+      --) 		shift ; break;;
+      -*) 		usage ;;
+      *) 		break;;
+   esac
+   shift
+done
+
+# The above while loop is exited when it reaches the last argument
+LASTARG=$1
+shift
+
+if ! [ $QUIET ] ; then  VERBOSE=true ; fi
+
+#  Set Default values
+HSBEPATH=${HSBEPATH:-/usr/local/HSAIL_LLVM_Backend/bin}
+CLOPTS=${CLOPTS:---opencl=1.2}
+CMD_CLC=${CMD_CLC:-clc --support_all_extension $CLOPTS}
+CMD_LLA=${CMD_LLA:-llvm-as}
+LKOPTS=${LKOPTS:--prelink-opt -l $HSBEPATH/builtins-hsail.bc -l $HSBEPATH/builtins-hsail-amd-ci.bc -l $HSBEPATH/builtins-gcn.bc}
+CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
+CMD_OPT=${CMD_OPT:-opt -O3}
+CMD_LLC=${CMD_LLC:-llc -O2 -march=hsail-64}
+CMD_ASM=${CMD_ASM:-HSAILasm -disassemble}
+
+RUNDATE=`date`
+
+filetype=${LASTARG##*\.}
+if [ "$filetype" != "cl" ]  ; then 
+   echo "ERROR:  $0 requires one argument with file type cl"
+   exit $DEADRC 
+fi
+if [ ! -e "$LASTARG" ]  ; then 
+   echo "ERROR:  The cl file $LASTARG does not exist."
+   exit $DEADRC
+fi
+
+# Parse LASTARG for directory, filename, and symbolname
+INDIR=$(getdname $LASTARG)
+CLNAME=${LASTARG##*/}
+# FNAME has the .cl stripped, used for symbolname and intermediate filenames
+FNAME=`echo "$CLNAME" | cut -d'.' -f1`
+SYMBOLNAME=${SYMBOLNAME:-$FNAME}
+
+if [ -z $OUTFILE ] ; then 
+#  Output file not specified so use input directory
+   OUTDIR=$INDIR
+#  Make up the output file name based on last step 
+   if [ $MAKEOBJ ] ; then 
+      OUTFILE=${FNAME}.o
+   else
+      if [ $HSAIL ] ; then 
+         OUTFILE=${FNAME}.hsail
+      else 
+         OUTFILE=${FNAME}.brig
+      fi
+   fi
+else 
+#  Use the specified OUTFILE
+   OUTDIR=$(getdname $OUTFILE)
+   OUTFILE=${OUTFILE##*/}
+fi 
+
+TMPDIR=${TMPDIR:-/tmp/cloc$$}
+if [ -d $TMPDIR ] ; then 
+   KEEPTDIR=true
+else 
+   if [ $DRYRUN ] ; then
+      echo "mkdir -p $TMPDIR"
+   else
+      mkdir -p $TMPDIR
+   fi
+fi
+# Be sure not to delete the output directory
+if [ $TMPDIR == $OUTDIR ] ; then 
+   KEEPTDIR=true
+fi
+if [ ! -d $TMPDIR ] && [ ! $DRYRUN ] ; then 
+   echo "ERROR:  Directory $TMPDIR does not exist or could not be created"
+   exit $DEADRC
+fi 
+if [ ! -d $HSBEPATH ] ; then 
+   echo "ERROR:  HSBEPATH $HSBEPATH does not exist. Consider -p option"
+   exit $DEADRC
+fi 
+if [ ! -e $HSBEPATH/HSAILasm ] ; then 
+   echo "ERROR:  HSBEPATH $HSBEPATH does not contain HSAILasm. "
+   echo "        This directory does not have HSAIL backend. Consider -p option"
+   exit $DEADRC
+fi 
+if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then 
+   echo "ERROR:  The output directory $OUTDIR does not exist"
+   exit $DEADRC
+fi 
+if [ $MAKEOBJ ] ; then 
+   CMD_GCC=`which g++`
+   if [ -z "$CMD_GCC" ] ; then  
+      echo "ERROR:  -c specified but no g++ compiler found."
+      exit $DEADRC
+   fi
+fi
+
+PATH=$HSBEPATH:$PATH
+if [ $DRYRUN ] ; then 
+   echo "export PATH=$HSBEPATH:\$PATH"
+fi
+
+[ $VERBOSE ] && echo "#Info:  Version:	$PROGVERSION" 
+[ $VERBOSE ] && echo "#Info:  OpenCL file:	$INDIR/$CLNAME"
+[ $VERBOSE ] && echo "#Info:  Output file:	$OUTDIR/$OUTFILE"
+[ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
+[ $KEEPTDIR ] && [ $VERBOSE ] && echo "#Info:  Temp dir:	$TMPDIR" 
+[ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  gcc loc:	$CMD_GCC" 
+rc=0
+
+[ $VERBOSE ] && echo "#Info:  Compile(clc)	cl --> ll ..."
+if [ $DRYRUN ] ; then
+   echo $CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$CLNAME
+else
+   $HSBEPATH/$CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$CLNAME
+   rc=$?
+fi
+if [ $rc != 0 ] ; then 
+   echo "ERROR:  The following command failed with return code $rc."
+   echo "        $CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$CLNAME"
+   do_err $rc
+fi
+
+[ $VERBOSE ] && echo "#Info:  Assmbl(llvm-as)	ll --> bc ..."
+if [ $DRYRUN ] ; then
+   echo $CMD_LLA -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll
+else 
+   $HSBEPATH/$CMD_LLA -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll
+   rc=$?
+fi
+if [ $rc != 0 ] ; then 
+   echo "ERROR:  The following command failed with return code $rc."
+   echo "        $CMD_LLA -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll"
+   do_err $rc
+fi
+
+[ $VERBOSE ] && echo "#Info:  Link(llvm-link)	bc --> lnkd.bc ..."
+if [ $DRYRUN ] ; then
+   echo $CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc  
+else
+#  Hide the warnings for now
+   $HSBEPATH/$CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc 2>/dev/null
+   rc=$?
+fi
+if [ $rc != 0 ] ; then 
+   echo "ERROR:  The following command failed with return code $rc."
+   echo "        $CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc"
+   do_err $rc
+fi
+
+[ $VERBOSE ] && echo "#Info:  Optimize(opt)	lnkd.bc --> opt.bc ..."
+if [ $DRYRUN ] ; then
+   echo $CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc
+else
+   $HSBEPATH/$CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc
+   rc=$?
+fi
+if [ $rc != 0 ] ; then 
+   echo "ERROR:  The following command failed with return code $rc."
+   echo "        $CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc"
+   do_err $rc
+fi
+
+if [ $HSAIL ]  ; then 
+   BRIGDIR=$TMPDIR
+   BRIGNAME=$FNAME.brig
+   if [ $MAKEOBJ ] ; then 
+      HSAILDIR=$TMPDIR
+      HSAILNAME=$FNAME.hsail
+   else
+#     generate hsail is last step
+      HSAILDIR=$OUTDIR
+      HSAILNAME=$OUTFILE
+   fi
+else
+   if [ $MAKEOBJ ] ; then 
+      BRIGDIR=$TMPDIR
+      BRIGNAME=$FNAME.brig
+   else
+#     generate brig is last step
+      BRIGDIR=$OUTDIR
+      BRIGNAME=$OUTFILE
+   fi 
+fi 
+ 
+if [ $HSAIL ] || [ $MAKEOBJ ] ; then 
+#  Don't print misleading message
+   [ $VERBOSE ] && echo "#Info:  llc arch=hsail	opt.bc --> brig ..."
+else
+   [ $VERBOSE ] && echo "#Info:  llc arch=hsail	opt.bc --> $BRIGNAME ..."
+fi
+if [ $DRYRUN ] ; then
+   echo $CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc
+else
+   $HSBEPATH/$CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc
+   rc=$?
+fi
+if [ $rc != 0 ] ; then 
+   echo "ERROR:  The following command failed with return code $rc."
+   echo "        $CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc"
+   do_err $rc
+fi
+
+if [ $HSAIL ] ; then 
+   if [ $MAKEOBJ ] ; then 
+      [ $VERBOSE ] && echo "#Info:  HSAILasm   	brig --> hsail ..."
+   else
+#     This is last step, show the filename
+      [ $VERBOSE ] && echo "#Info:  HSAILasm   	brig --> $HSAILNAME ..."
+   fi
+   if [ $DRYRUN ] ; then
+      echo $CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
+   else
+      $HSBEPATH/$CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
+      rc=$?
+   fi
+   if [ $rc != 0 ] ; then 
+      echo "ERROR:  The following command failed with return code $rc."
+      echo "        $CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig"
+      do_err $rc
+   fi
+fi
+
+if [ $MAKEOBJ ] ; then 
+   if [ $HSAIL ] ; then 
+      [ $VERBOSE ] && echo "#Info:  gcc  	 	hsail --> $OUTFILE ..."
+      if [ $DRYRUN ] ; then
+#        Sorry, dont show the magic to create cpp
+         echo $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.cpp
+      else
+#        A cool macro for creating big stings in cpp
+         echo "#define MULTILINE(...) # __VA_ARGS__" > $TMPDIR/$FNAME.cpp
+         echo "char ${SYMBOLNAME}[] = MULTILINE(" >> $TMPDIR/$FNAME.cpp
+         cat $TMPDIR/$HSAILNAME >> $TMPDIR/$FNAME.cpp
+         echo ");" >> $TMPDIR/$FNAME.cpp
+         $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.cpp
+         rc=$?
+      fi
+      if [ $rc != 0 ] ; then 
+         echo "ERROR:  The following command failed with return code $rc."
+         echo "        $CMD_GCC -o $OUTDIR/$OUTFILE.o -c $TMPDIR/$FNAME.cpp"
+         do_err $rc
+      fi
+   else
+      [ $VERBOSE ] && echo "#Info:  gcc  	 	brig --> $OUTFILE ..."
+      if [ $DRYRUN ] ; then
+#        Sorry, dont show the magic to create cpp
+         echo $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.cpp
+      else
+         echo "char ${SYMBOLNAME}[] = {" > $TMPDIR/$FNAME.cpp
+         hexdump -v -e '"0x" 1/1 "%02X" ","' $TMPDIR/$BRIGNAME >> $TMPDIR/$FNAME.cpp
+         rc=$?
+         if [ $rc != 0 ] ; then 
+            echo "ERROR:  The hexdump command failed with return code $rc."
+            do_err $rc
+         fi
+         echo "};" >> $TMPDIR/$FNAME.cpp
+#        okra needs the size of brig for createKernelFromBinary()
+         echo "int ${SYMBOLNAME}sz = sizeof($SYMBOLNAME);" >> $TMPDIR/$FNAME.cpp
+         $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.cpp
+         rc=$?
+      fi
+      if [ $rc != 0 ] ; then 
+         echo "ERROR:  The following command failed with return code $rc."
+         echo "        $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.cpp"
+         do_err $rc
+      fi
+   fi
+fi
+
+# cleanup
+if [ ! $KEEPTDIR ] ; then 
+   if [ $DRYRUN ] ; then 
+      echo "rm -rf $TMPDIR"
+   else
+      rm -rf $TMPDIR
+   fi
+fi
+
+[ $VERBOSE ] && echo "#Info:  Done"
+
+exit 0

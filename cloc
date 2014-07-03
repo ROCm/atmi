@@ -368,7 +368,7 @@ if [ $MAKEOBJ ] ; then
          fi
          echo "};" >> $TMPDIR/$FNAME.cpp
 #        okra needs the size of brig for createKernelFromBinary()
-         echo "int ${SYMBOLNAME}sz = sizeof($SYMBOLNAME);" >> $TMPDIR/$FNAME.cpp
+         echo "size_t ${SYMBOLNAME}sz = sizeof($SYMBOLNAME);" >> $TMPDIR/$FNAME.cpp
          $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.cpp
          rc=$?
       fi
@@ -378,6 +378,11 @@ if [ $MAKEOBJ ] ; then
          do_err $rc
       fi
    fi
+
+
+# Make the header file
+   echo "extern char ${SYMBOLNAME}[];" > $OUTDIR/$FNAME.h
+   echo "extern size_t ${SYMBOLNAME}sz;" >> $OUTDIR/$FNAME.h
 fi
 
 # cleanup

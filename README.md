@@ -1,4 +1,4 @@
-CLOC -Version 0.5
+CLOC -Version 0.6
 ====
 
 CL Offline Compiler : Compile OpenCL kernels to HSAIL

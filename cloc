@@ -4,9 +4,10 @@
 #         using the LLVM to HSAIL backend compiler.
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
+#  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #  (C) Copyright 2014 AMD 
 #
-PROGVERSION=0.5
+PROGVERSION=0.6
 
 function usage(){
 /bin/cat 2>&1 <<"EOF" 
@@ -121,14 +122,14 @@ if ! [ $QUIET ] ; then  VERBOSE=true ; fi
 
 #  Set Default values
 HSBEPATH=${HSBEPATH:-/usr/local/HSAIL_LLVM_Backend/bin}
-CLOPTS=${CLOPTS:---opencl=1.2}
-CMD_CLC=${CMD_CLC:-clc --support_all_extension $CLOPTS}
-CMD_LLA=${CMD_LLA:-llvm-as}
+#CLOPTS=${CLOPTS:---opencl=1.2}
+CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
+CMD_LLA=${CMD_LLA:-llvm-dis}
 LKOPTS=${LKOPTS:--prelink-opt -l $HSBEPATH/builtins-hsail.bc -l $HSBEPATH/builtins-hsail-amd-ci.bc -l $HSBEPATH/builtins-gcn.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
-CMD_OPT=${CMD_OPT:-opt -O3}
+CMD_OPT=${CMD_OPT:-opt -O3 -gpu -whole}
 CMD_LLC=${CMD_LLC:-llc -O2 -march=hsail-64}
-CMD_ASM=${CMD_ASM:-HSAILasm -disassemble}
+CMD_ASM=${CMD_ASM:-hsailasm -disassemble}
 
 RUNDATE=`date`
 
@@ -220,29 +221,29 @@ fi
 [ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  gcc loc:	$CMD_GCC" 
 rc=0
 
-[ $VERBOSE ] && echo "#Info:  Compile(clc)	cl --> ll ..."
+[ $VERBOSE ] && echo "#Info:  Compile(clc)	cl --> bc ..."
 if [ $DRYRUN ] ; then
    echo $CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$CLNAME
 else
-   $HSBEPATH/$CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$CLNAME
+   $HSBEPATH/$CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$CLNAME
    rc=$?
 fi
 if [ $rc != 0 ] ; then 
    echo "ERROR:  The following command failed with return code $rc."
-   echo "        $CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$CLNAME"
+   echo "        $CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$CLNAME"
    do_err $rc
 fi
 
-[ $VERBOSE ] && echo "#Info:  Assmbl(llvm-as)	ll --> bc ..."
+[ $VERBOSE ] && echo "#Info:  Disassmbl(llvm-as)	bc --> ll ..."
 if [ $DRYRUN ] ; then
-   echo $CMD_LLA -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll
+   echo $CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc
 else 
-   $HSBEPATH/$CMD_LLA -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll
+   $HSBEPATH/$CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc
    rc=$?
 fi
 if [ $rc != 0 ] ; then 
    echo "ERROR:  The following command failed with return code $rc."
-   echo "        $CMD_LLA -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll"
+   echo "        $CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc"
    do_err $rc
 fi
 
@@ -359,7 +360,8 @@ if [ $MAKEOBJ ] ; then
 #        Sorry, dont show the magic to create cpp
          echo $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.cpp
       else
-         echo "char ${SYMBOLNAME}[] = {" > $TMPDIR/$FNAME.cpp
+         echo "#include <cstring>" > $TMPDIR/$FNAME.cpp
+         echo "char ${SYMBOLNAME}[] = {" >> $TMPDIR/$FNAME.cpp
          hexdump -v -e '"0x" 1/1 "%02X" ","' $TMPDIR/$BRIGNAME >> $TMPDIR/$FNAME.cpp
          rc=$?
          if [ $rc != 0 ] ; then 

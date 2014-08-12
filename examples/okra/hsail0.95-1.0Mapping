@@ -1,0 +1,10 @@
+                       0.95(find string)                       		1.0(replacement str
+====================================================================================================================
+"function &get_global_id(arg_u32 %ret_val) (arg_u32 %arg_val0);"|	""								  (done)
+"function &abort() ();"											|	""								  (done)
+"align 8"														|	"align(8)" 						  (done)
+"atomic_exch_global_ar_sys_b32"									|	"atomic_exch_global_scar_sys_b32" (done)
+"atomic_cas_global_ar_sys"										|   "atomic_cas_global_scar_sys"      (done)
+"atomic_add_global_ar_sys"										|   "atomic_add_global_scar_sys"      (done)
+"cbr"															|   "cbr_b1"						  (done)
+"brn"															|   "br"							  (done)

@@ -1,0 +1,68 @@
+version 0:20140528:$full:$large;
+extension "amd:gcn";
+extension "IMAGE";
+
+decl prog function &abort()();
+
+prog kernel &__OpenCL_matmul_kernel(
+	kernarg_u64 %A,
+	kernarg_u64 %B,
+	kernarg_u64 %C,
+	kernarg_u64 %N1,
+	kernarg_u64 %P1)
+{
+	pragma  "AMD RTI", "ARGSTART:__OpenCL_matmul_kernel";
+	pragma  "AMD RTI", "version:3:1:104";
+	pragma  "AMD RTI", "device:generic";
+	pragma  "AMD RTI", "uniqueid:1024";
+	pragma  "AMD RTI", "function:1:0";
+	pragma  "AMD RTI", "memory:64bitABI";
+	pragma  "AMD RTI", "uavid:8";
+	pragma  "AMD RTI", "privateid:8";
+	pragma  "AMD RTI", "ARGEND:__OpenCL_matmul_kernel";
+
+@__OpenCL_matmul_kernel_entry:
+	// BB#0:                                // %entry
+	ld_kernarg_align(8)_width(all)_u64	$d0, [%P1];
+	ld_global_u32	$s0, [$d0];
+	workitemabsid_u32	$s1, 1;
+	workitemabsid_u32	$s4, 0;
+	mad_u32	$s2, $s0, $s4, $s1;
+	cvt_s64_s32	$d0, $s2;
+	shl_u64	$d0, $d0, 2;
+	ld_kernarg_align(8)_width(all)_u64	$d1, [%C];
+	add_u64	$d0, $d1, $d0;
+	ld_kernarg_align(8)_width(all)_u64	$d1, [%N1];
+	ld_global_u32	$s2, [$d1];
+	ld_kernarg_align(8)_width(all)_u64	$d1, [%B];
+	mov_b32	$s3, 0;
+	st_global_u32	$s3, [$d0];
+	cmp_lt_b1_s32	$c0, $s2, 1;
+	cbr_b1	$c0, @BB0_3;
+	// BB#1:                                // %for.body.lr.ph
+	ld_kernarg_align(8)_width(all)_u64	$d2, [%A];
+	mul_u32	$s4, $s2, $s4;
+	mov_b32	$s5, $s3;
+
+@BB0_2:
+	// %for.body
+	mad_u32	$s6, $s5, $s0, $s1;
+	cvt_s64_s32	$d3, $s6;
+	shl_u64	$d3, $d3, 2;
+	add_u64	$d3, $d1, $d3;
+	ld_global_u32	$s6, [$d3];
+	add_u32	$s7, $s5, $s4;
+	cvt_s64_s32	$d3, $s7;
+	shl_u64	$d3, $d3, 2;
+	add_u64	$d3, $d2, $d3;
+	ld_global_u32	$s7, [$d3];
+	mad_u32	$s3, $s6, $s7, $s3;
+	st_global_u32	$s3, [$d0];
+	add_u32	$s5, $s5, 1;
+	cmp_lt_b1_s32	$c0, $s5, $s2;
+	cbr_b1	$c0, @BB0_2;
+
+@BB0_3:
+	// %for.end
+	ret;
+};

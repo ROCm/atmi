@@ -1,0 +1,321 @@
+version 0:95: $full : $large;
+kernel &run(
+    align(8)  kernarg_u64 %_arg0, 
+    align(8)  kernarg_u64 %_arg1, 
+    align(8)  kernarg_s32 %_arg2
+   ){
+         ld_kernarg_u64 $d0, [%_arg0];
+         ld_kernarg_u64 $d1, [%_arg1];
+         ld_kernarg_s32 $s2, [%_arg2];
+         workitemabsid_u32 $s3, 0;
+
+ // 0000_0000 invokestatic [I com.amd.aparapi.HSA.localIntX1
+         add_s32 $s2, $s2, $s3;
+         align(4) group_u32 %local_buf_0000_0[256];
+         lda_group_u64 $d9,  [%local_buf_0000_0];
+
+ // 0000_0003 astore_3 var#3(oref_3 REF)
+         mov_b64 $d3, $d9;
+
+ // 0000_0004 invokestatic I com.amd.aparapi.HSA.getWorkItemId
+         workitemid_u32 $s9, 0;
+
+ // 0000_0007 istore   var#4(i_4 ref type)
+         mov_b32 $s4, $s9;
+
+ // 0000_0009 iconst_0.0
+         mov_b32 $s9, 0;
+
+ // 0000_0010 istore   var#5(i_5 ref type)
+         mov_b32 $s5, $s9;
+
+ // 0000_0012 aload_0  var#0(oref_0 [Ljava/lang/String;)
+         mov_b64 $d9, $d0;
+
+ // 0000_0013 iload_2  var#2(i_2 I)
+         mov_b32 $s10, $s2;
+
+ // 0000_0014 aaload  
+         cvt_u64_s32 $d10, $s10;
+         mad_u64 $d10, $d10, 8, $d9;
+         ld_global_u64 $d9, [$d10+24];
+
+ // 0000_0015 astore   var#6(oref_6 REF)
+         mov_b64 $d6, $d9;
+
+ // 0000_0017 iconst_0.0
+         mov_b32 $s9, 0;
+
+ // 0000_0018 istore   var#7(i_7 ref type)
+         mov_b32 $s7, $s9;
+@L0000_0020:
+ // 0000_0020 iload    var#7(i_7 ref type)
+         mov_b32 $s9, $s7;
+
+ // 0000_0022 aload    var#6(oref_6 REF)
+         mov_b64 $d10, $d6;
+
+ // 0001_0000 aload_0  var#0(oref_0 Ljava/lang/String;)
+         mov_b64 $d11, $d10;
+
+ // 0001_0001 getfield [C java.lang.String value
+         ld_global_u64 $d11, [$d11+16];
+
+ // 0001_0004 arraylength
+         ld_global_s32 $s11, [$d11+16];
+
+ // 0001_0005 ireturn 
+         mov_b32 $s10, $s11;
+
+ // 0000_0027 if_icmpge 97
+         cmp_ge_b1_s32 $c1, $s9, $s10;
+         cbr $c1, @L0000_0097;
+
+ // 0000_0030 aload    var#6(oref_6 REF)
+         mov_b64 $d9, $d6;
+
+ // 0000_0032 iload    var#7(i_7 ref type)
+         mov_b32 $s10, $s7;
+
+ // 0000_0034 invokevirtual C java.lang.String.charAt
+         ld_global_u64 $d11, [$d9+16];
+         mov_b32 $s12, $s10;
+         cvt_u64_s32 $d12, $s12;
+         mad_u64 $d12, $d12, 2, $d11;
+         ld_global_u16 $s9, [$d12+24];
+
+ // 0000_0037 istore   var#8(i_8 ref type)
+         mov_b32 $s8, $s9;
+
+ // 0000_0039 iload    var#8(i_8 ref type)
+         mov_b32 $s9, $s8;
+
+ // 0000_0041 bipush  .97
+         mov_b32 $s10, 97;
+
+ // 0000_0043 if_icmpeq 88
+         cmp_eq_b1_s32 $c1, $s9, $s10;
+         cbr $c1, @L0000_0088;
+
+ // 0000_0046 iload    var#8(i_8 ref type)
+         mov_b32 $s9, $s8;
+
+ // 0000_0048 bipush  .101
+         mov_b32 $s10, 101;
+
+ // 0000_0050 if_icmpeq 88
+         cmp_eq_b1_s32 $c1, $s9, $s10;
+         cbr $c1, @L0000_0088;
+
+ // 0000_0053 iload    var#8(i_8 ref type)
+         mov_b32 $s9, $s8;
+
+ // 0000_0055 bipush  .105
+         mov_b32 $s10, 105;
+
+ // 0000_0057 if_icmpeq 88
+         cmp_eq_b1_s32 $c1, $s9, $s10;
+         cbr $c1, @L0000_0088;
+
+ // 0000_0060 iload    var#8(i_8 ref type)
+         mov_b32 $s9, $s8;
+
+ // 0000_0062 bipush  .111
+         mov_b32 $s10, 111;
+
+ // 0000_0064 if_icmpne 71
+         cmp_ne_b1_s32 $c1, $s9, $s10;
+         cbr $c1, @L0000_0071;
+
+ // 0000_0067 iconst_1.1
+         mov_b32 $s9, 1;
+
+ // 0000_0068 goto     72
+         br @L0000_0072;
+@L0000_0071:
+ // 0000_0071 iconst_0.0
+         mov_b32 $s9, 0;
+@L0000_0072:
+ // 0000_0072 iload    var#8(i_8 ref type)
+         mov_b32 $s10, $s8;
+
+ // 0000_0074 bipush  .117
+         mov_b32 $s11, 117;
+
+ // 0000_0076 if_icmpne 83
+         cmp_ne_b1_s32 $c1, $s10, $s11;
+         cbr $c1, @L0000_0083;
+
+ // 0000_0079 iconst_1.1
+         mov_b32 $s10, 1;
+
+ // 0000_0080 goto     84
+         br @L0000_0084;
+@L0000_0083:
+ // 0000_0083 iconst_0.0
+         mov_b32 $s10, 0;
+@L0000_0084:
+ // 0000_0084 ior     
+         or_b32 $s9, $s9, $s10;
+
+ // 0000_0085 ifeq     91
+         cmp_eq_b1_s32 $c1, $s9, 0;
+         cbr $c1, @L0000_0091;
+@L0000_0088:
+ // 0000_0088 iinc     var#5(i_5 ref type)
+         add_s32 $s5, $s5, 1;
+@L0000_0091:
+ // 0000_0091 iinc     var#7(i_7 ref type)
+         add_s32 $s7, $s7, 1;
+
+ // 0000_0094 goto     20
+         br @L0000_0020;
+@L0000_0097:
+ // 0000_0097 aload_3  var#3(oref_3 REF)
+         mov_b64 $d9, $d3;
+
+ // 0000_0098 iload    var#4(i_4 ref type)
+         mov_b32 $s10, $s4;
+
+ // 0000_0100 iload    var#5(i_5 ref type)
+         mov_b32 $s11, $s5;
+
+ // 0000_0102 iastore 
+         cvt_u64_s32 $d10, $s10;
+         mad_u64 $d10, $d10, 4, $d9;
+         st_group_s32 $s11, [$d10+24];
+
+ // 0000_0103 invokestatic V com.amd.aparapi.HSA.barrier
+         barrier;
+
+ // 0000_0106 iconst_2.2
+         mov_b32 $s9, 2;
+
+ // 0000_0107 istore   var#7(i_7 ref type)
+         mov_b32 $s7, $s9;
+@L0000_0109:
+ // 0000_0109 iload    var#7(i_7 ref type)
+         mov_b32 $s9, $s7;
+
+ // 0000_0111 invokestatic I com.amd.aparapi.HSA.getCurrentWorkGroupSize
+         currentworkgroupsize_u32 $s10, 0;
+
+ // 0000_0114 if_icmpgt 155
+         cmp_gt_b1_s32 $c1, $s9, $s10;
+         cbr $c1, @L0000_0155;
+
+ // 0000_0117 iload    var#4(i_4 ref type)
+         mov_b32 $s9, $s4;
+
+ // 0000_0119 iload    var#7(i_7 ref type)
+         mov_b32 $s10, $s7;
+
+ // 0000_0121 irem    
+         rem_s32 $s9, $s9, $s10;
+
+ // 0000_0122 ifne     143
+         cmp_ne_b1_s32 $c1, $s9, 0;
+         cbr $c1, @L0000_0143;
+
+ // 0000_0125 aload_3  var#3(oref_3 REF)
+         mov_b64 $d9, $d3;
+
+ // 0000_0126 iload    var#4(i_4 ref type)
+         mov_b32 $s10, $s4;
+
+ // 0000_0128 aload_3  var#3(oref_3 REF)
+         mov_b64 $d11, $d3;
+
+ // 0000_0129 iload    var#4(i_4 ref type)
+         mov_b32 $s12, $s4;
+
+ // 0000_0131 iload    var#7(i_7 ref type)
+         mov_b32 $s13, $s7;
+
+ // 0000_0133 iconst_2.2
+         mov_b32 $s14, 2;
+
+ // 0000_0134 idiv    
+         div_s32 $s13, $s13, $s14;
+
+ // 0000_0135 iadd    
+         add_s32 $s12, $s12, $s13;
+
+ // 0000_0136 iaload  
+         cvt_u64_s32 $d12, $s12;
+         mad_u64 $d12, $d12, 4, $d11;
+         ld_group_s32 $s11, [$d12+24];
+
+ // 0000_0137 aload_3  var#3(oref_3 REF)
+         mov_b64 $d12, $d3;
+
+ // 0000_0138 iload    var#4(i_4 ref type)
+         mov_b32 $s13, $s4;
+
+ // 0000_0140 iaload  
+         cvt_u64_s32 $d13, $s13;
+         mad_u64 $d13, $d13, 4, $d12;
+         ld_group_s32 $s12, [$d13+24];
+
+ // 0000_0141 iadd    
+         add_s32 $s11, $s11, $s12;
+
+ // 0000_0142 iastore 
+         cvt_u64_s32 $d10, $s10;
+         mad_u64 $d10, $d10, 4, $d9;
+         st_group_s32 $s11, [$d10+24];
+@L0000_0143:
+ // 0000_0143 invokestatic V com.amd.aparapi.HSA.barrier
+         barrier;
+
+ // 0000_0146 iload    var#7(i_7 ref type)
+         mov_b32 $s9, $s7;
+
+ // 0000_0148 iconst_2.2
+         mov_b32 $s10, 2;
+
+ // 0000_0149 imul    
+         mul_s32 $s9, $s9, $s10;
+
+ // 0000_0150 istore   var#7(i_7 ref type)
+         mov_b32 $s7, $s9;
+
+ // 0000_0152 goto     109
+         br @L0000_0109;
+@L0000_0155:
+ // 0000_0155 aload_1  var#1(oref_1 [I)
+         mov_b64 $d9, $d1;
+
+ // 0000_0156 invokestatic I com.amd.aparapi.HSA.getWorkGroupId
+         workgroupid_u32 $s10, 0;
+
+ // 0000_0159 aload_3  var#3(oref_3 REF)
+         mov_b64 $d11, $d3;
+
+ // 0000_0160 iconst_0.0
+         mov_b32 $s12, 0;
+
+ // 0000_0161 iaload  
+         cvt_u64_s32 $d12, $s12;
+         mad_u64 $d12, $d12, 4, $d11;
+         ld_group_s32 $s11, [$d12+24];
+
+ // 0000_0162 iastore 
+         cvt_u64_s32 $d10, $s10;
+         mad_u64 $d10, $d10, 4, $d9;
+         st_global_s32 $s11, [$d10+24];
+
+ // 0000_0163 return  
+         ret;
+};
+/*
+0000={
+     0000 -> hsailtest.WordReductionJUnit.lambda$test$93([Ljava/lang/String;[II)V
+}
+
+0001={
+     0000 -> hsailtest.WordReductionJUnit.lambda$test$93([Ljava/lang/String;[II)V
+     0024 -> java.lang.String.length()I
+}
+
+*/

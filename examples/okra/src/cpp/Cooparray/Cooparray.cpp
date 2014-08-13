@@ -44,7 +44,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
-#include "utils.h"
+#include "../utils.h"
 #include <math.h>
 
 using namespace std;

@@ -43,7 +43,7 @@
 #include "okra.h"
 #include <iostream>
 #include <string>
-#include "utils.h"
+#include "../utils.h"
 #include <cstdlib>
 #include <cmath>
 

@@ -191,7 +191,7 @@ if [ ! -d $HSBEPATH ] ; then
    echo "ERROR:  HSBEPATH $HSBEPATH does not exist. Consider -p option"
    exit $DEADRC
 fi 
-if [ ! -e $HSBEPATH/HSAILasm ] ; then 
+if [ ! -e $HSBEPATH/hsailasm ] ; then 
    echo "ERROR:  HSBEPATH $HSBEPATH does not contain HSAILasm. "
    echo "        This directory does not have HSAIL backend. Consider -p option"
    exit $DEADRC

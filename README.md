@@ -1,17 +1,14 @@
-CLOC -Version 0.6
+CLOC -Version 0.6.1
 ====
 
-CL Offline Compiler : Compile OpenCL kernels to HSAIL
-
-
-cloc: Convert an OpenCL file to brig, hsail, or .o (object) 
+   cloc: Convert an OpenCL file to brig, hsail, or .o (object) 
          file using the LLVM to HSAIL backend compiler.
 
    Usage: cloc [ options ] filename.cl
 
    Options without values:
     -hsail  Generate hsail instead of brig 
-    -c      Compile hsail or brig to .o object file 
+    -str    Saves the output as a string in a header file and compiles it to .o object file 
     -v      Display version of cloc then exit
     -q      Run quietly, no messages 
     -n      Dryrun, do nothing, show commands that would execute
@@ -24,22 +21,21 @@ cloc: Convert an OpenCL file to brig, hsail, or .o (object)
     -lkopts <linker options> LKOPTS, Read cloc script for defaults
     -s      <symbolname> , Default=filename (only with -c)
     -t      <tdir> Temporary directory, Default=/tmp/cloc$$
-    -p      <path> HSBEPATH, Default=$HSBEPATH or /usr/local/HSAIL_LLVM_Backend/bin
+    -p1      <path> HSA_LLVM_PATH, Default=$HSA_LLVM_PATH or /usr/local/HSAIL_LLVM_Backend/bin
+    -p2      <path> HSA_LIBHSAIL_PATH, Default=$HSA_LIBHSAIL_PATH or /usr/local/HSAIL-Tools/libHSAIL/build_linux
     -o      <outfilename>, Default=<filename>.<ft> where ft is brig, hsail, or o
 
    Examples:
       cloc mykernel.cl              /* creates mykernel.brig  */
-      cloc -c mykernel.cl           /* creates mykernel.o     */
+      cloc -str mykernel.cl           /* creates mykernel.o     */
       cloc -hsail mykernel.cl       /* creates mykernel.hsail */
-      cloc -c -hsail mykernel.cl    /* creates mykernel.o     */
+      cloc -str -hsail mykernel.cl    /* creates mykernel.o     */
       cloc -t /tmp/foo mykernel.cl  /* automatically sets -k  */
-      cloc -c -nq -clopts "--opencl=2.0" mykernel.cl
+      cloc -str -nq -clopts "--opencl=2.0" mykernel.cl
 
-   You may set environment variables HSBEPATH, CLOPTS, or LKOPTS instead 
+   You may set environment variables HSA_LLVM_PATH, HSA_LIBHSAIL_PATH, CLOPTS, or LKOPTS instead 
    of using the command line options -p, -clopts, or -lkopts.  
    Command line options take precedence over the environment variables. 
 
    (C) Copyright 2014 AMD 
-
-Note: HSBEPATH must be set to the path containing the binaries of HSAIL_LLVM_BACKEND (https://github.com/HSAFoundation/HSAIL_LLVM_Backend)
 

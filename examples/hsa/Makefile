@@ -1,4 +1,4 @@
-DIRS = CalcPI CSquares CSquaresDbl MatMul
+DIRS = common vector_copy 
 # the sets of directories to do various things in
 BUILDDIRS = $(DIRS:%=build-%)
 INSTALLDIRS = $(DIRS:%=install-%)
@@ -14,7 +14,7 @@ install: $(INSTALLDIRS) all
 $(INSTALLDIRS):
 	$(MAKE) -C $(@:install-%=%) install
 
-test: $(TESTDIRS) all
+test: $(TESTDIRS)
 $(TESTDIRS): 
 	$(MAKE) -C $(@:test-%=%) test
 

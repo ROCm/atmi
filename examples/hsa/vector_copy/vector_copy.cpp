@@ -4,7 +4,7 @@
 #include "hsa.h"
 #include "hsa_ext_finalize.h"
 #include "Brig_new.hpp"
-#include "elf_utils.hpp"
+#include "../common/elf_utils.hpp"
 #include <iostream>
 
 #define MULTILINE(...) # __VA_ARGS__

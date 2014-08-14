@@ -9,7 +9,7 @@ HSA_LLVM_PATH to the build folder of the HSAIL-HLC-Stable or HSAIL-HLC-Developme
     Note- If HSAIL-HLC-Stable is used. The tests have to be compiled with CFLAGS=-DDUMMY_ARGS=1. Example make all -DDUMMY_ARGS=1
 
 To run the test case, set the following environment variables
-HSA_THUNK_PATH Path to libhsakmt.so
+HSA_KMT_PATH Path to libhsakmt.so
 
 
 #For building HSA examples. 

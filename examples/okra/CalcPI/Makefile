@@ -21,14 +21,14 @@ clean:
 
 
 test:	check-test-env
-	echo "export LD_LIBRARY_PATH=$(HSA_THUNK_PATH):$(HSA_OKRA_PATH)/dist/bin:$(HSA_RUNTIME_PATH)/lib/x86_64" > test.sh 
+	echo "export LD_LIBRARY_PATH=$(HSA_KMT_PATH)/lnx64a:$(HSA_OKRA_PATH)/dist/bin:$(HSA_RUNTIME_PATH)/lib/x86_64" > test.sh 
 	echo "./$(TEST_NAME)" >> test.sh
 	bash test.sh
 	rm test.sh
 
 check-test-env:
-ifndef HSA_THUNK_PATH
-	$(error HSA_THUNK_PATH is undefined)
+ifndef HSA_KMT_PATH
+	$(error HSA_KMT_PATH is undefined)
 endif
 ifndef HSA_RUNTIME_PATH
 	$(error HSA_RUNTIME_PATH is undefined)

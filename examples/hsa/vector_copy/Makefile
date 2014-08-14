@@ -8,12 +8,12 @@ OBJ_FILES := $(addprefix obj/, $(notdir $(C_FILES:.c=.o)))
 COMMON_C_FILES := $(wildcard ../common/*.c)
 COMMON_OBJ_FILES := $(addprefix ../common/obj/, $(notdir $(COMMON_C_FILES:.c=.o)))
 
-all: check-build-env $(TEST_NAME) $(TEST_NAME).brig
+all: $(TEST_NAME) $(TEST_NAME).brig
 
-$(TEST_NAME): $(OBJ_FILES) $(COMMON_OBJ_FILES)
+$(TEST_NAME): $(OBJ_FILES) $(COMMON_OBJ_FILES) check-build-env
 	$(CC) $(LFLAGS) $(COMMON_OBJ_FILES) $(OBJ_FILES) -lelf -L$(HSA_RUNTIME_PATH)/lib/x86_64 -lhsa-runtime64 -o $(TEST_NAME)
 
-$(TEST_NAME).brig :
+$(TEST_NAME).brig : check-cloc-env
 	$(HSA_CLOC_PATH)/cloc $(TEST_NAME).cl
 
 obj/%.o: %.c
@@ -41,8 +41,17 @@ check-build-env:
 ifndef HSA_RUNTIME_PATH
 	$(error HSA_RUNTIME_PATH is undefined)
 endif
+
+check-cloc-env:
 ifndef HSA_CLOC_PATH
 	$(error HSA_CLOC_PATH is undefined)
 endif
+ifndef HSA_LIBHSAIL_PATH
+	$(error HSA_LIBHSAIL_PATH is undefined - Required by CLOC)
+endif
+ifndef HSA_LIBHSAIL_PATH
+	$(error HSA_CLOC_PATH is undefined - Required by CLOC)
+endif
+
 
 

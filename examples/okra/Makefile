@@ -10,7 +10,7 @@ $(DIRS): $(BUILDDIRS)
 $(BUILDDIRS):
 	$(MAKE) -C $(@:build-%=%)
 
-test: $(TESTDIRS) all
+test: $(TESTDIRS) 
 $(TESTDIRS): 
 	$(MAKE) -C $(@:test-%=%) test
 

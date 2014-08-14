@@ -14,16 +14,17 @@ $(TEST_NAME).hsail :
 	$(HSA_CLOC_PATH)/cloc -hsail $(TEST_NAME).cl
 
 obj/%.o: %.cpp
-	$(CC) -c $(CFLAGS) $(INCS) -o $@ $< -std=c++11
+	$(CC) -c $(CFLAGS) $(INCS) -o $@ $< 
 
 clean:
 	rm -rf obj/*o *.hsail $(TEST_NAME)
 
 
 test:	check-test-env
-	export LD_LIBRARY_PATH=$(HSA_THUNK_PATH):$(HSA_OKRA_PATH)/dist/bin:$(HSA_RUNTIME_PATH)/lib/x86_64
-	./$(TEST_NAME)
-
+	echo "export LD_LIBRARY_PATH=$(HSA_THUNK_PATH):$(HSA_OKRA_PATH)/dist/bin:$(HSA_RUNTIME_PATH)/lib/x86_64" > test.sh 
+	echo "./$(TEST_NAME)" >> test.sh
+	bash test.sh
+	rm test.sh
 
 check-test-env:
 ifndef HSA_THUNK_PATH

@@ -299,16 +299,6 @@ int main(int argc, char **argv)
     memset(out, 0, 1024*1024*4);
     err=hsa_memory_register(out, 1024*1024*4);
     check(Registering argument memory for output parameter, err);
-
-    struct args_t
-    {
-        void* arg0;
-        void* arg1;
-    } args;
-
-    args.arg0=out;
-    args.arg1=in;
-
     /*
      * Find a memory region that supports kernel arguments.
      */
@@ -319,14 +309,24 @@ int main(int argc, char **argv)
     void* kernel_arg_buffer = NULL;
    
     size_t kernel_arg_buffer_size = hsaCodeDescriptor->kernarg_segment_byte_size;
-
     /*
      * Allocate the kernel argument buffer from the correct region.
      */   
     err = hsa_memory_allocate(kernarg_region, kernel_arg_buffer_size, 
                         &kernel_arg_buffer);
     check(Allocating kernel argument memory buffer, err);
-    memcpy(kernel_arg_buffer, &args, sizeof(args));
+    uint64_t kernel_arg_start_offset = 0;
+#ifdef DUMMY_ARGS
+    //This flags should be set if HSA_HLC_Stable is used
+    // This is because the high level compiler generates 6 extra args
+    kernel_arg_start_offset += sizeof(uint64_t) * 6;
+    printf("Using dummy args \n");
+#endif
+    memset(kernel_arg_buffer, 0, kernel_arg_buffer_size);
+    void *kernel_arg_buffer_start = 
+        (char*)kernel_arg_buffer + kernel_arg_start_offset;
+    memcpy(kernel_arg_buffer_start, &out, sizeof(void*));
+    memcpy(kernel_arg_buffer_start + sizeof(void*), &in, sizeof(void*));
  
     /*
      * Bind kernel code and the kernel argument buffer to the
@@ -334,12 +334,6 @@ int main(int argc, char **argv)
      */
     aql.kernel_object_address=hsaCodeDescriptor->code.handle;
     aql.kernarg_address=(uint64_t)kernel_arg_buffer;
-
-    /*
-     * Register the memory region for the argument buffer.
-     */
-    err = hsa_memory_register(&args, sizeof(struct args_t));
-    check(Registering the argument buffer, err);
 
     /*
      * Obtain the current queue write index.

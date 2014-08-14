@@ -101,10 +101,16 @@ int main(int argc, char **argv) {
   }
 
   _okra_clear_args(kernel);
-// These are not required with D2 compiler
-//  _okra_push_int(kernel, 0);
-//  _okra_push_int(kernel, 0);
-//  _okra_push_int(kernel, 0);
+#ifdef DUMMY_ARGS
+       //This flags should be set if HSA_HLC_Stable is used
+        // This is because the high level compiler generates 6 extra args
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+#endif   
   _okra_push_pointer(kernel, dst_list);
   _okra_push_pointer(kernel, src_list);
 //  _okra_push_long(kernel, 1024*1024);

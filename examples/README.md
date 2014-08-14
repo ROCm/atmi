@@ -5,7 +5,8 @@ HSA_OKRA_PATH to the root folder of the okra distribution from github.com/HSAFou
 HSA_CLOC_PATH to the root folder of CLOC form github.com/HSAFoundation
 
 HSA_LIBHSAIL_PATH to the build folder of HSAIL-Tools from github.com/HSAFoundation - HSAIL-Tools/libHSAIL/libHSAIL/build
-HSA_LLVM_PATH to the build folder of the HSAIL_HLC_Development from github.com/HSAFoundation (Old name-HSAIL_LLVM_BACKEND)
+HSA_LLVM_PATH to the build folder of the HSAIL-HLC-Stable or HSAIL-HLC-Development from github.com/HSAFoundation
+    Note- If HSAIL-HLC-Stable is used. The tests have to be compiled with CFLAGS=-DDUMMY_ARGS=1. Example make all -DDUMMY_ARGS=1
 
 To run the test case, set the following environment variables
 HSA_THUNK_PATH Path to libhsakmt.so
@@ -21,4 +22,4 @@ cd okra
 make all
 make test
 
-You can also build and run individually eah test case
+You can also build and run individually each test case

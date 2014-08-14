@@ -91,6 +91,17 @@ int main(int argc, char *argv[]) {
         
         //setup kernel arguments        
         okra_clear_args(kernel);
+#ifdef DUMMY_ARGS
+       //This flags should be set if HSA_HLC_Stable is used
+        // This is because the high level compiler generates 6 extra args
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+        okra_push_pointer(kernel, NULL);
+#endif        
+
         okra_push_pointer(kernel, outArray);
         okra_push_pointer(kernel, inArray);
 

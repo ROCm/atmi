@@ -129,7 +129,7 @@ HSA_LIBHSAIL_PATH=${HSA_LIBHSAIL_PATH:-/usr/local/HSAIL-tools/libHSAIL/build}
 #CLOPTS=${CLOPTS:---opencl=1.2}
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
 CMD_LLA=${CMD_LLA:-llvm-dis}
-LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc -l $HSA_LLVM_PATH/builtins-hsail-amd-ci.bc -l $HSA_LLVM_PATH/builtins-gcn.bc}
+LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
 CMD_OPT=${CMD_OPT:-opt -O3 -gpu -whole}
 CMD_LLC=${CMD_LLC:-llc -O2 -march=hsail-64}

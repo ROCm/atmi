@@ -1,7 +1,6 @@
 DIRS = common vector_copy 
 # the sets of directories to do various things in
 BUILDDIRS = $(DIRS:%=build-%)
-INSTALLDIRS = $(DIRS:%=install-%)
 CLEANDIRS = $(DIRS:%=clean-%)
 TESTDIRS = $(DIRS:%=test-%)
 
@@ -9,10 +8,6 @@ all: $(BUILDDIRS)
 $(DIRS): $(BUILDDIRS)
 $(BUILDDIRS):
 	$(MAKE) -C $(@:build-%=%)
-
-install: $(INSTALLDIRS) all
-$(INSTALLDIRS):
-	$(MAKE) -C $(@:install-%=%) install
 
 test: $(TESTDIRS)
 $(TESTDIRS): 
@@ -25,8 +20,7 @@ $(CLEANDIRS):
 
 .PHONY: subdirs $(DIRS)
 .PHONY: subdirs $(BUILDDIRS)
-.PHONY: subdirs $(INSTALLDIRS)
 .PHONY: subdirs $(TESTDIRS)
 .PHONY: subdirs $(CLEANDIRS)
-.PHONY: all install clean test
+.PHONY: all clean test
 

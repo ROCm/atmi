@@ -10,10 +10,6 @@ $(DIRS): $(BUILDDIRS)
 $(BUILDDIRS):
 	$(MAKE) -C $(@:build-%=%)
 
-install: $(INSTALLDIRS) all
-$(INSTALLDIRS):
-	$(MAKE) -C $(@:install-%=%) install
-
 test: $(TESTDIRS) all
 $(TESTDIRS): 
 	$(MAKE) -C $(@:test-%=%) test
@@ -25,8 +21,7 @@ $(CLEANDIRS):
 
 .PHONY: subdirs $(DIRS)
 .PHONY: subdirs $(BUILDDIRS)
-.PHONY: subdirs $(INSTALLDIRS)
 .PHONY: subdirs $(TESTDIRS)
 .PHONY: subdirs $(CLEANDIRS)
-.PHONY: all install clean test
+.PHONY: all clean test
 

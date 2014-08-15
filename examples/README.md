@@ -1,8 +1,14 @@
 To build, set the following environment variables
 
-HSA_RUNTIME_PATH to the root folder of HSA-Runtime from github.com/HSAFoundation
-HSA_OKRA_PATH to the root folder of the okra distribution from github.com/HSAFoundation
-HSA_CLOC_PATH to the root folder of CLOC form github.com/HSAFoundation
+* git clone https://github.com/HSAFoundation/HSA-Runtime-AMD
+* git clone https://github.com/HSAFoundation/HSA-Drivers-Linux-AMD
+* git clone https://github.com/HSAFoundation/Okra-Interface-to-HSA-Device
+* https://github.com/HSAFoundation/CLOC
+
+Set the environment variables
+* HSA_RUNTIME_PATH= Path to HSA-Runtime-AMD
+* HSA_KMT_PATH= Path to HSA-Drivers-Linux-AMD/kfd-0.8/libhsakmt/
+* HSA_OKRA_PATH= Path to Okra-Interface-to-HSA-Device/okra/
 
 HSA_LIBHSAIL_PATH to the build folder of HSAIL-Tools from github.com/HSAFoundation - HSAIL-Tools/libHSAIL/libHSAIL/build
 HSA_LLVM_PATH to the build folder of the HSAIL-HLC-Stable or HSAIL-HLC-Development from github.com/HSAFoundation

@@ -1,4 +1,4 @@
-DIRS = CalcPI CSquares CSquaresDbl MatMul
+DIRS = CalcPI MatMul
 # the sets of directories to do various things in
 BUILDDIRS = $(DIRS:%=build-%)
 INSTALLDIRS = $(DIRS:%=install-%)

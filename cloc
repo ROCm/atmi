@@ -28,7 +28,7 @@
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #  (C) Copyright 2014 AMD 
 #
-PROGVERSION=0.6.1
+PROGVERSION=0.6.2
 
 function usage(){
 /bin/cat 2>&1 <<"EOF" 
@@ -54,7 +54,7 @@ function usage(){
     -s      <symbolname> , Default=filename (only with -c)
     -t      <tdir> Temporary directory, Default=/tmp/cloc$$
     -p1      <path> HSA_LLVM_PATH, Default=$HSA_LLVM_PATH or /usr/local/HSAIL_LLVM_Backend/bin
-    -p2      <path> HSA_LIBHSAIL_PATH, Default=$HSA_LIBHSAIL_PATH or /usr/local/HSAIL-Tools/libHSAIL/build_linux
+    -p2      <path> HSA_LIBHSAIL_PATH, Default=$HSA_LIBHSAIL_PATH or /usr/local/HSAIL-Tools/libHSAIL/build*
     -o      <outfilename>, Default=<filename>.<ft> where ft is brig, hsail, or o
 
    Examples:
@@ -66,7 +66,7 @@ function usage(){
       cloc -str -nq -clopts "--opencl=2.0" mykernel.cl
 
    You may set environment variables HSA_LLVM_PATH, HSA_LIBHSAIL_PATH, CLOPTS, or LKOPTS instead 
-   of using the command line options -p, -clopts, or -lkopts.  
+   of using the command line options -p1, -p2, -clopts, or -lkopts.  
    Command line options take precedence over the environment variables. 
 
    (C) Copyright 2014 AMD 
@@ -145,7 +145,7 @@ if ! [ $QUIET ] ; then  VERBOSE=true ; fi
 
 #  Set Default values
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/usr/local/HSAIL_LLVM_Backend}
-HSA_LIBHSAIL_PATH=${HSA_LIBHSAIL_PATH:-/usr/local/HSAIL-tools/libHSAIL/build}
+HSA_LIBHSAIL_PATH=${HSA_LIBHSAIL_PATH:-/usr/local/HSAIL-Tools/libHSAIL/build}
 
 #CLOPTS=${CLOPTS:---opencl=1.2}
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
@@ -213,17 +213,19 @@ if [ ! -d $TMPDIR ] && [ ! $DRYRUN ] ; then
    exit $DEADRC
 fi 
 if [ ! -d $HSA_LLVM_PATH ] ; then 
-   echo "ERROR:  HSA_LLVM_PATH $HSA_LLVM_PATH does not exist. Consider -p option"
+   echo "ERROR:  HSA_LLVM_PATH $HSA_LLVM_PATH does not exist."
+   echo "        Set HSA_LLVM_PATH or consider -p1 option"
    exit $DEADRC
 fi 
 if [ ! -d $HSA_LIBHSAIL_PATH ] ; then 
-   echo "ERROR:  HSA_LIBHSAIL_PATH $HSA_LIBHSAIL_PATH does not exist. Consider -p option"
+   echo "ERROR:  HSA_LIBHSAIL_PATH $HSA_LIBHSAIL_PATH does not exist."
+   echo "        Set HSA_LIBHSAIL_PATH or consider -p2 option"
    exit $DEADRC
 fi 
 
 if [ ! -e $HSA_LIBHSAIL_PATH/hsailasm ] ; then 
    echo "ERROR:  HSA_LIBHSAIL_PATH $HSA_LIBHSAIL_PATH does not contain hsailasm. "
-   echo "        This directory does not have HSAIL backend. Consider -p option"
+   echo "        This directory does not have hsailasm . Consider -p2 option"
    exit $DEADRC
 fi 
 if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then 
@@ -354,7 +356,7 @@ if [ $HSAIL ] ; then
    if [ $DRYRUN ] ; then
       echo $CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
    else
-      $HSA_LLVM_PATH/$CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
+      $HSA_LIBHSAIL_PATH/$CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
       rc=$?
    fi
    if [ $rc != 0 ] ; then 

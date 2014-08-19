@@ -1,4 +1,4 @@
-CLOC -Version 0.6.1
+CLOC -Version 0.6.2
 ====
 
    cloc: Convert an OpenCL file to brig, hsail, or .o (object) 

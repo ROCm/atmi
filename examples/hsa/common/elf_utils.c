@@ -209,6 +209,7 @@ status_t create_brig_module_from_brig_file(const char* file_name, hsa_ext_brig_m
         }
     }
 
+    fclose(fp);
     return status;
 }
 

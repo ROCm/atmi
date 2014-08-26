@@ -36,6 +36,9 @@ if (status != HSA_STATUS_SUCCESS) { \
    printf("%s succeeded.\n", #msg); \
 }
 
+#define GRID_SIZE_X 1024*1024
+#define GROUP_SIZE_X 256
+
 /*
  * Define required BRIG data structures.
  */
@@ -274,10 +277,10 @@ int main(int argc, char **argv)
      */
     aql.completion_signal=signal;
     aql.dimensions=1;
-    aql.workgroup_size_x=256;
+    aql.workgroup_size_x=GROUP_SIZE_X;
     aql.workgroup_size_y=1;
     aql.workgroup_size_z=1;
-    aql.grid_size_x=1024*1024;
+    aql.grid_size_x=GRID_SIZE_X;
     aql.grid_size_y=1;
     aql.grid_size_z=1;
     aql.header.type=HSA_PACKET_TYPE_DISPATCH;
@@ -290,14 +293,15 @@ int main(int argc, char **argv)
     /*
      * Allocate and initialize the kernel arguments.
      */
-    char* in=(char*)malloc(1024*1024*4);
-    memset(in, 1, 1024*1024*4);
-    err=hsa_memory_register(in, 1024*1024*4);
+    uint64_t total_buffer_size = GRID_SIZE_X * sizeof(int);
+    int* in=(char*)malloc(total_buffer_size);
+    memset(in, 1, total_buffer_size); 
+    err=hsa_memory_register(in, total_buffer_size);
     check(Registering argument memory for input parameter, err);
 
-    char* out=(char*)malloc(1024*1024*4);
-    memset(out, 0, 1024*1024*4);
-    err=hsa_memory_register(out, 1024*1024*4);
+    int* out=(char*)malloc(total_buffer_size);
+    memset(out, 0, total_buffer_size);
+    err=hsa_memory_register(out, total_buffer_size);
     check(Registering argument memory for output parameter, err);
     /*
      * Find a memory region that supports kernel arguments.
@@ -325,8 +329,8 @@ int main(int argc, char **argv)
     memset(kernel_arg_buffer, 0, kernel_arg_buffer_size);
     void *kernel_arg_buffer_start = 
         (char*)kernel_arg_buffer + kernel_arg_start_offset;
-    memcpy(kernel_arg_buffer_start, &out, sizeof(void*));
-    memcpy(kernel_arg_buffer_start + sizeof(void*), &in, sizeof(void*));
+    memcpy(kernel_arg_buffer_start, &in, sizeof(void*));
+    memcpy(kernel_arg_buffer_start + sizeof(void*), &out, sizeof(void*));
  
     /*
      * Bind kernel code and the kernel argument buffer to the
@@ -362,27 +366,17 @@ int main(int argc, char **argv)
     /*
      * Validate the data in the output buffer.
      */
-    int valid=1;
-    int failIndex=0;
-    for(int i=0; i<1024*1024; i++)
-    {
-        if(out[i]!=in[i])
-        {
-            failIndex=i;
-            valid=0;
-            break;
-        }
-    }
-
-    if(valid) {
+    int valid = memcmp(in, out, total_buffer_size);
+    if(!valid) {
         printf("Passed validation.\n");
     } else {
-        printf("VALIDATION FAILED!\nBad index: %d\n", failIndex);
+        printf("Failed Validation %d!\n", valid);
     }
 
     /*
      * Cleanup all allocated resources.
      */
+    destroy_brig_module(brigModule);
     err=hsa_signal_destroy(signal);
     check(Destroying the signal, err);
 

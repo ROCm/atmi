@@ -294,12 +294,11 @@ int main(int argc, char **argv)
      * Allocate and initialize the kernel arguments.
      */
     uint64_t total_buffer_size = GRID_SIZE_X * sizeof(int);
-    int* in=(char*)malloc(total_buffer_size);
+    int* in=(int*)malloc(total_buffer_size);
     memset(in, 1, total_buffer_size); 
     err=hsa_memory_register(in, total_buffer_size);
     check(Registering argument memory for input parameter, err);
-
-    int* out=(char*)malloc(total_buffer_size);
+    int* out=(int*)malloc(total_buffer_size);
     memset(out, 0, total_buffer_size);
     err=hsa_memory_register(out, total_buffer_size);
     check(Registering argument memory for output parameter, err);

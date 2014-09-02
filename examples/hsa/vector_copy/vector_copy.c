@@ -162,7 +162,7 @@ hsa_status_t find_symbol_offset(hsa_ext_brig_module_t* brig_module,
             BrigDirectiveExecutable* directive_kernel = (BrigDirectiveExecutable*) (code_entry);
             BrigDataOffsetString32_t data_name_offset = directive_kernel->name;
             BrigData* data_entry = (BrigData*)((char*) data_section_header + data_name_offset);
-            if (!strncmp(symbol_name, (char*)data_entry->bytes, sizeof(symbol_name))){
+            if (!strncmp(symbol_name, (char*)data_entry->bytes, strlen(symbol_name))){
                 *offset = code_offset;
                 return HSA_STATUS_SUCCESS;
             }

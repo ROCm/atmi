@@ -1,17 +1,20 @@
 CLOC - Version 0.6.2
 ====================
 
-CLOC: C Language (kernel) Offline Compiler
+CLOC: Convert an CL (Kernel c Language) file to brig, hsail, or object
 
 Table of contents
-=================
-- [Copyright and disclaimer] (#Copyright-and-disclaimer)
-- [License] (#License)
-- [Help Text] (#helptext)
-- [Install] (#install)
+-----------------
 
+- [Copyright and Disclaimer](#Copyright)
+- [License](#License)
+- [Help Text](#Help)
+- [Install](INSTALL.md)
+
+<A NAME="Copyright">
 Copyright and Disclaimer
-========================
+------------------------
+
 Copyright 2014 ADVANCED MICRO DEVICES, INC.  
 
 AMD is granting you permission to use this software (the Materials) pursuant to the 
@@ -50,8 +53,9 @@ Materials by the Government constitutes acknowledgement of AMD's proprietary rig
 EXPORT RESTRICTIONS: The Materials may be subject to export restrictions as stated in the 
 Software License Agreement.
 
+<A NAME="License">
 License
-=======
+-------
 
 ```
 /* Copyright 2014 HSA Foundation Inc.  All Rights Reserved.
@@ -77,13 +81,14 @@ License
  */
 ```
 
+<A NAME="Help">
 Help Text
-=========
+--------- 
 
 ```
-   cloc: Convert an OpenCL file to brig, hsail, or .o (object) 
-         file using the LLVM to HSAIL backend compiler.
-         Header .h files will be created with .o files. 
+   cloc: Convert an CL (Kernel C Language) file to brig, hsail, or
+         object file using the LLVM to HSAIL backend compiler.
+         Header .h files will also be created with .o files. 
 
    Usage: cloc [ options ] filename.cl
 

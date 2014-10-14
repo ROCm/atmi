@@ -1,0 +1,47 @@
+These directories provide examples of how to write, compile, link, and execute
+GPU accelerated applications using SNACK functions.
+
+How to use these examples. 
+
+Copy the example directory to a place that you can update.
+cd to that directory and run the command 
+
+./buildrun.sh
+
+These buildrun scripts are very short. They set necessary environment variables,
+compile the .cl files with cloc, compile and link the main application with 
+a gcc compiler, and then execute the main application. 
+
+SNACK is an acronym for 
+
+  SNACK = Simple No Api Compiled Kernels.
+
+SNACK uses cloc to generate an object file from a cl file containing GPU kernel code. 
+cloc is a command line utility written in bash for generating many types of compiled kernels. 
+Run cloc -h to see all the cool stuff you can do with cloc or read the 
+buildrun.sh scripts. 
+
+This is NOT OpenCL.  Snack application do not use the OpenCL API.
+However, the kernel language uses the same subset of c that OpenCL uses.
+We preserve the file type .cl for interoperability with OpenCL.
+cloc will also generate the necessary header file for each .cl file. 
+so that your c or c++ application will call the kernel function correctly. 
+
+Link this object with your application so you your application can call the functions directly. 
+All the examples show the command to compile and link a main application with these object files. 
+This is the best way to understand the libraries and runtime that snack requires. 
+There are no snack specific runtimes or libraries.  Snack uses HSA only.
+A few examples use some additional utility libraries. 
+
+Calling a SNACK function requires you provide ONE additional argument called lparm.
+This argument provides the global and local run dimensions to execute your kernel. 
+Essentially this defines how many times and size of thread groups execution will use.
+This argument is a simple structure that can typically be filled in with a single line.
+Here are two examples to fill in the lparm structure.
+
+Launch_params_t lparm={ .ndim=1, .gdims={strlength}, .ldims={1} };
+Launch_params_t lparm={ .ndim=2, .gdims={B.width,A.height}, .ldims={BLOCK_SIZE,BLOCK_SIZE} };
+
+Please see the fortran example for how to set launch_params with Fortran.
+
+The sample helloworld shows how to use the same .cl file for c, c++, and Fortran. 

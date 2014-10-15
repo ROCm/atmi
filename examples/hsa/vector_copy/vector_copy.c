@@ -287,8 +287,8 @@ int main(int argc, char **argv)
     aql.header.acquire_fence_scope=2;
     aql.header.release_fence_scope=2;
     aql.header.barrier=1;
-    aql.group_segment_size=0;
-    aql.private_segment_size=0;
+    aql.group_segment_size= hsaCodeDescriptor->workgroup_group_segment_byte_size;
+    aql.private_segment_size= hsaCodeDescriptor->workitem_private_segment_byte_size;
     
     /*
      * Allocate and initialize the kernel arguments.

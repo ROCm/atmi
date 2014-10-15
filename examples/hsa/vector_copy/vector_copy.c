@@ -353,7 +353,7 @@ int main(int argc, char **argv)
      * Increment the write index and ring the doorbell to dispatch the kernel.
      */
     hsa_queue_store_write_index_relaxed(commandQueue, index+1);
-    hsa_signal_store_relaxed(commandQueue->doorbell_signal, index+1);
+    hsa_signal_store_relaxed(commandQueue->doorbell_signal, index);
     check(Dispatching the kernel, err);
 
     /*

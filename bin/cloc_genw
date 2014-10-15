@@ -546,8 +546,8 @@ function write_kernel_template(){
     _KN__Aql.header.acquire_fence_scope=2;
     _KN__Aql.header.release_fence_scope=2;
     _KN__Aql.header.barrier=1;
-    _KN__Aql.group_segment_size=0;
-    _KN__Aql.private_segment_size=0;
+    _KN__Aql.group_segment_size=_KN__HsaCodeDescriptor->workgroup_group_segment_byte_size;
+    _KN__Aql.private_segment_size=_KN__HsaCodeDescriptor->workitem_private_segment_byte_size;
     
     /*  copy args from the custom _KN__args structure */
     /*  FIXME We should align kernel_arg_buffer because _KN__args is aligned */
@@ -569,7 +569,7 @@ function write_kernel_template(){
 
     /* Increment the write index and ring the doorbell to dispatch the kernel.  */
     hsa_queue_store_write_index_relaxed(_KN__CommandQ, index+1);
-    hsa_signal_store_relaxed(_KN__CommandQ->doorbell_signal, index+1);
+    hsa_signal_store_relaxed(_KN__CommandQ->doorbell_signal, index);
 
     /*  Wait on the dispatch signal until the kernel is finished.  */
     err = hsa_signal_wait_acquire(_KN__Signal, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);

@@ -1,4 +1,4 @@
-CLOC - Version 0.7.1
+CLOC - Version 0.7.2
 ====================
 
 CLOC: Convert an CL (Kernel c Language) file to brig, hsail, or object

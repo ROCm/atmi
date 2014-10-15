@@ -7,7 +7,7 @@
 [ -z HSA_LLVM_PATH ] && HSA_LLVM_PATH=/usr/local/HSAIL_LLVM_Backend/bin
 export HSA_RUNTIME_PATH HSA_LIBHSAIL_PATH HSA_KMT_PATH HSA_LLVM_PATH
 
-export LD_LIBRARY_PATH=$HSA_KMT_PATH/lnx64a:$HSA_RUNTIME_PATH/lib/x86_64
+export LD_LIBRARY_PATH=$HSA_KMT_PATH/lnx64a:$HSA_RUNTIME_PATH/lib
 
 # Compile accelerated functions
 echo 
@@ -18,8 +18,8 @@ cloc -q -c vector_copy.cl
 # Compile Main and link to accelerated functions in vector_copy.o
 echo 
 if [ -f VectorCopy ] ; then rm VectorCopy ; fi
-echo "g++ -o VectorCopy vector_copy.o VectorCopy.cpp -L $HSA_RUNTIME_PATH/lib/x86_64 -lhsa-runtime64 -lelf "
-g++ -o VectorCopy vector_copy.o VectorCopy.cpp -L $HSA_RUNTIME_PATH/lib/x86_64 -lhsa-runtime64 -lelf 
+echo "g++ -o VectorCopy vector_copy.o VectorCopy.cpp -L $HSA_RUNTIME_PATH/lib -lhsa-runtime64 -lelf "
+g++ -o VectorCopy vector_copy.o VectorCopy.cpp -L $HSA_RUNTIME_PATH/lib -lhsa-runtime64 -lelf 
 
 #  Execute
 echo

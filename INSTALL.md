@@ -14,6 +14,8 @@ git clone http://github.com/HSAfoundation/HSA-Runtime-AMD
 git clone http://github.com/HSAfoundation/HSAIL-HLC-Stable
 git clone http://github.com/HSAfoundation/HSAIL-HLC-Development
 git clone http://github.com/HSAfoundation/HSAIL-Tools
+git clone https://github.com/HSAFoundation/Okra-Interface-to-HSA-Device
+
 ```
 2.  Install kernel
 ```
@@ -53,25 +55,8 @@ export HSA_LIBHSAIL_PATH=~/git/HSAIL-Tools/libHSAIL/build
 export HSA_LLVM_PATH=~/git/HSAIL-HLC-Stable/bin
 export HSA_RUNTIME_PATH=~/git/HSA-Runtime-AMD
 export HSA_KMT_PATH=~/git/HSA-Drivers-Linux-AMD/kfd-0.9/libhsakmt
+export HSA_OKRA_PATH=~/git/Okra-Interface-to-HSA-Device/okra/
 ```
 
-7. Try the 6 samples 
-```
-cd
-cp -rp git/CLOC/examples examples
+7. Try the examples. Use the README in CLOC/example 
 
-cd examples/snack/csquares
-./buildrun.sh
-cd ../fortran
-./buildrun.sh
-cd ../helloworld
-./buildrun.sh
-./buildrun.sh f
-./buildrun.sh cpp
-cd ../matmul
-./buildrun.sh
-cd ../multiple_cl_files
-./buildrun.sh
-cd ../vector_copy
-./buildrun.sh
-```

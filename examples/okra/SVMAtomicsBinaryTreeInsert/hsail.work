@@ -1,0 +1,163 @@
+version 0:20140528:$full:$large;
+extension "amd:gcn";
+extension "IMAGE";
+
+decl prog function &__atomic_memfence()(
+	arg_u32 %arg_p0,
+	arg_u32 %arg_p1,
+	arg_u32 %arg_p2);
+
+decl prog function &abort()();
+
+prog kernel &__OpenCL_binTreeInsert_kernel(
+	kernarg_u64 %global_offset_0,
+	kernarg_u64 %global_offset_1,
+	kernarg_u64 %global_offset_2,
+	kernarg_u64 %printf_buffer,
+	kernarg_u64 %vqueue_pointer,
+	kernarg_u64 %aqlwrap_pointer,
+	kernarg_u64 %rootNode,
+	kernarg_u64 %devStartNode,
+	kernarg_u64 %g_nodes)
+{
+	pragma  "AMD RTI", "ARGSTART:__OpenCL_binTreeInsert_kernel";
+	pragma  "AMD RTI", "version:3:1:104";
+	pragma  "AMD RTI", "device:generic";
+	pragma  "AMD RTI", "uniqueid:1030";
+	pragma  "AMD RTI", "memory:private:16";
+	pragma  "AMD RTI", "memory:region:0";
+	pragma  "AMD RTI", "memory:local:0";
+	pragma  "AMD RTI", "value:global_offset_0:u64:1:1:0";
+	pragma  "AMD RTI", "value:global_offset_1:u64:1:1:16";
+	pragma  "AMD RTI", "value:global_offset_2:u64:1:1:32";
+	pragma  "AMD RTI", "pointer:printf_buffer:u8:1:1:48:uav:8:1:RW:0:0:0";
+	pragma  "AMD RTI", "value:vqueue_pointer:u64:1:1:64";
+	pragma  "AMD RTI", "value:aqlwrap_pointer:u64:1:1:80";
+	pragma  "AMD RTI", "pointer:rootNode:u8:1:1:96:uav:8:1:RW:0:0:0";
+	pragma  "AMD RTI", "pointer:devStartNode:u8:1:1:112:uav:8:1:RW:0:0:0";
+	pragma  "AMD RTI", "pointer:g_nodes:u32:1:1:128:uav:8:4:RW:0:0:0";
+	pragma  "AMD RTI", "function:1:0";
+	pragma  "AMD RTI", "memory:64bitABI";
+	pragma  "AMD RTI", "uavid:8";
+	pragma  "AMD RTI", "privateid:8";
+	pragma  "AMD RTI", "enqueue_kernel:0";
+	pragma  "AMD RTI", "kernel_index:0";
+	pragma  "AMD RTI", "reflection:0:size_t";
+	pragma  "AMD RTI", "reflection:1:size_t";
+	pragma  "AMD RTI", "reflection:2:size_t";
+	pragma  "AMD RTI", "reflection:3:size_t";
+	pragma  "AMD RTI", "reflection:4:size_t";
+	pragma  "AMD RTI", "reflection:5:size_t";
+	pragma  "AMD RTI", "reflection:6:void*";
+	pragma  "AMD RTI", "reflection:7:void*";
+	pragma  "AMD RTI", "reflection:8:int*";
+	pragma  "AMD RTI", "ARGEND:__OpenCL_binTreeInsert_kernel";
+	align(4) private_u8 %privateStack[4];
+
+@__OpenCL_binTreeInsert_kernel_entry:
+	// BB#0:                                // %entry
+	workitemabsid_u32	$s0, 0;
+	cvt_u64_u32	$d0, $s0;
+	ld_kernarg_align(8)_width(all)_u64	$d1, [0];
+	add_u64	$d0, $d0, $d1;
+	ld_kernarg_align(8)_width(all)_u64	$d1, [%g_nodes];
+	ld_global_align(4)_const_width(all)_u32	$s0, [$d1];
+	cvt_s64_s32	$d1, $s0;
+	cmp_ge_b1_u64	$c0, $d0, $d1;
+	cbr_b1	$c0, @BB0_15;
+	// BB#1:                                // %if.end
+	ld_kernarg_align(8)_width(all)_u64	$d3, [%rootNode];
+	ld_kernarg_align(8)_width(all)_u64	$d1, [%devStartNode];
+	shl_u64	$d0, $d0, 5;
+	add_u64	$d0, $d1, $d0;
+	mov_b32	$s0, 0;
+	nullptr_global_u64	$d1;
+	cmp_eq_b1_s64	$c0, $d3, $d1;
+	cbr_b1	$c0, @BB0_2;
+	// BB#6:
+	ld_global_align(4)_u32	$s2, [$d0];
+
+@BB0_7:
+	// %while.body
+	ld_global_align(4)_u32	$s1, [$d3];
+	sub_u32	$s1, $s2, $s1;
+	add_u64	$d2, $d3, 16;
+	add_u64	$d4, $d3, 8;
+	cmp_lt_b1_s32	$c0, $s1, 0;
+	cmov_b64	$d2, $c0, $d4, $d2;
+	ld_global_align(8)_u64	$d4, [$d2];
+	cmp_ne_b1_s64	$c0, $d4, $d1;
+	mov_b64	$d2, $d3;
+	mov_b64	$d3, $d4;
+	cbr_b1	$c0, @BB0_7;
+	br	@BB0_3;
+
+@BB0_2:
+	mov_b32	$s1, $s0;
+	mov_b64	$d2, $d3;
+
+@BB0_3:
+	// %do.body.preheader
+	mov_b32	$s2, 1;
+	mov_b32	$s3, 2;
+	mov_b32	$s4, 4;
+
+@BB0_4:
+	// %do.body
+	st_private_align(4)_u32	$s0, [%privateStack];
+	ld_private_align(4)_u32	$s5, [%privateStack];
+	atomic_cas_global_scar_sys_equiv(255)_b32	$s6, [$d2+24], $s5, $s2;
+	st_private_align(4)_u32	$s6, [%privateStack];
+	cmp_ne_b1_s32	$c0, $s6, $s5;
+	cbr_b1	$c0, @BB0_5;
+	// BB#8:                                // %if.then9
+	add_u64	$d3, $d2, 24;
+	add_u64	$d4, $d2, 16;
+	add_u64	$d5, $d2, 8;
+	cmp_lt_b1_s32	$c0, $s1, 0;
+	cmov_b64	$d6, $c0, $d5, $d4;
+	ld_global_align(8)_u64	$d6, [$d6];
+	cmp_ne_b1_s64	$c0, $d6, $d1;
+	cbr_b1	$c0, @BB0_9;
+	// BB#10:                                // %if.else
+	cmp_gt_b1_s32	$c0, $s1, -1;
+	mov_b64	$d6, $d0;
+	cbr_b1	$c0, @BB0_12;
+	// BB#11:                                // %cond.false42
+	st_global_align(8)_u64	$d0, [$d5];
+	ld_global_align(8)_u64	$d6, [$d4];
+
+@BB0_12:
+	// %cond.end44
+	st_global_align(8)_u64	$d6, [$d4];
+	mov_b32	$s5, $s2;
+	br	@BB0_13;
+
+@BB0_5:
+	mov_b32	$s5, $s0;
+	br	@BB0_14;
+
+@BB0_9:
+	// %if.then19
+	ld_global_align(4)_u32	$s1, [$d6];
+	ld_global_align(4)_u32	$s5, [$d0];
+	sub_u32	$s1, $s5, $s1;
+	mov_b64	$d2, $d6;
+	mov_b32	$s5, $s0;
+
+@BB0_13:
+	// %if.end47
+	st_private_align(4)_u32	$s2, [%privateStack];
+	ld_private_align(4)_u32	$s6, [%privateStack];
+	atomic_cas_global_scar_sys_equiv(255)_b32	$s6, [$d3], $s6, $s0;
+	st_private_align(4)_u32	$s6, [%privateStack];
+
+@BB0_14:
+	// %if.end50
+	cmp_eq_b1_s32	$c0, $s5, 0;
+	cbr_b1	$c0, @BB0_4;
+
+@BB0_15:
+	// %do.end
+	ret;
+};

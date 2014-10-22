@@ -120,6 +120,7 @@ while [ $# -gt 0 ] ; do
       -hsail) 		HSAIL=true;; 
       -clopts) 		CLOPTS=$2; shift ;; 
       -lkopts) 		LKOPTS=$2; shift ;; 
+      -optopts)		OPT_OPTS=$2; shift ;; 
       -s) 		SYMBOLNAME=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
@@ -149,10 +150,11 @@ HSA_LIBHSAIL_PATH=${HSA_LIBHSAIL_PATH:-/usr/local/HSAIL-Tools/libHSAIL/build}
 
 #CLOPTS=${CLOPTS:---opencl=1.2}
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
+OPT_OPTS=${OPT_OPTS:-O3}
 CMD_LLA=${CMD_LLA:-llvm-dis}
 LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
-CMD_OPT=${CMD_OPT:-opt -O3 -gpu -whole}
+CMD_OPT=${CMD_OPT:-opt $OPT_OPTS -gpu -whole}
 CMD_LLC=${CMD_LLC:-llc -O2 -march=hsail-64}
 CMD_ASM=${CMD_ASM:-hsailasm -disassemble}
 

@@ -6,20 +6,18 @@
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.7.2
+PROGVERSION=0.7.3
 #
-# Copyright 2014 ADVANCED MICRO DEVICES, INC.  
-#
-# AMD is granting you permission to use this software (the Materials) pursuant to the 
-# terms and conditions of the Software License Agreement included with the Materials.  
-# If you do not have a copy of the Software License Agreement, contact your AMD 
-# representative for a copy or refer to 
-#
-#    http://github.com/HSAFoundation/CLOC/blob/master/LICENSE.TXT
-#
-# You agree that you will not reverse engineer or decompile the Materials, in whole or 
-# in part, except as allowed by applicable law.
-#
+# Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
+# 
+# AMD is granting you permission to use this software and documentation (if any) (collectively, the 
+# Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
+# Materials.  If you do not have a copy of the Software License Agreement, contact your AMD 
+# representative for a copy.
+# 
+# You agree that you will not reverse engineer or decompile the Materials, in whole or in part, except for 
+# example code which is provided in source code form and as allowed by applicable law.
+# 
 # WARRANTY DISCLAIMER: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
 # KIND.  AMD DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT 
 # LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
@@ -93,7 +91,7 @@ function usage(){
    -p1, -p2, -p3, -clopts, or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
-   (C) Copyright 2014 ADVANCED MICRO DEVICES, INC.
+   Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.
 
 EOF
    exit 1 

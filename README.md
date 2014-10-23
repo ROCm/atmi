@@ -1,4 +1,4 @@
-CLOC - Version 0.7.2
+CLOC - Version 0.7.3
 ====================
 
 CLOC: Convert an CL (Kernel c Language) file to brig, hsail, or object
@@ -16,17 +16,15 @@ Table of contents
 # Copyright and Disclaimer
 ------------------------
 
-Copyright 2014 ADVANCED MICRO DEVICES, INC.  
+Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
 
-AMD is granting you permission to use this software (the Materials) pursuant to the 
-terms and conditions of the Software License Agreement included with the Materials.  
-If you do not have a copy of the Software License Agreement, contact your AMD 
-representative for a copy or refer to 
+AMD is granting you permission to use this software and documentation (if any) (collectively, the 
+Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
+Materials.  If you do not have a copy of the Software License Agreement, contact your AMD 
+representative for a copy.
 
-  http://github.com/HSAFoundation/CLOC/blob/master/LICENSE.TXT
-
-You agree that you will not reverse engineer or decompile the Materials, in whole or 
-in part, except as allowed by applicable law.
+You agree that you will not reverse engineer or decompile the Materials, in whole or in part, except for 
+example code which is provided in source code form and as allowed by applicable law.
 
 WARRANTY DISCLAIMER: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
 KIND.  AMD DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT 
@@ -103,7 +101,7 @@ Software License Agreement.
    -p1, -p2, -p3, -clopts, or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
-   (C) Copyright 2014 ADVANCED MICRO DEVICES, INC.
+   Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.
 
 ```
 
@@ -161,7 +159,7 @@ You can now compile and build the binary "HelloWorld" with any c++ compiler.
 Here is the command to build HelloWorld with g++. 
 
 ```
-g++ -o HelloWorld hw.o HelloWorld.cpp -L$HSA_RUNTIME_PATH/lib/x86_64 -lhsa-runtime64 -lelf 
+g++ -o HelloWorld hw.o HelloWorld.cpp -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -lelf 
 
 ```
 

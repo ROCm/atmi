@@ -32,14 +32,15 @@ You can also build and run individually each test case
 
 ----------
 
-Copyright 2014 ADVANCED MICRO DEVICES, INC.  
+Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
 
-AMD is granting you permission to use this software (the Materials) pursuant to the 
-terms and conditions of the Software License Agreement included with the Materials.  
-If you do not have a copy of the Software License Agreement, contact your AMD 
-representative for a copy or refer to 
+AMD is granting you permission to use this software and documentation (if any) (collectively, the 
+Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
+Materials.  If you do not have a copy of the Software License Agreement, contact your AMD 
+representative for a copy.
 
-  http://github.com/HSAFoundation/CLOC/blob/master/LICENSE.TXT
+You agree that you will not reverse engineer or decompile the Materials, in whole or in part, except for 
+example code which is provided in source code form and as allowed by applicable law.
 
 WARRANTY DISCLAIMER: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
 KIND.  AMD DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT 

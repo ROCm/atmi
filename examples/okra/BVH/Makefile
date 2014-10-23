@@ -12,7 +12,7 @@ $(TEST_NAME): $(OBJ_FILES)
 	$(CC) $(LFLAGS) $(OBJ_FILES) -lelf -L$(HSA_OKRA_PATH)/dist/bin -lokra_x86_64 -o $(TEST_NAME)
 
 $(TEST_NAME).hsail :
-	$(HSA_CLOC_PATH)/cloc -hsail $(TEST_NAME).cl
+	cloc -hsail $(TEST_NAME).cl
 
 obj/%.o: %.cpp
 	$(CC) -c $(CXXFLAGS) $(CFLAGS) $(INCS) -o $@ $< 
@@ -42,9 +42,5 @@ check-build-env:
 ifndef HSA_OKRA_PATH
 	$(error HSA_OKRA_PATH is undefined)
 endif
-ifndef HSA_CLOC_PATH
-	$(error HSA_CLOC_PATH is undefined)
-endif
-
 
 

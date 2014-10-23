@@ -10,7 +10,6 @@ export HSA_KMT_PATH=/home/cas/Prakash/GitObsedian/HSA-Drivers-Linux-AMD/kfd-0.8/
 export HSA_OKRA_PATH=/home/cas/Prakash/GitObsedian/Okra-Interface-to-HSA-Device/okra/
 export HSA_LLVM_PATH=/home/cas/Prakash/GitObsedian/HSAIL-HLC-Development/bin
 export HSA_LIBHSAIL_PATH=/home/cas/Prakash/GitObsedian/HSAIL-Tools/libHSAIL/build_linux_opt_m64
-export HSA_CLOC_PATH=/home/cas/Prakash/GitObsedian/CLOC
 export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib/x86_64:$HSA_KMT_PATH/lnx64a:$HSA_OKRA_PATH/dist/bin
 export OKRA_DISABLE_FIX_HSAIL=1
 

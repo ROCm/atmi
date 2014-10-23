@@ -1,8 +1,9 @@
-TEST_NAME=MemApp
+TEST_NAME=BVH
 LFLAGS= -g  -Wl,--unresolved-symbols=ignore-in-shared-libs
 INCS += -I $(HSA_OKRA_PATH)/dist/include
 CPP_FILES := $(wildcard *.cpp)
 OBJ_FILES := $(addprefix obj/, $(notdir $(CPP_FILES:.cpp=.o)))
+CXXFLAGS=-std=c++11
 CC=g++
 
 all: check-build-env $(TEST_NAME) $(TEST_NAME).hsail
@@ -14,7 +15,7 @@ $(TEST_NAME).hsail :
 	$(HSA_CLOC_PATH)/cloc -hsail $(TEST_NAME).cl
 
 obj/%.o: %.cpp
-	$(CC) -c $(CFLAGS) $(INCS) -o $@ $< 
+	$(CC) -c $(CXXFLAGS) $(CFLAGS) $(INCS) -o $@ $< 
 
 clean:
 	rm -rf obj/*o *.hsail $(TEST_NAME)

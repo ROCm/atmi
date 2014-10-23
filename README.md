@@ -1,4 +1,4 @@
-CLOC - Version 0.6.2
+CLOC - Version 0.7.3
 ====================
 
 CLOC: Convert an CL (Kernel c Language) file to brig, hsail, or object
@@ -7,23 +7,24 @@ Table of contents
 -----------------
 
 - [Copyright and Disclaimer](#Copyright)
-- [License](#License)
-- [Help Text](#Help)
+- [Software License Agreement](LICENSE.TXT)
+- [Command Help](#CommandHelp)
+- [Examples](#ReadmeExamples)
 - [Install](INSTALL.md)
 
 <A NAME="Copyright">
-Copyright and Disclaimer
+# Copyright and Disclaimer
 ------------------------
 
-Copyright 2014 ADVANCED MICRO DEVICES, INC.  
+Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
 
-AMD is granting you permission to use this software (the Materials) pursuant to the 
-terms and conditions of the Software License Agreement included with the Materials.  
-If you do not have a copy of the Software License Agreement, contact your AMD 
+AMD is granting you permission to use this software and documentation (if any) (collectively, the 
+Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
+Materials.  If you do not have a copy of the Software License Agreement, contact your AMD 
 representative for a copy.
 
-You agree that you will not reverse engineer or decompile the Materials, in whole or 
-in part, except as allowed by applicable law.
+You agree that you will not reverse engineer or decompile the Materials, in whole or in part, except for 
+example code which is provided in source code form and as allowed by applicable law.
 
 WARRANTY DISCLAIMER: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
 KIND.  AMD DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT 
@@ -53,36 +54,8 @@ Materials by the Government constitutes acknowledgement of AMD's proprietary rig
 EXPORT RESTRICTIONS: The Materials may be subject to export restrictions as stated in the 
 Software License Agreement.
 
-<A NAME="License">
-License
--------
-
-```
-/* Copyright 2014 HSA Foundation Inc.  All Rights Reserved.
- *
- * HSAF is granting you permission to use this software and documentation (if
- * any) (collectively, the "Materials") pursuant to the terms and conditions
- * of the Software License Agreement included with the Materials.  If you do
- * not have a copy of the Software License Agreement, contact the  HSA Foundation for a copy.
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE SOFTWARE.
- */
-```
-
-<A NAME="Help">
-Help Text
+<A NAME="CommandHelp">
+# Command Help 
 --------- 
 
 ```
@@ -128,6 +101,123 @@ Help Text
    -p1, -p2, -p3, -clopts, or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
-   (C) Copyright 2014 ADVANCED MICRO DEVICES, INC.
+   Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.
 
 ```
+
+<A NAME="ReadmeExamples">
+# Examples
+-------- 
+
+## Example 1: Hello World
+
+This version of cloc supports the SNACK method of writing accelerated 
+kernels in c. With SNACK, a host program can directly call the 
+accelerated function. 
+Here is the c++ source code HelloWorld.cpp using SNACK.
+```cpp
+//
+//    File:  HelloWorld.cpp
+//
+#include <string.h>
+#include <stdlib.h>
+#include <iostream>
+using namespace std;
+#include "hw.h"
+int main(int argc, char* argv[]) {
+	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
+	size_t strlength = strlen(input);
+	char *output = (char*) malloc(strlength + 1);
+	Launch_params_t lparm={.ndim=1, .gdims={strlength}, .ldims={256}};
+	decode(input,output,lparm);
+	output[strlength] = '\0';
+	cout << output << endl;
+	free(output);
+	return 0;
+}
+```
+The c source for the accelerated kernel is in file hw.cl.
+```c
+/*
+    File:  hw.cl 
+*/
+__kernel void decode(__global char* in, __global char* out) {
+	int num = get_global_id(0);
+	out[num] = in[num] + 1;
+}
+```
+The host program includes header file "hw.h" that does not exist yet.
+The -c option of cloc will create both the object file and the header file.
+The header file will have the function prototype for all kernels declared 
+in the .cl file.  Use this command to compile the hw.cl file with cloc.
+
+```
+cloc -c hw.cl
+```
+
+You can now compile and build the binary "HelloWorld" with any c++ compiler.
+Here is the command to build HelloWorld with g++. 
+
+```
+g++ -o HelloWorld hw.o HelloWorld.cpp -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -lelf 
+
+```
+
+Then execute the program as follows.
+```
+$ ./HelloWorld
+Hello HSA World
+```
+
+This example and other examples can be found in the CLOC repository in the directory examples/snack.
+
+## Example 2: Manual HSAIL Optimization Process
+
+This version of cloc supports a process where a programmer can experiment with
+manual updates to HSAIL. This requires the use of SNACK (the -c option). 
+This process has two steps. 
+
+#### Step 1
+The first step compiles the .cl file into the object code needed by a SNACK application.
+For example, if your kernels are in the file myKernels.cl, then you can run step 1 as follows.
+```
+   cloc -c -hsail myKernels.cl
+```
+When cloc sees the "-c" option and the "-hsail" option, it will save four files 
+in the same directory as myKernels.cl file.  The first two files are always created 
+with the -c option. 
+
+ 1.  The object file (myKernels.o) to link with your application
+ 2.  The header file (myKernels.h) for your host code to compile correctly
+ 3.  The c wrapper code (myKernels.snackwrap.c) needed to recreate the .o file in step 2.
+ 4.  The HSAIL code (myKernels.hsail) to be manually modified in step 2. 
+
+This is a good time to test your host program before making manual changes to the HSAIL.
+BE WARNED, rerunning step 1 will overwrite these files. A common mistake is to rerun
+step 1 after you have manually updated your HSAIL code for step 2. This would 
+naturally destroy those edits.  
+
+#### Step 2
+For step 2, make manual edits to the myKernels.hsail file using your favorite editor.  
+You may not change any of the calling arguments or insert new kernels.  This is because 
+the generated wrapper from step 1 will be incorrect if you make these types of changes.  
+If you want different arguments or new kernels, make those changes in your .cl file and
+go back to step 1.  After your manual edits, rebuild the object code from your 
+modified hsail as follows. 
+
+```
+   cloc -c myKernels.hsail
+```
+The above will fail if either the myKernels.hsail or myKernels.snackwrap.c file are missing.
+
+## Example 3: Single Source
+
+Currently cloc does not support the combination of kernel code and host code in the same
+file. A future utility may provide this.  For now, put your kernel and device code
+(routines called by kernels) into a .cl file for cloc to compile.  Put your host code into 
+separate files with appropriate filetypes for your build environment.  The host code can 
+be c++, c, or FORTRAN.  
+
+One advantage of isolating kernel code from host code is that you can use any compiler
+for your host code.  Any future utility that supports a single source will likely be bound
+to a specific compiler. 

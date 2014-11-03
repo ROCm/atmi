@@ -1,18 +1,9 @@
 cloc Installation Instructions
 ==============================
 
-The cloc utility consists of two bash shells with file names "cloc" and "cloc_genw".   
-These are found in the bin directory of this repository.
-Copy these files to a bin directory somewhere in your Linux environment PATH.  
-Since cloc depends on the HSAIL compiler, you can copy these two files to its bin directory which is usually in /opt/amd/bin.  
-To update to a new version of cloc simply replace these two files in that directory.  
+The cloc utility consists of two bash shells with file names "cloc" and "cloc_genw". These are found in the bin directory of this repository. Copy these files to a bin directory somewhere in your Linux environment PATH. Since cloc depends on the HSAIL compiler, you can copy these two files to its bin directory which is usually /opt/amd/bin. To update to a new version of cloc simply replace cloc and cloc_genw in that directory.  
 
-In addition to the backend compiler, cloc requires HSA software and the LLVM compiler.  
-This set of instructions can be used to install HSA and cloc for Ubuntu.
-
-
-# Setting up Ubuntu and HSA Linux Driver
-----------------------------------------
+In addition to the backend compiler, cloc requires HSA software and the LLVM compiler. This set of instructions can be used to install HSA and cloc for Ubuntu.
 
 - Make sure Ubuntu 14.04 64-bit version or above has been installed and then install these dependencies
 ```
@@ -48,13 +39,13 @@ sudo cp kfd-0.9/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
 sudo reboot
 ```
 
-- Use "kfd_check_installation.sh" in HSA Linux driver to verify installation is correct.
+- Use "kfd_check_installation.sh" in HSA Linux driver to verify installation.
 ``` 
 cd git/HSA-Ddrivers-Linux-AMD
 ./kfd_check_installation.sh
 ``` 
 
-Output of above should look like this.
+The output of above command should look like this.
 
 ```
 Kaveri detected:............................Yes
@@ -68,9 +59,7 @@ Valid GPU ID is detected:...................Yes
 Can run HSA.................................YES
 ```
 
-# Setting up HSAIL Compiler
----------------------------
-
+- Install HSAIL Compiler
 ```
 cd git
 git clone https://github.com/HSAfoundation/HSAIL-HLC-Stable.git
@@ -78,9 +67,7 @@ sudo mkdir -p /opt/amd
 sudo cp -R HSAIL-HLC-Stable/bin /opt/amd
 ```
 
-# Build and Install libHSAIL
-----------------------------
-
+- Build and Install libHSAIL
 ```
 cd git
 git clone https://github.com/HSAfoundation/HSAIL-Tools.git
@@ -94,9 +81,7 @@ sudo cp libHSAIL/generated/*.h* /opt/hsa/include
 
 ```
 
-# Copy cloc and cloc_genw to /opt/amd/bin
------------------------------------------
-
+- Copy cloc and cloc_genw to /opt/amd/bin
 ```
 cd git
 git clone https://github.com/HSAfoundation/CLOC.git
@@ -104,8 +89,7 @@ sudo cp CLOC/bin/cloc /opt/amd/bin/.
 sudo cp CLOC/bin/cloc_genw /opt/amd/bin/.
 ```
 
-# Set HSA environment variables
--------------------------------
+- Set HSA environment variables
 ```
 export HSA_LLVM_PATH=/opt/amd/bin
 export HSA_RUNTIME_PATH=/opt/hsa

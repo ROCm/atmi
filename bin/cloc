@@ -74,9 +74,9 @@ function usage(){
     -s       <symbolname>     Default=filename (only with -str option)
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig, hsail, or o
-    -p1     <path>            Default=$HSA_LLVM_PATH or /usr/local/HSAIL_LLVM_Backend/bin
-    -p2     <path>            Default=$HSA_LIBHSAIL_PATH or /usr/local/HSAIL-Tools/libHSAIL/build
-    -p3     <path>            Default=$HSA_RUNTIME_PATH or /usr/local/HSA-Runtime-AMD
+    -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p2     <path>            Default=$HSA_LIBHSAIL_PATH or /opt/hsa/lib
+    -p3     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
 
    Examples:
     cloc mykernel.cl              /* create mykernel.brig            */
@@ -181,9 +181,9 @@ CLOCPATH=$(getdname $0)
 if ! [ $QUIET ] ; then  VERBOSE=true ; fi
 
 #  Set Default values
-HSA_LIBHSAIL_PATH=${HSA_LIBHSAIL_PATH:-/usr/local/HSAIL-Tools/libHSAIL/build}
-HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/usr/local/HSA-Runtime-AMD}
-HSA_LLVM_PATH=${HSA_LLVM_PATH:-/usr/local/HSAIL_LLVM_Backend/bin}
+HSA_LIBHSAIL_PATH=${HSA_LIBHSAIL_PATH:-/opt/hsa/lib}
+HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/bin}
 #  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
 CMD_LLA=${CMD_LLA:-llvm-dis}

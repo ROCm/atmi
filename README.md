@@ -84,9 +84,9 @@ Software License Agreement.
     -s       <symbolname>     Default=filename (only with -str option)
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig, hsail, or o
-    -p1     <path>            Default=$HSA_LLVM_PATH or /usr/local/HSAIL_LLVM_Backend/bin
-    -p2     <path>            Default=$HSA_LIBHSAIL_PATH or /usr/local/HSAIL-Tools/libHSAIL/build
-    -p3     <path>            Default=$HSA_RUNTIME_PATH or /usr/local/HSA-Runtime-AMD
+    -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p2     <path>            Default=$HSA_LIBHSAIL_PATH or /opt/hsa/lib
+    -p3     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
 
    Examples:
     cloc mykernel.cl              /* create mykernel.brig            */

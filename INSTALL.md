@@ -7,11 +7,12 @@ In addition to the backend compiler, cloc requires HSA software and the LLVM com
 
 - Make sure Ubuntu 14.04 64-bit version or above has been installed and then install these dependencies
 ```
+sudo apt-get install git
+sudo apt-get install make
 sudo apt-get install g++
 sudo apt-get install libstdc++-4.8-dev
 sudo apt-get install llvm-3.4-dev
 sudo apt-get install libelf-dev
-sudo apt-get install libdwarf-dev
 sudo apt-get install libtinfo-dev
 sudo apt-get install re2c
 sudo apt-get install libbsd-dev
@@ -20,28 +21,30 @@ sudo apt-get install gfortran
 
 - Install HSA Runtime
 ```
+mkdir git
 cd git
 git clone https://github.com/HSAfoundation/HSA-Runtime-AMD.git
 cd HSA-Runtime-AMD 
 sudo mkdir -p /opt/hsa/lib
-sudo cp -R include /opt/hsa; 
+sudo cp -R include /opt/hsa
 sudo cp lib/* /opt/hsa/lib
 ```
 
+
 - Install HSA Linux Kernel Drivers and Reboot
 ```
-mkdir git
 cd git
 git clone https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
-sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-0.9/ubuntu/linux*.deb
+sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-0.9/ubuntu/*.deb
 echo "KERNEL==\"kfd\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/kfd.rules
-sudo cp kfd-0.9/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
+sudo cp HSA-Drivers-Linux-AMD/kfd-0.9/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
 sudo reboot
 ```
 
+
 - Use "kfd_check_installation.sh" in HSA Linux driver to verify installation.
 ``` 
-cd git/HSA-Ddrivers-Linux-AMD
+cd git/HSA-Drivers-Linux-AMD
 ./kfd_check_installation.sh
 ``` 
 
@@ -67,9 +70,18 @@ sudo mkdir -p /opt/amd
 sudo cp -R HSAIL-HLC-Stable/bin /opt/amd
 ```
 
-- Build and Install libHSAIL
+- Build and Install libdwarf & libHSAIL
 ```
 cd git
+wget http://pkgs.fedoraproject.org/repo/pkgs/libdwarf/libdwarf-20130729.tar.gz/4cc5e48693f7b93b7aa0261e63c0e21d/libdwarf-20130729.tar.gz
+tar -xvzf libdwarf-20130729
+cd dwarf-20130729
+./configure
+make
+sudo cp libdwarf/libdwarf.a /usr/local/lib
+sudo cp libdwarf/libdwarf.h /usr/local/include
+sudo chmod 444 /usr/local/include/libdwarf.h
+cd ..
 git clone https://github.com/HSAfoundation/HSAIL-Tools.git
 cd HSAIL-Tools/libHSAIL
 make -j LLVM_CONFIG=llvm-config-3.4 _OPT=1 _M64=1
@@ -81,12 +93,16 @@ sudo cp libHSAIL/generated/*.h* /opt/hsa/include
 
 ```
 
-- Copy cloc and cloc_genw to /opt/amd/bin
+- Copy cloc and cloc_genw to /usr/local/bin and test
 ```
 cd git
 git clone https://github.com/HSAfoundation/CLOC.git
-sudo cp CLOC/bin/cloc /opt/amd/bin/.
-sudo cp CLOC/bin/cloc_genw /opt/amd/bin/.
+sudo cp CLOC/bin/cloc /usr/local/bin/.
+sudo cp CLOC/bin/cloc_genw /usr/local/bin/.
+cd 
+cp -r git/CLOC/examples .
+cd examples/snack/helloworld
+./buildrun.sh
 ```
 
 - Set HSA environment variables

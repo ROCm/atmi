@@ -17,6 +17,7 @@ sudo apt-get install libtinfo-dev
 sudo apt-get install re2c
 sudo apt-get install libbsd-dev
 sudo apt-get install gfortran
+sudo apt-get install build-essential 
 ```
 
 - Install HSA Runtime
@@ -62,6 +63,9 @@ Valid GPU ID is detected:...................Yes
 Can run HSA.................................YES
 ```
 
+If it does not detect a valid GPU ID (last two entries are NO), it is possible that you need to turn the IOMMU on in the firmware.  Reboot your system and interrupt the boot process to get the firmware screen. Then find the menu to turn on IOMMU and switch from disabled ton enabled.  Then save and exit to boot your system. 
+
+
 - Install HSAIL Compiler
 ```
 cd git
@@ -93,7 +97,7 @@ sudo cp libHSAIL/generated/*.h* /opt/hsa/include
 
 ```
 
-- Copy cloc and cloc_genw to /usr/local/bin and test
+- Install and test cloc
 ```
 cd git
 git clone https://github.com/HSAfoundation/CLOC.git
@@ -105,11 +109,21 @@ cd examples/snack/helloworld
 ./buildrun.sh
 ```
 
+- Install Okra (optional, not needed for cloc)
+```
+cd git
+git clone https://github.com/HSAfoundation/Okra-Interface-to-HSA-Device
+sudo mkdir /opt/amd/okra
+sudo cp -r Okra-Interface-to-HSA-Device/okra /opt/amd
+sudo cp Okra-Interface-to-HSA-Device/okra/dist/bin/libokra_x86_64.so /opt/hsa/lib/.
+```
+
 - Set HSA environment variables
 ```
 export HSA_LLVM_PATH=/opt/amd/bin
 export HSA_RUNTIME_PATH=/opt/hsa
 export HSA_LIBHSAIL_PATH=/opt/hsa/lib
+export HSA_OKRA_PATH=/opt/amd/okra
 export PATH=$PATH:/opt/amd/bin
 export LD_LIBRARY_PATH=/opt/hsa/lib
 ```

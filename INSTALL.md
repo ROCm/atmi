@@ -1,11 +1,16 @@
-cloc Installation Instructions
-==============================
+cloc Install Instructions
+=========================
 
-The cloc utility consists of two bash shells with file names "cloc" and "cloc_genw". These are found in the bin directory of this repository. Copy these files to a bin directory somewhere in your Linux environment PATH. Since cloc depends on the HSAIL compiler, you can copy these two files to its bin directory which is usually /opt/amd/bin. To update to a new version of cloc simply replace cloc and cloc_genw in that directory.  
+The cloc utility consists of two bash scripts with file names "cloc" and "cloc_genw". These are found in the bin directory of this repository. Copy these files to a bin directory in your Linux environment PATH such as /usr/local/bin.  To update to a new version of cloc simply replace cloc and cloc_genw in that directory.
 
-In addition to the backend compiler, cloc requires HSA software and the LLVM compiler. This set of instructions can be used to install HSA and cloc for Ubuntu.
+In addition to the bash scripts, cloc requires HSA software and the LLVM compiler. This set of instructions can be used to install much of the HSA software stack and cloc for Ubuntu.  In addition to Linux, you must have an HSA compatible system such as a Kaveri processor. 
 
-- Make sure Ubuntu 14.04 64-bit version or above has been installed and then install these dependencies
+
+HSA Software Install Instructions
+=================================
+
+
+- Make sure Ubuntu 14.04 64-bit version or above has been installed.  Then install these dependencies:
 ```
 sudo apt-get install git
 sudo apt-get install make
@@ -20,10 +25,11 @@ sudo apt-get install gfortran
 sudo apt-get install build-essential 
 ```
 
+
 - Install HSA Runtime
 ```
-mkdir git
-cd git
+mkdir ~/git
+cd ~/git
 git clone https://github.com/HSAfoundation/HSA-Runtime-AMD.git
 cd HSA-Runtime-AMD 
 sudo mkdir -p /opt/hsa/lib
@@ -34,7 +40,7 @@ sudo cp lib/* /opt/hsa/lib
 
 - Install HSA Linux Kernel Drivers and Reboot
 ```
-cd git
+cd ~/git
 git clone https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
 sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-0.9/ubuntu/*.deb
 echo "KERNEL==\"kfd\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/kfd.rules
@@ -45,7 +51,7 @@ sudo reboot
 
 - Use "kfd_check_installation.sh" in HSA Linux driver to verify installation.
 ``` 
-cd git/HSA-Drivers-Linux-AMD
+cd ~/git/HSA-Drivers-Linux-AMD
 ./kfd_check_installation.sh
 ``` 
 
@@ -63,20 +69,21 @@ Valid GPU ID is detected:...................Yes
 Can run HSA.................................YES
 ```
 
-If it does not detect a valid GPU ID (last two entries are NO), it is possible that you need to turn the IOMMU on in the firmware.  Reboot your system and interrupt the boot process to get the firmware screen. Then find the menu to turn on IOMMU and switch from disabled ton enabled.  Then save and exit to boot your system. 
+If it does not detect a valid GPU ID (last two entries are NO), it is possible that you need to turn the IOMMU on in the firmware.  Reboot your system and interrupt the boot process to get the firmware screen. Then find the menu to turn on IOMMU and switch from disabled to enabled.  Then select "save and exit" to boot your system.  Then rerun the test script.
 
 
 - Install HSAIL Compiler
 ```
-cd git
+cd ~/git
 git clone https://github.com/HSAfoundation/HSAIL-HLC-Stable.git
 sudo mkdir -p /opt/amd
 sudo cp -R HSAIL-HLC-Stable/bin /opt/amd
 ```
 
+
 - Build and Install libdwarf & libHSAIL
 ```
-cd git
+cd ~/git
 wget http://pkgs.fedoraproject.org/repo/pkgs/libdwarf/libdwarf-20130729.tar.gz/4cc5e48693f7b93b7aa0261e63c0e21d/libdwarf-20130729.tar.gz
 tar -xvzf libdwarf-20130729
 cd dwarf-20130729
@@ -97,9 +104,10 @@ sudo cp libHSAIL/generated/*.h* /opt/hsa/include
 
 ```
 
+
 - Install and test cloc
 ```
-cd git
+cd ~/git
 git clone https://github.com/HSAfoundation/CLOC.git
 sudo cp CLOC/bin/cloc /usr/local/bin/.
 sudo cp CLOC/bin/cloc_genw /usr/local/bin/.
@@ -109,14 +117,28 @@ cd examples/snack/helloworld
 ./buildrun.sh
 ```
 
+
+- Install C++AMP (optional, not needed for cloc)
+```
+mkdir ~/git/deb
+cd ~/git/deb
+wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-0.4.0-hsa-milestone3-Linux.deb
+wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/libcxxamp-0.4.0-hsa-milestone3-Linux.deb
+wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-bolt-1.2.0-hsa-milestone3-Linux.deb
+wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/boost_1_55_0-hsa-milestone3.deb
+sudo dpkg -i *.deb
+```
+
+
 - Install Okra (optional, not needed for cloc)
 ```
-cd git
+cd ~/git
 git clone https://github.com/HSAfoundation/Okra-Interface-to-HSA-Device
 sudo mkdir /opt/amd/okra
 sudo cp -r Okra-Interface-to-HSA-Device/okra /opt/amd
 sudo cp Okra-Interface-to-HSA-Device/okra/dist/bin/libokra_x86_64.so /opt/hsa/lib/.
 ```
+
 
 - Set HSA environment variables
 ```

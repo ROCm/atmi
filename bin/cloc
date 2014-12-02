@@ -6,7 +6,7 @@
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.7.3
+PROGVERSION=0.7.4
 #
 # Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -75,8 +75,7 @@ function usage(){
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig, hsail, or o
     -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
-    -p2     <path>            Default=$HSA_LIBHSAIL_PATH or /opt/hsa/lib
-    -p3     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -p2     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
 
    Examples:
     cloc mykernel.cl              /* create mykernel.brig            */
@@ -86,9 +85,9 @@ function usage(){
     cloc -str -hsail mykernel.cl  /* create mykernel.o for okra      */
     cloc -t /tmp/foo mykernel.cl  /* will automatically set -k       */
 
-   You may set environment variables HSA_LLVM_PATH, HSA_LIBHSAIL_PATH, 
-   HSA_RUNTIME_PATH, CLOPTS, or LKOPTS instead of providing options 
-   -p1, -p2, -p3, -clopts, or -lkopts respectively.  
+   You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
+   CLOPTS, or LKOPTS instead of providing options -p1, -p2, -clopts, 
+   or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
    Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.
@@ -149,8 +148,7 @@ while [ $# -gt 0 ] ; do
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
       -p1)              HSA_LLVM_PATH=$2; shift ;;
-      -p2)              HSA_LIBHSAIL_PATH=$2; shift ;;
-      -p3)              HSA_RUNTIME_PATH=$2; shift ;;
+      -p2)              HSA_RUNTIME_PATH=$2; shift ;;
       -h) 		usage ;; 
       -help) 		usage ;; 
       --help) 		usage ;; 
@@ -181,7 +179,6 @@ CLOCPATH=$(getdname $0)
 if ! [ $QUIET ] ; then  VERBOSE=true ; fi
 
 #  Set Default values
-HSA_LIBHSAIL_PATH=${HSA_LIBHSAIL_PATH:-/opt/hsa/lib}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/bin}
 #  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
@@ -227,17 +224,11 @@ if [ ! -d $HSA_LLVM_PATH ] ; then
    echo "        Set env variable HSA_LLVM_PATH or use -p1 option"
    exit $DEADRC
 fi
-#  We need RUNTIME and LIBHSAIL with -c option
+#  We need RUNTIME with -c option
 if [ $MAKEOBJ ] && [ ! -d $HSA_RUNTIME_PATH ] ; then 
    echo "ERROR:  The -c option needs HSA_RUNTIME_PATH"
    echo "        Missing directory $HSA_RUNTIME_PATH "
-   echo "        Set env variable HSA_RUNTIME_PATH or use -p3 option"
-   exit $DEADRC
-fi
-if [ $MAKEOBJ ] && [ ! -d $HSA_LIBHSAIL_PATH ] ; then 
-   echo "ERROR:  The -c option needs HSA_LIBHSAIL_PATH"
-   echo "        Missing directory $HSA_LIBHSAIL_PATH "
-   echo "        Set env variable HSA_LIBHSAIL_PATH or use -p2 option"
+   echo "        Set env variable HSA_RUNTIME_PATH or use -p2 option"
    exit $DEADRC
 fi
 if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
@@ -352,7 +343,6 @@ fi
 [ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
 [ $VERBOSE ] && echo "#Info:  LLVM path:	$HSA_LLVM_PATH"
 [ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  Runtime:	$HSA_RUNTIME_PATH"
-[ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  HSA path:	$HSA_LIBHSAIL_PATH"
 [ $KEEPTDIR ] && [ $VERBOSE ] && echo "#Info:  Temp dir:	$TMPDIR" 
 if [ $MAKESTR ] || [ $MAKEOBJ ] ; then  
    [ $VERBOSE ] && echo "#Info:  gcc loc:	$CMD_GCC" 
@@ -575,7 +565,7 @@ fi
 if [ $MAKEOBJ ] ; then 
    if [ $DRYRUN ] ; then
       [ $VERBOSE ] && echo "#Step:  gcc		c --> $OUTFILE  ..."
-      echo "$CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_LIBHSAIL_PATH/../libHSAIL -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+      echo "$CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
    else
       [ $VERBOSE ] && echo "#Step:  gcc		c --> $OUTFILE  ..."
       echo "char brigMem[] = {" > $TMPDIR/binarybrig.h
@@ -587,11 +577,11 @@ if [ $MAKEOBJ ] ; then
       fi
       echo "};" >> $TMPDIR/binarybrig.h
       echo "size_t brigMemSz = sizeof(brigMem);" >> $TMPDIR/binarybrig.h
-      $CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_LIBHSAIL_PATH/../libHSAIL -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
+      $CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_LIBHSAIL_PATH/../libHSAIL -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+         echo "        $CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
          do_err $rc
       fi
    fi

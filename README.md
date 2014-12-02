@@ -1,4 +1,4 @@
-CLOC - Version 0.7.3
+CLOC - Version 0.7.4
 ====================
 
 CLOC: Convert an CL (Kernel c Language) file to brig, hsail, or object
@@ -85,8 +85,7 @@ Software License Agreement.
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig, hsail, or o
     -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
-    -p2     <path>            Default=$HSA_LIBHSAIL_PATH or /opt/hsa/lib
-    -p3     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -p2     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
 
    Examples:
     cloc mykernel.cl              /* create mykernel.brig            */
@@ -96,9 +95,9 @@ Software License Agreement.
     cloc -str -hsail mykernel.cl  /* create mykernel.o for okra      */
     cloc -t /tmp/foo mykernel.cl  /* will automatically set -k       */
 
-   You may set environment variables HSA_LLVM_PATH, HSA_LIBHSAIL_PATH, 
-   HSA_RUNTIME_PATH, CLOPTS, or LKOPTS instead of providing options 
-   -p1, -p2, -p3, -clopts, or -lkopts respectively.  
+   You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
+   CLOPTS, or LKOPTS instead of providing options -p1, -p2, -clopts, 
+   or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
    Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.

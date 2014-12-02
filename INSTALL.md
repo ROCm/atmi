@@ -16,7 +16,6 @@ sudo apt-get install git
 sudo apt-get install make
 sudo apt-get install g++
 sudo apt-get install libstdc++-4.8-dev
-sudo apt-get install llvm-3.4-dev
 sudo apt-get install libelf-dev
 sudo apt-get install libtinfo-dev
 sudo apt-get install re2c
@@ -81,30 +80,6 @@ sudo cp -R HSAIL-HLC-Stable/bin /opt/amd
 ```
 
 
-- Build and Install libdwarf & libHSAIL
-```
-cd ~/git
-wget http://pkgs.fedoraproject.org/repo/pkgs/libdwarf/libdwarf-20130729.tar.gz/4cc5e48693f7b93b7aa0261e63c0e21d/libdwarf-20130729.tar.gz
-tar -xvzf libdwarf-20130729
-cd dwarf-20130729
-./configure
-make
-sudo cp libdwarf/libdwarf.a /usr/local/lib
-sudo cp libdwarf/libdwarf.h /usr/local/include
-sudo chmod 444 /usr/local/include/libdwarf.h
-cd ..
-git clone https://github.com/HSAfoundation/HSAIL-Tools.git
-cd HSAIL-Tools/libHSAIL
-make -j LLVM_CONFIG=llvm-config-3.4 _OPT=1 _M64=1
-sudo mkdir -p /opt/hsa/lib
-sudo mkdir -p /opt/hsa/include
-sudo cp build*/libhsail.a /opt/hsa/lib
-sudo cp libHSAIL/*.h* /opt/hsa/include
-sudo cp libHSAIL/generated/*.h* /opt/hsa/include
-
-```
-
-
 - Install and test cloc
 ```
 cd ~/git
@@ -144,7 +119,6 @@ sudo cp Okra-Interface-to-HSA-Device/okra/dist/bin/libokra_x86_64.so /opt/hsa/li
 ```
 export HSA_LLVM_PATH=/opt/amd/bin
 export HSA_RUNTIME_PATH=/opt/hsa
-export HSA_LIBHSAIL_PATH=/opt/hsa/lib
 export HSA_OKRA_PATH=/opt/amd/okra
 export PATH=$PATH:/opt/amd/bin
 export LD_LIBRARY_PATH=/opt/hsa/lib

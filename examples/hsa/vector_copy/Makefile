@@ -13,7 +13,7 @@ all: $(TEST_NAME) $(TEST_NAME).brig
 $(TEST_NAME): $(OBJ_FILES) $(COMMON_OBJ_FILES) check-build-env
 	$(CC) $(LFLAGS) $(COMMON_OBJ_FILES) $(OBJ_FILES) -lelf -L$(HSA_RUNTIME_PATH)/lib -lhsa-runtime64 -o $(TEST_NAME)
 
-$(TEST_NAME).brig : check-cloc-env
+$(TEST_NAME).brig :
 	cloc $(TEST_NAME).cl
 
 obj/%.o: %.c
@@ -41,11 +41,5 @@ check-build-env:
 ifndef HSA_RUNTIME_PATH
 	$(error HSA_RUNTIME_PATH is undefined)
 endif
-
-check-cloc-env:
-ifndef HSA_LIBHSAIL_PATH
-	$(error HSA_LIBHSAIL_PATH is undefined - Required by CLOC)
-endif
-
 
 

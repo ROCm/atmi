@@ -5,7 +5,6 @@
 #
 #  Set HSA Environment variables
 [ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
-[ -z HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib
 [ -z HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/bin
 export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
 

@@ -1,5 +1,5 @@
 ```
-Note- If HSAIL-HLC-Stable is used. The tests have to be compiled with CFLAGS=-DDUMMY_ARGS=1. Example make all -DDUMMY_ARGS=1
+Note- If HSAIL-HLC-Stable is used. The tests have to be compiled with CFLAGS=-DDUMMY_ARGS=1. Example make all -DDUMMY_ARGS=1. Make sure to have the compiler and cloc installed in opt/amd/bin and the runtime in opt/hsa/ as per the instructions in INSTALL.md
 
 #For building HSA examples. 
 cd hsa 

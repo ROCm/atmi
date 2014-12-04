@@ -1,3 +1,6 @@
+ifndef HSA_RUNTIME_PATH
+	HSA_RUNTIME_PATH=/opt/hsa
+endif
 
 TEST_NAME=vector_copy
 LFLAGS= -g  -Wl,--unresolved-symbols=ignore-in-shared-libs
@@ -10,7 +13,7 @@ COMMON_OBJ_FILES := $(addprefix ../common/obj/, $(notdir $(COMMON_C_FILES:.c=.o)
 
 all: $(TEST_NAME) $(TEST_NAME).brig
 
-$(TEST_NAME): $(OBJ_FILES) $(COMMON_OBJ_FILES) check-build-env
+$(TEST_NAME): $(OBJ_FILES) $(COMMON_OBJ_FILES)
 	$(CC) $(LFLAGS) $(COMMON_OBJ_FILES) $(OBJ_FILES) -lelf -L$(HSA_RUNTIME_PATH)/lib -lhsa-runtime64 -o $(TEST_NAME)
 
 $(TEST_NAME).brig :
@@ -23,23 +26,10 @@ clean:
 	rm -rf obj/*o *.brig $(TEST_NAME)
 
 
-test:	check-test-env
-	echo "export LD_LIBRARY_PATH=$(HSA_KMT_PATH)/lnx64a:$(HSA_RUNTIME_PATH)/lib" > test.sh
+test:	
+	echo "export LD_LIBRARY_PATH=$(HSA_RUNTIME_PATH)/lib" > test.sh
 	echo "./$(TEST_NAME)" >> test.sh
 	bash test.sh
 	rm test.sh
-
-check-test-env:
-ifndef HSA_KMT_PATH
-	$(error HSA_KMT_PATH is undefined)
-endif
-ifndef HSA_RUNTIME_PATH
-	$(error HSA_RUNTIME_PATH is undefined)
-endif
-  
-check-build-env:
-ifndef HSA_RUNTIME_PATH
-	$(error HSA_RUNTIME_PATH is undefined)
-endif
 
 

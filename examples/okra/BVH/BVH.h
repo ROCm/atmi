@@ -3,7 +3,7 @@
 
 #include "Sphere.h"
 #include "mem_mgr.h"
-
+#include "stdint.h"
 #ifndef SVM_DATA_STRUCT_OPENCL_DEVICE
 #define __global 
 #endif

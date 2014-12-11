@@ -756,8 +756,12 @@ __SEDCMD=" "
          echo "extern void ${__KN}_($__CFN_ARGL, const Launch_params_t* lparm_p) {" >>$__CWRAP
          echo "   Launch_params_t lparm ;" >> $__CWRAP
          echo "   lparm=lparm_p[0];" >> $__CWRAP
-      else 
-         echo "extern void $__KN($__CFN_ARGL, const Launch_params_t lparm) {" >>$__CWRAP
+      else  
+         if [ "$__CFN_ARGL" == "" ] ; then 
+            echo "extern void $__KN(const Launch_params_t lparm) {" >>$__CWRAP
+         else
+            echo "extern void $__KN($__CFN_ARGL, const Launch_params_t lparm) {" >>$__CWRAP
+         fi
       fi
 
 #     Write the structure definition for the kernel arguments
@@ -851,7 +855,11 @@ __SEDCMD=" "
 #        don't use headers for fortran but it is a good reference for how to call from fortran
          echo "extern _CPPSTRING_ void ${__KN}_($__PROTO_ARGL, const Launch_params_t* lparm_p);" >>$__HDRF
       else
-         echo "extern _CPPSTRING_ void ${__KN}($__PROTO_ARGL, const Launch_params_t lparm);" >>$__HDRF
+         if [ "$__PROTO_ARGL" == "" ] ; then 
+            echo "extern _CPPSTRING_ void ${__KN}(const Launch_params_t lparm);" >>$__HDRF
+         else
+            echo "extern _CPPSTRING_ void ${__KN}($__PROTO_ARGL, const Launch_params_t lparm);" >>$__HDRF
+         fi
       fi
 
 #     Now add the kernel template to wrapper and change all three strings

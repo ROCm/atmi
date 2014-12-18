@@ -115,10 +115,14 @@ function getdname(){
       __DIRN=$PWD; 
    else
       if [ ${__DIRN:0:1} != "/" ] ; then 
-         if [ ${__DIRN:0:1} = "." ] ; then 
-            __DIRN=$PWD/${__DIRN:2}
+         if [ ${__DIRN:0:2} == ".." ] ; then 
+               __DIRN=`dirname $PWD`/${__DIRN:3}
          else
-            __DIRN=$PWD/$__DIRN
+            if [ ${__DIRN:0:1} = "." ] ; then 
+               __DIRN=$PWD/${__DIRN:2}
+            else
+               __DIRN=$PWD/$__DIRN
+            fi
          fi
       fi
    fi
@@ -164,6 +168,11 @@ done
 # The above while loop is exited when last string with a "-" is processed
 LASTARG=$1
 shift
+
+#  Allow output specifier after the cl file
+if [ "$1" == "-o" ]; then 
+   OUTFILE=$2; shift ; shift; 
+fi
 
 if [ ! -z $1 ]; then 
    echo " "
@@ -261,6 +270,9 @@ else
 #  Use the specified OUTFILE
    OUTDIR=$(getdname $OUTFILE)
    OUTFILE=${OUTFILE##*/}
+   if [ ${OUTFILE##*.} == "h" ] ; then 
+      OUTFILE="${OUTFILE%.*}.o"
+   fi
 fi 
 
 if [ $MAKEOBJ ] && [ $GEN_IL ] ; then

@@ -6,7 +6,7 @@
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.7.4
+PROGVERSION=0.7.5
 #
 # Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -196,7 +196,7 @@ CMD_LLA=${CMD_LLA:-llvm-dis}
 LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
 CMD_OPT=${CMD_OPT:-opt -O3 -gpu -whole}
-CMD_LLC=${CMD_LLC:-llc -O2 -march=hsail-64}
+CMD_LLC=${CMD_LLC:-llc -O2 -march=hsail-64 -filetype=obj}
 CMD_ASM=${CMD_ASM:-hsailasm -disassemble}
 CMD_BRI=${CMD_BRI:-hsailasm }
 

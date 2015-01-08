@@ -375,12 +375,13 @@ int main(int argc, char **argv)
     /*
      * Cleanup all allocated resources.
      */
-    destroy_brig_module(brigModule);
     err=hsa_signal_destroy(signal);
     check(Destroying the signal, err);
 
     err=hsa_ext_program_destroy(hsaProgram);
     check(Destroying the program, err);
+
+    destroy_brig_module(brigModule);
 
     err=hsa_queue_destroy(commandQueue);
     check(Destroying the queue, err);

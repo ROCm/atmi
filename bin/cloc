@@ -202,13 +202,10 @@ CMD_BRI=${CMD_BRI:-hsailasm }
 
 RUNDATE=`date`
 
-#  #### REMOVE THIS #######################
-$HSA_LLVM_PATH/$CMD_LLC -version  | grep -q "Jul 21 2014"
-if [ $? == 0 ] ; then 
-   GENW_ADD_DUMMY=t
-   export GENW_ADD_DUMMY
-fi
-#  #########################################
+#$HSA_LLVM_PATH/$CMD_LLC -version  | grep -q "Jul 21 2014"
+#We assume that the HSAIL_HLC_Stable always generates dummy arguments
+GENW_ADD_DUMMY=t
+export GENW_ADD_DUMMY
 
 filetype=${LASTARG##*\.}
 if [ "$filetype" != "cl" ]  ; then 

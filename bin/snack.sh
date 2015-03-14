@@ -66,14 +66,16 @@ PROGVERSION=0.8.0
 function usage(){
 /bin/cat 2>&1 <<"EOF" 
 
-   snack: Generate snack functions from source code.
-          Header .h files will be created with .o files. 
+   snack: Generate host-callable "snack" functions for GPU kernels.
+          Snack generates the source code and headers for each kernel 
+          in the input filename.cl file.  The -c option will compile 
+          the source with gcc so you can link with your host application.
+          Host applicaton requires no API to use snack functions.
 
-   Usage: snack [ options ] filename.cl
+   Usage: snack.sh [ options ] filename.cl
 
    Options without values:
-    -c      Create .o object file for SNACK
-    -str    Create .o file with string for brig or hsail. e.g. to use with okra
+    -c      Compile generated source code to create .o file
     -hsail  Generate dissassembled hsail from brig 
     -v      Display version of snack then exit
     -q      Run quietly, no messages 
@@ -81,8 +83,9 @@ function usage(){
     -h      Print this help message
     -k      Keep temporary files
     -nq     Shortcut for -n -q, Show commands without messages. 
-    -fort   Generate fortran function names for -c option
+    -fort   Generate fortran function names
     -noglobs Do not generate global functions 
+    -str    Create .o file with string for brig or hsail. e.g. to use with okra
 
    Options with values:
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
@@ -96,11 +99,11 @@ function usage(){
     -gccopt <gcc opt>         Default=2
 
    Examples:
-    snack mykernel.cl              /* create mykernel.snackwrap.c     */
-    snack -c mykernel.cl           /* gcc compile to mykernel.o       */
-    snack -str mykernel.cl         /* create mykernel.o for okra      */
-    snack -hsail mykernel.cl       /* create hsail and snackwrap.c    */
-    snack -t /tmp/foo mykernel.cl  /* will automatically set -k       */
+    snack my.cl              /* create my.snackwrap.c and my.h  */
+    snack -c my.cl           /* gcc compile to creat  my.o      */
+    snack -str my.cl         /* create mykernel.o for okra      */
+    snack -hsail my.cl       /* create hsail and snackwrap.c    */
+    snack -t /tmp/foo my.cl  /* will automatically set -k       */
 
    You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
    CLOPTS, or LKOPTS instead of providing options -p1, -p2, -clopts, 

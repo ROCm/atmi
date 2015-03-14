@@ -60,6 +60,7 @@ Software License Agreement.
 <A NAME="CommandHelp">
 # Command Help 
 --------- 
+## The cloc.sh command 
 
 ```
    cloc.sh: Convert a cl file to brig or hsail using the
@@ -90,6 +91,57 @@ Software License Agreement.
 
    You may set environment variables HSA_LLVM_PATH, CLOPTS, or LKOPTS 
    instead of providing options -p, -clopts, or -lkopts respectively.  
+   Command line options will take precedence over environment variables. 
+
+   Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
+
+```
+
+## The snack.sh Command 
+
+```
+   snack: Generate host-callable "snack" functions for GPU kernels.
+          Snack generates the source code and headers for each kernel 
+          in the input filename.cl file.  The -c option will compile 
+          the source with gcc so you can link with your host application.
+          Host applicaton requires no API to use snack functions.
+
+   Usage: snack.sh [ options ] filename.cl
+
+   Options without values:
+    -c      Compile generated source code to create .o file
+    -hsail  Generate dissassembled hsail from brig 
+    -v      Display version of snack then exit
+    -q      Run quietly, no messages 
+    -n      Dryrun, do nothing, show commands that would execute
+    -h      Print this help message
+    -k      Keep temporary files
+    -nq     Shortcut for -n -q, Show commands without messages. 
+    -fort   Generate fortran function names
+    -noglobs Do not generate global functions 
+    -str    Create .o file with string for brig or hsail. e.g. to use with okra
+
+   Options with values:
+    -clopts  <compiler opts>  Default="-cl-std=CL2.0"
+    -lkopts  <linker opts>    Read snack script for defaults
+    -s       <symbolname>     Default=filename (only with -str option)
+    -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
+    -o       <outfilename>    Default=<filename>.<ft> ft=snackwrap.c or o
+    -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p2     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -opt    <cl opt>          Default=2
+    -gccopt <gcc opt>         Default=2
+
+   Examples:
+    snack my.cl              /* create my.snackwrap.c and my.h  */
+    snack -c my.cl           /* gcc compile to creat  my.o      */
+    snack -str my.cl         /* create mykernel.o for okra      */
+    snack -hsail my.cl       /* create hsail and snackwrap.c    */
+    snack -t /tmp/foo my.cl  /* will automatically set -k       */
+
+   You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
+   CLOPTS, or LKOPTS instead of providing options -p1, -p2, -clopts, 
+   or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
    Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
@@ -138,12 +190,14 @@ __kernel void decode(__global char* in, __global char* out) {
 }
 ```
 The host program includes header file "hw.h" that does not exist yet.
-The -c option of snack will create both the object file and the header file.
-The header file will have the function prototype for all kernels declared 
-in the .cl file.  Use this command to compile the hw.cl file with snack.
+The -c option of snack.sh will call the gcc compiler and create 
+the object file and the header file.  Without -c you get the 
+generated c code hw.snackwrap.c and the header file.  The header file
+has function prototypes for all kernels declared in the .cl file.  Use 
+this command to compile the hw.cl file with snack.sh.
 
 ```
-snack -c hw.cl
+snack.sh -c hw.cl
 ```
 
 You can now compile and build the binary "HelloWorld" with any c++ compiler.
@@ -196,7 +250,7 @@ go back to step 1.  After your manual edits, rebuild the object code from your
 modified hsail as follows. 
 
 ```
-   cloc -c myKernels.hsail
+   snack.sh -c  myKernels.hsail
 ```
 The above will fail if either the myKernels.hsail or myKernels.snackwrap.c file are missing.
 

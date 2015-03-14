@@ -52,7 +52,7 @@ function usage(){
    cloc.sh: Convert a cl file to brig or hsail using the
             LLVM to HSAIL backend compiler.
 
-   Usage: cloc [ options ] filename.cl
+   Usage: cloc.sh [ options ] filename.cl
 
    Options without values:
     -hsail    Generate dissassembled hsail from brig 

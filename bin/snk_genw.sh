@@ -1,12 +1,11 @@
 #!/bin/bash
 #
-#  cloc_genw:  Part of cloc that generates the user callable wrapper functions.
-#              when the -c option is used. 
+#  snk_genw.sh: Part of snack that generates the user callable wrapper functions.
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-# Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
+# Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  
 # 
 # AMD is granting you permission to use this software and documentation (if any) (collectively, the 
 # Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
@@ -45,11 +44,11 @@
 # Software License Agreement.
 # 
 
-function write_context_template(){
+function write_copyright_template(){
 /bin/cat  <<"EOF"
 /*
 
-  Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
+  Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  
 
   AMD is granting you permission to use this software and documentation (if any) (collectively, the 
   Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
@@ -98,10 +97,9 @@ function write_context_template(){
 #include "hsa.h"
 #include "hsa_ext_finalize.h"
 
-typedef struct transfer_t Transfer_t;
-struct transfer_t { int nargs ; size_t* rsrvd1; size_t* rsrvd2 ; size_t* rsrvd3 ; } ;
-typedef struct lparm_t Launch_params_t;
-struct lparm_t { int ndim; size_t gdims[3]; size_t ldims[3]; Transfer_t transfer ; } ;
+/*  set NOTCOHERENT needs this include
+#include "hsa_ext_amd.h"
+*/
 
 typedef enum status_t status_t;
 enum status_t {
@@ -114,8 +112,69 @@ enum status_t {
     STATUS_KERNEL_MISSING_OPERAND_SECTION=6,
     STATUS_UNKNOWN=7,
 };
+EOF
+}
 
-static Elf_Scn* cloc_extract_elf_sect (Elf *elfP, Elf_Data *secHdr, char const *brigName, char const *bifName) {
+function write_header_template(){
+/bin/cat  <<"EOF"
+#ifdef __cplusplus
+#define _CPPSTRING_ "C" 
+#endif
+#ifndef __cplusplus
+#define _CPPSTRING_ 
+#endif
+#ifndef __SNK_DEFS
+#define SNK_MAX_STREAMS 8 
+extern _CPPSTRING_ void stream_sync(const int stream_num);
+extern _CPPSTRING_ void snk_stop();
+
+#define SNK_MAXEDGESIN 10
+#define SNK_MAXEDGESOUT 10
+#define SNK_ORDERED 1
+#define SNK_UNORDERED 0
+#define SNK_GPU 0
+#define SNK_SIM 1
+#define SNK_CPU 2
+
+typedef struct snk_lparm_s snk_lparm_t;
+struct snk_lparm_s { 
+   int ndim;                         /* default = 1 */
+   size_t gdims[3];                  /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
+   size_t ldims[3];                  /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
+   int stream;                       /* default = -1 , synchrnous */
+   int barrier;                      /* default = SNK_ORDERED */
+   int acquire_fence_scope;          /* default = 2 */
+   int release_fence_scope;          /* default = 2 */
+   int num_edges_in;                 /*  not yet implemented */
+   int num_edges_out;                /*  not yet implemented */
+   int * edges_in;                   /*  not yet implemented */
+   int * edges_out;                  /*  not yet implemented */
+   int devtype;                      /*  not yet implemented-default=SNK_GPU */
+   int rank;                         /*  not yet implemented-used for MPI work sharing */
+} ;
+
+/* This string macro is used to declare launch parameters set default values  */
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_ORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_edges_in=0,.num_edges_out=0,.edges_in=NULL,.edges_out=NULL,.devtype=SNK_GPU,.rank=0} ; X = &_ ## X ;
+ 
+/* Equivalent host data types for kernel data types */
+typedef struct snk_image3d_s snk_image3d_t;
+struct snk_image3d_s { 
+   unsigned int channel_order; 
+   unsigned int channel_data_type; 
+   size_t width, height, depth;
+   size_t row_pitch, slice_pitch;
+   size_t element_size;
+   void *data;
+};
+
+#define __SNK_DEFS
+#endif
+EOF
+}
+
+function write_context_template(){
+/bin/cat  <<"EOF"
+static Elf_Scn* snk_extract_elf_sect (Elf *elfP, Elf_Data *secHdr, char const *brigName, char const *bifName) {
     int cnt = 0;
     Elf_Scn* scn = NULL;
     Elf32_Shdr* shdr = NULL;
@@ -138,7 +197,7 @@ static Elf_Scn* cloc_extract_elf_sect (Elf *elfP, Elf_Data *secHdr, char const *
 }
 
 /* Extract section and copy into HsaBrig */
-static status_t cloc_CopyElfSectToModule (Elf *elfP, Elf_Data *secHdr, char const *brigName, char const *bifName, 
+static status_t snk_CopyElfSectToModule (Elf *elfP, Elf_Data *secHdr, char const *brigName, char const *bifName, 
                                        hsa_ext_brig_module_t* brig_module,
                                        hsa_ext_brig_section_id_t section_id) {
     Elf_Scn* scn = NULL;
@@ -146,7 +205,7 @@ static status_t cloc_CopyElfSectToModule (Elf *elfP, Elf_Data *secHdr, char cons
     void* address_to_copy;
     size_t section_size=0;
 
-    scn = cloc_extract_elf_sect(elfP, secHdr, brigName, bifName);
+    scn = snk_extract_elf_sect(elfP, secHdr, brigName, bifName);
 
     if (scn) {
         if ((data = elf_getdata(scn, NULL)) == NULL) {
@@ -168,7 +227,7 @@ static status_t cloc_CopyElfSectToModule (Elf *elfP, Elf_Data *secHdr, char cons
 } 
 
 /* Reads binary of BRIG and BIF format */
-static status_t cloc_ReadBinary(hsa_ext_brig_module_t **brig_module_t, char* binary, size_t binsz) {
+static status_t snk_ReadBinary(hsa_ext_brig_module_t **brig_module_t, char* binary, size_t binsz) {
     /* Create the brig_module */
     uint32_t number_of_sections = 3;
     hsa_ext_brig_module_t* brig_module;
@@ -193,15 +252,15 @@ static status_t cloc_ReadBinary(hsa_ext_brig_module_t **brig_module_t, char* bin
         return STATUS_KERNEL_INVALID_SECTION_HEADER;
     }
 
-    status = cloc_CopyElfSectToModule(elfP, secHdr,"hsa_data",".brig_hsa_data",
+    status = snk_CopyElfSectToModule(elfP, secHdr,"hsa_data",".brig_hsa_data",
                                    brig_module, HSA_EXT_BRIG_SECTION_DATA);
     if (status != STATUS_SUCCESS) { return STATUS_KERNEL_MISSING_DATA_SECTION; }
 
-    status = cloc_CopyElfSectToModule(elfP, secHdr, "hsa_code",".brig_hsa_code",
+    status = snk_CopyElfSectToModule(elfP, secHdr, "hsa_code",".brig_hsa_code",
                                    brig_module, HSA_EXT_BRIG_SECTION_CODE);
     if (status != STATUS_SUCCESS) { return STATUS_KERNEL_MISSING_CODE_SECTION; }
 
-    status = cloc_CopyElfSectToModule(elfP, secHdr, "hsa_operand",".brig_hsa_operand",
+    status = snk_CopyElfSectToModule(elfP, secHdr, "hsa_operand",".brig_hsa_operand",
                                    brig_module, HSA_EXT_BRIG_SECTION_OPERAND);
     if (status != STATUS_SUCCESS) { return STATUS_KERNEL_MISSING_OPERAND_SECTION; }
 
@@ -271,7 +330,7 @@ struct BrigData {
  * Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
  * and sets the value of data to the agent handle if it is.
  */
-static hsa_status_t cloc_FindGPU(hsa_agent_t agent, void *data) {
+static hsa_status_t snk_FindGPU(hsa_agent_t agent, void *data) {
     if (data == NULL) {
         return HSA_STATUS_ERROR_INVALID_ARGUMENT;
     }
@@ -288,7 +347,7 @@ static hsa_status_t cloc_FindGPU(hsa_agent_t agent, void *data) {
 }
 
 /*  Determines if a memory region can be used for kernarg allocations.  */
-static hsa_status_t cloc_GetKernArg(hsa_region_t region, void* data) {
+static hsa_status_t snk_GetKernArrg(hsa_region_t region, void* data) {
     hsa_region_flag_t flags;
     hsa_region_get_info(region, HSA_REGION_INFO_FLAGS, &flags);
     if (flags & HSA_REGION_FLAG_KERNARG) {
@@ -300,7 +359,7 @@ static hsa_status_t cloc_GetKernArg(hsa_region_t region, void* data) {
 }
 
 /*  Determines if a memory region is device memory */
-static hsa_status_t cloc_GetDevRegion(hsa_region_t region, void* data) {
+static hsa_status_t snk_GetDevRegion(hsa_region_t region, void* data) {
     hsa_segment_t segment;
     hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT , &segment);
     if (segment & HSA_SEGMENT_GROUP ) {
@@ -317,7 +376,7 @@ static hsa_status_t cloc_GetDevRegion(hsa_region_t region, void* data) {
  * If the symbol is found the function returns HSA_STATUS_SUCCESS, 
  * otherwise it returns HSA_STATUS_ERROR.
  */
-static hsa_status_t cloc_FindSymbolOffset(hsa_ext_brig_module_t* brig_module, const char* symbol_name,
+static hsa_status_t snk_FindSymbolOffset(hsa_ext_brig_module_t* brig_module, const char* symbol_name,
     hsa_ext_brig_code_section_offset32_t* offset) {
     
     /*  Get the data section */
@@ -347,16 +406,50 @@ static hsa_status_t cloc_FindSymbolOffset(hsa_ext_brig_module_t* brig_module, co
     return HSA_STATUS_ERROR;
 }
 
-/* Context specific globals */
+/* Stream specific globals */
+hsa_signal_t   Stream_Signal[SNK_MAX_STREAMS];
+hsa_queue_t*   Stream_CommandQ[SNK_MAX_STREAMS];
+
+extern void stream_sync(int stream_num) {
+
+    hsa_queue_t *queue = Stream_CommandQ[stream_num];
+    hsa_signal_t signal = Stream_Signal[stream_num];
+
+    hsa_barrier_packet_t barrier;
+    memset (&barrier, 0, sizeof(hsa_barrier_packet_t));
+    barrier.header.type=HSA_PACKET_TYPE_BARRIER;
+    barrier.header.acquire_fence_scope=2;
+    barrier.header.release_fence_scope=2;
+    barrier.header.barrier=1;
+    barrier.completion_signal = signal;
+
+    uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+    const uint32_t queue_mask = queue->size - 1;
+    ((hsa_barrier_packet_t*)(queue->base_address))[index&queue_mask]=barrier; 
+    hsa_queue_store_write_index_relaxed(queue,index+1);
+    //Ring the doorbell.
+    hsa_signal_store_relaxed(queue->doorbell_signal, index);
+
+    //Wait for completion signal
+    /* printf("DEBUG STREAM_SYNC:Call #%d for stream %d \n",(int) index,stream_num);  */
+    hsa_signal_wait_acquire(signal, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);
+}
+
+
+/* Context(cl file) specific globals */
 hsa_ext_brig_module_t*           _CN__BrigModule;
 hsa_agent_t                      _CN__Device;
 hsa_ext_program_handle_t         _CN__HsaProgram;
 hsa_ext_brig_module_handle_t     _CN__ModuleHandle;
 int                              _CN__FC = 0; 
 
+/* Global variables */
+hsa_queue_t*                     Sync_CommandQ;
+hsa_signal_t                     Sync_Signal; 
+
 status_t _CN__InitContext(){
 
-/*  cloc will put the binary string for brigMem in binarybrig.h  */
+/*  snack will put the binary string for brigMem in binarybrig.h  */
 #include "binarybrig.h" 
 
     hsa_status_t err;
@@ -366,20 +459,25 @@ status_t _CN__InitContext(){
 
     /*  Iterate over the agents and pick the gpu agent */
     _CN__Device = 0;
-    err = hsa_iterate_agents(cloc_FindGPU, &_CN__Device);
+    err = hsa_iterate_agents(snk_FindGPU, &_CN__Device);
     ErrorCheck(Calling hsa_iterate_agents, err);
 
     err = (_CN__Device == 0) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Checking if the GPU device is non-zero, err);
+/*
+    err = hsa_ext_set_memory_type(_CN__Device, HSA_EXT_MEMORY_TYPE_COHERENT );
+    ErrorCheck(Calling hsa_ext_set_memory_type, err);
+*/
 
     /*  Query the name of the device.  */
     char name[64] = { 0 };
     err = hsa_agent_get_info(_CN__Device, HSA_AGENT_INFO_NAME, name);
     ErrorCheck(Querying the device name, err);
-    /* printf("The device name is %s.\n", name);  */
-
+/*
+    printf("The device name is %s.\n", name);  
+*/
     /*  Load BRIG, encapsulated in an ELF container, into a BRIG module.  */
-    status_t status = cloc_ReadBinary(&_CN__BrigModule,brigMem,brigMemSz);
+    status_t status = snk_ReadBinary(&_CN__BrigModule,brigMem,brigMemSz);
     if (status != STATUS_SUCCESS) {
         printf("Could not create BRIG module: %d\n", status);
         if (status == STATUS_KERNEL_INVALID_SECTION_HEADER || 
@@ -395,7 +493,7 @@ status_t _CN__InitContext(){
         }
     }
 
-    /*  Create hsa program for this kernel.  */
+    /*  Create hsa program for this context */
     err = hsa_ext_program_create(&_CN__Device, 1, HSA_EXT_BRIG_MACHINE_LARGE, HSA_EXT_BRIG_PROFILE_FULL, &_CN__HsaProgram);
     ErrorCheck(Creating the hsa program, err);
 
@@ -403,9 +501,50 @@ status_t _CN__InitContext(){
     err = hsa_ext_add_module(_CN__HsaProgram, _CN__BrigModule, &_CN__ModuleHandle);
     ErrorCheck(Adding the brig module to the program, err);
 
-    return STATUS_SUCCESS;
+    /*  Query the maximum size of the queue.  */
+    uint32_t queue_size = 0;
+    err = hsa_agent_get_info(_CN__Device, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+    ErrorCheck(Querying the device maximum queue size, err);
 
+    /* printf("DEBUG: The maximum queue size is %u.\n", (unsigned int) queue_size);  */
+
+    /*  Create a queue using the maximum size.  */
+    err = hsa_queue_create(_CN__Device, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, &Sync_CommandQ);
+    ErrorCheck(Creating the queue, err);
+
+    /*  Create signal to wait for the dispatch to finish. this Signal is only used for synchronous execution  */ 
+    err=hsa_signal_create(1, 0, NULL, &Sync_Signal);
+    ErrorCheck(Creating a HSA signal, err);
+
+    /*  Create queues and signals for each stream */
+    int stream_num;
+    for ( stream_num = 0 ; stream_num < SNK_MAX_STREAMS ; stream_num++){
+
+       /* printf("calling queue create for stream %d\n",stream_num); */
+       err = hsa_queue_create(_CN__Device, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, &Stream_CommandQ[stream_num]);
+       ErrorCheck(Creating the Stream Command Q, err);
+
+       /*  Create signal to wait for the dispatch to finish. this Signal is only used for synchronous execution  */ 
+       err=hsa_signal_create(1, 0, NULL, &Stream_Signal[stream_num]);
+       ErrorCheck(Creating the Stream Signal, err);
+    }
+
+    return STATUS_SUCCESS;
 } /* end of __CN__InitContext */
+
+extern void snk_stop(){
+    status_t err;
+    if (_CN__FC == 0 ) {
+       err = _CN__InitContext();
+       if ( err != STATUS_SUCCESS ) return ; 
+       _CN__FC = 1;
+    }
+    err=hsa_queue_destroy(Sync_CommandQ);
+    ErrorCheck(Destroying the queue, err);
+    err=hsa_signal_destroy(Sync_Signal); 
+    ErrorCheck(Destroying the signal, err);
+} /* end of snk_stop */
+
 EOF
 }
 
@@ -413,22 +552,20 @@ function write_KernelStatics_template(){
 /bin/cat <<"EOF"
 
 /* Kernel specific globals, one set for each kernel  */
-hsa_dispatch_packet_t            _KN__Aql;
-hsa_signal_t                     _KN__Signal;
 hsa_ext_code_descriptor_t*       _KN__HsaCodeDescriptor;
-void*                            _KN__kernel_arg_buffer = NULL;  
+void*                            _KN__kernel_arg_buffer = NULL; /* Only for syncrhnous calls */  
 size_t                           _KN__kernel_arg_buffer_size ;  
 hsa_ext_finalization_request_t   _KN__FinalizationRequestList;
 int                              _KN__FK = 0 ; 
-hsa_queue_t*                     _KN__CommandQ;
-status_t                         _KN__InitKernel();
-status_t                         _KN__DestroyKernel();
+status_t                         _KN__init();
+status_t                         _KN__stop();
+
 EOF
 }
 
 function write_InitKernel_template(){
 /bin/cat <<"EOF"
-extern status_t _KN__InitKernel(){
+extern status_t _KN__init(){
 
     if (_CN__FC == 0 ) {
        status_t status = _CN__InitContext();
@@ -438,21 +575,11 @@ extern status_t _KN__InitKernel(){
    
     hsa_status_t err;
 
-    /*  Query the maximum size of the queue.  */
-    uint32_t queue_size = 0;
-    err = hsa_agent_get_info(_CN__Device, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
-    ErrorCheck(Querying the device maximum queue size, err);
-    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size);  */
-
-    /*  Create a queue using the maximum size.  */
-    err = hsa_queue_create(_CN__Device, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, &_KN__CommandQ);
-    ErrorCheck(Creating the queue, err);
-
     /*  Construct finalization request list for this kernel.  */
     _KN__FinalizationRequestList.module = _CN__ModuleHandle;
     _KN__FinalizationRequestList.program_call_convention = 0;
 
-    err = cloc_FindSymbolOffset(_CN__BrigModule, "_FN_" , &_KN__FinalizationRequestList.symbol);
+    err = snk_FindSymbolOffset(_CN__BrigModule, "_FN_" , &_KN__FinalizationRequestList.symbol);
     ErrorCheck(Finding the symbol offset for the kernel, err);
 
     /*  (RE) Finalize the hsa program with this kernel on the request list */
@@ -465,7 +592,7 @@ extern status_t _KN__InitKernel(){
 
     /* Find a memory region that supports kernel arguments.  */
     hsa_region_t kernarg_region = 0;
-    hsa_agent_iterate_regions(_CN__Device, cloc_GetKernArg, &kernarg_region);
+    hsa_agent_iterate_regions(_CN__Device, snk_GetKernArrg, &kernarg_region);
     err = (kernarg_region == 0) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a kernarg memory region, err);
    
@@ -476,104 +603,125 @@ extern status_t _KN__InitKernel(){
 
     return STATUS_SUCCESS;
 
-} /* end of _KN__InitKernel */
+} /* end of _KN__init */
 
-extern status_t _KN__DestroyKernel(){
+extern status_t _KN__stop(){
     status_t err;
     if (_CN__FC == 0 ) {
+       /* weird, but we cannot stop unless we initialized the context */
        err = _CN__InitContext();
        if ( err != STATUS_SUCCESS ) return err; 
        _CN__FC = 1;
     }
     if ( _KN__FK == 1 ) {
+        /*  Currently nothing kernel specific must be recovered */
        _KN__FK = 0;
-/*     err=hsa_signal_destroy(signal); */
-       err=hsa_queue_destroy(_KN__CommandQ);
-       ErrorCheck(Destroying the queue, err);
     }
     return STATUS_SUCCESS;
 
-} /* end of _KN__DestroyKernel */
+} /* end of _KN__stop */
+
 EOF
 }
-
 
 function write_kernel_template(){
 /bin/cat <<"EOF"
 
-
     hsa_status_t err;
     status_t status;
 
+    /*  Get stream number from launch parameters.       */
+    /*  This must be less than SNK_MAX_STREAMS.         */
+    /*  If negative, then function call is synchrnous.  */
+    int stream_num = lparm->stream;
+    if ( stream_num >= SNK_MAX_STREAMS )  {
+       printf(" ERROR Stream number %d specified, must be less than %d \n", stream_num, SNK_MAX_STREAMS);
+       return; 
+    }
+
     if (_KN__FK == 0 ) {
-       status = _KN__InitKernel();
+       status = _KN__init();
        if ( status  != STATUS_SUCCESS ) return; 
        _KN__FK = 1;
     }
 
-    /*  Create a signal to wait for the dispatch to finish.  */ 
-    err=hsa_signal_create(1, 0, NULL, &_KN__Signal);
-    ErrorCheck(Creating a HSA signal, err);
+    hsa_queue_t* this_Q ;
+    hsa_signal_t this_sig ;
 
     /*  Setup this call to this kernel dispatch packet from scratch.  */
-    memset(&_KN__Aql, 0, sizeof(_KN__Aql));
-    _KN__Aql.completion_signal=_KN__Signal;
+    hsa_dispatch_packet_t this_aql;
+    memset(&this_aql, 0, sizeof(this_aql));
+
+    if ( stream_num < 0 ) {
+       /*  Sychronous execution */
+       this_Q = Sync_CommandQ;
+       this_sig = Sync_Signal;
+       this_aql.completion_signal=this_sig;
+    } else {
+       /* Asynchrnous */
+       this_Q = Stream_CommandQ[stream_num];
+       this_sig = Stream_Signal[stream_num];
+    }
+
+    /*  Reset signal to original value. */
+    /*  WARNING  atomic operation here. */
+    hsa_signal_store_relaxed(this_sig,1);
 
     /*  Set the dimensions passed from the application */
-    _KN__Aql.dimensions=(uint16_t) lparm.ndim;
-    _KN__Aql.grid_size_x=lparm.gdims[0];
-    _KN__Aql.workgroup_size_x=lparm.ldims[0];
-    if (lparm.ndim>1) {
-       _KN__Aql.grid_size_y=lparm.gdims[1];
-       _KN__Aql.workgroup_size_y=lparm.ldims[1];
+    this_aql.dimensions=(uint16_t) lparm->ndim;
+    this_aql.grid_size_x=lparm->gdims[0];
+    this_aql.workgroup_size_x=lparm->ldims[0];
+    if (lparm->ndim>1) {
+       this_aql.grid_size_y=lparm->gdims[1];
+       this_aql.workgroup_size_y=lparm->ldims[1];
     } else {
-       _KN__Aql.grid_size_y=1;
-       _KN__Aql.workgroup_size_y=1;
+       this_aql.grid_size_y=1;
+       this_aql.workgroup_size_y=1;
     }
-    if (lparm.ndim>2) {
-       _KN__Aql.grid_size_z=lparm.gdims[2];
-       _KN__Aql.workgroup_size_z=lparm.ldims[2];
+    if (lparm->ndim>2) {
+       this_aql.grid_size_z=lparm->gdims[2];
+       this_aql.workgroup_size_z=lparm->ldims[2];
     } else {
-       _KN__Aql.grid_size_z=1;
-       _KN__Aql.workgroup_size_z=1;
+       this_aql.grid_size_z=1;
+       this_aql.workgroup_size_z=1;
     }
 
-    /*  In the future, we may use environment variables for some of these */
-    _KN__Aql.header.type=HSA_PACKET_TYPE_DISPATCH;
-    _KN__Aql.header.acquire_fence_scope=2;
-    _KN__Aql.header.release_fence_scope=2;
-    _KN__Aql.header.barrier=1;
-    _KN__Aql.group_segment_size=_KN__HsaCodeDescriptor->workgroup_group_segment_byte_size;
-    _KN__Aql.private_segment_size=_KN__HsaCodeDescriptor->workitem_private_segment_byte_size;
+    this_aql.header.type=HSA_PACKET_TYPE_DISPATCH;
+    this_aql.header.acquire_fence_scope=lparm->acquire_fence_scope;
+    this_aql.header.release_fence_scope=lparm->release_fence_scope;
+
+    /*  Set user defined barrier, default = 0 implies execution order not gauranteed */
+    this_aql.header.barrier=lparm->barrier;
+    this_aql.group_segment_size=_KN__HsaCodeDescriptor->workgroup_group_segment_byte_size;
+    this_aql.private_segment_size=_KN__HsaCodeDescriptor->workitem_private_segment_byte_size;
     
     /*  copy args from the custom _KN__args structure */
     /*  FIXME We should align kernel_arg_buffer because _KN__args is aligned */
     memcpy(_KN__kernel_arg_buffer, &_KN__args, sizeof(_KN__args)); 
 
     /*  Bind kernelcode to the packet.  */
-    _KN__Aql.kernel_object_address=_KN__HsaCodeDescriptor->code.handle;
+    this_aql.kernel_object_address=_KN__HsaCodeDescriptor->code.handle;
 
     /*  Bind kernel argument buffer to the aql packet.  */
-    _KN__Aql.kernarg_address=(uint64_t)_KN__kernel_arg_buffer;
+    this_aql.kernarg_address=(uint64_t)_KN__kernel_arg_buffer;
 
     /*  Obtain the current queue write index. increases with each call to kernel  */
-    uint64_t index = hsa_queue_load_write_index_relaxed(_KN__CommandQ);
-    /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index+1,"_KN_"); */
+    uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
+    /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
 
-    /*  Write the _KN__Aql packet at the calculated queue index address.  */
-    const uint32_t queueMask = _KN__CommandQ->size - 1;
-    ((hsa_dispatch_packet_t*)(_KN__CommandQ->base_address))[index&queueMask]=_KN__Aql;
+    /*  Write this_aql at the calculated queue index address.  */
+    const uint32_t queueMask = this_Q->size - 1;
+    ((hsa_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]=this_aql;
 
     /* Increment the write index and ring the doorbell to dispatch the kernel.  */
-    hsa_queue_store_write_index_relaxed(_KN__CommandQ, index+1);
-    hsa_signal_store_relaxed(_KN__CommandQ->doorbell_signal, index);
+    hsa_queue_store_write_index_relaxed(this_Q, index+1);
+    hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
 
-    /*  Wait on the dispatch signal until the kernel is finished.  */
-    err = hsa_signal_wait_acquire(_KN__Signal, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);
-    ErrorCheck(Waiting on the dispatch signal, err);
-
-    err = hsa_signal_destroy(_KN__Signal);
-    ErrorCheck(Destroy dispatch signal, err);
+    /*  For synchronous execution, wait on the dispatch signal until the kernel is finished.  */
+    if ( stream_num < 0 ) {
+       err = hsa_signal_wait_acquire(this_sig, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);
+       ErrorCheck(Waiting on the dispatch signal, err);
+    }
 
     return; 
 
@@ -585,30 +733,40 @@ function write_fortran_lparm_t(){
 if [ -f launch_params.f ] ; then 
    echo
    echo "WARNING: The file launch_params.f already exists.   "
-   echo "         cloc will not overwrite this file.  "
+   echo "         snack will not overwrite this file.  "
    echo
 else
 /bin/cat >launch_params.f <<"EOF"
 C     INCLUDE launch_params.f in your FORTRAN source so you can set dimensions.
       use, intrinsic :: ISO_C_BINDING
-      type, BIND(C) :: Launch_params_t
-          integer (C_INT) :: ndim
-          integer (C_SIZE_T) :: gdims(3),ldims(3)
-          type (C_PTR) :: transfer
-      end type Launch_params_t
-      type (Launch_params_t) lparm
-C     These commented lines demonstrate how to set-up a one dimensional grid
+      type, BIND(C) :: snk_lparm_t
+          integer (C_INT) :: ndim = 1
+          integer (C_SIZE_T) :: gdims(3) = (/ 1 , 0, 0 /)
+          integer (C_SIZE_T) :: ldims(3) = (/ 64, 0, 0 /)
+          integer (C_INT) :: stream = -1 
+          integer (C_INT) :: barrier = 1
+          integer (C_INT) :: acquire_fence_scope = 2
+          integer (C_INT) :: release_fence_scope = 2
+          integer (C_INT) :: num_edges_in = 0
+          integer (C_INT) :: num_edges_out = 0
+      end type snk_lparm_t
+      type (snk_lparm_t) lparm
+C  
+C     Set default values
 C     lparm%ndim=1 
-C     lparm%gdims(1)=256
-C     lparm%ldims(1)=256
-C     transfer field reserved for future use
+C     lparm%gdims(1)=1
+C     lparm%ldims(1)=64
+C     lparm%stream=-1 
+C     lparm%barrier=1
+C  
+C  
 EOF
 fi
 }
 
 
 function is_scalar() {
-    scalartypes="int,float,char,double,void,size_t"
+    scalartypes="int,float,char,double,void,size_t,image3d_t"
     local stype
     IFS=","
     for stype in $scalartypes ; do 
@@ -630,7 +788,15 @@ function parse_arg() {
    else
       is_local=0
    fi
+   if [ "${arg_type:0:4}" == "int3" ] ; then   
+      arg_type="int*"
+   fi
    simple_arg_type=`echo $arg_type | awk '{print $NF}' | sed 's/\*//'`
+#  Drop keyword restrict from argument in host callable c function
+   if [ "${simple_arg_type}" == "restrict" ] ; then 
+      arg_type=${arg_type%%restrict*}
+      simple_arg_type=`echo $arg_type | awk '{print $NF}' | sed 's/\*//'`
+   fi
    last_char="${arg_type: $((${#arg_type}-1)):1}"
    if [ "$last_char" == "*" ] ; then 
       is_pointer=1
@@ -641,17 +807,20 @@ function parse_arg() {
       last_char=" " 
    fi
 #  Convert CL types to c types.  A lot of work is needed here.
-   if [ "$simple_arg_type" == "uchar" ] ; then 
+   if [ "$simple_arg_type" == "uint" ] ; then 
+      simple_arg_type="int"
+      arg_type="unsigned int${__lc}"
+   elif [ "$simple_arg_type" == "uchar" ] ; then 
       simple_arg_type="char"
       arg_type="unsigned char${__lc}"
    elif [ "$simple_arg_type" == "uchar16" ] ; then 
       simple_arg_type="int"
       arg_type="unsigned short int${__lc}"
    fi
-#  echo "arg_name:$arg_name arg_type:$arg_type  simple_arg_type:$simple_arg_type"
+#   echo "arg_name:$arg_name arg_type:$arg_type  simple_arg_type:$simple_arg_type"
 }
 
-#  cloc_genw starts here
+#  snk_genw starts here
    
 #  Inputs 
 __SN=$1
@@ -665,7 +834,7 @@ __CWRAP=$5
 __HDRF=$6
 __UPDATED_CL=$7
 
-# If cloc call cloc_genw with -fort option
+# If snack call snk_genw with -fort option
 __IS_FORTRAN=$8
 
 # Intermediate files.
@@ -691,31 +860,21 @@ __SEDCMD=" "
    touch $__EXTRACL
 
 #  Create header file for c and c++ with extra lparm arg (global and local dimensions)
-   echo "/* HEADER FILE GENERATED BY cloc VERSION $__PROGV */" >$__HDRF
+   echo "/* HEADER FILE GENERATED BY snack VERSION $__PROGV */" >$__HDRF
    echo "/* THIS FILE:  $__HDRF  */" >>$__HDRF
    echo "/* INPUT FILE: $__CLF  */" >>$__HDRF
-   echo "#ifdef __cplusplus" >>$__HDRF
-   echo "#define _CPPSTRING_ \"C\" " >>$__HDRF
-   echo "#endif" >>$__HDRF
-   echo "#ifndef __cplusplus" >>$__HDRF
-   echo "#define _CPPSTRING_ " >>$__HDRF
-   echo "#endif" >>$__HDRF
-   echo "#ifndef __SNACK_DEFS" >>$__HDRF
-   echo "typedef struct transfer_t Transfer_t;" >>$__HDRF
-   echo "struct transfer_t { int nargs ; size_t* rsrvd1; size_t* rsrvd2 ; size_t* rsrvd3; } ;" >>$__HDRF
-   echo "typedef struct lparm_t Launch_params_t;" >>$__HDRF
-   echo "struct lparm_t { int ndim; size_t gdims[3]; size_t ldims[3]; Transfer_t transfer  ;} ;" >>$__HDRF
-   echo "#define __SNACK_DEFS" >>$__HDRF
-   echo "#endif" >>$__HDRF
+   write_header_template >>$__HDRF
 
 #  Write comments at the beginning of the c wrapper, include copyright notice
-   echo "/* THIS TEMPORARY c SOURCE FILE WAS GENERATED BY cloc version $__PROGV */" >$__CWRAP
+   echo "/* THIS TEMPORARY c SOURCE FILE WAS GENERATED BY snack version $__PROGV */" >$__CWRAP
    echo "/* THIS FILE : $__CWRAP  */" >>$__CWRAP
    echo "/* INPUT FILE: $__CLF  */" >>$__CWRAP
    echo "/* UPDATED CL: $__UPDATED_CL  */" >>$__CWRAP
    echo "/*                               */ " >>$__CWRAP
    echo "    " >>$__CWRAP
 
+   write_copyright_template >>$__CWRAP
+   write_header_template >>$__CWRAP
    write_context_template | sed -e "s/_CN_/${__SN}/g"  >>$__CWRAP
 
 #  Add includes from CL to the generated C wrapper.
@@ -753,14 +912,12 @@ __SEDCMD=" "
       echo "/* ------  Start of SNACK function ${__KN} ------ */ " >> $__CWRAP 
       if [ $__IS_FORTRAN ] ; then 
 #        Add underscore to kernel name and resolve lparm pointer 
-         echo "extern void ${__KN}_($__CFN_ARGL, const Launch_params_t* lparm_p) {" >>$__CWRAP
-         echo "   Launch_params_t lparm ;" >> $__CWRAP
-         echo "   lparm=lparm_p[0];" >> $__CWRAP
+         echo "extern void ${__KN}_($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
       else  
          if [ "$__CFN_ARGL" == "" ] ; then 
-            echo "extern void $__KN(const Launch_params_t lparm) {" >>$__CWRAP
+            echo "extern void $__KN(const snk_lparm_t * lparm) {" >>$__CWRAP
          else
-            echo "extern void $__KN($__CFN_ARGL, const Launch_params_t lparm) {" >>$__CWRAP
+            echo "extern void $__KN($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
 
@@ -853,12 +1010,12 @@ __SEDCMD=" "
 #     Write the prototype to the header file
       if [ $__IS_FORTRAN ] ; then 
 #        don't use headers for fortran but it is a good reference for how to call from fortran
-         echo "extern _CPPSTRING_ void ${__KN}_($__PROTO_ARGL, const Launch_params_t* lparm_p);" >>$__HDRF
+         echo "extern _CPPSTRING_ void ${__KN}_($__PROTO_ARGL, const snk_lparm_t * lparm_p);" >>$__HDRF
       else
          if [ "$__PROTO_ARGL" == "" ] ; then 
-            echo "extern _CPPSTRING_ void ${__KN}(const Launch_params_t lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ void ${__KN}(const snk_lparm_t * lparm);" >>$__HDRF
          else
-            echo "extern _CPPSTRING_ void ${__KN}($__PROTO_ARGL, const Launch_params_t lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ void ${__KN}($__PROTO_ARGL, const snk_lparm_t * lparm);" >>$__HDRF
          fi
       fi
 

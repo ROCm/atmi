@@ -1,7 +1,10 @@
-CLOC - Version 0.7.5
+CLOC - Version 0.8.0
 ====================
 
-CLOC: Convert an CL (Kernel c Language) file to brig, hsail, or object
+CLOC:  CL Offline Compiler
+       Generate HSAIL or brig from a cl (Kernel c Language) file.
+SNACK: Structured No API Compiled Kernels.
+       Launch GPU kernels as host-callable functions with structured launch parameters.
 
 Table of contents
 -----------------
@@ -16,7 +19,7 @@ Table of contents
 # Copyright and Disclaimer
 ------------------------
 
-Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
+Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  
 
 AMD is granting you permission to use this software and documentation (if any) (collectively, the 
 Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
@@ -59,48 +62,37 @@ Software License Agreement.
 --------- 
 
 ```
-   cloc: Convert an CL (Kernel C Language) file to brig, hsail, or
-         object file using the LLVM to HSAIL backend compiler.
-         Header .h files will also be created with .o files. 
+   cloc.sh: Convert a cl file to brig or hsail using the
+            LLVM to HSAIL backend compiler.
 
    Usage: cloc [ options ] filename.cl
 
    Options without values:
-    -c      Create .o object file for SNACK 
-    -str    Create .o file with string for brig or hsail. e.g. to use with okra
-    -hsail  Generate dissassembled hsail from brig 
-    -ll     Generate dissassembled ll from bc, for info only
-    -v      Display version of cloc then exit
-    -q      Run quietly, no messages 
-    -n      Dryrun, do nothing, show commands that would execute
-    -h      Print this help message
-    -k      Keep temporary files
-    -nq     Shortcut for -n -q, Show commands without messages. 
-    -fort   Generate fortran function names for -c option
+    -hsail    Generate dissassembled hsail from brig 
+    -ll       Generate dissassembled ll from bc, for info only
+    -version  Display version of cloc then exit
+    -v        Verbose messages
+    -n        Dryrun, do nothing, show commands that would execute
+    -h        Print this help message
+    -k        Keep temporary files
 
    Options with values:
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
     -lkopts  <linker opts>    Read cloc script for defaults
-    -s       <symbolname>     Default=filename (only with -str option)
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
-    -o       <outfilename>    Default=<filename>.<ft> ft=brig, hsail, or o
-    -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
-    -p2     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -o       <outfilename>    Default=<filename>.<ft> ft=brig or hsail
+    -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/bin
 
    Examples:
-    cloc mykernel.cl              /* create mykernel.brig            */
-    cloc -c mykernel.cl           /* create mykernel.o for SNACK     */
-    cloc -str mykernel.cl         /* create mykernel.o for okra      */
-    cloc -hsail mykernel.cl       /* create mykernel.hsail           */
-    cloc -str -hsail mykernel.cl  /* create mykernel.o for okra      */
-    cloc -t /tmp/foo mykernel.cl  /* will automatically set -k       */
+    cloc my.cl              /* create my.brig                   */
+    cloc -hsail my.cl       /* --> my.hsail and my.brig         */
+    cloc -t /tmp/foo my.cl  /* Set tempdir will force -k option */
 
-   You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
-   CLOPTS, or LKOPTS instead of providing options -p1, -p2, -clopts, 
-   or -lkopts respectively.  
+   You may set environment variables HSA_LLVM_PATH, CLOPTS, or LKOPTS 
+   instead of providing options -p, -clopts, or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
-   Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.
+   Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
 
 ```
 
@@ -127,7 +119,7 @@ int main(int argc, char* argv[]) {
 	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
 	size_t strlength = strlen(input);
 	char *output = (char*) malloc(strlength + 1);
-	Launch_params_t lparm={.ndim=1, .gdims={strlength}, .ldims={256}};
+        SNK_INIT_LPARM(lparm,strlength);
 	decode(input,output,lparm);
 	output[strlength] = '\0';
 	cout << output << endl;
@@ -146,12 +138,12 @@ __kernel void decode(__global char* in, __global char* out) {
 }
 ```
 The host program includes header file "hw.h" that does not exist yet.
-The -c option of cloc will create both the object file and the header file.
+The -c option of snack will create both the object file and the header file.
 The header file will have the function prototype for all kernels declared 
-in the .cl file.  Use this command to compile the hw.cl file with cloc.
+in the .cl file.  Use this command to compile the hw.cl file with snack.
 
 ```
-cloc -c hw.cl
+snack -c hw.cl
 ```
 
 You can now compile and build the binary "HelloWorld" with any c++ compiler.
@@ -172,15 +164,14 @@ This example and other examples can be found in the CLOC repository in the direc
 
 ## Example 2: Manual HSAIL Optimization Process
 
-This version of cloc supports a process where a programmer can experiment with
-manual updates to HSAIL. This requires the use of SNACK (the -c option). 
-This process has two steps. 
+This version of snack supports a process where a programmer can experiment with
+manual updates to HSAIL.  This process has two steps. 
 
 #### Step 1
 The first step compiles the .cl file into the object code needed by a SNACK application.
 For example, if your kernels are in the file myKernels.cl, then you can run step 1 as follows.
 ```
-   cloc -c -hsail myKernels.cl
+   snack -c -hsail myKernels.cl
 ```
 When cloc sees the "-c" option and the "-hsail" option, it will save four files 
 in the same directory as myKernels.cl file.  The first two files are always created 

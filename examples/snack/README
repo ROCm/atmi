@@ -35,12 +35,19 @@ A few examples use some additional utility libraries.
 
 Calling a SNACK function requires you provide ONE additional argument called lparm.
 This argument provides the global and local run dimensions to execute your kernel. 
-Essentially this defines how many times and size of thread groups execution will use.
-This argument is a simple structure that can typically be filled in with a single line.
+This argument is a simple structure that can be initialized with the SNK_INIT_LPARM 
+string macro provided in the generated header. 
+
 Here are two examples to fill in the lparm structure.
 
-Launch_params_t lparm={ .ndim=1, .gdims={strlength}, .ldims={1} };
-Launch_params_t lparm={ .ndim=2, .gdims={B.width,A.height}, .ldims={BLOCK_SIZE,BLOCK_SIZE} };
+SNK_INIT_LPARM(lparm,strlength)
+
+SNK_INIT_LPARM(lparm,strlength)
+lparm->ndim=2;
+lparm->gdims[0]=B.width;
+lparm->gdims[1]=A.height;
+lparm->ldims[0]=BLOCK_SIZE;
+lparm->ldims[1]=BLOCK_SIZE;
 
 Please see the fortran example for how to set launch_params with Fortran.
 

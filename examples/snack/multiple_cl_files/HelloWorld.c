@@ -17,9 +17,9 @@ int main(int argc, char* argv[]) {
            Here we show how to initialize the kernel. It is not really 
            needed but it will make the first call go slightly faster. 
         */
-        decode_InitKernel();
+        decode_init();
 
-	Launch_params_t lparm={.ndim=1, .gdims={strlength}, .ldims={1}};
+        SNK_INIT_LPARM(lparm,strlength);
 	decode(input,output,lparm);
 	output[strlength] = '\0';
 	printf("Decoded       :%s\n",output);
@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
             again after the Destroy.  It will just reinitialize 
             on the next call.  
         */
-        decode_DestroyKernel();
+        decode_stop();
 
 	/* Show we can call same function multiple times */
 	decode(secode,output,lparm);

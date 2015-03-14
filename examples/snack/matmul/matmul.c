@@ -145,7 +145,15 @@ int main(int argc, char* argv[]){
 
    printf("Calling Simple Kernel ... \n");
    clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&start_time);
+/*   OLD METHOD OF DECLARING lparm 
    Launch_params_t lparm={.ndim=2,.gdims={C.hpad,C.stride},.ldims={BLOCK_SIZE,BLOCK_SIZE}};
+*/
+   SNK_INIT_LPARM(lparm,0);
+   lparm->ndim=2;
+   lparm->gdims[0]=C.hpad;
+   lparm->gdims[1]=C.stride;
+   lparm->ldims[0]=BLOCK_SIZE;
+   lparm->ldims[1]=BLOCK_SIZE;
    simple_sgemm_tt(A.height,B.width,B.height,1.0,A.elements,A.stride,B.elements,B.stride,1.0,C.elements,C.stride,lparm); 
    clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&end_time);
    nanosecs = get_nanosecs(start_time,end_time);

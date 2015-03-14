@@ -9,11 +9,11 @@ export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
 
 #  First compile all files with acclerated functions to create hw.o and hw2.o
 echo 
-echo cloc -q -c hw.cl 
-cloc -q -c hw.cl 
+echo snack.sh -q -c hw.cl 
+snack.sh -q -c hw.cl 
 echo 
-echo cloc -q -c hw2.cl 
-cloc -q -c hw2.cl 
+echo snack.sh -q -c -noglobs hw2.cl 
+snack.sh -q -c -noglobs hw2.cl 
 
 #  Compile the main program and link to hw.o
 #  Main program can be c, cpp, or fotran

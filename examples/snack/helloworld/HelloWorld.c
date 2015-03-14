@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
 	char *secode = (char*) malloc(strlength + 1);
 	char *output2 = (char*) malloc(strlength + 1);
 
-        Launch_params_t lparm={.ndim=1,.gdims={strlength},.ldims={256}};
+        SNK_INIT_LPARM(lparm,strlength);
         decode(input,output,lparm);
 	output[strlength] = '\0';
 	printf("Decoded       :%s\n",output);

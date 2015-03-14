@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 	// initialize inArray
 	for (int i=0; i<NUMELEMENTS; i++) {inArray[i] = (float)i; }
 	
-        Launch_params_t lparm={.ndim=1,.gdims={NUMELEMENTS},.ldims={1}};
+        SNK_INIT_LPARM(lparm,NUMELEMENTS);
         csquares(outArray,inArray,lparm);
 
 	bool passed = true;

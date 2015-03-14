@@ -1,14 +1,31 @@
 #!/bin/bash
 #
-#  cloc:  Convert cl file to brig, hsail, or .o  file
-#         using the LLVM to HSAIL backend compiler.
+#  snack: Structured No API Compiled Kernels .  Snack is used to
+#         generate host-callable functions that launch compiled 
+#         GPU and CPU kernels without an API.  Snack generates the
+#         wrapper source code for these host-callable functions
+#         that embeds compiled kernels into the source. The generated 
+#         source code uses the HSA API to launch these kernels 
+#         with various synchrnous and asynchronous features.
+#         
+#         The generated functions are called a "snack" functions
+#         An application calls snack functions with the programmer
+#         defined name and argument list. An extra argument is 
+#         added to the programmer defined argument list to specify
+#         the launch parameters. Since the host application directly 
+#         calls snack functions and the launch attributes are 
+#         specified in a data structure, there is no host API required.
+#
+#         The snack command requires the cloc.sh tool to generate
+#         HSAIL for GPU kernels. Snack is distributed with the 
+#         snack github repository.  
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.7.5
+PROGVERSION=0.8.0
 #
-# Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
+# Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  Patent pending.
 # 
 # AMD is granting you permission to use this software and documentation (if any) (collectively, the 
 # Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
@@ -49,18 +66,16 @@ PROGVERSION=0.7.5
 function usage(){
 /bin/cat 2>&1 <<"EOF" 
 
-   cloc: Convert an OpenCL file to brig, hsail, or .o (object) 
-         file using the LLVM to HSAIL backend compiler.
-         Header .h files will be created with .o files. 
+   snack: Generate snack functions from source code.
+          Header .h files will be created with .o files. 
 
-   Usage: cloc [ options ] filename.cl
+   Usage: snack [ options ] filename.cl
 
    Options without values:
     -c      Create .o object file for SNACK
     -str    Create .o file with string for brig or hsail. e.g. to use with okra
     -hsail  Generate dissassembled hsail from brig 
-    -ll     Generate dissassembled ll from bc, for info only
-    -v      Display version of cloc then exit
+    -v      Display version of snack then exit
     -q      Run quietly, no messages 
     -n      Dryrun, do nothing, show commands that would execute
     -h      Print this help message
@@ -70,27 +85,28 @@ function usage(){
 
    Options with values:
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
-    -lkopts  <linker opts>    Read cloc script for defaults
+    -lkopts  <linker opts>    Read snack script for defaults
     -s       <symbolname>     Default=filename (only with -str option)
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
-    -o       <outfilename>    Default=<filename>.<ft> ft=brig, hsail, or o
+    -o       <outfilename>    Default=<filename>.<ft> ft=snackwrap.c or o
     -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
     -p2     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -opt    <cl opt>          Default=2
+    -gccopt <gcc opt>         Default=2
 
    Examples:
-    cloc mykernel.cl              /* create mykernel.brig            */
-    cloc -c mykernel.cl           /* create mykernel.o for SNACK     */
-    cloc -str mykernel.cl         /* create mykernel.o for okra      */
-    cloc -hsail mykernel.cl       /* create mykernel.hsail           */
-    cloc -str -hsail mykernel.cl  /* create mykernel.o for okra      */
-    cloc -t /tmp/foo mykernel.cl  /* will automatically set -k       */
+    snack mykernel.cl              /* create mykernel.snackwrap.c     */
+    snack -c mykernel.cl           /* gcc compile to mykernel.o       */
+    snack -str mykernel.cl         /* create mykernel.o for okra      */
+    snack -hsail mykernel.cl       /* create hsail and snackwrap.c    */
+    snack -t /tmp/foo mykernel.cl  /* will automatically set -k       */
 
    You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
    CLOPTS, or LKOPTS instead of providing options -p1, -p2, -clopts, 
    or -lkopts respectively.  
    Command line options will take precedence over environment variables. 
 
-   Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.
+   Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
 
 EOF
    exit 1 
@@ -145,8 +161,9 @@ while [ $# -gt 0 ] ; do
       -fort) 		FORTRAN=true;;  
       -str) 		MAKESTR=true;; 
       -hsail) 		GEN_IL=true;; 
-      -ll) 		GENLL=true;KEEPTDIR=true;; 
       -clopts) 		CLOPTS=$2; shift ;; 
+      -opt) 		LLVMOPT=$2; shift ;; 
+      -gccopt) 		GCCOPT=$2; shift ;; 
       -lkopts) 		LKOPTS=$2; shift ;; 
       -s) 		SYMBOLNAME=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
@@ -176,8 +193,8 @@ fi
 
 if [ ! -z $1 ]; then 
    echo " "
-   echo "WARNING:  Cloc can only process one .cl file at a time."
-   echo "          You can call cloc multiple times to get multiple outputs."
+   echo "WARNING:  Snack can only process one .cl file at a time."
+   echo "          You can call snack multiple times to get multiple outputs."
    echo "          Argument $LASTARG will be processed. "
    echo "          These args are ignored: $@"
    echo " "
@@ -188,6 +205,8 @@ CLOCPATH=$(getdname $0)
 if ! [ $QUIET ] ; then  VERBOSE=true ; fi
 
 #  Set Default values
+GCCOPT=${GCCOPT:-3}
+LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/bin}
 #  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
@@ -195,8 +214,8 @@ CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
 CMD_LLA=${CMD_LLA:-llvm-dis}
 LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
-CMD_OPT=${CMD_OPT:-opt -O3 -gpu -whole}
-CMD_LLC=${CMD_LLC:-llc -O2 -march=hsail-64 -filetype=obj}
+CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -gpu -whole}
+CMD_LLC=${CMD_LLC:-llc -O$LLVMOPT -march=hsail-64 -filetype=obj}
 CMD_ASM=${CMD_ASM:-hsailasm -disassemble}
 CMD_BRI=${CMD_BRI:-hsailasm }
 
@@ -209,15 +228,11 @@ export GENW_ADD_DUMMY
 
 filetype=${LASTARG##*\.}
 if [ "$filetype" != "cl" ]  ; then 
-   if [ "$filetype" != "hsail" ]  ; then 
-      echo "ERROR:  $0 requires one argument with file type cl"
-      exit $DEADRC 
-   else
-      if [ ! $MAKEOBJ ] ; then 
-         echo "ERROR:  step 2 of the hsail optimization process requires the -c option."
-         exit $DEADRC 
-      fi
+   if [ "$filetype" == "hsail" ]  ; then 
       HSAIL_OPT_STEP2=true
+   else
+      echo "ERROR:  $0 requires one argument with file type cl or hsail "
+      exit $DEADRC 
    fi
 fi
 
@@ -231,13 +246,13 @@ if [ ! -d $HSA_LLVM_PATH ] ; then
    exit $DEADRC
 fi
 #  We need RUNTIME with -c option
-if [ $MAKEOBJ ] && [ ! -d $HSA_RUNTIME_PATH ] ; then 
-   echo "ERROR:  The -c option needs HSA_RUNTIME_PATH"
+if [ ! -d $HSA_RUNTIME_PATH ] ; then 
+   echo "ERROR:  Snack needs HSA_RUNTIME_PATH"
    echo "        Missing directory $HSA_RUNTIME_PATH "
    echo "        Set env variable HSA_RUNTIME_PATH or use -p2 option"
    exit $DEADRC
 fi
-if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
+if [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
    echo "ERROR:  Missing $HSA_RUNTIME_PATH/include/hsa.h"
    echo "        The -c option requires HSA includes"
    exit $DEADRC
@@ -257,28 +272,22 @@ if [ -z $OUTFILE ] ; then
    if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
       OUTFILE=${FNAME}.o
    else
-      if [ $GEN_IL ] ; then 
-         OUTFILE=${FNAME}.hsail
-      else 
-         OUTFILE=${FNAME}.brig
-      fi
+#     Output is snackwrap.c
+      OUTFILE=${FNAME}.snackwrap.c
    fi
 else 
-#  Use the specified OUTFILE
+#  Use the specified OUTFILE.  Bad idea for snack
    OUTDIR=$(getdname $OUTFILE)
    OUTFILE=${OUTFILE##*/}
-   if [ ${OUTFILE##*.} == "h" ] ; then 
-      OUTFILE="${OUTFILE%.*}.o"
-   fi
 fi 
 
-if [ $MAKEOBJ ] && [ $GEN_IL ] ; then
+if [ $GEN_IL ] ; then
    HSAIL_OPT_STEP1=true
-#  -c and -hsail specified.  This should be step 1 of HSAIL optimization process 
+#   -hsail specified.  This should be step 1 of HSAIL optimization process 
    if [ $HSAIL_OPT_STEP2 ] ; then 
       echo "ERROR:  Step 2 of manual HSAIL optimization process for file: $FNAME.hsail "
       echo "        For step 2, do not use the -hsail option."
-      echo "        -c and -hsail are used for step 1 to create hsail."
+      echo "        -hsail is used for step 1 to create hsail."
       exit $DEADRC
    fi
 fi
@@ -287,14 +296,13 @@ if [ $HSAIL_OPT_STEP2 ] ; then
    if [ ! -f $INDIR/$FNAME.snackwrap.c ] ; then 
       echo "        "
       echo "ERROR:  Step 2 of manual HSAIL optimization process requires: $INDIR/$FNAME.snackwrap.c"
-      echo "        Complete step 1 by building files with \"cloc -c -hsail $FNAME.cl \" command "
+      echo "        Complete step 1 by building files with \"snack -c -hsail $FNAME.cl \" command "
       echo "        "
       exit $DEADRC
    fi
 fi
 
-
-TMPDIR=${TMPDIR:-/tmp/cloc$$}
+TMPDIR=${TMPDIR:-/tmp/snk_$$}
 if [ -d $TMPDIR ] ; then 
    KEEPTDIR=true
 else 
@@ -321,15 +329,12 @@ if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then
    echo "ERROR:  The output directory $OUTDIR does not exist"
    exit $DEADRC
 fi 
-if [ $MAKEOBJ ] && [ $MAKESTR ] ; then 
-   echo "ERROR:  Cannot use the -c option with -str option."
-   echo "        You must choose the type of object to create. "
-   exit $DEADRC
-fi
+
+# Snack only needs to compile if -c or -str specified
 if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
    CMD_GCC=`which gcc`
    if [ -z "$CMD_GCC" ] ; then  
-      echo "ERROR:  -c or -str specified but no gcc compiler found."
+      echo "ERROR:  No gcc compiler found."
       exit $DEADRC
    fi
 fi
@@ -345,9 +350,13 @@ if [ $HSAIL_OPT_STEP1 ] ; then
    [ $VERBOSE ] && echo "#Info:     Wrapper:	$CWRAPFILE"
    [ $VERBOSE ] && echo "#Info:     Headers:	$OUTDIR/$FNAME.h"
 else
-   CWRAPFILE=$TMPDIR/$FNAME.snackwrap.c
+   if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
+      CWRAPFILE=$TMPDIR/$FNAME.snackwrap.c
+   else 
+      CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
+   fi
    [ $VERBOSE ] && echo "#Info:  Output file:	$OUTDIR/$OUTFILE"
-   [ $VERBOSE ] && [[ $MAKEOBJ || $MAKESTR ]] && echo "#Info:  Output headers:	$OUTDIR/$FNAME.h"
+   [ $VERBOSE ] && echo "#Info:  Output headers:	$OUTDIR/$FNAME.h"
 fi
 [ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
 [ $VERBOSE ] && echo "#Info:  LLVM path:	$HSA_LLVM_PATH"
@@ -378,160 +387,50 @@ if [ $HSAIL_OPT_STEP2 ] ; then
    fi
 
 else
-
+  
 #  This is not step 2 of manual HSAIL, so do all the normal steps
-#  Sorry this is not indented like it should be. 
-if [ $MAKEOBJ ] ; then 
+
    [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
    if [ $DRYRUN ] ; then
-      echo "$CLOCPATH/cloc_genw $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN"
+      echo "$CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN"
    else
-      $CLOCPATH/cloc_genw $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN
+      $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CLOCPATH/cloc_genw $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN"
+         echo "        $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN"
          do_err $rc
       fi
    fi
-fi
 
-if [ $MAKEOBJ ] ; then
-   [ $VERBOSE ] && echo "#Step:  Compile(clc2)	cl --> bc ..."
-   if [ $DRYRUN ] ; then
-      echo "$CMD_CLC -I$INDIR -o $TMPDIR/$FNAME.bc $TMPDIR/updated.cl"
-   else
-      $HSA_LLVM_PATH/$CMD_CLC -I$INDIR -o $TMPDIR/$FNAME.bc $TMPDIR/updated.cl 
-      rc=$?
-      if [ $rc != 0 ] ; then 
-         echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CMD_CLC -I$INDIR -o $TMPDIR/$FNAME.bc $TMPDIR/updated.cl "
-         do_err $rc
-      fi
-   fi
-else
-   [ $VERBOSE ] && echo "#Step:  Compile(clc2)	cl --> bc ..."
-   if [ $DRYRUN ] ; then
-      echo $CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$CLNAME
-   else
-      $HSA_LLVM_PATH/$CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$CLNAME
-      rc=$?
-      if [ $rc != 0 ] ; then 
-         echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$CLNAME"
-         do_err $rc
-      fi
-   fi
-fi
+#  Call cloc to generate brig
+   [ $VERBOSE ] && echo "#Step:  cloc		Updated cl --> brig ..."
+   $CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $TMPDIR/updated.cl
 
-if [ $GENLL ] ; then
-   [ $VERBOSE ] && echo "#Step:  Disassmble	bc --> ll ..."
-   if [ $DRYRUN ] ; then
-      echo $CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc
-   else 
-      $HSA_LLVM_PATH/$CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc
-      rc=$?
-   fi
-   if [ $rc != 0 ] ; then 
-      echo "ERROR:  The following command failed with return code $rc."
-      echo "        $CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc"
-      do_err $rc
-   fi
-fi
-
-[ $VERBOSE ] && echo "#Step:  Link(llvm-link)	bc --> lnkd.bc ..."
-if [ $DRYRUN ] ; then
-   echo $CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc  
-else
-#  Hide the warnings for now
-   $HSA_LLVM_PATH/$CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc 2>/dev/null
-   rc=$?
-fi
-if [ $rc != 0 ] ; then 
-   echo "ERROR:  The following command failed with return code $rc."
-   echo "        $CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc"
-   do_err $rc
-fi
-
-[ $VERBOSE ] && echo "#Step:  Optimize(opt)	lnkd.bc --> opt.bc ..."
-if [ $DRYRUN ] ; then
-   echo $CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc
-else
-   $HSA_LLVM_PATH/$CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc
-   rc=$?
-fi
-if [ $rc != 0 ] ; then 
-   echo "ERROR:  The following command failed with return code $rc."
-   echo "        $CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc"
-   do_err $rc
-fi
-
-if [ $GEN_IL ]  ; then 
    BRIGDIR=$TMPDIR
-   BRIGNAME=$FNAME.brig
-   HSAILDIR=$OUTDIR
-   HSAILNAME=$FNAME.hsail
-else
-   if [ $MAKESTR ] || [ $MAKEOBJ ]  ; then 
-      BRIGDIR=$TMPDIR
-      BRIGNAME=$FNAME.brig
-   else
-#     generate brig is last step
-      BRIGDIR=$OUTDIR
-      BRIGNAME=$OUTFILE
-   fi 
-fi 
+   BRIGNAME=updated.brig
+
+   if [ $GEN_IL ]  ; then 
+      HSAILDIR=$OUTDIR
+      HSAILNAME=$FNAME.hsail
+   fi
  
-[ $VERBOSE ] && echo "#Step:  llc arch=hsail	opt.bc --> brig ..."
-if [ $DRYRUN ] ; then
-   echo $CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc
-else
-   $HSA_LLVM_PATH/$CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc
-   rc=$?
-fi
-if [ $rc != 0 ] ; then 
-   echo "ERROR:  The following command failed with return code $rc."
-   echo "        $CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc"
-   do_err $rc
-fi
-
-
-if [ $GEN_IL ] ; then 
-   if [ $MAKESTR ] || [ $MAKEOBJ ]  ; then 
-      [ $VERBOSE ] && echo "#Step:  hsailasm   	brig --> hsail ..."
-   else
-#     This is last step, show the filename
-      [ $VERBOSE ] && echo "#Step:  hsailasm   	brig --> $HSAILNAME ..."
-   fi
-   if [ $DRYRUN ] ; then
-      echo $CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
-   else
-      $HSA_LLVM_PATH/$CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
-      rc=$?
-   fi
-   if [ $rc != 0 ] ; then 
-      echo "ERROR:  The following command failed with return code $rc."
-      echo "        $CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig"
-      do_err $rc
-   fi
-fi
-
 if [ $MAKESTR ] ; then 
    if [ $GEN_IL ] ; then 
       [ $VERBOSE ] && echo "#Step:  gcc  	 	hsail --> $OUTFILE ..."
       if [ $DRYRUN ] ; then
-         echo $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
+         echo $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
       else
 #        A cool macro for creating big stings in c
          echo "#define MULTILINE(...) # __VA_ARGS__" > $TMPDIR/$FNAME.c
          echo "char ${SYMBOLNAME}[] = MULTILINE(" >> $TMPDIR/$FNAME.c
          cat $TMPDIR/$HSAILNAME >> $TMPDIR/$FNAME.c
          echo ");" >> $TMPDIR/$FNAME.c
-         $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
+         $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
          rc=$?
          if [ $rc != 0 ] ; then 
             echo "ERROR:  The following command failed with return code $rc."
-            echo "        $CMD_GCC -o $OUTDIR/$OUTFILE.o -c $TMPDIR/$FNAME.c"
+            echo "        $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE.o -c $TMPDIR/$FNAME.c"
             do_err $rc
          fi
 #        Make the header file, no sz needed for hsail
@@ -540,7 +439,7 @@ if [ $MAKESTR ] ; then
    else
       [ $VERBOSE ] && echo "#Step:  gcc  	 	brig --> $OUTFILE ..."
       if [ $DRYRUN ] ; then
-         echo $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
+         echo $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
       else
          echo "#include <stddef.h>" > $TMPDIR/$FNAME.c
          echo "char ${SYMBOLNAME}[] = {" >> $TMPDIR/$FNAME.c
@@ -553,11 +452,11 @@ if [ $MAKESTR ] ; then
          echo "};" >> $TMPDIR/$FNAME.c
 #        okra needs the size of brig for createKernelFromBinary()
          echo "size_t ${SYMBOLNAME}sz = sizeof($SYMBOLNAME);" >> $TMPDIR/$FNAME.c
-         $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
+         $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
          rc=$?
          if [ $rc != 0 ] ; then 
             echo "ERROR:  The following command failed with return code $rc."
-            echo "        $CMD_GCC -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c"
+            echo "        $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c"
             do_err $rc
          fi
 #        Make the header file
@@ -567,14 +466,13 @@ if [ $MAKESTR ] ; then
    fi
 fi
 
-#  End of Sorry this is not indented like it should be. 
 fi   
 
 #  Add the brig to the c as local binary string and compile c
 if [ $MAKEOBJ ] ; then 
    if [ $DRYRUN ] ; then
       [ $VERBOSE ] && echo "#Step:  gcc		c --> $OUTFILE  ..."
-      echo "$CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
    else
       [ $VERBOSE ] && echo "#Step:  gcc		c --> $OUTFILE  ..."
       echo "char brigMem[] = {" > $TMPDIR/binarybrig.h
@@ -586,11 +484,11 @@ if [ $MAKEOBJ ] ; then
       fi
       echo "};" >> $TMPDIR/binarybrig.h
       echo "size_t brigMemSz = sizeof(brigMem);" >> $TMPDIR/binarybrig.h
-      $CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
+      $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CMD_GCC -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+         echo "        $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
          do_err $rc
       fi
    fi
@@ -605,7 +503,7 @@ if [ ! $KEEPTDIR ] ; then
    fi
 fi
 
-[ $HSAIL_OPT_STEP1 ] && [ $VERBOSE ] && echo " " &&  echo "#WARN:  ***** For Step 2, Make hsail updates then run \"cloc -c $FNAME.hsail \" ***** "
+[ $HSAIL_OPT_STEP1 ] && [ $VERBOSE ] && echo " " &&  echo "#WARN:  ***** For Step 2, Make hsail updates then run \"snack -c $FNAME.hsail \" ***** "
 [ $VERBOSE ] && echo "#Info:  Done"
 
 exit 0

@@ -14,7 +14,7 @@ int main(int argc, char **argv)
 	memset(out, 0, 1024*1024*4);
 	memset(in, 1, 1024*1024*4);
 
-        Launch_params_t lparm={ .ndim=1, .gdims={1024*1024}, .ldims={256} };
+        SNK_INIT_LPARM(lparm,1024*1024);
         vcopy(out,in,lparm);
 
 	//Validate

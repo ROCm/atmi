@@ -7,8 +7,8 @@ export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
 # Compile accelerated functions
 echo 
 if [ -f vector_copy.o ] ; then rm vector_copy.o ; fi
-echo cloc -q -c vector_copy.cl 
-cloc -q -c vector_copy.cl 
+echo snack.sh -q -c vector_copy.cl 
+snack.sh -q -c vector_copy.cl 
 
 # Compile Main and link to accelerated functions in vector_copy.o
 echo 

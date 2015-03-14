@@ -10,7 +10,7 @@
 
 ***************************/
 
-__kernel void simple_sgemm_tt(const int M, const int N, const int K, const float alpha, const float * A, const int LDA, const float * B, const int LDB, const float beta ,  float* C, const int LDC){ 
+__kernel void simple_sgemm_tt(const int M, const int N, const int K, const float alpha, __global const float * A, const int LDA, __global const float * B, const int LDB, const float beta , __global  float* C, const int LDC){ 
 
    int C_row = get_global_id(0);
    int C_col = get_global_id(1);
@@ -28,7 +28,7 @@ __kernel void simple_sgemm_tt(const int M, const int N, const int K, const float
 
 ***************************/
 
-__kernel void tiled_sgemm_tt(const int M, const int N, const int K, const float alpha, const float * A, const int LDA, const float * B, const int LDB, const float beta ,  float* C, const int LDC){ 
+__kernel void tiled_sgemm_tt(const int M, const int N, const int K, const float alpha, __global const float * A, const int LDA, __global const float * B, const int LDB, const float beta ,  __global float* C, const int LDC){ 
 
    int C_row = get_global_id(0);
    int C_col = get_global_id(1);
@@ -82,7 +82,8 @@ __kernel void tiled_sgemm_tt(const int M, const int N, const int K, const float 
 
 ***************************/
 
-__kernel void tiled_sgemm_tn(const int M, const int N, const int K, const float alpha, const float * A, const int LDA, const float * B, const int LDB, const float beta ,  float* C, const int LDC){ 
+__kernel void tiled_sgemm_tn(const int M, const int N, const int K, const float alpha, __global const float * A, 
+const int LDA, __global const float * B, const int LDB, const float beta ,  __global float* C, const int LDC){ 
 
    int C_row = get_global_id(0);
    int C_col = get_global_id(1);

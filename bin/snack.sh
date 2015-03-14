@@ -82,6 +82,7 @@ function usage(){
     -k      Keep temporary files
     -nq     Shortcut for -n -q, Show commands without messages. 
     -fort   Generate fortran function names for -c option
+    -noglobs Do not generate global functions 
 
    Options with values:
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
@@ -158,7 +159,8 @@ while [ $# -gt 0 ] ; do
       -nq) 		DRYRUN=true;QUIET=true;;
       -qn) 		DRYRUN=true;QUIET=true;; 
       -c) 		MAKEOBJ=true;;  
-      -fort) 		FORTRAN=true;;  
+      -fort) 		FORTRAN=1;;  
+      -noglobs)  	NOGLOBFUNS=1;;  
       -str) 		MAKESTR=true;; 
       -hsail) 		GEN_IL=true;; 
       -clopts) 		CLOPTS=$2; shift ;; 
@@ -218,6 +220,10 @@ CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -gpu -whole}
 CMD_LLC=${CMD_LLC:-llc -O$LLVMOPT -march=hsail-64 -filetype=obj}
 CMD_ASM=${CMD_ASM:-hsailasm -disassemble}
 CMD_BRI=${CMD_BRI:-hsailasm }
+
+
+FORTRAN=${FORTRAN:-0};
+NOGLOBFUNS=${NOGLOBFUNS:-0};
 
 RUNDATE=`date`
 
@@ -392,13 +398,13 @@ else
 
    [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
    if [ $DRYRUN ] ; then
-      echo "$CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN"
+      echo "$CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
    else
-      $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN
+      $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN"
+         echo "        $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS"
          do_err $rc
       fi
    fi

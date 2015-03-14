@@ -126,7 +126,6 @@ function write_header_template(){
 #ifndef __SNK_DEFS
 #define SNK_MAX_STREAMS 8 
 extern _CPPSTRING_ void stream_sync(const int stream_num);
-extern _CPPSTRING_ void snk_stop();
 
 #define SNK_MAXEDGESIN 10
 #define SNK_MAXEDGESOUT 10
@@ -169,6 +168,37 @@ struct snk_image3d_s {
 
 #define __SNK_DEFS
 #endif
+EOF
+}
+function write_global_functions_template(){
+/bin/cat  <<"EOF"
+
+extern void stream_sync(int stream_num) {
+
+    hsa_queue_t *queue = Stream_CommandQ[stream_num];
+    hsa_signal_t signal = Stream_Signal[stream_num];
+
+    hsa_barrier_packet_t barrier;
+    memset (&barrier, 0, sizeof(hsa_barrier_packet_t));
+    barrier.header.type=HSA_PACKET_TYPE_BARRIER;
+    barrier.header.acquire_fence_scope=2;
+    barrier.header.release_fence_scope=2;
+    barrier.header.barrier=1;
+    barrier.completion_signal = signal;
+
+    uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+    const uint32_t queue_mask = queue->size - 1;
+    ((hsa_barrier_packet_t*)(queue->base_address))[index&queue_mask]=barrier; 
+    hsa_queue_store_write_index_relaxed(queue,index+1);
+    //Ring the doorbell.
+    hsa_signal_store_relaxed(queue->doorbell_signal, index);
+
+    //Wait for completion signal
+    /* printf("DEBUG STREAM_SYNC:Call #%d for stream %d \n",(int) index,stream_num);  */
+    hsa_signal_wait_acquire(signal, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);
+}
+
+
 EOF
 }
 
@@ -410,31 +440,6 @@ static hsa_status_t snk_FindSymbolOffset(hsa_ext_brig_module_t* brig_module, con
 hsa_signal_t   Stream_Signal[SNK_MAX_STREAMS];
 hsa_queue_t*   Stream_CommandQ[SNK_MAX_STREAMS];
 
-extern void stream_sync(int stream_num) {
-
-    hsa_queue_t *queue = Stream_CommandQ[stream_num];
-    hsa_signal_t signal = Stream_Signal[stream_num];
-
-    hsa_barrier_packet_t barrier;
-    memset (&barrier, 0, sizeof(hsa_barrier_packet_t));
-    barrier.header.type=HSA_PACKET_TYPE_BARRIER;
-    barrier.header.acquire_fence_scope=2;
-    barrier.header.release_fence_scope=2;
-    barrier.header.barrier=1;
-    barrier.completion_signal = signal;
-
-    uint64_t index = hsa_queue_load_write_index_relaxed(queue);
-    const uint32_t queue_mask = queue->size - 1;
-    ((hsa_barrier_packet_t*)(queue->base_address))[index&queue_mask]=barrier; 
-    hsa_queue_store_write_index_relaxed(queue,index+1);
-    //Ring the doorbell.
-    hsa_signal_store_relaxed(queue->doorbell_signal, index);
-
-    //Wait for completion signal
-    /* printf("DEBUG STREAM_SYNC:Call #%d for stream %d \n",(int) index,stream_num);  */
-    hsa_signal_wait_acquire(signal, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);
-}
-
 
 /* Context(cl file) specific globals */
 hsa_ext_brig_module_t*           _CN__BrigModule;
@@ -531,19 +536,6 @@ status_t _CN__InitContext(){
 
     return STATUS_SUCCESS;
 } /* end of __CN__InitContext */
-
-extern void snk_stop(){
-    status_t err;
-    if (_CN__FC == 0 ) {
-       err = _CN__InitContext();
-       if ( err != STATUS_SUCCESS ) return ; 
-       _CN__FC = 1;
-    }
-    err=hsa_queue_destroy(Sync_CommandQ);
-    ErrorCheck(Destroying the queue, err);
-    err=hsa_signal_destroy(Sync_Signal); 
-    ErrorCheck(Destroying the signal, err);
-} /* end of snk_stop */
 
 EOF
 }
@@ -837,6 +829,9 @@ __UPDATED_CL=$7
 # If snack call snk_genw with -fort option
 __IS_FORTRAN=$8
 
+# If snack was called with -noglobs
+__NO_GLOB_FUNS=$9
+
 # Intermediate files.
 __EXTRACL=${__TMPD}/extra.cl
 __KARGLIST=${__TMPD}/klist
@@ -877,6 +872,10 @@ __SEDCMD=" "
    write_header_template >>$__CWRAP
    write_context_template | sed -e "s/_CN_/${__SN}/g"  >>$__CWRAP
 
+   if [ "$__NO_GLOB_FUNS" == "0" ] ; then 
+      write_global_functions_template >>$__CWRAP
+   fi
+
 #  Add includes from CL to the generated C wrapper.
    grep "^#include " $__CLF >> $__CWRAP
 
@@ -910,7 +909,7 @@ __SEDCMD=" "
 
 #     Write start of the SNACK function
       echo "/* ------  Start of SNACK function ${__KN} ------ */ " >> $__CWRAP 
-      if [ $__IS_FORTRAN ] ; then 
+      if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        Add underscore to kernel name and resolve lparm pointer 
          echo "extern void ${__KN}_($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
       else  
@@ -1008,7 +1007,7 @@ __SEDCMD=" "
       fi
 
 #     Write the prototype to the header file
-      if [ $__IS_FORTRAN ] ; then 
+      if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        don't use headers for fortran but it is a good reference for how to call from fortran
          echo "extern _CPPSTRING_ void ${__KN}_($__PROTO_ARGL, const snk_lparm_t * lparm_p);" >>$__HDRF
       else
@@ -1033,7 +1032,7 @@ __SEDCMD=" "
    done < $__KARGLIST
 
 
-   if [ $__IS_FORTRAN ] ; then 
+   if [ "$__IS_FORTRAN" == "1" ] ; then 
       write_fortran_lparm_t
    fi
 

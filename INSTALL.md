@@ -30,10 +30,8 @@ sudo apt-get install build-essential
 mkdir ~/git
 cd ~/git
 git clone https://github.com/HSAfoundation/HSA-Runtime-AMD.git
-cd HSA-Runtime-AMD 
-sudo mkdir -p /opt/hsa/lib
-sudo cp -R include /opt/hsa
-sudo cp lib/* /opt/hsa/lib
+cd HSA-Runtime-AMD/ubuntu
+sudo dpkg -i hsa-runtime_1.0_amd64.deb
 ```
 
 
@@ -41,9 +39,9 @@ sudo cp lib/* /opt/hsa/lib
 ```
 cd ~/git
 git clone https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
-sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-0.9/ubuntu/*.deb
+sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-1.0/ubuntu/*.deb
 echo "KERNEL==\"kfd\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/kfd.rules
-sudo cp HSA-Drivers-Linux-AMD/kfd-0.9/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
+sudo cp HSA-Drivers-Linux-AMD/kfd-1.0/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
 sudo reboot
 ```
 
@@ -75,8 +73,8 @@ If it does not detect a valid GPU ID (last two entries are NO), it is possible t
 ```
 cd ~/git
 git clone https://github.com/HSAfoundation/HSAIL-HLC-Stable.git
-sudo mkdir -p /opt/amd
-sudo cp -R HSAIL-HLC-Stable/bin /opt/amd
+cd HSAIL-HLC-Stable/ubuntu
+sudo dpkg -i hsail-hlc-stable_1.0_amd64.deb
 ```
 
 
@@ -84,8 +82,11 @@ sudo cp -R HSAIL-HLC-Stable/bin /opt/amd
 ```
 cd ~/git
 git clone https://github.com/HSAfoundation/CLOC.git
-sudo cp CLOC/bin/cloc /usr/local/bin/.
-sudo cp CLOC/bin/cloc_genw /usr/local/bin/.
+# As of 0.8 the executable names are changed to cloc.sh, snack.sh and snk_genw.sh
+# We will fix the debian package later
+sudo cp CLOC/bin/cloc.sh /usr/local/bin/.
+sudo cp CLOC/bin/snack.sh /usr/local/bin/.
+sudo cp CLOC/bin/snk_genw.sh /usr/local/bin/.
 cd 
 cp -r git/CLOC/examples .
 cd examples/snack/helloworld

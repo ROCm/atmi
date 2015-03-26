@@ -454,8 +454,7 @@ hsa_signal_t                     Sync_Signal;
 
 status_t _CN__InitContext(){
 
-/*  snack will put the binary string for brigMem in binarybrig.h  */
-#include "binarybrig.h" 
+#include "_CN__brig.h" 
 
     hsa_status_t err;
 

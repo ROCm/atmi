@@ -66,6 +66,7 @@ function usage(){
    Options with values:
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
     -lkopts  <linker opts>    Read cloc script for defaults
+    -opt     <LLVM opt>       Default=2, LLVM optimization 
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig or hsail
     -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/bin
@@ -132,6 +133,7 @@ while [ $# -gt 0 ] ; do
       -hsail) 		GEN_IL=true;; 
       -ll) 		GENLL=true;KEEPTDIR=true;; 
       -clopts) 		CLOPTS=$2; shift ;; 
+      -opt) 		LLVMOPT=$2; shift ;; 
       -lkopts) 		LKOPTS=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
@@ -173,14 +175,15 @@ fi
 #  CLOCPATH=$(getdname $0)
 
 #  Set Default values,  all CMD_ are started from $HSA_LLVM_PATH
+LLVMOPT=${LLVMOPT:-2} 
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/bin}
 #  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
 CMD_LLA=${CMD_LLA:-llvm-dis}
 LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
-CMD_OPT=${CMD_OPT:-opt -O3 -gpu -whole}
-CMD_LLC=${CMD_LLC:-llc -O3 -march=hsail-64 -filetype=obj}
+CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -gpu -whole}
+CMD_LLC=${CMD_LLC:-llc -O$LLVMOPT -march=hsail-64 -filetype=obj}
 CMD_ASM=${CMD_ASM:-hsailasm -disassemble}
 
 RUNDATE=`date`
@@ -211,17 +214,13 @@ if [ -z $OUTFILE ] ; then
 #  Output file not specified so use input directory
    OUTDIR=$INDIR
 #  Make up the output file name based on last step 
-   if [ $GEN_IL ] ; then 
-      OUTFILE=${FNAME}.hsail
-   else 
-      OUTFILE=${FNAME}.brig
-   fi
+   OUTFILE=${FNAME}.brig
 else 
 #  Use the specified OUTFILE
    OUTDIR=$(getdname $OUTFILE)
    OUTFILE=${OUTFILE##*/}
    if [ ${OUTFILE##*.} == "h" ] ; then 
-      OUTFILE="${OUTFILE%.*}.o"
+      OUTFILE="${OUTFILE%.*}.brig"
    fi
 fi 
 
@@ -253,9 +252,17 @@ if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then
    exit $DEADRC
 fi 
 
-[ $VERBOSE ] && echo "#Info:  Version:	$PROGVERSION" 
+if [ $GEN_IL ]  ; then 
+   HSAILDIR=$OUTDIR
+   HSAILNAME=$FNAME.hsail
+fi 
+
+[ $VERBOSE ] && echo "#Info:  Version:	cloc.sh $PROGVERSION" 
 [ $VERBOSE ] && echo "#Info:  Input file:	$INDIR/$CLNAME"
-[ $VERBOSE ] && echo "#Info:  Output file:	$OUTDIR/$OUTFILE"
+[ $VERBOSE ] && echo "#Info:  Brig file:	$OUTDIR/$OUTFILE"
+if [ $GEN_IL ] ; then 
+   [ $VERBOSE ] && echo "#Info:  HSAIL file:	$HSAILDIR/$HSAILNAME"
+fi
 [ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
 [ $VERBOSE ] && echo "#Info:  LLVM path:	$HSA_LLVM_PATH"
 [ $KEEPTDIR ] && [ $VERBOSE ] && echo "#Info:  Temp dir:	$TMPDIR" 
@@ -303,7 +310,7 @@ if [ $rc != 0 ] ; then
    do_err $rc
 fi
 
-[ $VERBOSE ] && echo "#Step:  Optimize(opt)	lnkd.bc --> opt.bc ..."
+[ $VERBOSE ] && echo "#Step:  Optimize(opt)	lnkd.bc --> opt.bc -O$LLVMOPT ..."
 if [ $DRYRUN ] ; then
    echo $CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc
 else
@@ -316,38 +323,31 @@ if [ $rc != 0 ] ; then
    do_err $rc
 fi
 
-#  Change in 0.8 is to always save the brig
-BRIGDIR=$OUTDIR
-BRIGNAME=$OUTFILE
-if [ $GEN_IL ]  ; then 
-   HSAILDIR=$OUTDIR
-   HSAILNAME=$FNAME.hsail
-fi 
  
-[ $VERBOSE ] && echo "#Step:  llc arch=hsail	opt.bc --> $BRIGNAME ..."
+[ $VERBOSE ] && echo "#Step:  llc arch=hsail	opt.bc --> $OUTFILE -O$LLVMOPT ..."
 if [ $DRYRUN ] ; then
-   echo $CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc
+   echo $CMD_LLC -o $OUTDIR/$OUTFILE $TMPDIR/$FNAME.opt.bc
 else
-   $HSA_LLVM_PATH/$CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc
+   $HSA_LLVM_PATH/$CMD_LLC -o $OUTDIR/$OUTFILE $TMPDIR/$FNAME.opt.bc
    rc=$?
 fi
 if [ $rc != 0 ] ; then 
    echo "ERROR:  The following command failed with return code $rc."
-   echo "        $CMD_LLC -o $BRIGDIR/$BRIGNAME $TMPDIR/$FNAME.opt.bc"
+   echo "        $CMD_LLC -o $OUTDIR/$OUTFILE $TMPDIR/$FNAME.opt.bc"
    do_err $rc
 fi
 
 if [ $GEN_IL ] ; then 
    [ $VERBOSE ] && echo "#Step:  hsailasm   	brig --> $HSAILNAME ..."
    if [ $DRYRUN ] ; then
-      echo $CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
+      echo $CMD_ASM -o $HSAILDIR/$HSAILNAME $OUTDIR/$OUTFILE
    else
-      $HSA_LLVM_PATH/$CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig
+      $HSA_LLVM_PATH/$CMD_ASM -o $HSAILDIR/$HSAILNAME $OUTDIR/$OUTFILE
       rc=$?
    fi
    if [ $rc != 0 ] ; then 
       echo "ERROR:  The following command failed with return code $rc."
-      echo "        $CMD_ASM -o $HSAILDIR/$HSAILNAME $TMPDIR/$FNAME.brig"
+      echo "        $CMD_ASM -o $HSAILDIR/$HSAILNAME $OUTDIR/$OUTFILE"
       do_err $rc
    fi
 fi

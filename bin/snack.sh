@@ -75,28 +75,28 @@ function usage(){
    Usage: snack.sh [ options ] filename.cl
 
    Options without values:
-    -c      Compile generated source code to create .o file
-    -hsail  Generate dissassembled hsail from brig 
-    -v      Display version of snack then exit
-    -q      Run quietly, no messages 
-    -n      Dryrun, do nothing, show commands that would execute
-    -h      Print this help message
-    -k      Keep temporary files
-    -nq     Shortcut for -n -q, Show commands without messages. 
-    -fort   Generate fortran function names
-    -noglobs Do not generate global functions 
-    -str    Create .o file with string for brig or hsail. e.g. to use with okra
+    -c        Compile generated source code to create .o file
+    -hsail    Generate text hsail for manual optimization
+    -version  Display version of snack then exit
+    -v        Verbose messages
+    -vv       Get additional verbose messages from cloc.sh
+    -n        Dryrun, do nothing, show commands that would execute
+    -h        Print this help message
+    -k        Keep temporary files
+    -fort     Generate fortran function names
+    -noglobs  Do not generate global functions 
+    -str      Depricated, Create .o file needed for okra
 
    Options with values:
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
     -lkopts  <linker opts>    Read snack script for defaults
     -s       <symbolname>     Default=filename (only with -str option)
-    -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
+    -t       <tempdir>        Default=/tmp/snk_$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=snackwrap.c or o
     -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
     -p2     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
-    -opt    <cl opt>          Default=2
-    -gccopt <gcc opt>         Default=2
+    -opt    <LLVM opt>        Default=2, used for HSAIL generation
+    -gccopt <gcc opt>         Default=2, to compile snack wrapper
 
    Examples:
     snack my.cl              /* create my.snackwrap.c and my.h  */
@@ -159,8 +159,7 @@ while [ $# -gt 0 ] ; do
       -k) 		KEEPTDIR=true;; 
       --keep) 		KEEPTDIR=true;; 
       -n) 		DRYRUN=true;; 
-      -nq) 		DRYRUN=true;QUIET=true;;
-      -qn) 		DRYRUN=true;QUIET=true;; 
+      -n) 		DRYRUN=true;;
       -c) 		MAKEOBJ=true;;  
       -fort) 		FORTRAN=1;;  
       -noglobs)  	NOGLOBFUNS=1;;  
@@ -178,8 +177,10 @@ while [ $# -gt 0 ] ; do
       -h) 		usage ;; 
       -help) 		usage ;; 
       --help) 		usage ;; 
-      -v) 		version ;; 
+      -version) 	version ;; 
       --version) 	version ;; 
+      -v) 		VERBOSE=true;; 
+      -vv) 		CLOCVERBOSE=true;; 
       --) 		shift ; break;;
       -*) 		usage ;;
       *) 		break;echo $1 ignored;
@@ -206,8 +207,6 @@ if [ ! -z $1 ]; then
 fi
 
 CLOCPATH=$(getdname $0)
-
-if ! [ $QUIET ] ; then  VERBOSE=true ; fi
 
 #  Set Default values
 GCCOPT=${GCCOPT:-3}
@@ -273,6 +272,8 @@ CLNAME=${LASTARG##*/}
 # FNAME has the .cl extension removed, used for symbolname and intermediate filenames
 FNAME=`echo "$CLNAME" | cut -d'.' -f1`
 SYMBOLNAME=${SYMBOLNAME:-$FNAME}
+BRIGHFILE="${SYMBOLNAME}_brig.h"
+OTHERCLOCFLAGS=""
 
 if [ -z $OUTFILE ] ; then 
 #  Output file not specified so use input directory
@@ -290,8 +291,11 @@ else
    OUTFILE=${OUTFILE##*/}
 fi 
 
+if [ $CLOCVERBOSE ] ; then 
+   VERBOSE=true
+fi
+
 if [ $GEN_IL ] ; then
-   HSAIL_OPT_STEP1=true
 #   -hsail specified.  This should be step 1 of HSAIL optimization process 
    if [ $HSAIL_OPT_STEP2 ] ; then 
       echo "ERROR:  Step 2 of manual HSAIL optimization process for file: $FNAME.hsail "
@@ -299,6 +303,7 @@ if [ $GEN_IL ] ; then
       echo "        -hsail is used for step 1 to create hsail."
       exit $DEADRC
    fi
+   OTHERCLOCFLAGS="$OTHERCLOCFLAGS -hsail"
 fi
 
 if [ $HSAIL_OPT_STEP2 ] ; then 
@@ -309,6 +314,7 @@ if [ $HSAIL_OPT_STEP2 ] ; then
       echo "        "
       exit $DEADRC
    fi
+   [ $VERBOSE ] && echo " " && echo "#WARN:  ***** Step 2 of manual HSAIL optimization process detected. ***** "
 fi
 
 TMPDIR=${TMPDIR:-/tmp/snk_$$}
@@ -348,25 +354,51 @@ if [ $MAKESTR ] || [ $MAKEOBJ ] ; then
    fi
 fi
 
-[ $VERBOSE ] && echo "#Info:  Version:	$PROGVERSION" 
-[ $VERBOSE ] && echo "#Info:  Input file:	$INDIR/$CLNAME"
-if [ $HSAIL_OPT_STEP1 ] ; then 
+if [ $MAKESTR ] && [ $GEN_IL ] ; then 
+   echo "ERROR:  The use of -hsail with -str is depricated "
+   echo "        In the future , -str will be completely depricated"
+   exit $DEADRC
+fi 
+
+[ $VERBOSE ] && echo "#Info:  Version:	snack.sh $PROGVERSION" 
+
+if [ $HSAIL_OPT_STEP2 ] ; then 
    CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
-   [ $VERBOSE ] && echo "#WARN:  ***** Step 1 of manual HSAIL optimization process detected. ***** "
+   [ $VERBOSE ] && echo "#Info:  Input Files:	"
+   [ $VERBOSE ] && echo "#           HSAIL file:	   $INDIR/$FNAME.hsail"
+   [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
+   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
    [ $VERBOSE ] && echo "#Info:  Output Files:"
-   [ $VERBOSE ] && echo "#Info:     Object:	$OUTDIR/$OUTFILE"
-   [ $VERBOSE ] && echo "#Info:     HSAIL:	$OUTDIR/$FNAME.hsail"
-   [ $VERBOSE ] && echo "#Info:     Wrapper:	$CWRAPFILE"
-   [ $VERBOSE ] && echo "#Info:     Headers:	$OUTDIR/$FNAME.h"
+   FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
+   [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
 else
-   if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
-      CWRAPFILE=$TMPDIR/$FNAME.snackwrap.c
-   else 
+   [ $VERBOSE ] && echo "#Info:  Input File:	"
+   [ $VERBOSE ] && echo "#           CL file:	   $INDIR/$CLNAME"
+   [ $VERBOSE ] && echo "#Info:  Output Files:"
+   if [ $GEN_IL ] ; then 
+      [ $VERBOSE ] && echo "#WARN:  ***** Step 1 of manual HSAIL optimization process detected. ***** "
       CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
+      FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
+      [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
+      [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
+      [ $VERBOSE ] && echo "#           HSAIL:	   $OUTDIR/$FNAME.hsail"
+   else
+      if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
+         FULLBRIGHFILE=$TMPDIR/$BRIGHFILE
+         CWRAPFILE=$TMPDIR/$FNAME.snackwrap.c
+      else
+         CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
+         FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
+         [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
+         [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
+      fi
    fi
-   [ $VERBOSE ] && echo "#Info:  Output file:	$OUTDIR/$OUTFILE"
-   [ $VERBOSE ] && echo "#Info:  Output headers:	$OUTDIR/$FNAME.h"
+   if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
+      [ $VERBOSE ] && echo "#           Object:	   $OUTDIR/$OUTFILE"
+   fi
+   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
 fi
+
 [ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
 [ $VERBOSE ] && echo "#Info:  LLVM path:	$HSA_LLVM_PATH"
 [ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  Runtime:	$HSA_RUNTIME_PATH"
@@ -377,8 +409,7 @@ fi
 rc=0
 
 if [ $HSAIL_OPT_STEP2 ] ; then 
-
-   [ $VERBOSE ] && echo " " && echo "#WARN:  ***** Step 2 of manual HSAIL optimization process detected. ***** "
+#  This is step 2 of manual HSAIL
    BRIGDIR=$TMPDIR
    BRIGNAME=$FNAME.brig
    CWRAPFILE=$INDIR/$FNAME.snackwrap.c
@@ -397,8 +428,7 @@ if [ $HSAIL_OPT_STEP2 ] ; then
 
 else
   
-#  This is not step 2 of manual HSAIL, so do all the normal steps
-
+#  Not step 2, do normal steps
    [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
    if [ $DRYRUN ] ; then
       echo "$CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
@@ -413,42 +443,36 @@ else
    fi
 
 #  Call cloc to generate brig
-   [ $VERBOSE ] && echo "#Step:  cloc		Updated cl --> brig ..."
-   $CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $TMPDIR/updated.cl
-
+   if [ $CLOCVERBOSE ] ; then 
+      OTHERCLOCFLAGS="$OTHERCLOCFLAGS -v"
+   fi
+   [ $VERBOSE ] && echo "#Step:  cloc.sh		cl --> brig ..."
+   if [ $DRYRUN ] ; then
+      echo "$CLOCPATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+   else 
+      [ $CLOCVERBOSE ] && echo " " && echo "#------ Start cloc.sh output ------"
+      $CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl
+      rc=$?
+      [ $CLOCVERBOSE ] && echo "#------ End cloc.sh output ------" && echo " " 
+      if [ $rc != 0 ] ; then 
+         echo "ERROR:  cloc.sh failed with return code $rc.  Command was:"
+         echo "        $CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+         do_err $rc
+      fi
+      if [ $GEN_IL ] ; then 
+         cp $TMPDIR/updated.hsail $OUTDIR/$FNAME.hsail
+      fi
+   fi
    BRIGDIR=$TMPDIR
    BRIGNAME=updated.brig
 
-   if [ $GEN_IL ]  ; then 
-      HSAILDIR=$OUTDIR
-      HSAILNAME=$FNAME.hsail
-   fi
- 
+fi
+
+#  This section will be depricated with Okra and -str option
 if [ $MAKESTR ] ; then 
-   if [ $GEN_IL ] ; then 
-      [ $VERBOSE ] && echo "#Step:  gcc  	 	hsail --> $OUTFILE ..."
+      [ $VERBOSE ] && echo "#Step:  hexdump  	brig --> c char array ..."
       if [ $DRYRUN ] ; then
-         echo $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
-      else
-#        A cool macro for creating big stings in c
-         echo "#define MULTILINE(...) # __VA_ARGS__" > $TMPDIR/$FNAME.c
-         echo "char ${SYMBOLNAME}[] = MULTILINE(" >> $TMPDIR/$FNAME.c
-         cat $TMPDIR/$HSAILNAME >> $TMPDIR/$FNAME.c
-         echo ");" >> $TMPDIR/$FNAME.c
-         $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
-         rc=$?
-         if [ $rc != 0 ] ; then 
-            echo "ERROR:  The following command failed with return code $rc."
-            echo "        $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE.o -c $TMPDIR/$FNAME.c"
-            do_err $rc
-         fi
-#        Make the header file, no sz needed for hsail
-         echo "extern char ${SYMBOLNAME}[];" > $OUTDIR/$FNAME.h
-      fi
-   else
-      [ $VERBOSE ] && echo "#Step:  gcc  	 	brig --> $OUTFILE ..."
-      if [ $DRYRUN ] ; then
-         echo $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
+         echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $TMPDIR/$BRIGNAME "
       else
          echo "#include <stddef.h>" > $TMPDIR/$FNAME.c
          echo "char ${SYMBOLNAME}[] = {" >> $TMPDIR/$FNAME.c
@@ -461,6 +485,11 @@ if [ $MAKESTR ] ; then
          echo "};" >> $TMPDIR/$FNAME.c
 #        okra needs the size of brig for createKernelFromBinary()
          echo "size_t ${SYMBOLNAME}sz = sizeof($SYMBOLNAME);" >> $TMPDIR/$FNAME.c
+      fi
+      [ $VERBOSE ] && echo "#Step:  gcc  	 	c char array --> $OUTFILE ..."
+      if [ $DRYRUN ] ; then
+         echo $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
+      else
          $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
          rc=$?
          if [ $rc != 0 ] ; then 
@@ -472,35 +501,42 @@ if [ $MAKESTR ] ; then
          echo "extern char ${SYMBOLNAME}[];" > $OUTDIR/$FNAME.h
          echo "extern size_t ${SYMBOLNAME}sz;" >> $OUTDIR/$FNAME.h
       fi
+
+else
+#   Not depricated option -str 
+
+[ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
+if [ $DRYRUN ] ; then
+   echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
+else
+   echo "char brigMem[] = {" > $FULLBRIGHFILE
+   hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLBRIGHFILE
+   rc=$?
+   if [ $rc != 0 ] ; then 
+      echo "ERROR:  The hexdump command failed with return code $rc."
+      exit $rc
    fi
+   echo "};" >> $FULLBRIGHFILE
+   echo "size_t brigMemSz = sizeof(brigMem);" >> $FULLBRIGHFILE
 fi
 
-fi   
 
-#  Add the brig to the c as local binary string and compile c
 if [ $MAKEOBJ ] ; then 
+   [ $VERBOSE ] && echo "#Step:  gcc		snackwrap.c + _brig.h --> $OUTFILE  ..."
    if [ $DRYRUN ] ; then
-      [ $VERBOSE ] && echo "#Step:  gcc		c --> $OUTFILE  ..."
       echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
    else
-      [ $VERBOSE ] && echo "#Step:  gcc		c --> $OUTFILE  ..."
-      echo "char brigMem[] = {" > $TMPDIR/binarybrig.h
-      hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $TMPDIR/binarybrig.h
-      rc=$?
-      if [ $rc != 0 ] ; then 
-         echo "ERROR:  The hexdump command failed with return code $rc."
-         exit $rc
-      fi
-      echo "};" >> $TMPDIR/binarybrig.h
-      echo "size_t brigMemSz = sizeof(brigMem);" >> $TMPDIR/binarybrig.h
       $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
          echo "        $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
-         do_err $rc
+        do_err $rc
       fi
    fi
+fi
+
+# end of NOT -str
 fi
 
 # cleanup
@@ -512,7 +548,7 @@ if [ ! $KEEPTDIR ] ; then
    fi
 fi
 
-[ $HSAIL_OPT_STEP1 ] && [ $VERBOSE ] && echo " " &&  echo "#WARN:  ***** For Step 2, Make hsail updates then run \"snack -c $FNAME.hsail \" ***** "
+[ $GEN_IL ] && [ $VERBOSE ] && echo " " &&  echo "#WARN:  ***** For Step 2, Make hsail updates then run \"snack -c $FNAME.hsail \" ***** "
 [ $VERBOSE ] && echo "#Info:  Done"
 
 exit 0

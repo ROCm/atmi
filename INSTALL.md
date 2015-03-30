@@ -1,7 +1,7 @@
 cloc Install Instructions
 =========================
 
-The cloc utility consists of two bash scripts with file names "cloc" and "cloc_genw". These are found in the bin directory of this repository. Copy these files to a bin directory in your Linux environment PATH such as /usr/local/bin.  To update to a new version of cloc simply replace cloc and cloc_genw in that directory.
+The cloc utility consists of thre bash scripts with file names "cloc.sh" ,  "snack.sh" , and "snk_genw.sh" . These are found in the bin directory of this repository. Copy these files to a bin directory in your Linux environment PATH such as /usr/local/bin.  To update to a new version of cloc simply replace cloc.sh snack.sh,  and snk_genw.sh in that directory.
 
 In addition to the bash scripts, cloc requires HSA software and the LLVM compiler. This set of instructions can be used to install much of the HSA software stack and cloc for Ubuntu.  In addition to Linux, you must have an HSA compatible system such as a Kaveri processor. 
 

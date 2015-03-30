@@ -1,0 +1,52 @@
+#!/bin/bash
+#
+#  printhsail: Extract HSAIL from ELF executeable or brig file and write to stdout
+#              Assumes 64-bit ELF is executable binary or .o and 32-bit ELF is a brig file
+#
+#  Written by Greg Rodgers.
+#
+infile=$1
+tmpfile=/tmp/printhsail$$
+HSAIL_DISASSEMBLE=${HSAIL_DISASSEMBLE:-/opt/amd/bin/hsailasm}
+if [ ! -f "$infile" ] ; then 
+   echo "ERROR:  Input file \"$1\" does not exist "
+   exit 1
+fi
+if [ ! -f "$HSAIL_DISASSEMBLE" ] ; then 
+   echo "ERROR:  Missing HSAIL disassembler. $HSAIL_DISASSEMBLE"
+   exit 1
+fi
+format=`file $infile | cut -d" " -f2-3`
+readelf -S $infile | grep -q  "hsa_code" 
+if [ $? != 0 ] ; then 
+   echo "ERROR:  No hsa_code section in input elf file \"$1\" "
+   exit 1
+fi
+if [ "$format" == "ELF 64-bit" ] ; then 
+   # extract sections and convert to 32bit elf, ignore empty section warning
+   #objcopy  -S -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile
+   objcopy --no-change-warnings -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile 2>/dev/null
+   # Need to zero this byte to get hsailasm to thing this is a real brig file
+   printf '\x00\' | dd of=$tmpfile bs=1 seek=16 count=1 conv=notrunc >/dev/null 2>/dev/null
+   brigfile=$tmpfile
+elif [ "$format" == "ELF 32-bit" ] ; then 
+#  Just assume a 32-bit ELF is a brig file so no need to extract or zap byte 16.
+   brigfile=$infile
+else
+   echo "ERROR:  Input file \"$1\" must be ELF 64-bit or brig file"
+   exit 1
+fi
+
+#  Disassemble the brig file
+$HSAIL_DISASSEMBLE -disassemble $brigfile -o $tmpfile.hsail
+rc=$?
+if [ $rc != 0 ] ; then 
+   exit $rc
+fi
+cat $tmpfile.hsail
+
+#  cleanup
+if [ -f $tmpfile ] ; then 
+   rm $tmpfile
+fi
+rm $tmpfile.hsail

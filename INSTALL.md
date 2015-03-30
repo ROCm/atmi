@@ -29,7 +29,7 @@ sudo apt-get install build-essential
 ```
 mkdir ~/git
 cd ~/git
-git clone https://github.com/HSAfoundation/HSA-Runtime-AMD.git
+git clone -b release-v1.0  https://github.com/HSAfoundation/HSA-Runtime-AMD.git
 cd HSA-Runtime-AMD/ubuntu
 sudo dpkg -i hsa-runtime_1.0_amd64.deb
 ```
@@ -38,7 +38,7 @@ sudo dpkg -i hsa-runtime_1.0_amd64.deb
 - Install HSA Linux Kernel Drivers and Reboot
 ```
 cd ~/git
-git clone https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
+git clone -b kfd-v1.0.x https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
 sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-1.0/ubuntu/*.deb
 echo "KERNEL==\"kfd\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/kfd.rules
 sudo cp HSA-Drivers-Linux-AMD/kfd-1.0/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
@@ -98,9 +98,9 @@ cd examples/snack/helloworld
 ```
 mkdir ~/git/deb
 cd ~/git/deb
-wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-0.4.0-hsa-milestone3-Linux.deb
-wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/libcxxamp-0.4.0-hsa-milestone3-Linux.deb
-wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-bolt-1.2.0-hsa-milestone3-Linux.deb
+wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-0.5.0-hsa-milestone4-Linux.deb
+wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/libcxxamp-0.5.0-hsa-milestone4-Linux.deb
+wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-bolt-1.2.0-hsa-milestone4-Linux.deb
 wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/boost_1_55_0-hsa-milestone3.deb
 sudo dpkg -i *.deb
 ```

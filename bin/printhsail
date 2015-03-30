@@ -17,20 +17,40 @@ if [ ! -f "$HSAIL_DISASSEMBLE" ] ; then
    exit 1
 fi
 format=`file $infile | cut -d" " -f2-3`
-readelf -S $infile | grep -q  "hsa_code" 
-if [ $? != 0 ] ; then 
-   echo "ERROR:  No hsa_code section in input elf file \"$1\" "
-   exit 1
-fi
 if [ "$format" == "ELF 64-bit" ] ; then 
-   # extract sections and convert to 32bit elf, ignore empty section warning
-   #objcopy  -S -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile
-   objcopy --no-change-warnings -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile 2>/dev/null
-   # Need to zero this byte to get hsailasm to thing this is a real brig file
-   printf '\x00\' | dd of=$tmpfile bs=1 seek=16 count=1 conv=notrunc >/dev/null 2>/dev/null
-   brigfile=$tmpfile
+   readelf -S $infile | grep -q  "hsa_code" 
+   if [ $? != 0 ] ; then 
+      # no elf sections, so look for external data with brig from snack 
+      brigszloc=`nm $infile | grep HSA_BrigMemSz | cut -d" " -f1 ` 
+      if [ "$brigszloc" == "" ] ; then 
+         echo "ERROR:  No hsa_code section or HSAIL data in input elf file \"$1\" "
+         exit 1
+      fi
+      brigloc=`nm $infile | grep HSA_BrigMem | grep -v HSA_BrigMemSz | cut -d" " -f1 ` 
+      datastart=`readelf -S $infile | grep "\.data" | awk '{print $5}'`
+      relstart=`readelf -S $infile | grep "\.data" | awk '{print $4}'`
+      brigszoff=$((0x$datastart + 0x$brigszloc - 0x$relstart))
+      brigoff=$((0x$datastart + 0x$brigloc - 0x$relstart))
+      brigszhex=`od -N2 -w2 -j $brigszoff -t x2 -An $infile | awk '{print $1}'` 
+      brigsz=$((0x$brigszhex))
+      #  Create the brig file by extracting the binary out of the applicaton elf
+      dd if=$infile of=$tmpfile bs=1 count=$brigsz skip=$brigoff >/dev/null 2>/dev/null
+      brigfile=$tmpfile
+   else 
+      # extract sections and convert to 32bit elf, ignore empty section warning
+      #objcopy  -S -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile
+      objcopy --no-change-warnings -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile 2>/dev/null
+      # Need to zero this byte to get hsailasm to thing this is a real brig file
+      printf '\x00\' | dd of=$tmpfile bs=1 seek=16 count=1 conv=notrunc >/dev/null 2>/dev/null
+      brigfile=$tmpfile
+   fi
 elif [ "$format" == "ELF 32-bit" ] ; then 
 #  Just assume a 32-bit ELF is a brig file so no need to extract or zap byte 16.
+   readelf -S $infile | grep -q  "hsa_code" 
+   if [ $? != 0 ] ; then 
+      echo "ERROR:  No hsa_code section in input elf file \"$1\" "
+      exit 1
+   fi
    brigfile=$infile
 else
    echo "ERROR:  Input file \"$1\" must be ELF 64-bit or brig file"

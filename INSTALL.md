@@ -1,20 +1,20 @@
-Cloc Install Instructions
-=========================
+Cloc Install Instructions 1.0P
+==============================
 
 The Cloc utility consists of three bash scripts with file names "cloc.sh" ,  "snack.sh" , and "snk_genw.sh" . These are found in the bin directory of this repository. Copy these files to a bin directory in your Linux environment PATH such as /usr/local/bin.  To update to a new version of Cloc simply replace cloc.sh snack.sh,  and snk_genw.sh in that directory. 
 
 In addition to the bash scripts, Cloc requires the HSA runtime and the HLC compiler. This set of instructions can be used to install a comprehensive HSA software stack and the Cloc utility for Ubuntu.  In addition to Linux, you must have an HSA compatible system such as a Kaveri processor. There are four major steps to this process:
 
-- [Prepare for Upgrade](#Prepare)
-- [Install Linux Kernel](#Boot)
-- [Install HSA Software](#Install)
-- [Install Optional Infiniband Software](#Infiniband)
+- [1. Prepare for Upgrade](#Prepare)
+- [2. Install Linux Kernel](#Boot)
+- [3. Install HSA Software](#Install)
+- [4. Install Optional Infiniband Software](#Infiniband)
 
 <A Name="Prepare">
-Prepare System
-==============
+1. Prepare System
+=================
 
-## Install and Upgrade Ubuntu 14.04 LTS
+## Install Ubuntu 14.04 LTS
 
 Make sure Ubuntu 14.04 LTS 64-bit version has been installed.  We recommend the server package set.  The utica version of ubuntu (14.10) has not been tested with HSA.  Then install these dependencies:
 ```
@@ -32,7 +32,9 @@ sudo apt-get install gfortran
 sudo apt-get install build-essential 
 ```
 
-## If you have Infiniband installed, uninstall the current MLNX_OFED
+## Uninstall Infiniband
+
+If you have Infiniband installed, uninstall the MLNX_OFED packages. 
 ```
 mount the appropriate MLNX_OFED iso
 /<mount point>/uninstall.sh
@@ -40,10 +42,14 @@ mount the appropriate MLNX_OFED iso
 
 
 <A Name="Boot">
-Upgrade Linux Kernels and Drivers
-=================================
+2. Install Linux Kernel Drivers 
+===============================
 
-## Install HSA Linux Kernel Drivers and Reboot
+## Install HSA Linux Kernel Drivers 
+
+Make sure you get the backlevel <b>kfd-v1.0.x</b> branch. This set of instructions is for the provisional HSA runtime.  The software stack for the new <b>finalized v1.0F</b> is not yet complete. We will update these install instructions when that is complete.  This should be sometime in June 2015.  
+
+Execute these commands:
 
 ```
 cd ~/git
@@ -86,8 +92,8 @@ If it does not detect a valid GPU ID (last two entries are NO), it is possible t
 
 
 <A Name="Install">
-Install HSA Software
-====================
+3. Install HSA Software
+=======================
 
 ## Install HSA Runtime
 
@@ -161,8 +167,8 @@ export LD_LIBRARY_PATH=/opt/hsa/lib
 
 
 <A Name="Infiniband">
-Optional Infiniband Install 
-===========================
+4. Optional Infiniband Install 
+==============================
 
 ## Download OFED
 

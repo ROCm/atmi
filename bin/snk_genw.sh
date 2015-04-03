@@ -451,10 +451,9 @@ int                              _CN__FC = 0;
 /* Global variables */
 hsa_queue_t*                     Sync_CommandQ;
 hsa_signal_t                     Sync_Signal; 
+#include "_CN__brig.h" 
 
 status_t _CN__InitContext(){
-
-#include "_CN__brig.h" 
 
     hsa_status_t err;
 
@@ -481,7 +480,7 @@ status_t _CN__InitContext(){
     printf("The device name is %s.\n", name);  
 */
     /*  Load BRIG, encapsulated in an ELF container, into a BRIG module.  */
-    status_t status = snk_ReadBinary(&_CN__BrigModule,brigMem,brigMemSz);
+    status_t status = snk_ReadBinary(&_CN__BrigModule,HSA_BrigMem,HSA_BrigMemSz);
     if (status != STATUS_SUCCESS) {
         printf("Could not create BRIG module: %d\n", status);
         if (status == STATUS_KERNEL_INVALID_SECTION_HEADER || 

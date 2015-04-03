@@ -503,13 +503,13 @@ if [ $MAKESTR ] ; then
       fi
 
 else
-#   Not depricated option -str 
 
+#   Not depricated option -str 
 [ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
 if [ $DRYRUN ] ; then
    echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
 else
-   echo "char brigMem[] = {" > $FULLBRIGHFILE
+   echo "char HSA_BrigMem[] = {" > $FULLBRIGHFILE
    hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLBRIGHFILE
    rc=$?
    if [ $rc != 0 ] ; then 
@@ -517,7 +517,7 @@ else
       exit $rc
    fi
    echo "};" >> $FULLBRIGHFILE
-   echo "size_t brigMemSz = sizeof(brigMem);" >> $FULLBRIGHFILE
+   echo "size_t HSA_BrigMemSz = sizeof(HSA_BrigMem);" >> $FULLBRIGHFILE
 fi
 
 

@@ -7,6 +7,11 @@
 #
 infile=$1
 tmpfile=/tmp/printhsail$$
+cloc_brigsym="HSA_BrigMem"
+cloc_brigszsym="HSA_BrigMemSz"
+kalmar_brigsym="_binary_kernel_brig_start"
+kalmar_brigszsym="_binary_kernel_brig_size"
+
 HSAIL_DISASSEMBLE=${HSAIL_DISASSEMBLE:-/opt/amd/bin/hsailasm}
 if [ ! -f "$infile" ] ; then 
    echo "ERROR:  Input file \"$1\" does not exist "
@@ -21,17 +26,26 @@ if [ "$format" == "ELF 64-bit" ] ; then
    readelf -S $infile | grep -q  "hsa_code" 
    if [ $? != 0 ] ; then 
       # no elf sections, so look for external data with brig from snack 
-      brigszloc=`nm $infile | grep HSA_BrigMemSz | cut -d" " -f1 ` 
+      brigszloc=`nm $infile | grep $cloc_brigszsym | cut -d" " -f1 ` 
       if [ "$brigszloc" == "" ] ; then 
-         echo "ERROR:  No hsa_code section or HSAIL data in input elf file \"$1\" "
-         exit 1
+         # no cloc brig symbol , looking for kalmar
+         brigszhex=`nm $infile | grep $kalmar_brigszsym | cut -d" " -f1 ` 
+         if [ "$brigszhex" == "" ] ; then 
+            echo "ERROR:  No hsa_code section or HSAIL data in input elf file \"$1\" "
+            exit 1
+         else 
+            datastart=`readelf -S $infile | grep "\.data\.rel\.ro" | awk '{print $5}'`
+            relstart=`readelf -S $infile | grep "\.data\.rel\.ro" | awk '{print $4}'`
+            brigloc=`nm $infile | grep $kalmar_brigsym | grep -v $kalmar_brigszsym | cut -d" " -f1 ` 
+         fi
+      else
+         datastart=`readelf -S $infile | grep "\.data" | awk '{print $5}'`
+         relstart=`readelf -S $infile | grep "\.data" | awk '{print $4}'`
+         brigloc=`nm $infile | grep $cloc_brigsym | grep -v $cloc_brigszsym | cut -d" " -f1 ` 
+         brigszoff=$((0x$datastart + 0x$brigszloc - 0x$relstart))
+         brigszhex=`od -N2 -w2 -j $brigszoff -t x2 -An $infile | awk '{print $1}'` 
       fi
-      brigloc=`nm $infile | grep HSA_BrigMem | grep -v HSA_BrigMemSz | cut -d" " -f1 ` 
-      datastart=`readelf -S $infile | grep "\.data" | awk '{print $5}'`
-      relstart=`readelf -S $infile | grep "\.data" | awk '{print $4}'`
-      brigszoff=$((0x$datastart + 0x$brigszloc - 0x$relstart))
       brigoff=$((0x$datastart + 0x$brigloc - 0x$relstart))
-      brigszhex=`od -N2 -w2 -j $brigszoff -t x2 -An $infile | awk '{print $1}'` 
       brigsz=$((0x$brigszhex))
       #  Create the brig file by extracting the binary out of the applicaton elf
       dd if=$infile of=$tmpfile bs=1 count=$brigsz skip=$brigoff >/dev/null 2>/dev/null

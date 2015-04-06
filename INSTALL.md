@@ -120,7 +120,7 @@ As of Cloc version 0.8 the executable shell script names are changed to cloc.sh,
 These scripts need to be copied to a directory that is in users PATH.  For example /usr/local/bin is typically in PATH.
 ```
 cd ~/git
-git clone https://github.com/HSAfoundation/CLOC.git
+git clone -b 0.8 https://github.com/HSAfoundation/CLOC.git
 sudo cp CLOC/bin/cloc.sh /usr/local/bin/.
 sudo cp CLOC/bin/snack.sh /usr/local/bin/.
 sudo cp CLOC/bin/snk_genw.sh /usr/local/bin/.

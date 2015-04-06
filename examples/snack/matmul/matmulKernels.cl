@@ -30,37 +30,29 @@ __kernel void simple_sgemm_tt(const int M, const int N, const int K, const float
 
 __kernel void tiled_sgemm_tt(const int M, const int N, const int K, const float alpha, __global const float * A, const int LDA, __global const float * B, const int LDB, const float beta ,  __global float* C, const int LDC){ 
 
-   int C_row = get_global_id(0);
-   int C_col = get_global_id(1);
-   __private int kblock,e,A_col,B_row;
-
    // Local memory used to store submatrices As and Bs 
    __local float As[BLOCK_SIZE][BLOCK_SIZE];
    __local float Bs[BLOCK_SIZE][BLOCK_SIZE];
 
-   // Thread row and column 
-   int row = get_local_id(0);
-   int col = get_local_id(1);
-
-   // A_row and B_col are constant for this group
-   int A_row = (BLOCK_SIZE*get_group_id(0)) + row;
-   int B_col = (BLOCK_SIZE*get_group_id(1)) + col;
+   __private int kblock,e,row,col,C_row,C_col;
+   C_row = get_global_id(0);
+   C_col = get_global_id(1);
+   row = get_local_id(0);
+   col = get_local_id(1);
 
    // Each thread computes one element of C
-   float Cvalue = 0.0;
+   __private float Cvalue = 0.0;
 
    // Loop over all the sub-matrices of A and B required to compute CVALUE
-   for (kblock = 0; kblock  < (((K-1) / BLOCK_SIZE) + 1) ; ++kblock ) {
+   for (kblock = 0; kblock  < K ; kblock += BLOCK_SIZE ) {
       // Copy global memory values to local memory
-      A_col = (BLOCK_SIZE*kblock) + col;
-      As[row][col] = A[(A_row*LDA)+ A_col];
-      B_row = (BLOCK_SIZE*kblock) + row;
-      Bs[row][col] = B[(B_row*LDB)+ B_col];
+      As[row][col] = A[(C_row*LDA)+ kblock + col];
+      Bs[row][col] = B[((kblock+row)*LDB)+ C_col];
 
       // Synchronize to ensure As and Bs are loaded before starting computation
       barrier(CLK_LOCAL_MEM_FENCE);
 
-      // Multiply As and Bs and accumulate in Cvalue
+      // Multiply Local As and Bs and accumulate in Cvalue
       for (e = 0; e < BLOCK_SIZE; ++e) Cvalue += As[row][e] * Bs[e][col];
 
       // Synchronize to ensure computation is done before next iteration

@@ -64,20 +64,19 @@ function usage(){
     -k        Keep temporary files
 
    Options with values:
-    -clopts  <compiler opts>  Default="-cl-std=CL2.0"
-    -lkopts  <linker opts>    Read cloc script for defaults
-    -opt     <LLVM opt>       Default=2, LLVM optimization 
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig or hsail
+    -opt     <LLVM opt>       Default=2, LLVM optimization level
     -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -clopts  <compiler opts>  Default="-cl-std=CL2.0"
+    -lkopts  <LLVM link opts> Default="--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc"
 
    Examples:
     cloc my.cl              /* create my.brig                   */
-    cloc -hsail my.cl       /* --> my.hsail and my.brig         */
-    cloc -t /tmp/foo my.cl  /* Set tempdir will force -k option */
+    cloc -hsail my.cl       /* create my.hsail and my.brig      */
 
-   You may set environment variables HSA_LLVM_PATH, CLOPTS, or LKOPTS 
-   instead of providing options -p, -clopts, or -lkopts respectively.  
+   You may set environment variables LLVMOPT, HSA_LLVM_PATH, CLOPTS, or 
+   LKOPTS instead of providing options -opt -p, -clopts, or -lkopts .
    Command line options will take precedence over environment variables. 
 
    Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
@@ -129,7 +128,6 @@ while [ $# -gt 0 ] ; do
       -k) 		KEEPTDIR=true;; 
       --keep) 		KEEPTDIR=true;; 
       -n) 		DRYRUN=true;; 
-      -fort) 		FORTRAN=true;;  
       -hsail) 		GEN_IL=true;; 
       -ll) 		GENLL=true;KEEPTDIR=true;; 
       -clopts) 		CLOPTS=$2; shift ;; 

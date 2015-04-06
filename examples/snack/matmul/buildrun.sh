@@ -12,8 +12,8 @@ export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
 # Compile accelerated functions
 echo 
 if [ -f matmulKernels.o ] ; then rm matmulKernels.o ; fi
-echo snack.sh -c -q matmulKernels.cl 
-snack.sh -c -q  matmulKernels.cl 
+echo snack.sh -c -opt 3 -vv  matmulKernels.cl 
+snack.sh -c -opt 3 -vv  matmulKernels.cl 
 
 # Compile Main .c  and link to accelerated functions in matmulKernels.o
 echo 

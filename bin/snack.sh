@@ -85,29 +85,26 @@ function usage(){
     -k        Keep temporary files
     -fort     Generate fortran function names
     -noglobs  Do not generate global functions 
-    -str      Depricated, Create .o file needed for okra
+    -str      Depricated, create .o file needed for okra
 
    Options with values:
-    -clopts  <compiler opts>  Default="-cl-std=CL2.0"
-    -lkopts  <linker opts>    Read snack script for defaults
-    -s       <symbolname>     Default=filename (only with -str option)
-    -t       <tempdir>        Default=/tmp/snk_$$, Temp dir for files
-    -o       <outfilename>    Default=<filename>.<ft> ft=snackwrap.c or o
-    -p1     <path>            Default=$HSA_LLVM_PATH or /opt/amd/bin
-    -p2     <path>            Default=$HSA_RUNTIME_PATH or /opt/hsa
-    -opt    <LLVM opt>        Default=2, used for HSAIL generation
-    -gccopt <gcc opt>         Default=2, to compile snack wrapper
+    -opt      <LLVM opt>     Default=2, passed to cloc.sh to build HSAIL 
+    -gccopt   <gcc opt>      Default=2, gcc optimization for snack wrapper
+    -t        <tempdir>      Default=/tmp/snk_$$, Temp dir for files
+    -s        <symbolname>   Default=filename 
+    -p1       <path>         Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p2       <path>         Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -o        <outfilename>  Default=<filename>.<ft> 
 
    Examples:
-    snack my.cl              /* create my.snackwrap.c and my.h  */
-    snack -c my.cl           /* gcc compile to creat  my.o      */
-    snack -str my.cl         /* create mykernel.o for okra      */
-    snack -hsail my.cl       /* create hsail and snackwrap.c    */
-    snack -t /tmp/foo my.cl  /* will automatically set -k       */
+    snack my.cl              /* create my.snackwrap.c and my.h    */
+    snack -c my.cl           /* gcc compile to create  my.o       */
+    snack -hsail my.cl       /* create hsail and snackwrap.c      */
+    snack -c -hsail my.cl    /* create hsail snackwrap.c and .o   */
+    snack -t /tmp/foo my.cl  /* will automatically set -k         */
 
    You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
-   CLOPTS, or LKOPTS instead of providing options -p1, -p2, -clopts, 
-   or -lkopts respectively.  
+   instead of providing options -p1, -p2.
    Command line options will take precedence over environment variables. 
 
    Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
@@ -165,10 +162,8 @@ while [ $# -gt 0 ] ; do
       -noglobs)  	NOGLOBFUNS=1;;  
       -str) 		MAKESTR=true;; 
       -hsail) 		GEN_IL=true;; 
-      -clopts) 		CLOPTS=$2; shift ;; 
       -opt) 		LLVMOPT=$2; shift ;; 
       -gccopt) 		GCCOPT=$2; shift ;; 
-      -lkopts) 		LKOPTS=$2; shift ;; 
       -s) 		SYMBOLNAME=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
@@ -213,23 +208,14 @@ GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/bin}
-#  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
-CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
-CMD_LLA=${CMD_LLA:-llvm-dis}
 LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
-CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
-CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -gpu -whole}
-CMD_LLC=${CMD_LLC:-llc -O$LLVMOPT -march=hsail-64 -filetype=obj}
-CMD_ASM=${CMD_ASM:-hsailasm -disassemble}
 CMD_BRI=${CMD_BRI:-hsailasm }
-
 
 FORTRAN=${FORTRAN:-0};
 NOGLOBFUNS=${NOGLOBFUNS:-0};
 
 RUNDATE=`date`
 
-#$HSA_LLVM_PATH/$CMD_LLC -version  | grep -q "Jul 21 2014"
 #We assume that the HSAIL_HLC_Stable always generates dummy arguments
 GENW_ADD_DUMMY=t
 export GENW_ADD_DUMMY
@@ -273,7 +259,7 @@ CLNAME=${LASTARG##*/}
 FNAME=`echo "$CLNAME" | cut -d'.' -f1`
 SYMBOLNAME=${SYMBOLNAME:-$FNAME}
 BRIGHFILE="${SYMBOLNAME}_brig.h"
-OTHERCLOCFLAGS=""
+OTHERCLOCFLAGS="-opt $LLVMOPT"
 
 if [ -z $OUTFILE ] ; then 
 #  Output file not specified so use input directory
@@ -451,6 +437,7 @@ else
       echo "$CLOCPATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
    else 
       [ $CLOCVERBOSE ] && echo " " && echo "#------ Start cloc.sh output ------"
+      [ $CLOCVERBOSE ] && echo "$CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
       $CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl
       rc=$?
       [ $CLOCVERBOSE ] && echo "#------ End cloc.sh output ------" && echo " " 

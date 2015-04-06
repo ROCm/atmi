@@ -46,7 +46,7 @@ int main(int argc, char* argv[]){
    a1 = atoi(argv[1]); /* Height of A */
    a2 = atoi(argv[2]); /* Width of A , and Height of B*/
    a3 = atoi(argv[3]); /* Width of B */
-   total_ops = (long int) a1 * (long int) a2 * (long int) a3;
+   total_ops = 2 * (long int) a1 * (long int) a2 * (long int) a3;
    printf("\n\n");
 
    A.height = a1;
@@ -145,9 +145,6 @@ int main(int argc, char* argv[]){
 
    printf("Calling Simple Kernel ... \n");
    clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&start_time);
-/*   OLD METHOD OF DECLARING lparm 
-   Launch_params_t lparm={.ndim=2,.gdims={C.hpad,C.stride},.ldims={BLOCK_SIZE,BLOCK_SIZE}};
-*/
    SNK_INIT_LPARM(lparm,0);
    lparm->ndim=2;
    lparm->gdims[0]=C.hpad;

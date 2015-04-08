@@ -1,11 +1,14 @@
 #ifndef HSA_RUNTIME_PATH
 	HSA_RUNTIME_PATH=/opt/hsa
 #endif
+#ifndef HSA_OKRA_PATH
+	HSA_OKRA_PATH=/opt/amd/okra
+#endif
 TEST_NAME=BVH
 CC=g++
 LFLAGS+= -g  -Wl,--unresolved-symbols=ignore-in-shared-libs
 CFLAGS+= -std=c++11
-INCS += -I $(HSA_RUNTIME_PATH)/include
+INCS += -I $(HSA_RUNTIME_PATH)/include -I $(HSA_OKRA_PATH)/dist/include
 CPP_FILES := $(wildcard *.cpp)
 OBJ_FILES := $(addprefix obj/, $(notdir $(CPP_FILES:.cpp=.o)))
 
@@ -15,7 +18,7 @@ $(TEST_NAME): $(OBJ_FILES)
 	$(CC) $(LFLAGS) $(OBJ_FILES) -lelf -L$(HSA_RUNTIME_PATH)/lib -lokra_x86_64 -o $(TEST_NAME)
 
 $(TEST_NAME).hsail :
-	cloc -hsail $(TEST_NAME).cl
+	cloc.sh -hsail $(TEST_NAME).cl
 
 obj/%.o: %.cpp
 	$(CC) -c $(CFLAGS) $(INCS) -o $@ $< 

@@ -1,4 +1,4 @@
-kernel int matmul(global int *A, global int *B, global int *C, global int *N1, global int *P1) {
+kernel void matmul(global int *A, global int *B, global int *C, global int *N1, global int *P1) {
    int i = get_global_id(0);
    int j = get_global_id(1);
    int k;

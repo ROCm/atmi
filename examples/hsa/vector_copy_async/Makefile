@@ -8,13 +8,10 @@ INCS = -I $(HSA_RUNTIME_PATH)/include
 C_FILES := $(wildcard *.c)
 OBJ_FILES := $(addprefix obj/, $(notdir $(C_FILES:.c=.o)))
 
-COMMON_C_FILES := $(wildcard ../common/*.c)
-COMMON_OBJ_FILES := $(addprefix ../common/obj/, $(notdir $(COMMON_C_FILES:.c=.o)))
-
 all: $(TEST_NAME) $(TEST_NAME).brig
 
 $(TEST_NAME): $(OBJ_FILES) $(COMMON_OBJ_FILES)
-	$(CC) $(LFLAGS) $(COMMON_OBJ_FILES) $(OBJ_FILES) -lelf -L$(HSA_RUNTIME_PATH)/lib -lhsa-runtime64 -o $(TEST_NAME)
+	$(CC) $(LFLAGS) $(OBJ_FILES) -L$(HSA_RUNTIME_PATH)/lib -lhsa-runtime64 -o $(TEST_NAME)
 
 $(TEST_NAME).brig :
 	cloc $(TEST_NAME).cl

@@ -1,7 +1,9 @@
-Cloc 0.9 Install Instructions 1.0F 
-==================================
+Cloc 0.9 Install Instructions
+=============================
 
-The Cloc utility consists of three bash scripts with file names "cloc.sh" ,  "snack.sh" , and "snk_genw.sh" . These are found in the bin directory of this repository. Copy these files to a bin directory in your Linux environment PATH such as /usr/local/bin.  To update to a new version of Cloc simply replace cloc.sh snack.sh,  and snk_genw.sh in that directory. 
+Warning.  These instructions are for HSA 1.0F .
+
+The Cloc utility consists of three bash scripts with file names "cloc.sh" ,  "snack.sh" , and "snk_genw.sh" . These are found in the bin directory of this repository. Copy these files to /opt/amd/cloc/bin.  To update to a new version of Cloc simply replace cloc.sh snack.sh,  and snk_genw.sh in directory /opt/amd/cloc/bin.
 
 In addition to the bash scripts, Cloc requires the HSA runtime and the HLC compiler. This set of instructions can be used to install a comprehensive HSA software stack and the Cloc utility for Ubuntu.  In addition to Linux, you must have an HSA compatible system such as a Kaveri processor. There are four major steps to this process:
 
@@ -16,7 +18,7 @@ In addition to the bash scripts, Cloc requires the HSA runtime and the HLC compi
 
 ## Install Ubuntu 14.04 LTS
 
-Make sure Ubuntu 14.04 LTS 64-bit version has been installed.  We recommend the server package set.  The utica version of ubuntu (14.10) has not been tested with HSA.  Then install these dependencies:
+Make sure Ubuntu 14.04 LTS 64-bit version has been installed.  Ubunutu 14.04 is also known as trusty.  We recommend the server package set.  The utica version of ubuntu (14.10) has not been tested with HSA.  Then install these dependencies:
 ```
 sudo apt-get update
 sudo apt-get upgrade
@@ -24,7 +26,7 @@ sudo apt-get install git
 sudo apt-get install make
 sudo apt-get install g++
 sudo apt-get install libstdc++-4.8-dev
-sudo apt-get install libelf-dev
+sudo apt-get install libelf
 sudo apt-get install libtinfo-dev
 sudo apt-get install re2c
 sudo apt-get install libbsd-dev
@@ -107,30 +109,41 @@ sudo dpkg -i hsa-runtime_1.0_amd64.deb
 
 ## Install and Test Cloc utility
 
-As of Cloc version 0.9 the cl frontend clc2 and supporting LLVM 3.6 executables are stored in the same directory as the cloc.sh, snack.sh and snk_genw.sh shell scripts.  These scripts need to be copied should be copied into /opt/amd/bin
+As of Cloc version 0.9 the cl frontend clc2 and supporting LLVM 3.6 executables are stored in the same directory as the cloc.sh, snack.sh and snk_genw.sh shell scripts.  These scripts need to be copied should be copied into /opt/amd/cloc/bin
 ```
 cd ~/git
 git clone -b CLOC-0.9 https://github.com/HSAfoundation/CLOC.git
-mkdir -p /opt/amd/bin/
-sudo cp -rp CLOC/bin/ /opt/amd/bin/
+mkdir -p /opt/amd/cloc/bin/
+sudo cp -rp CLOC/bin/ /opt/amd/cloc/bin/
 cd 
 cp -r git/CLOC/examples .
 cd examples/snack/helloworld
 ./buildrun.sh
 ```
 
-## Install Kalmar compiler 
-
-SKIP THIS STEP TILL KALMAR IS PORTED TO 1.0F
-
 ## Set HSA environment variables
 
 ```
-export HSA_LLVM_PATH=/opt/amd/bin
 export HSA_RUNTIME_PATH=/opt/hsa
-export PATH=$PATH:/opt/amd/bin
+export PATH=$PATH:/opt/amd/cloc/bin
 export LD_LIBRARY_PATH=/opt/hsa/lib
 ```
+
+## Install Kalmar (C++AMP) HSA Compiler (OPTIONAL)
+
+SKIP THIS STEP TILL KALMAR IS PORTED TO 1.0F
+
+## Install gcc OpenMP for HSA Compiler (OPTIONAL)
+
+SKIP THIS STEP TILL IT IS PORTED TO 1.0F
+
+## Install Codeplay HSA Compiler (OPTIONAL)
+
+SKIP THIS STEP TILL IT IS PORTED TO 1.0F
+
+## Install Pathscale HSA Compiler (OPTIONAL)
+
+SKIP THIS STEP TILL IT IS PORTED TO 1.0F
 
 
 <A Name="Infiniband">

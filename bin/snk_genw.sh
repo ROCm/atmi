@@ -93,7 +93,6 @@ function write_copyright_template(){
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
-#include <libelf.h>
 #include "hsa.h"
 #include "hsa_ext_finalize.h"
 
@@ -104,13 +103,7 @@ function write_copyright_template(){
 typedef enum status_t status_t;
 enum status_t {
     STATUS_SUCCESS=0,
-    STATUS_KERNEL_INVALID_SECTION_HEADER=1,
-    STATUS_KERNEL_ELF_INITIALIZATION_FAILED=2,
-    STATUS_KERNEL_INVALID_ELF_CONTAINER=3,
-    STATUS_KERNEL_MISSING_DATA_SECTION=4,
-    STATUS_KERNEL_MISSING_CODE_SECTION=5,
-    STATUS_KERNEL_MISSING_OPERAND_SECTION=6,
-    STATUS_UNKNOWN=7,
+    STATUS_UNKNOWN=1
 };
 EOF
 }
@@ -127,13 +120,8 @@ function write_header_template(){
 #define SNK_MAX_STREAMS 8 
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
-#define SNK_MAXEDGESIN 10
-#define SNK_MAXEDGESOUT 10
 #define SNK_ORDERED 1
 #define SNK_UNORDERED 0
-#define SNK_GPU 0
-#define SNK_SIM 1
-#define SNK_CPU 2
 
 typedef struct snk_lparm_s snk_lparm_t;
 struct snk_lparm_s { 
@@ -145,15 +133,12 @@ struct snk_lparm_s {
    int acquire_fence_scope;          /* default = 2 */
    int release_fence_scope;          /* default = 2 */
    int num_edges_in;                 /*  not yet implemented */
-   int num_edges_out;                /*  not yet implemented */
    int * edges_in;                   /*  not yet implemented */
-   int * edges_out;                  /*  not yet implemented */
-   int devtype;                      /*  not yet implemented-default=SNK_GPU */
    int rank;                         /*  not yet implemented-used for MPI work sharing */
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_ORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_edges_in=0,.num_edges_out=0,.edges_in=NULL,.edges_out=NULL,.devtype=SNK_GPU,.rank=0} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_ORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_edges_in=0,.edges_in=NULL,.rank=0} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -173,133 +158,55 @@ EOF
 function write_global_functions_template(){
 /bin/cat  <<"EOF"
 
+void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest){
+  __atomic_store_n(packet,header|(rest<<16),__ATOMIC_RELEASE);
+}
+
+uint16_t header(hsa_packet_type_t type) {
+   uint16_t header = type << HSA_PACKET_HEADER_TYPE;
+   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+   return header;
+}
+
 extern void stream_sync(int stream_num) {
+    /* 
+       This is a user-callable function that puts a barrier packet into a queue where
+       all former dispatch packets were put on the queue for asynchronous asynchrnous 
+       executions. This routine will wait for all packets to complete on this queue.
+
+       All indications are that we are not doing this correctly in 1.0F.
+    */
 
     hsa_queue_t *queue = Stream_CommandQ[stream_num];
     hsa_signal_t signal = Stream_Signal[stream_num];
-
-    hsa_barrier_packet_t barrier;
-    memset (&barrier, 0, sizeof(hsa_barrier_packet_t));
-    barrier.header.type=HSA_PACKET_TYPE_BARRIER;
-    barrier.header.acquire_fence_scope=2;
-    barrier.header.release_fence_scope=2;
-    barrier.header.barrier=1;
-    barrier.completion_signal = signal;
-
+ 
+    /* Obtain the write index for the command queue for this stream.  */
     uint64_t index = hsa_queue_load_write_index_relaxed(queue);
-    const uint32_t queue_mask = queue->size - 1;
-    ((hsa_barrier_packet_t*)(queue->base_address))[index&queue_mask]=barrier; 
-    hsa_queue_store_write_index_relaxed(queue,index+1);
-    //Ring the doorbell.
+
+    /* Define the barrier packet to be at the calculated queue index address.  */
+    const uint32_t queueMask = queue->size - 1;
+    hsa_barrier_or_packet_t* barrier_packet = &(((hsa_barrier_or_packet_t*)(queue->base_address))[index&queueMask]);
+    memset(((uint8_t*) barrier_packet)+4, 0, sizeof(*barrier_packet)-4); 
+
+    barrier_packet->completion_signal = signal;
+    hsa_signal_store_relaxed(signal,1);
+ 
+    packet_store_release((uint32_t*)barrier_packet,header(HSA_PACKET_TYPE_BARRIER_OR),0);
+
+    /* Increment write index and ring doorbell to dispatch the kernel.  */
+    hsa_queue_store_write_index_relaxed(queue, index+1);
     hsa_signal_store_relaxed(queue->doorbell_signal, index);
 
-    //Wait for completion signal
-    /* printf("DEBUG STREAM_SYNC:Call #%d for stream %d \n",(int) index,stream_num);  */
-    hsa_signal_wait_acquire(signal, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);
-}
+    /* Wait on completion signal til kernel is finished.  */
+    hsa_signal_value_t value = hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
 
-
+}  /* End of generated global functions */
 EOF
-}
+} # end of bash function write_global_functions_template() 
 
 function write_context_template(){
 /bin/cat  <<"EOF"
-static Elf_Scn* snk_extract_elf_sect (Elf *elfP, Elf_Data *secHdr, char const *brigName, char const *bifName) {
-    int cnt = 0;
-    Elf_Scn* scn = NULL;
-    Elf32_Shdr* shdr = NULL;
-    char* sectionName = NULL;
-
-    /* Iterate thru the elf sections */
-    for (cnt = 1, scn = NULL; scn = elf_nextscn(elfP, scn); cnt++) {
-        if (((shdr = elf32_getshdr(scn)) == NULL)) {
-            return NULL;
-        }
-        sectionName = (char *)secHdr->d_buf + shdr->sh_name;
-        if (sectionName &&
-           ((strcmp(sectionName, brigName) == 0) ||
-           (strcmp(sectionName, bifName) == 0))) {
-            return scn;
-        }
-     }
-
-     return NULL;
-}
-
-/* Extract section and copy into HsaBrig */
-static status_t snk_CopyElfSectToModule (Elf *elfP, Elf_Data *secHdr, char const *brigName, char const *bifName, 
-                                       hsa_ext_brig_module_t* brig_module,
-                                       hsa_ext_brig_section_id_t section_id) {
-    Elf_Scn* scn = NULL;
-    Elf_Data* data = NULL;
-    void* address_to_copy;
-    size_t section_size=0;
-
-    scn = snk_extract_elf_sect(elfP, secHdr, brigName, bifName);
-
-    if (scn) {
-        if ((data = elf_getdata(scn, NULL)) == NULL) {
-            return STATUS_UNKNOWN;
-        }
-        section_size = data->d_size;
-        if (section_size > 0) {
-          address_to_copy = malloc(section_size);
-          memcpy(address_to_copy, data->d_buf, section_size);
-        }
-    }
-
-    if ((!scn ||  section_size == 0))  { return STATUS_UNKNOWN; }
-
-    /* Create a section header */
-    brig_module->section[section_id] = (hsa_ext_brig_section_header_t*) address_to_copy; 
-
-    return STATUS_SUCCESS;
-} 
-
-/* Reads binary of BRIG and BIF format */
-static status_t snk_ReadBinary(hsa_ext_brig_module_t **brig_module_t, char* binary, size_t binsz) {
-    /* Create the brig_module */
-    uint32_t number_of_sections = 3;
-    hsa_ext_brig_module_t* brig_module;
-
-    brig_module = (hsa_ext_brig_module_t*)
-                  (malloc (sizeof(hsa_ext_brig_module_t) + sizeof(void*)*number_of_sections));
-    brig_module->section_count = number_of_sections;
-
-    status_t status;
-    Elf* elfP = NULL;
-    Elf32_Ehdr* ehdr = NULL;
-    Elf_Data *secHdr = NULL;
-    Elf_Scn* scn = NULL;
-
-    if (elf_version ( EV_CURRENT ) == EV_NONE) { return STATUS_KERNEL_ELF_INITIALIZATION_FAILED; } 
-    if ((elfP = elf_memory(binary,binsz)) == NULL) { return STATUS_KERNEL_INVALID_ELF_CONTAINER; }
-    if (elf_kind (elfP) != ELF_K_ELF) { return STATUS_KERNEL_INVALID_ELF_CONTAINER; }
-  
-    if (((ehdr = elf32_getehdr(elfP)) == NULL) ||
-       ((scn = elf_getscn(elfP, ehdr->e_shstrndx)) == NULL) ||
-       ((secHdr = elf_getdata(scn, NULL)) == NULL)) {
-        return STATUS_KERNEL_INVALID_SECTION_HEADER;
-    }
-
-    status = snk_CopyElfSectToModule(elfP, secHdr,"hsa_data",".brig_hsa_data",
-                                   brig_module, HSA_EXT_BRIG_SECTION_DATA);
-    if (status != STATUS_SUCCESS) { return STATUS_KERNEL_MISSING_DATA_SECTION; }
-
-    status = snk_CopyElfSectToModule(elfP, secHdr, "hsa_code",".brig_hsa_code",
-                                   brig_module, HSA_EXT_BRIG_SECTION_CODE);
-    if (status != STATUS_SUCCESS) { return STATUS_KERNEL_MISSING_CODE_SECTION; }
-
-    status = snk_CopyElfSectToModule(elfP, secHdr, "hsa_operand",".brig_hsa_operand",
-                                   brig_module, HSA_EXT_BRIG_SECTION_OPERAND);
-    if (status != STATUS_SUCCESS) { return STATUS_KERNEL_MISSING_OPERAND_SECTION; }
-
-    elf_end(elfP);
-    *brig_module_t = brig_module;
-
-    return STATUS_SUCCESS;
-}
-
 
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
@@ -309,143 +216,49 @@ if (status != HSA_STATUS_SUCCESS) { \
  /*  printf("%s succeeded.\n", #msg);*/ \
 }
 
-/*  Define required BRIG data structures.  */
-typedef uint32_t BrigCodeOffset32_t;
-typedef uint32_t BrigDataOffset32_t;
-typedef uint16_t BrigKinds16_t;
-typedef uint8_t BrigLinkage8_t;
-typedef uint8_t BrigExecutableModifier8_t;
-typedef BrigDataOffset32_t BrigDataOffsetString32_t;
-
-enum BrigKinds {
-    BRIG_KIND_NONE = 0x0000,
-    BRIG_KIND_DIRECTIVE_BEGIN = 0x1000,
-    BRIG_KIND_DIRECTIVE_KERNEL = 0x1008,
-};
-
-typedef struct BrigBase BrigBase;
-struct BrigBase {
-    uint16_t byteCount;
-    BrigKinds16_t kind;
-};
-
-typedef struct BrigExecutableModifier BrigExecutableModifier;
-struct BrigExecutableModifier { 
-    BrigExecutableModifier8_t allBits;
-};
-
-typedef struct BrigDirectiveExecutable BrigDirectiveExecutable;
-struct BrigDirectiveExecutable {
-    uint16_t byteCount;
-    BrigKinds16_t kind;
-    BrigDataOffsetString32_t name;
-    uint16_t outArgCount;
-    uint16_t inArgCount;
-    BrigCodeOffset32_t firstInArg;
-    BrigCodeOffset32_t firstCodeBlockEntry;
-    BrigCodeOffset32_t nextModuleEntry;
-    uint32_t codeBlockEntryCount;
-    BrigExecutableModifier modifier;
-    BrigLinkage8_t linkage;
-    uint16_t reserved;
-};
-
-typedef struct BrigData BrigData;
-struct BrigData {
-    uint32_t byteCount;
-    uint8_t bytes[1];
-};
-
-/*
- * Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
- * and sets the value of data to the agent handle if it is.
- */
-static hsa_status_t snk_FindGPU(hsa_agent_t agent, void *data) {
-    if (data == NULL) {
-        return HSA_STATUS_ERROR_INVALID_ARGUMENT;
-    }
+/* Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
+   and sets the value of data to the agent handle if it is.
+*/
+static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {
+    hsa_status_t status;
     hsa_device_type_t device_type;
-    hsa_status_t stat =
-    hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
-    if (stat != HSA_STATUS_SUCCESS) {
-        return stat;
-    }
-    if (device_type == HSA_DEVICE_TYPE_GPU) {
-        *((hsa_agent_t *)data) = agent;
+    status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
+    if (HSA_STATUS_SUCCESS == status && HSA_DEVICE_TYPE_GPU == device_type) {
+        hsa_agent_t* ret = (hsa_agent_t*)data;
+        *ret = agent;
+        return HSA_STATUS_INFO_BREAK;
     }
     return HSA_STATUS_SUCCESS;
 }
 
-/*  Determines if a memory region can be used for kernarg allocations.  */
-static hsa_status_t snk_GetKernArrg(hsa_region_t region, void* data) {
-    hsa_region_flag_t flags;
-    hsa_region_get_info(region, HSA_REGION_INFO_FLAGS, &flags);
-    if (flags & HSA_REGION_FLAG_KERNARG) {
-        hsa_region_t* ret = (hsa_region_t*) data;
-        *ret = region;
+/* Determines if a memory region can be used for kernarg allocations.  */
+static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
+    hsa_region_segment_t segment;
+    hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT, &segment);
+    if (HSA_REGION_SEGMENT_GLOBAL != segment) {
         return HSA_STATUS_SUCCESS;
     }
-    return HSA_STATUS_SUCCESS;
-}
 
-/*  Determines if a memory region is device memory */
-static hsa_status_t snk_GetDevRegion(hsa_region_t region, void* data) {
-    hsa_segment_t segment;
-    hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT , &segment);
-    if (segment & HSA_SEGMENT_GROUP ) {
+    hsa_region_global_flag_t flags;
+    hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &flags);
+    if (flags & HSA_REGION_GLOBAL_FLAG_KERNARG) {
         hsa_region_t* ret = (hsa_region_t*) data;
         *ret = region;
-        return HSA_STATUS_SUCCESS;
+        return HSA_STATUS_INFO_BREAK;
     }
+
     return HSA_STATUS_SUCCESS;
-}
-
-
-/*
- * Finds the specified symbols offset in the specified brig_module.
- * If the symbol is found the function returns HSA_STATUS_SUCCESS, 
- * otherwise it returns HSA_STATUS_ERROR.
- */
-static hsa_status_t snk_FindSymbolOffset(hsa_ext_brig_module_t* brig_module, const char* symbol_name,
-    hsa_ext_brig_code_section_offset32_t* offset) {
-    
-    /*  Get the data section */
-    hsa_ext_brig_section_header_t* data_section_header = 
-                brig_module->section[HSA_EXT_BRIG_SECTION_DATA];
-    /*  Get the code section */
-    hsa_ext_brig_section_header_t* code_section_header =
-             brig_module->section[HSA_EXT_BRIG_SECTION_CODE];
-
-    /*  First entry into the BRIG code section */
-    BrigCodeOffset32_t code_offset = code_section_header->header_byte_count;
-    BrigBase* code_entry = (BrigBase*) ((char*)code_section_header + code_offset);
-    while (code_offset != code_section_header->byte_count) {
-        if (code_entry->kind == BRIG_KIND_DIRECTIVE_KERNEL) {
-            /*  Now find the data in the data section */
-            BrigDirectiveExecutable* directive_kernel = (BrigDirectiveExecutable*) (code_entry);
-            BrigDataOffsetString32_t data_name_offset = directive_kernel->name;
-            BrigData* data_entry = (BrigData*)((char*) data_section_header + data_name_offset);
-            if (!strncmp(symbol_name, (char*)data_entry->bytes, strlen(symbol_name))){
-                *offset = code_offset;
-                return HSA_STATUS_SUCCESS;
-            }
-        }
-        code_offset += code_entry->byteCount;
-        code_entry = (BrigBase*) ((char*)code_section_header + code_offset);
-    }
-    return HSA_STATUS_ERROR;
 }
 
 /* Stream specific globals */
 hsa_signal_t   Stream_Signal[SNK_MAX_STREAMS];
 hsa_queue_t*   Stream_CommandQ[SNK_MAX_STREAMS];
 
-
 /* Context(cl file) specific globals */
-hsa_ext_brig_module_t*           _CN__BrigModule;
-hsa_agent_t                      _CN__Device;
-hsa_ext_program_handle_t         _CN__HsaProgram;
-hsa_ext_brig_module_handle_t     _CN__ModuleHandle;
+hsa_ext_module_t*                _CN__BrigModule;
+hsa_agent_t                      _CN__Agent;
+hsa_ext_program_t                _CN__HsaProgram;
+hsa_executable_t                 _CN__Executable;
 int                              _CN__FC = 0; 
 
 /* Global variables */
@@ -460,59 +273,65 @@ status_t _CN__InitContext(){
     err = hsa_init();
     ErrorCheck(Initializing the hsa runtime, err);
 
-    /*  Iterate over the agents and pick the gpu agent */
-    _CN__Device = 0;
-    err = hsa_iterate_agents(snk_FindGPU, &_CN__Device);
-    ErrorCheck(Calling hsa_iterate_agents, err);
+    /* Iterate over the agents and pick the gpu agent */
+    err = hsa_iterate_agents(get_gpu_agent, &_CN__Agent);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
 
-    err = (_CN__Device == 0) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
-    ErrorCheck(Checking if the GPU device is non-zero, err);
-/*
-    err = hsa_ext_set_memory_type(_CN__Device, HSA_EXT_MEMORY_TYPE_COHERENT );
-    ErrorCheck(Calling hsa_ext_set_memory_type, err);
-*/
-
-    /*  Query the name of the device.  */
+    /* Query the name of the agent.  */
     char name[64] = { 0 };
-    err = hsa_agent_get_info(_CN__Device, HSA_AGENT_INFO_NAME, name);
-    ErrorCheck(Querying the device name, err);
-/*
-    printf("The device name is %s.\n", name);  
-*/
-    /*  Load BRIG, encapsulated in an ELF container, into a BRIG module.  */
-    status_t status = snk_ReadBinary(&_CN__BrigModule,HSA_BrigMem,HSA_BrigMemSz);
-    if (status != STATUS_SUCCESS) {
-        printf("Could not create BRIG module: %d\n", status);
-        if (status == STATUS_KERNEL_INVALID_SECTION_HEADER || 
-            status == STATUS_KERNEL_ELF_INITIALIZATION_FAILED || 
-            status == STATUS_KERNEL_INVALID_ELF_CONTAINER) {
-            printf("The ELF file is invalid or possibley corrupted.\n");
-        }
-        if (status == STATUS_KERNEL_MISSING_DATA_SECTION ||
-            status == STATUS_KERNEL_MISSING_CODE_SECTION ||
-            status == STATUS_KERNEL_MISSING_OPERAND_SECTION) {
-            printf("One or more ELF sections are missing. Use readelf command to \
-            to check if hsa_data, hsa_code and hsa_operands exist.\n");
-        }
-    }
+    err = hsa_agent_get_info(_CN__Agent, HSA_AGENT_INFO_NAME, name);
+    ErrorCheck(Querying the agent name, err);
+    /* printf("The agent name is %s.\n", name); */
 
-    /*  Create hsa program for this context */
-    err = hsa_ext_program_create(&_CN__Device, 1, HSA_EXT_BRIG_MACHINE_LARGE, HSA_EXT_BRIG_PROFILE_FULL, &_CN__HsaProgram);
-    ErrorCheck(Creating the hsa program, err);
+    /* Query the maximum size of the queue.  */
+    uint32_t queue_size = 0;
+    err = hsa_agent_get_info(_CN__Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+    ErrorCheck(Querying the agent maximum queue size, err);
+    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
 
-    /*  Add the BRIG module to this hsa program.  */
-    err = hsa_ext_add_module(_CN__HsaProgram, _CN__BrigModule, &_CN__ModuleHandle);
+    /* Load the BRIG binary.  */
+    _CN__BrigModule = (hsa_ext_module_t*) &HSA_BrigMem;
+
+    /* Create hsa program.  */
+    memset(&_CN__HsaProgram,0,sizeof(hsa_ext_program_t));
+    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &_CN__HsaProgram);
+    ErrorCheck(Create the program, err);
+
+    /* Add the BRIG module to hsa program.  */
+    err = hsa_ext_program_add_module(_CN__HsaProgram, _CN__BrigModule);
     ErrorCheck(Adding the brig module to the program, err);
 
-    /*  Query the maximum size of the queue.  */
-    uint32_t queue_size = 0;
-    err = hsa_agent_get_info(_CN__Device, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
-    ErrorCheck(Querying the device maximum queue size, err);
+    /* Determine the agents ISA.  */
+    hsa_isa_t isa;
+    err = hsa_agent_get_info(_CN__Agent, HSA_AGENT_INFO_ISA, &isa);
+    ErrorCheck(Query the agents isa, err);
 
-    /* printf("DEBUG: The maximum queue size is %u.\n", (unsigned int) queue_size);  */
+    /* * Finalize the program and extract the code object.  */
+    hsa_ext_control_directives_t control_directives;
+    memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
+    hsa_code_object_t code_object;
+    err = hsa_ext_program_finalize(_CN__HsaProgram, isa, 0, control_directives, "", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
+    ErrorCheck(Finalizing the program, err);
+
+    /* Destroy the program, it is no longer needed.  */
+    err=hsa_ext_program_destroy(_CN__HsaProgram);
+    ErrorCheck(Destroying the program, err);
+
+    /* Create the empty executable.  */
+    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &_CN__Executable);
+    ErrorCheck(Create the executable, err);
+
+    /* Load the code object.  */
+    err = hsa_executable_load_code_object(_CN__Executable, _CN__Agent, code_object, "");
+    ErrorCheck(Loading the code object, err);
+
+    /* Freeze the executable; it can now be queried for symbols.  */
+    err = hsa_executable_freeze(_CN__Executable, "");
+    ErrorCheck(Freeze the executable, err);
 
     /*  Create a queue using the maximum size.  */
-    err = hsa_queue_create(_CN__Device, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, &Sync_CommandQ);
+    err = hsa_queue_create(_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Sync_CommandQ);
     ErrorCheck(Creating the queue, err);
 
     /*  Create signal to wait for the dispatch to finish. this Signal is only used for synchronous execution  */ 
@@ -524,7 +343,7 @@ status_t _CN__InitContext(){
     for ( stream_num = 0 ; stream_num < SNK_MAX_STREAMS ; stream_num++){
 
        /* printf("calling queue create for stream %d\n",stream_num); */
-       err = hsa_queue_create(_CN__Device, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, &Stream_CommandQ[stream_num]);
+       err=hsa_queue_create(_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Stream_CommandQ[stream_num]);
        ErrorCheck(Creating the Stream Command Q, err);
 
        /*  Create signal to wait for the dispatch to finish. this Signal is only used for synchronous execution  */ 
@@ -542,13 +361,14 @@ function write_KernelStatics_template(){
 /bin/cat <<"EOF"
 
 /* Kernel specific globals, one set for each kernel  */
-hsa_ext_code_descriptor_t*       _KN__HsaCodeDescriptor;
-void*                            _KN__kernel_arg_buffer = NULL; /* Only for syncrhnous calls */  
-size_t                           _KN__kernel_arg_buffer_size ;  
-hsa_ext_finalization_request_t   _KN__FinalizationRequestList;
+hsa_executable_symbol_t          _KN__Symbol;
 int                              _KN__FK = 0 ; 
 status_t                         _KN__init();
-status_t                         _KN__stop();
+uint64_t                         _KN__Kernel_Object;
+uint32_t                         _KN__Kernarg_Segment_Size; /* May not need to be global */
+uint32_t                         _KN__Group_Segment_Size;
+uint32_t                         _KN__Private_Segment_Size;
+void*                            _KN__Kernarg_Address;
 
 EOF
 }
@@ -565,51 +385,36 @@ extern status_t _KN__init(){
    
     hsa_status_t err;
 
-    /*  Construct finalization request list for this kernel.  */
-    _KN__FinalizationRequestList.module = _CN__ModuleHandle;
-    _KN__FinalizationRequestList.program_call_convention = 0;
+    /* Extract the symbol from the executable.  */
+    /* printf("Kernel name _KN__: Looking for symbol %s\n","__OpenCL__KN__kernel"); */
+    err = hsa_executable_get_symbol(_CN__Executable, "", "&__OpenCL__KN__kernel", _CN__Agent , 0, &_KN__Symbol);
+    ErrorCheck(Extract the symbol from the executable, err);
 
-    err = snk_FindSymbolOffset(_CN__BrigModule, "_FN_" , &_KN__FinalizationRequestList.symbol);
-    ErrorCheck(Finding the symbol offset for the kernel, err);
-
-    /*  (RE) Finalize the hsa program with this kernel on the request list */
-    err = hsa_ext_finalize_program(_CN__HsaProgram, _CN__Device, 1, &_KN__FinalizationRequestList, NULL, NULL, 0, NULL, 0);
-    ErrorCheck(Finalizing the program, err);
-
-    /*  Get the hsa code descriptor address.  */
-    err = hsa_ext_query_kernel_descriptor_address(_CN__HsaProgram, _CN__ModuleHandle , _KN__FinalizationRequestList.symbol, &_KN__HsaCodeDescriptor);
-    ErrorCheck(Querying the kernel descriptor address, err);
+    /* Extract dispatch information from the symbol */
+    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &_KN__Kernel_Object);
+    ErrorCheck(Extracting the symbol from the executable, err);
+    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &_KN__Kernarg_Segment_Size);
+    ErrorCheck(Extracting the kernarg segment size from the executable, err);
+    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE, &_KN__Group_Segment_Size);
+    ErrorCheck(Extracting the group segment size from the executable, err);
+    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, &_KN__Private_Segment_Size);
+    ErrorCheck(Extracting the private segment from the executable, err);
 
     /* Find a memory region that supports kernel arguments.  */
-    hsa_region_t kernarg_region = 0;
-    hsa_agent_iterate_regions(_CN__Device, snk_GetKernArrg, &kernarg_region);
-    err = (kernarg_region == 0) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    hsa_region_t kernarg_region;
+    kernarg_region.handle=(uint64_t)-1;
+    hsa_agent_iterate_regions(_CN__Agent, get_kernarg_memory_region, &kernarg_region);
+    err = (kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a kernarg memory region, err);
-   
-    /*  Allocate the kernel argument buffer from the correct region.  */   
-    _KN__kernel_arg_buffer_size = _KN__HsaCodeDescriptor->kernarg_segment_byte_size;
-    err = hsa_memory_allocate(kernarg_region, _KN__kernel_arg_buffer_size, &_KN__kernel_arg_buffer);
+    _KN__Kernarg_Address = NULL;
+
+    /* Allocate the kernel argument buffer from the correct region.  */   
+    err = hsa_memory_allocate(kernarg_region, _KN__Kernarg_Segment_Size, &_KN__Kernarg_Address);
     ErrorCheck(Allocating kernel argument memory buffer, err);
 
     return STATUS_SUCCESS;
 
 } /* end of _KN__init */
-
-extern status_t _KN__stop(){
-    status_t err;
-    if (_CN__FC == 0 ) {
-       /* weird, but we cannot stop unless we initialized the context */
-       err = _CN__InitContext();
-       if ( err != STATUS_SUCCESS ) return err; 
-       _CN__FC = 1;
-    }
-    if ( _KN__FK == 1 ) {
-        /*  Currently nothing kernel specific must be recovered */
-       _KN__FK = 0;
-    }
-    return STATUS_SUCCESS;
-
-} /* end of _KN__stop */
 
 EOF
 }
@@ -617,8 +422,6 @@ EOF
 function write_kernel_template(){
 /bin/cat <<"EOF"
 
-    hsa_status_t err;
-    status_t status;
 
     /*  Get stream number from launch parameters.       */
     /*  This must be less than SNK_MAX_STREAMS.         */
@@ -630,87 +433,79 @@ function write_kernel_template(){
     }
 
     if (_KN__FK == 0 ) {
-       status = _KN__init();
+       status_t status = _KN__init();
        if ( status  != STATUS_SUCCESS ) return; 
        _KN__FK = 1;
     }
 
     hsa_queue_t* this_Q ;
-    hsa_signal_t this_sig ;
-
-    /*  Setup this call to this kernel dispatch packet from scratch.  */
-    hsa_dispatch_packet_t this_aql;
-    memset(&this_aql, 0, sizeof(this_aql));
-
-    if ( stream_num < 0 ) {
-       /*  Sychronous execution */
+    if ( stream_num < 0 ) { /*  Sychronous execution */
        this_Q = Sync_CommandQ;
-       this_sig = Sync_Signal;
-       this_aql.completion_signal=this_sig;
-    } else {
-       /* Asynchrnous */
+    } else { /* Asynchrnous execution uses one command Q per stream */
        this_Q = Stream_CommandQ[stream_num];
-       this_sig = Stream_Signal[stream_num];
     }
-
-    /*  Reset signal to original value. */
-    /*  WARNING  atomic operation here. */
-    hsa_signal_store_relaxed(this_sig,1);
-
-    /*  Set the dimensions passed from the application */
-    this_aql.dimensions=(uint16_t) lparm->ndim;
-    this_aql.grid_size_x=lparm->gdims[0];
-    this_aql.workgroup_size_x=lparm->ldims[0];
-    if (lparm->ndim>1) {
-       this_aql.grid_size_y=lparm->gdims[1];
-       this_aql.workgroup_size_y=lparm->ldims[1];
-    } else {
-       this_aql.grid_size_y=1;
-       this_aql.workgroup_size_y=1;
-    }
-    if (lparm->ndim>2) {
-       this_aql.grid_size_z=lparm->gdims[2];
-       this_aql.workgroup_size_z=lparm->ldims[2];
-    } else {
-       this_aql.grid_size_z=1;
-       this_aql.workgroup_size_z=1;
-    }
-
-    this_aql.header.type=HSA_PACKET_TYPE_DISPATCH;
-    this_aql.header.acquire_fence_scope=lparm->acquire_fence_scope;
-    this_aql.header.release_fence_scope=lparm->release_fence_scope;
-
-    /*  Set user defined barrier, default = 0 implies execution order not gauranteed */
-    this_aql.header.barrier=lparm->barrier;
-    this_aql.group_segment_size=_KN__HsaCodeDescriptor->workgroup_group_segment_byte_size;
-    this_aql.private_segment_size=_KN__HsaCodeDescriptor->workitem_private_segment_byte_size;
-    
-    /*  copy args from the custom _KN__args structure */
-    /*  FIXME We should align kernel_arg_buffer because _KN__args is aligned */
-    memcpy(_KN__kernel_arg_buffer, &_KN__args, sizeof(_KN__args)); 
-
-    /*  Bind kernelcode to the packet.  */
-    this_aql.kernel_object_address=_KN__HsaCodeDescriptor->code.handle;
-
-    /*  Bind kernel argument buffer to the aql packet.  */
-    this_aql.kernarg_address=(uint64_t)_KN__kernel_arg_buffer;
 
     /*  Obtain the current queue write index. increases with each call to kernel  */
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
     /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
 
-    /*  Write this_aql at the calculated queue index address.  */
+    /* Find the queue index address to write the packet info into.  */
     const uint32_t queueMask = this_Q->size - 1;
-    ((hsa_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]=this_aql;
+    hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
 
-    /* Increment the write index and ring the doorbell to dispatch the kernel.  */
+    /*  FIXME: We need to check for queue overflow here. */
+
+    if ( stream_num < 0 ) {
+       /* Set signal only for synchrnous snack function */
+       this_aql->completion_signal=Sync_Signal;
+       hsa_signal_store_relaxed(Sync_Signal,1);
+    }
+    /* Note: The Stream_Signal[stream_num] is only used by stream_sync function */
+
+    /*  Process lparm values */
+    /*  this_aql.dimensions=(uint16_t) lparm->ndim; */
+    this_aql->setup  |= (uint16_t) lparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
+    this_aql->grid_size_x=lparm->gdims[0];
+    this_aql->workgroup_size_x=lparm->ldims[0];
+    if (lparm->ndim>1) {
+       this_aql->grid_size_y=lparm->gdims[1];
+       this_aql->workgroup_size_y=lparm->ldims[1];
+    } else {
+       this_aql->grid_size_y=1;
+       this_aql->workgroup_size_y=1;
+    }
+    if (lparm->ndim>2) {
+       this_aql->grid_size_z=lparm->gdims[2];
+       this_aql->workgroup_size_z=lparm->ldims[2];
+    } else {
+       this_aql->grid_size_z=1;
+       this_aql->workgroup_size_z=1;
+    }
+
+
+    /*  copy args from the custom _KN__args structure, we should get rid of this */
+    memcpy(_KN__Kernarg_Address, &_KN__args, sizeof(_KN__args));
+
+    /*  Bind kernel argument buffer to the aql packet.  */
+    this_aql->kernarg_address = (void*) _KN__Kernarg_Address;
+    this_aql->kernel_object = _KN__Kernel_Object;
+    this_aql->private_segment_size = _KN__Private_Segment_Size;
+    this_aql->group_segment_size = _KN__Group_Segment_Size;
+
+    /*  Prepare and set the packet header */ 
+    /* Only set barrier bit if asynchrnous execution */
+    if ( stream_num >= 0 )  this_aql->header |= lparm->barrier << HSA_PACKET_HEADER_BARRIER; 
+    this_aql->header |= lparm->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+    this_aql->header |= lparm->release_fence_scope  << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+    __atomic_store_n((uint8_t*)(&this_aql->header), (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH, __ATOMIC_RELEASE);
+
+    /* Increment write index and ring doorbell to dispatch the kernel.  */
     hsa_queue_store_write_index_relaxed(this_Q, index+1);
     hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
 
-    /*  For synchronous execution, wait on the dispatch signal until the kernel is finished.  */
     if ( stream_num < 0 ) {
-       err = hsa_signal_wait_acquire(this_sig, HSA_LT, 1, (uint64_t) -1, HSA_WAIT_EXPECTANCY_UNKNOWN);
-       ErrorCheck(Waiting on the dispatch signal, err);
+       /* For default synchrnous execution, wait til kernel is finished.  */
+       hsa_signal_value_t value = hsa_signal_wait_acquire(Sync_Signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
     }
 
     return; 
@@ -738,7 +533,6 @@ C     INCLUDE launch_params.f in your FORTRAN source so you can set dimensions.
           integer (C_INT) :: acquire_fence_scope = 2
           integer (C_INT) :: release_fence_scope = 2
           integer (C_INT) :: num_edges_in = 0
-          integer (C_INT) :: num_edges_out = 0
       end type snk_lparm_t
       type (snk_lparm_t) lparm
 C  

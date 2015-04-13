@@ -1,5 +1,5 @@
-Cloc Install Instructions 1.0P
-==============================
+Cloc 0.9 Install Instructions 1.0F 
+==================================
 
 The Cloc utility consists of three bash scripts with file names "cloc.sh" ,  "snack.sh" , and "snk_genw.sh" . These are found in the bin directory of this repository. Copy these files to a bin directory in your Linux environment PATH such as /usr/local/bin.  To update to a new version of Cloc simply replace cloc.sh snack.sh,  and snk_genw.sh in that directory. 
 
@@ -47,16 +47,16 @@ mount the appropriate MLNX_OFED iso
 
 ## Install HSA Linux Kernel Drivers 
 
-Make sure you get the backlevel <b>kfd-v1.0.x</b> branch. This set of instructions is for the provisional HSA runtime.  The software stack for the new <b>finalized v1.0F</b> is not yet complete. We will update these install instructions when that is complete.  This should be sometime in June 2015.  
+These instructions are for HSA1.0F.
 
 Execute these commands:
 
 ```
 cd ~/git
-git clone -b kfd-v1.0.x https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
-sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-1.0/ubuntu/*.deb
+git clone https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
+sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-1.2/ubuntu/*.deb
 echo "KERNEL==\"kfd\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/kfd.rules
-sudo cp HSA-Drivers-Linux-AMD/kfd-1.0/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
+sudo cp HSA-Drivers-Linux-AMD/kfd-1.2/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
 ```
 
 ## Reboot System
@@ -95,72 +95,39 @@ If it does not detect a valid GPU ID (last two entries are NO), it is possible t
 3. Install HSA Software
 =======================
 
-## Install HSA Runtime
+## Install HSA 1.0F Runtime
 
 ```
 mkdir ~/git
 cd ~/git
-git clone -b release-v1.0  https://github.com/HSAfoundation/HSA-Runtime-AMD.git
+git clone https://github.com/HSAfoundation/HSA-Runtime-AMD.git
 cd HSA-Runtime-AMD/ubuntu
 sudo dpkg -i hsa-runtime_1.0_amd64.deb
 ```
 
-## Install HSAIL Compiler (HLC)
-
-```
-cd ~/git
-git clone https://github.com/HSAfoundation/HSAIL-HLC-Stable.git
-cd HSAIL-HLC-Stable/ubuntu
-sudo dpkg -i hsail-hlc-stable_1.0_amd64.deb
-```
-
 ## Install and Test Cloc utility
 
-As of Cloc version 0.8 the executable shell script names are changed to cloc.sh, snack.sh and snk_genw.sh. 
-These scripts need to be copied to a directory that is in users PATH.  For example /usr/local/bin is typically in PATH.
+As of Cloc version 0.9 the cl frontend clc2 and supporting LLVM 3.6 executables are stored in the same directory as the cloc.sh, snack.sh and snk_genw.sh shell scripts.  These scripts need to be copied should be copied into /opt/amd/bin
 ```
 cd ~/git
-git clone -b 0.8 https://github.com/HSAfoundation/CLOC.git
-sudo cp CLOC/bin/cloc.sh /usr/local/bin/.
-sudo cp CLOC/bin/snack.sh /usr/local/bin/.
-sudo cp CLOC/bin/snk_genw.sh /usr/local/bin/.
+git clone -b CLOC-0.9 https://github.com/HSAfoundation/CLOC.git
+mkdir -p /opt/amd/bin/
+sudo cp -rp CLOC/bin/ /opt/amd/bin/
 cd 
 cp -r git/CLOC/examples .
 cd examples/snack/helloworld
 ./buildrun.sh
 ```
 
-## Install Kalmar compiler
+## Install Kalmar compiler 
 
-This was formerly known as C++AMP. This step is optional because it is not needed for Cloc.  However this is becoming a very good HSA compiler. 
-
-```
-mkdir ~/git/deb
-cd ~/git/deb
-wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-0.5.0-hsa-milestone4-Linux.deb
-wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/libcxxamp-0.5.0-hsa-milestone4-Linux.deb
-wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/clamp-bolt-1.2.0-hsa-milestone4-Linux.deb
-wget https://bitbucket.org/multicoreware/cppamp-driver-ng/downloads/boost_1_55_0-hsa-milestone3.deb
-sudo dpkg -i *.deb
-```
-
-## Install Okra 
-
-This step is also optional.  It is not needed for Cloc.  However, it is currently needed for the experimental version of gcc that supports OpenMP accelertion in HSA. 
-```
-cd ~/git
-git clone https://github.com/HSAfoundation/Okra-Interface-to-HSA-Device
-sudo mkdir /opt/amd/okra
-sudo cp -r Okra-Interface-to-HSA-Device/okra /opt/amd
-sudo cp Okra-Interface-to-HSA-Device/okra/dist/bin/libokra_x86_64.so /opt/hsa/lib/.
-```
+SKIP THIS STEP TILL KALMAR IS PORTED TO 1.0F
 
 ## Set HSA environment variables
 
 ```
 export HSA_LLVM_PATH=/opt/amd/bin
 export HSA_RUNTIME_PATH=/opt/hsa
-export HSA_OKRA_PATH=/opt/amd/okra
 export PATH=$PATH:/opt/amd/bin
 export LD_LIBRARY_PATH=/opt/hsa/lib
 ```

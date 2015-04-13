@@ -1,5 +1,5 @@
-CLOC - Version 0.8.0
-====================
+CLOC - V 0.9.0 (HSA 1.0F) 
+=========================
 
 CLOC:  CL Offline Compiler
        Generate HSAIL or brig from a cl (Kernel c Language) file.
@@ -221,7 +221,7 @@ manual updates to HSAIL.  This process has two steps.
 The first step compiles the .cl file into the object code needed by a SNACK application.
 For example, if your kernels are in the file myKernels.cl, then you can run step 1 as follows.
 ```
-   snack -c -hsail myKernels.cl
+   snack.sh -c -hsail myKernels.cl
 ```
 When cloc sees the "-c" option and the "-hsail" option, it will save four files 
 in the same directory as myKernels.cl file.  The first two files are always created 

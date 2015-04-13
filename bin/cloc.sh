@@ -6,7 +6,7 @@
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.8.0
+PROGVERSION=0.9.0
 #
 # Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -67,7 +67,7 @@ function usage(){
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig or hsail
     -opt     <LLVM opt>       Default=2, LLVM optimization level
-    -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/cloc/bin
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
     -lkopts  <LLVM link opts> Default="--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc"
 
@@ -174,7 +174,7 @@ fi
 
 #  Set Default values,  all CMD_ are started from $HSA_LLVM_PATH
 LLVMOPT=${LLVMOPT:-2} 
-HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/bin}
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
 #  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
 CMD_LLA=${CMD_LLA:-llvm-dis}

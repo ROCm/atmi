@@ -170,36 +170,37 @@ uint16_t header(hsa_packet_type_t type) {
 }
 
 extern void stream_sync(int stream_num) {
-    /* 
-       This is a user-callable function that puts a barrier packet into a queue where
+    /* This is a user-callable function that puts a barrier packet into a queue where
        all former dispatch packets were put on the queue for asynchronous asynchrnous 
        executions. This routine will wait for all packets to complete on this queue.
-
-       All indications are that we are not doing this correctly in 1.0F.
     */
 
     hsa_queue_t *queue = Stream_CommandQ[stream_num];
-    hsa_signal_t signal = Stream_Signal[stream_num];
- 
+
+    hsa_signal_t signal;
+    hsa_signal_create(1, 0, NULL, &signal);
+  
     /* Obtain the write index for the command queue for this stream.  */
     uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+    const uint32_t queueMask = queue->size - 1;
 
     /* Define the barrier packet to be at the calculated queue index address.  */
-    const uint32_t queueMask = queue->size - 1;
-    hsa_barrier_or_packet_t* barrier_packet = &(((hsa_barrier_or_packet_t*)(queue->base_address))[index&queueMask]);
-    memset(((uint8_t*) barrier_packet)+4, 0, sizeof(*barrier_packet)-4); 
-
-    barrier_packet->completion_signal = signal;
-    hsa_signal_store_relaxed(signal,1);
- 
-    packet_store_release((uint32_t*)barrier_packet,header(HSA_PACKET_TYPE_BARRIER_OR),0);
+    hsa_barrier_or_packet_t* barrier = &(((hsa_barrier_or_packet_t*)(queue->base_address))[index&queueMask]);
+    memset(barrier, 0, sizeof(hsa_barrier_or_packet_t));
+    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+    barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
+    barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE; 
+    barrier->completion_signal = signal;
 
     /* Increment write index and ring doorbell to dispatch the kernel.  */
     hsa_queue_store_write_index_relaxed(queue, index+1);
     hsa_signal_store_relaxed(queue->doorbell_signal, index);
 
     /* Wait on completion signal til kernel is finished.  */
-    hsa_signal_value_t value = hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+    hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+
+    hsa_signal_destroy(signal);
 
 }  /* End of generated global functions */
 EOF
@@ -251,7 +252,6 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
 }
 
 /* Stream specific globals */
-hsa_signal_t   Stream_Signal[SNK_MAX_STREAMS];
 hsa_queue_t*   Stream_CommandQ[SNK_MAX_STREAMS];
 
 /* Context(cl file) specific globals */
@@ -341,14 +341,9 @@ status_t _CN__InitContext(){
     /*  Create queues and signals for each stream */
     int stream_num;
     for ( stream_num = 0 ; stream_num < SNK_MAX_STREAMS ; stream_num++){
-
        /* printf("calling queue create for stream %d\n",stream_num); */
        err=hsa_queue_create(_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Stream_CommandQ[stream_num]);
        ErrorCheck(Creating the Stream Command Q, err);
-
-       /*  Create signal to wait for the dispatch to finish. this Signal is only used for synchronous execution  */ 
-       err=hsa_signal_create(1, 0, NULL, &Stream_Signal[stream_num]);
-       ErrorCheck(Creating the Stream Signal, err);
     }
 
     return STATUS_SUCCESS;
@@ -460,7 +455,6 @@ function write_kernel_template(){
        this_aql->completion_signal=Sync_Signal;
        hsa_signal_store_relaxed(Sync_Signal,1);
     }
-    /* Note: The Stream_Signal[stream_num] is only used by stream_sync function */
 
     /*  Process lparm values */
     /*  this_aql.dimensions=(uint16_t) lparm->ndim; */

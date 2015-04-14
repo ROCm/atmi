@@ -1,5 +1,5 @@
-CLOC - Version 0.8.0
-====================
+CLOC - V 0.9.0 (HSA 1.0F) 
+=========================
 
 CLOC:  CL Offline Compiler
        Generate HSAIL or brig from a cl (Kernel c Language) file.
@@ -81,7 +81,7 @@ Software License Agreement.
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig or hsail
     -opt     <LLVM opt>       Default=2, LLVM optimization level
-    -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/cloc/bin
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
     -lkopts  <LLVM link opts> Default="--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc"
 
@@ -126,7 +126,7 @@ Software License Agreement.
     -gccopt   <gcc opt>      Default=2, gcc optimization for snack wrapper
     -t        <tempdir>      Default=/tmp/snk_$$, Temp dir for files
     -s        <symbolname>   Default=filename 
-    -p1       <path>         Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p1       <path>         Default=$HSA_LLVM_PATH or /opt/amd/cloc/bin
     -p2       <path>         Default=$HSA_RUNTIME_PATH or /opt/hsa
     -o        <outfilename>  Default=<filename>.<ft> 
 
@@ -221,7 +221,7 @@ manual updates to HSAIL.  This process has two steps.
 The first step compiles the .cl file into the object code needed by a SNACK application.
 For example, if your kernels are in the file myKernels.cl, then you can run step 1 as follows.
 ```
-   snack -c -hsail myKernels.cl
+   snack.sh -c -hsail myKernels.cl
 ```
 When cloc sees the "-c" option and the "-hsail" option, it will save four files 
 in the same directory as myKernels.cl file.  The first two files are always created 

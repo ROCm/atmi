@@ -23,7 +23,7 @@
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.8.0
+PROGVERSION=0.9.0
 #
 # Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  Patent pending.
 # 
@@ -92,7 +92,7 @@ function usage(){
     -gccopt   <gcc opt>      Default=2, gcc optimization for snack wrapper
     -t        <tempdir>      Default=/tmp/snk_$$, Temp dir for files
     -s        <symbolname>   Default=filename 
-    -p1       <path>         Default=$HSA_LLVM_PATH or /opt/amd/bin
+    -p1       <path>         Default=$HSA_LLVM_PATH or /opt/amd/cloc/bin
     -p2       <path>         Default=$HSA_RUNTIME_PATH or /opt/hsa
     -o        <outfilename>  Default=<filename>.<ft> 
 
@@ -207,7 +207,7 @@ CLOCPATH=$(getdname $0)
 GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
-HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/bin}
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
 LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
 CMD_BRI=${CMD_BRI:-hsailasm }
 

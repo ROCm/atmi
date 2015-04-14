@@ -12,7 +12,7 @@ cloc_brigszsym="HSA_BrigMemSz"
 kalmar_brigsym="_binary_kernel_brig_start"
 kalmar_brigszsym="_binary_kernel_brig_size"
 
-HSAIL_DISASSEMBLE=${HSAIL_DISASSEMBLE:-/opt/amd/bin/hsailasm}
+HSAIL_DISASSEMBLE=${HSAIL_DISASSEMBLE:-/opt/amd/cloc/bin/hsailasm}
 if [ ! -f "$infile" ] ; then 
    echo "ERROR:  Input file \"$1\" does not exist "
    exit 1

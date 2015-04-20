@@ -67,16 +67,19 @@ function usage(){
     -t       <tdir>           Default=/tmp/cloc$$, Temp dir for files
     -o       <outfilename>    Default=<filename>.<ft> ft=brig or hsail
     -opt     <LLVM opt>       Default=2, LLVM optimization level
-    -p       <path>           Default=$HSA_LLVM_PATH or /opt/amd/cloc/bin
+    -p       <path>           $HSA_LLVM_PATH or <cdir> if HSA_LLVM_PATH not set
+                              <cdir> is actual directory of cloc.sh 
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
-    -lkopts  <LLVM link opts> Default="--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc"
+    -lkopts  <LLVM link opts> Default="-prelink-opt   \
+              -l <cdir>/builtins-hsail.bc -l <cdir>/builtins-gcn.bc   \
+              -l <cdir>/builtins-hsail-amd-ci.bc  -l <cdir>/builtins-ocml.bc"
 
    Examples:
-    cloc my.cl              /* create my.brig                   */
-    cloc -hsail my.cl       /* create my.hsail and my.brig      */
+    cloc.sh my.cl               /* create my.brig                   */
+    cloc.sh  -hsail my.cl       /* create my.hsail and my.brig      */
 
-   You may set environment variables LLVMOPT, HSA_LLVM_PATH, CLOPTS, or 
-   LKOPTS instead of providing options -opt -p, -clopts, or -lkopts .
+   You may set environment variables LLVMOPT, HSA_LLVM_PATH, CLOPTS, 
+   or LKOPTS instead of providing options -opt -p, -clopts, or -lkopts .
    Command line options will take precedence over environment variables. 
 
    Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
@@ -161,24 +164,26 @@ fi
 
 if [ ! -z $1 ]; then 
    echo " "
-   echo "WARNING:  Cloc can only process one .cl file at a time."
+   echo "WARNING:  cloc.sh can only process one .cl file at a time."
    echo "          You can call cloc multiple times to get multiple outputs."
    echo "          Argument $LASTARG will be processed. "
    echo "          These args are ignored: $@"
    echo " "
 fi
 
-#  We no longer need CLOCPATH (no _genw).
-#  In future we expect cloc.sh to be in $HSA_LLVM_PATH
-#  CLOCPATH=$(getdname $0)
+# All binaries and builtins are expected to be in the same directory as cloc.sh
+# unless HSA_LLVM_PATH is set. 
+cdir=$(getdname $0)
+[ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
+# If HSA_LLVM_PATH is set use it, else use cdir
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-$cdir}
 
 #  Set Default values,  all CMD_ are started from $HSA_LLVM_PATH
 LLVMOPT=${LLVMOPT:-2} 
-HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
 #  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
 CMD_LLA=${CMD_LLA:-llvm-dis}
-LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
+LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc -l $HSA_LLVM_PATH/builtins-gcn.bc  -l $HSA_LLVM_PATH/builtins-hsail-amd-ci.bc  -l $HSA_LLVM_PATH/builtins-ocml.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -gpu -whole}
 CMD_LLC=${CMD_LLC:-llc -O$LLVMOPT -march=hsail-64 -filetype=obj}
@@ -194,11 +199,6 @@ fi
 
 if [ ! -e "$LASTARG" ]  ; then 
    echo "ERROR:  The file $LASTARG does not exist."
-   exit $DEADRC
-fi
-if [ ! -d $HSA_LLVM_PATH ] ; then 
-   echo "ERROR:  Missing directory $HSA_LLVM_PATH "
-   echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi
 
@@ -241,8 +241,7 @@ if [ ! -d $TMPDIR ] && [ ! $DRYRUN ] ; then
    exit $DEADRC
 fi 
 if [ ! -e $HSA_LLVM_PATH/hsailasm ] ; then 
-   echo "ERROR:  Missing hsailasm in $HSA_LLVM_PATH"
-   echo "        Set env variable HSA_LLVM_PATH or use -p option"
+   echo "ERROR:  Missing binary hsailasm in $HSA_LLVM_PATH"
    exit $DEADRC
 fi 
 if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then 
@@ -298,13 +297,12 @@ fi
 if [ $DRYRUN ] ; then
    echo $CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc  
 else
-#  Hide the warnings for now
-   $HSA_LLVM_PATH/$CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc 2>/dev/null
+   $HSA_LLVM_PATH/$CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc 
    rc=$?
 fi
 if [ $rc != 0 ] ; then 
    echo "ERROR:  The following command failed with return code $rc."
-   echo "        $CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc"
+   echo "        $HSA_LLVM_PATH/$CMD_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc"
    do_err $rc
 fi
 

@@ -92,19 +92,20 @@ function usage(){
     -gccopt   <gcc opt>      Default=2, gcc optimization for snack wrapper
     -t        <tempdir>      Default=/tmp/snk_$$, Temp dir for files
     -s        <symbolname>   Default=filename 
-    -p1       <path>         Default=$HSA_LLVM_PATH or /opt/amd/cloc/bin
-    -p2       <path>         Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -p        <path>         $HSA_LLVM_PATH or <sdir> if HSA_LLVM_PATH not set
+                             <sdir> is actual directory of snack.sh 
+    -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
     -o        <outfilename>  Default=<filename>.<ft> 
 
    Examples:
-    snack my.cl              /* create my.snackwrap.c and my.h    */
-    snack -c my.cl           /* gcc compile to create  my.o       */
-    snack -hsail my.cl       /* create hsail and snackwrap.c      */
-    snack -c -hsail my.cl    /* create hsail snackwrap.c and .o   */
-    snack -t /tmp/foo my.cl  /* will automatically set -k         */
+    snack.sh my.cl              /* create my.snackwrap.c and my.h    */
+    snack.sh -c my.cl           /* gcc compile to create  my.o       */
+    snack.sh -hsail my.cl       /* create hsail and snackwrap.c      */
+    snack.sh -c -hsail my.cl    /* create hsail snackwrap.c and .o   */
+    snack.sh -t /tmp/foo my.cl  /* will automatically set -k         */
 
    You may set environment variables HSA_LLVM_PATH, HSA_RUNTIME_PATH, 
-   instead of providing options -p1, -p2.
+   instead of providing options -p, -rp.
    Command line options will take precedence over environment variables. 
 
    Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.
@@ -167,8 +168,8 @@ while [ $# -gt 0 ] ; do
       -s) 		SYMBOLNAME=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
-      -p1)              HSA_LLVM_PATH=$2; shift ;;
-      -p2)              HSA_RUNTIME_PATH=$2; shift ;;
+      -p)               HSA_LLVM_PATH=$2; shift ;;
+      -rp)              HSA_RUNTIME_PATH=$2; shift ;;
       -h) 		usage ;; 
       -help) 		usage ;; 
       --help) 		usage ;; 
@@ -201,14 +202,14 @@ if [ ! -z $1 ]; then
    echo " "
 fi
 
-CLOCPATH=$(getdname $0)
+sdir=$(getdname $0)
+[ ! -L "$sdir/snack.sh" ] || sdir=$(getdname `readlink "$sdir/snack.sh"`)
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-$sdir}
 
 #  Set Default values
 GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
-HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
-LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc}
 CMD_BRI=${CMD_BRI:-hsailasm }
 
 FORTRAN=${FORTRAN:-0};
@@ -236,19 +237,18 @@ if [ ! -e "$LASTARG" ]  ; then
 fi
 if [ ! -d $HSA_LLVM_PATH ] ; then 
    echo "ERROR:  Missing directory $HSA_LLVM_PATH "
-   echo "        Set env variable HSA_LLVM_PATH or use -p1 option"
+   echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi
-#  We need RUNTIME with -c option
-if [ ! -d $HSA_RUNTIME_PATH ] ; then 
-   echo "ERROR:  Snack needs HSA_RUNTIME_PATH"
-   echo "        Missing directory $HSA_RUNTIME_PATH "
-   echo "        Set env variable HSA_RUNTIME_PATH or use -p2 option"
+if [ $MAKEOBJ ] && [ ! -d "$HSA_RUNTIME_PATH/lib" ] ; then 
+   echo "ERROR:  snack.sh -c option needs HSA_RUNTIME_PATH"
+   echo "        Missing directory $HSA_RUNTIME_PATH/lib "
+   echo "        Set env variable HSA_RUNTIME_PATH or use -rp option"
    exit $DEADRC
 fi
-if [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
+if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
    echo "ERROR:  Missing $HSA_RUNTIME_PATH/include/hsa.h"
-   echo "        The -c option requires HSA includes"
+   echo "        snack.sh requires HSA includes"
    exit $DEADRC
 fi
 
@@ -323,7 +323,7 @@ if [ ! -d $TMPDIR ] && [ ! $DRYRUN ] ; then
 fi 
 if [ ! -e $HSA_LLVM_PATH/hsailasm ] ; then 
    echo "ERROR:  Missing hsailasm in $HSA_LLVM_PATH"
-   echo "        Set env variable HSA_LLVM_PATH or use -p1 option"
+   echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi 
 if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then 
@@ -417,13 +417,13 @@ else
 #  Not step 2, do normal steps
    [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
    if [ $DRYRUN ] ; then
-      echo "$CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
+      echo "$HSA_LLVM_PATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
    else
-      $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS
+      $HSA_LLVM_PATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CLOCPATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS"
+         echo "        $HSA_LLVM_PATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS"
          do_err $rc
       fi
    fi
@@ -434,16 +434,16 @@ else
    fi
    [ $VERBOSE ] && echo "#Step:  cloc.sh		cl --> brig ..."
    if [ $DRYRUN ] ; then
-      echo "$CLOCPATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
    else 
       [ $CLOCVERBOSE ] && echo " " && echo "#------ Start cloc.sh output ------"
-      [ $CLOCVERBOSE ] && echo "$CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
-      $CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl
+      [ $CLOCVERBOSE ] && echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl
       rc=$?
       [ $CLOCVERBOSE ] && echo "#------ End cloc.sh output ------" && echo " " 
       if [ $rc != 0 ] ; then 
          echo "ERROR:  cloc.sh failed with return code $rc.  Command was:"
-         echo "        $CLOCPATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+         echo "        $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
          do_err $rc
       fi
       if [ $GEN_IL ] ; then 
@@ -535,7 +535,7 @@ if [ ! $KEEPTDIR ] ; then
    fi
 fi
 
-[ $GEN_IL ] && [ $VERBOSE ] && echo " " &&  echo "#WARN:  ***** For Step 2, Make hsail updates then run \"snack -c $FNAME.hsail \" ***** "
+[ $GEN_IL ] && [ $VERBOSE ] && echo " " &&  echo "#WARN:  ***** For Step 2, Make hsail updates then run \"snack.sh -c $FNAME.hsail \" ***** "
 [ $VERBOSE ] && echo "#Info:  Done"
 
 exit 0

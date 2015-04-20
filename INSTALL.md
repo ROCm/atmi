@@ -123,11 +123,25 @@ cd examples/snack/helloworld
 
 ## Set HSA environment variables
 
+As of Cloc version 0.9, HSA_LLVM_PATH is no longer required because cloc.sh and snack.sh expect the binaries to be in the same directory where cloc.sh and snack.sh are stored.  For testing other compilers or versions of the HSA LLVM binaries, you may set HSA_LLVM_PATH or use the -p option as noted in the help. The snack.sh script assumes HSA_RUNTIME_PATH is /opt/hsa.  However, we recommend using LD_LIBRARY_PATH to find the current version of he HSA runtime as follows:
 ```
 export HSA_RUNTIME_PATH=/opt/hsa
-export PATH=$PATH:/opt/amd/cloc/bin
-export LD_LIBRARY_PATH=/opt/hsa/lib
+export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
 ```
+
+We recommend that cloc.sh, snack,sh, and printhsail be available in your path.  You can symbolically link them or add to PATH as follows:
+```
+#
+# Either put /opt/amd/cloc/bin in your PATH as follows
+export PATH=$PATH:/opt/amd/cloc/bin
+#
+# OR symbolic link cloc.sh and snack.sh to system path
+sudo ln -sf /opt/amd/cloc/bin/cloc.sh /usr/local/bin/cloc.sh
+sudo ln -sf /opt/amd/cloc/bin/snack.sh /usr/local/bin/snack.sh
+sudo ln -sf /opt/amd/cloc/bin/printhsail /usr/local/bin/printhsail
+```
+
+Future package installers (.deb and .rpm) will symbolically link them.
 
 ## Install Kalmar (C++AMP) HSA Compiler (OPTIONAL)
 

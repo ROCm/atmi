@@ -5,6 +5,27 @@
 #
 #  Written by Greg Rodgers.
 #
+
+function getdname(){
+   local __DIRN=`dirname "$1"`
+   if [ "$__DIRN" = "." ] ; then 
+      __DIRN=$PWD; 
+   else
+      if [ ${__DIRN:0:1} != "/" ] ; then 
+         if [ ${__DIRN:0:2} == ".." ] ; then 
+               __DIRN=`dirname $PWD`/${__DIRN:3}
+         else
+            if [ ${__DIRN:0:1} = "." ] ; then 
+               __DIRN=$PWD/${__DIRN:2}
+            else
+               __DIRN=$PWD/$__DIRN
+            fi
+         fi
+      fi
+   fi
+   echo $__DIRN
+}
+
 infile=$1
 tmpfile=/tmp/printhsail$$
 cloc_brigsym="HSA_BrigMem"
@@ -12,7 +33,12 @@ cloc_brigszsym="HSA_BrigMemSz"
 kalmar_brigsym="_binary_kernel_brig_start"
 kalmar_brigszsym="_binary_kernel_brig_size"
 
-HSAIL_DISASSEMBLE=${HSAIL_DISASSEMBLE:-/opt/amd/cloc/bin/hsailasm}
+cdir=$(getdname $0)
+[ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-$cdir}
+
+HSAIL_DISASSEMBLE=${HSAIL_DISASSEMBLE:-$HSA_LLVM_PATH/hsailasm}
+
 if [ ! -f "$infile" ] ; then 
    echo "ERROR:  Input file \"$1\" does not exist "
    exit 1

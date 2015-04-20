@@ -132,13 +132,10 @@ struct snk_lparm_s {
    int barrier;                      /* default = SNK_ORDERED */
    int acquire_fence_scope;          /* default = 2 */
    int release_fence_scope;          /* default = 2 */
-   int num_edges_in;                 /*  not yet implemented */
-   int * edges_in;                   /*  not yet implemented */
-   int rank;                         /*  not yet implemented-used for MPI work sharing */
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_ORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_edges_in=0,.edges_in=NULL,.rank=0} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_ORDERED,.acquire_fence_scope=2,.release_fence_scope=2} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -526,7 +523,6 @@ C     INCLUDE launch_params.f in your FORTRAN source so you can set dimensions.
           integer (C_INT) :: barrier = 1
           integer (C_INT) :: acquire_fence_scope = 2
           integer (C_INT) :: release_fence_scope = 2
-          integer (C_INT) :: num_edges_in = 0
       end type snk_lparm_t
       type (snk_lparm_t) lparm
 C  

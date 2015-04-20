@@ -72,7 +72,7 @@ function usage(){
     -clopts  <compiler opts>  Default="-cl-std=CL2.0"
     -lkopts  <LLVM link opts> Default="-prelink-opt   \
               -l <cdir>/builtins-hsail.bc -l <cdir>/builtins-gcn.bc   \
-              -l <cdir>/builtins-hsail-amd-ci.bc  -l <cdir>/builtins-ocml.bc"
+              -l <cdir>/builtins-hsail-amd-ci.bc"
 
    Examples:
     cloc.sh my.cl               /* create my.brig                   */
@@ -183,7 +183,7 @@ LLVMOPT=${LLVMOPT:-2}
 #  no default CLOPTS -cl-std=CL2.0 is a forced option to the clc2 command
 CMD_CLC=${CMD_CLC:-clc2 -cl-std=CL2.0 $CLOPTS}
 CMD_LLA=${CMD_LLA:-llvm-dis}
-LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc -l $HSA_LLVM_PATH/builtins-gcn.bc  -l $HSA_LLVM_PATH/builtins-hsail-amd-ci.bc  -l $HSA_LLVM_PATH/builtins-ocml.bc}
+LKOPTS=${LKOPTS:--prelink-opt -l $HSA_LLVM_PATH/builtins-hsail.bc -l $HSA_LLVM_PATH/builtins-gcn.bc  -l $HSA_LLVM_PATH/builtins-hsail-amd-ci.bc}
 CMD_LLL=${CMD_LLL:-llvm-link $LKOPTS}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -gpu -whole}
 CMD_LLC=${CMD_LLC:-llc -O$LLVMOPT -march=hsail-64 -filetype=obj}

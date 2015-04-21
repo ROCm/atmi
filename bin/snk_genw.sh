@@ -118,24 +118,38 @@ function write_header_template(){
 #endif
 #ifndef __SNK_DEFS
 #define SNK_MAX_STREAMS 8 
+#define SNK_MAX_TASKS 1000
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
 #define SNK_ORDERED 1
 #define SNK_UNORDERED 0
 
+#include <stdint.h>
+#ifndef HSA_RUNTIME_INC_HSA_H_
+typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
+#endif
+
+typedef struct snk_task_s snk_task_t;
+struct snk_task_s { 
+   hsa_signal_t signal ; 
+   snk_task_t* next;
+};
+
 typedef struct snk_lparm_s snk_lparm_t;
 struct snk_lparm_s { 
-   int ndim;                         /* default = 1 */
-   size_t gdims[3];                  /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
-   size_t ldims[3];                  /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
-   int stream;                       /* default = -1 , synchrnous */
-   int barrier;                      /* default = SNK_ORDERED */
-   int acquire_fence_scope;          /* default = 2 */
-   int release_fence_scope;          /* default = 2 */
+   int ndim;                  /* default = 1 */
+   size_t gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
+   size_t ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
+   int stream;                /* default = -1 , synchrnous */
+   int barrier;               /* default = SNK_UNORDERED */
+   int acquire_fence_scope;   /* default = 2 */
+   int release_fence_scope;   /* default = 2 */
+   snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
+   snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_ORDERED,.acquire_fence_scope=2,.release_fence_scope=2} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -249,7 +263,9 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
 }
 
 /* Stream specific globals */
-hsa_queue_t*   Stream_CommandQ[SNK_MAX_STREAMS];
+hsa_queue_t* Stream_CommandQ[SNK_MAX_STREAMS];
+snk_task_t   SNK_Tasks[SNK_MAX_TASKS];
+int          SNK_NextTaskId = 0 ;
 
 /* Context(cl file) specific globals */
 hsa_ext_module_t*                _CN__BrigModule;
@@ -335,7 +351,15 @@ status_t _CN__InitContext(){
     err=hsa_signal_create(1, 0, NULL, &Sync_Signal);
     ErrorCheck(Creating a HSA signal, err);
 
-    /*  Create queues and signals for each stream */
+    int task_num;
+    /* Initialize all preallocated tasks and signals */
+    for ( task_num = 0 ; task_num < SNK_MAX_TASKS; task_num++){
+       SNK_Tasks[task_num].next = NULL;
+       err=hsa_signal_create(1, 0, NULL, &(SNK_Tasks[task_num].signal));
+       ErrorCheck(Creating a HSA signal, err);
+    }
+
+    /* Create queues and signals for each stream. */
     int stream_num;
     for ( stream_num = 0 ; stream_num < SNK_MAX_STREAMS ; stream_num++){
        /* printf("calling queue create for stream %d\n",stream_num); */
@@ -414,7 +438,6 @@ EOF
 function write_kernel_template(){
 /bin/cat <<"EOF"
 
-
     /*  Get stream number from launch parameters.       */
     /*  This must be less than SNK_MAX_STREAMS.         */
     /*  If negative, then function call is synchrnous.  */
@@ -437,6 +460,13 @@ function write_kernel_template(){
        this_Q = Stream_CommandQ[stream_num];
     }
 
+    if ( lparm->requires != NULL) {
+       printf("\n THIS TASK REQUIRES ONE OR MORE PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
+    }
+    if ( lparm->needs != NULL) {
+       printf("\n THIS TASK NEEDS ONE OF A LIST OF PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
+    }
+
     /*  Obtain the current queue write index. increases with each call to kernel  */
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
     /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
@@ -447,8 +477,18 @@ function write_kernel_template(){
 
     /*  FIXME: We need to check for queue overflow here. */
 
+    /* If this kernel was declared as snk_task_t*, then use preallocated signal */
+    if ( needs_return_task == 1) {
+        if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
+           printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
+           return ;
+        }
+        /* hsa_signal_store_relaxed(SNK_Tasks[SNK_NextTaskId].signal,1); */
+        this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].signal;
+    }
+
     if ( stream_num < 0 ) {
-       /* Set signal only for synchrnous snack function */
+       /* Use the global synchrnous signal Sync_Signal */
        this_aql->completion_signal=Sync_Signal;
        hsa_signal_store_relaxed(Sync_Signal,1);
     }
@@ -472,7 +512,6 @@ function write_kernel_template(){
        this_aql->grid_size_z=1;
        this_aql->workgroup_size_z=1;
     }
-
 
     /*  copy args from the custom _KN__args structure, we should get rid of this */
     memcpy(_KN__Kernarg_Address, &_KN__args, sizeof(_KN__args));
@@ -498,8 +537,6 @@ function write_kernel_template(){
        /* For default synchrnous execution, wait til kernel is finished.  */
        hsa_signal_value_t value = hsa_signal_wait_acquire(Sync_Signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
     }
-
-    return; 
 
     /*  *** END OF KERNEL LAUNCH TEMPLATE ***  */
 EOF
@@ -630,7 +667,7 @@ __SEDCMD=" "
 
 #  Read the CLF and build a list of kernels and args, one kernel and set of args per line of KARGLIST file
    cpp $__CLF | sed -e '/__kernel/,/)/!d' |  sed -e ':a;$!N;s/\n/ /;ta;P;D' | sed -e 's/__kernel/\n__kernel/g'  | grep "__kernel" | \
-   sed -e "s/__kernel//;s/void//;s/__global//g;s/{//g;s/ \*/\*/g"  | cut -d\) -f1 | sed -e "s/\*/\* /g;s/__restrict__//g" >$__KARGLIST
+   sed -e "s/__kernel//;s/__global//g;s/{//g;s/ \*/\*/g"  | cut -d\) -f1 | sed -e "s/\*/\* /g;s/__restrict__//g" >$__KARGLIST
 
 #  The header and extra-cl files must start empty because lines are incrementally added to end of file
    if [ -f $__EXTRACL ] ; then rm -f $__EXTRACL ; fi
@@ -671,8 +708,15 @@ __SEDCMD=" "
    while read line ; do 
 
 #     parse the kernel name __KN and the native argument list __ARGL
-      __KN=`echo ${line%(*} | tr -d ' '`
+      TYPE_NAME=`echo ${line%(*}`
+      __KN=`echo $TYPE_NAME | awk '{print $2}'`
+      __KT=`echo $TYPE_NAME | awk '{print $1}'`
       __ARGL=${line#*(}
+#     force it to return pointer to snk_task_t
+      if [ "$__KT" == "snk_task_t" ] ; then  
+         __KT="snk_task_t*" 
+      fi
+         
 
 #     Add the kernel initialization routine to the c wrapper
       write_KernelStatics_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g" >>$__CWRAP
@@ -693,12 +737,12 @@ __SEDCMD=" "
       echo "/* ------  Start of SNACK function ${__KN} ------ */ " >> $__CWRAP 
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        Add underscore to kernel name and resolve lparm pointer 
-         echo "extern void ${__KN}_($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
+         echo "extern ${__KT} ${__KN}_($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
       else  
          if [ "$__CFN_ARGL" == "" ] ; then 
-            echo "extern void $__KN(const snk_lparm_t * lparm) {" >>$__CWRAP
+            echo "extern ${__KT} $__KN(const snk_lparm_t * lparm) {" >>$__CWRAP
          else
-            echo "extern void $__KN($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
+            echo "extern ${__KT} $__KN($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
 
@@ -791,19 +835,32 @@ __SEDCMD=" "
 #     Write the prototype to the header file
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        don't use headers for fortran but it is a good reference for how to call from fortran
-         echo "extern _CPPSTRING_ void ${__KN}_($__PROTO_ARGL, const snk_lparm_t * lparm_p);" >>$__HDRF
+         echo "extern _CPPSTRING_ $__KT ${__KN}_($__PROTO_ARGL, const snk_lparm_t * lparm_p);" >>$__HDRF
       else
          if [ "$__PROTO_ARGL" == "" ] ; then 
-            echo "extern _CPPSTRING_ void ${__KN}(const snk_lparm_t * lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ $__KT ${__KN}(const snk_lparm_t * lparm);" >>$__HDRF
          else
-            echo "extern _CPPSTRING_ void ${__KN}($__PROTO_ARGL, const snk_lparm_t * lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ $__KT ${__KN}($__PROTO_ARGL, const snk_lparm_t * lparm);" >>$__HDRF
          fi
+      fi
+
+#     Make sure template knows when to allocate and bind a global signal for this function
+      if [ $__KT == "snk_task_t*" ] ; then 
+         echo "   int needs_return_task = 1;" >>$__CWRAP
+      else
+         echo "   int needs_return_task = 0;" >>$__CWRAP
       fi
 
 #     Now add the kernel template to wrapper and change all three strings
 #     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_
       write_kernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP
 
+#     if kernel is type snk_task_t*, then return &parentTask else return void 
+      if [ $__KT == "snk_task_t*" ] ; then 
+         echo "    return (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);" >> $__CWRAP 
+      else
+         echo "    return;" >> $__CWRAP 
+      fi 
       echo "} " >> $__CWRAP 
       echo "/* ------  End of SNACK function ${__KN} ------ */ " >> $__CWRAP 
 
@@ -820,13 +877,13 @@ __SEDCMD=" "
 
 #  Write the updated CL
    if [ "$__SEDCMD" != " " ] ; then 
-#      Remove extra spaces, then change "__kernel void" to "void" if they have call-by-value structs
-#      Still could fail if __kernel void _FN_ split across multple lines, FIX THIS
-       awk '$1=$1'  $__CLF | sed -e "$__SEDCMD" > $__UPDATED_CL
-       cat $__EXTRACL >> $__UPDATED_CL
+#     Remove extra spaces, then change "__kernel void" to "void" if they have call-by-value structs
+#     Still could fail if __kernel void _FN_ split across multple lines, FIX THIS
+      awk '$1=$1'  $__CLF | sed -e "$__SEDCMD" > $__UPDATED_CL
+      cat $__EXTRACL | sed -e "s/ snk_task_t/ void/g" >> $__UPDATED_CL
    else 
-#  No changes to the CL file is needed, so just make a copy
-      cp -p $__CLF $__UPDATED_CL
+#  No changes to the CL file are needed, so just make a copy
+      cat $__CLF | sed -e "s/ snk_task_t/ void/g" > $__UPDATED_CL
    fi
 
    rm $__KARGLIST

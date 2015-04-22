@@ -272,6 +272,7 @@ hsa_ext_module_t*                _CN__BrigModule;
 hsa_agent_t                      _CN__Agent;
 hsa_ext_program_t                _CN__HsaProgram;
 hsa_executable_t                 _CN__Executable;
+hsa_region_t                     _CN__KernargRegion;
 int                              _CN__FC = 0; 
 
 /* Global variables */
@@ -343,6 +344,12 @@ status_t _CN__InitContext(){
     err = hsa_executable_freeze(_CN__Executable, "");
     ErrorCheck(Freeze the executable, err);
 
+    /* Find a memory region that supports kernel arguments.  */
+    _CN__KernargRegion.handle=(uint64_t)-1;
+    hsa_agent_iterate_regions(_CN__Agent, get_kernarg_memory_region, &_CN__KernargRegion);
+    err = (_CN__KernargRegion.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    ErrorCheck(Finding a kernarg memory region, err);
+
     /*  Create a queue using the maximum size.  */
     err = hsa_queue_create(_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Sync_CommandQ);
     ErrorCheck(Creating the queue, err);
@@ -384,7 +391,6 @@ uint64_t                         _KN__Kernel_Object;
 uint32_t                         _KN__Kernarg_Segment_Size; /* May not need to be global */
 uint32_t                         _KN__Group_Segment_Size;
 uint32_t                         _KN__Private_Segment_Size;
-void*                            _KN__Kernarg_Address;
 
 EOF
 }
@@ -416,17 +422,6 @@ extern status_t _KN__init(){
     err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, &_KN__Private_Segment_Size);
     ErrorCheck(Extracting the private segment from the executable, err);
 
-    /* Find a memory region that supports kernel arguments.  */
-    hsa_region_t kernarg_region;
-    kernarg_region.handle=(uint64_t)-1;
-    hsa_agent_iterate_regions(_CN__Agent, get_kernarg_memory_region, &kernarg_region);
-    err = (kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
-    ErrorCheck(Finding a kernarg memory region, err);
-    _KN__Kernarg_Address = NULL;
-
-    /* Allocate the kernel argument buffer from the correct region.  */   
-    err = hsa_memory_allocate(kernarg_region, _KN__Kernarg_Segment_Size, &_KN__Kernarg_Address);
-    ErrorCheck(Allocating kernel argument memory buffer, err);
 
     return STATUS_SUCCESS;
 
@@ -513,11 +508,16 @@ function write_kernel_template(){
        this_aql->workgroup_size_z=1;
     }
 
-    /*  copy args from the custom _KN__args structure, we should get rid of this */
-    memcpy(_KN__Kernarg_Address, &_KN__args, sizeof(_KN__args));
+    /* Allocate the kernel argument buffer from the correct region.  */   
+    void* thisKernargAddress;
+    hsa_memory_allocate(_CN__KernargRegion, _KN__Kernarg_Segment_Size, &thisKernargAddress);
+
+    /* We may be able to avoid this memcopy by allocating thisKernargAddres first, then setting up args directly */
+    /* This would also eliminate the global _KN__args.  See comments in arg processing code below.   */
+    memcpy(thisKernargAddress, &_KN__args, sizeof(_KN__args));
 
     /*  Bind kernel argument buffer to the aql packet.  */
-    this_aql->kernarg_address = (void*) _KN__Kernarg_Address;
+    this_aql->kernarg_address = (void*) thisKernargAddress;
     this_aql->kernel_object = _KN__Kernel_Object;
     this_aql->private_segment_size = _KN__Private_Segment_Size;
     this_aql->group_segment_size = _KN__Group_Segment_Size;
@@ -746,7 +746,12 @@ __SEDCMD=" "
          fi
       fi
 
-#     Write the structure definition for the kernel arguments
+#     Write the structure definition for the kernel arguments.
+#     Consider eliminating global _KN__args and memcopy and write directly to thisKernargAddress.
+#     by writing these statements here:
+#        void* thisKernargAddress;
+#        hsa_memory_allocate(_CN__KernargRegion, _KN__Kernarg_Segment_Size, &thisKernargAddress);
+#     How to map a structure into an malloced memory area?
       echo "   struct ${__KN}_args_struct {" >> $__CWRAP
       NEXTI=0
       if [ $GENW_ADD_DUMMY ] ; then 

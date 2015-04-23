@@ -180,6 +180,53 @@ uint16_t header(hsa_packet_type_t type) {
    return header;
 }
 
+void barrier_sync(int stream_num, snk_task_t *dep_task_list) {
+    /* This routine will wait for all dependent packets to complete
+	   irrespective of their queue number. This will put a barrier packet in the
+	   stream belonging to the current packet. 
+    */
+
+	if(stream_num < 0) return; 
+
+    hsa_queue_t *queue = Stream_CommandQ[stream_num];
+
+    hsa_signal_t signal;
+    hsa_signal_create(1, 0, NULL, &signal);
+  
+    /* Obtain the write index for the command queue for this stream.  */
+    uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+    const uint32_t queueMask = queue->size - 1;
+
+    /* Define the barrier packet to be at the calculated queue index address.  */
+    hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
+    memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
+    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+    barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
+    barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE; 
+    barrier->completion_signal = signal;
+
+	/* populate all dep_signals */
+	// FIXME: How about more than 5 dependent signals? 
+	int dep_signal_id = 0;
+	snk_task_t *tasks = dep_task_list;
+	while(tasks != NULL) {
+		barrier->dep_signal[dep_signal_id] = tasks->signal; 
+		tasks = tasks->next;
+		dep_signal_id++;
+	}
+
+    /* Increment write index and ring doorbell to dispatch the kernel.  */
+    hsa_queue_store_write_index_relaxed(queue, index+1);
+    hsa_signal_store_relaxed(queue->doorbell_signal, index);
+
+    /* Wait on completion signal til kernel is finished.  */
+    hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+
+    hsa_signal_destroy(signal);
+
+}
+
 extern void stream_sync(int stream_num) {
     /* This is a user-callable function that puts a barrier packet into a queue where
        all former dispatch packets were put on the queue for asynchronous asynchrnous 
@@ -442,12 +489,6 @@ function write_kernel_template(){
        return; 
     }
 
-    if (_KN__FK == 0 ) {
-       status_t status = _KN__init();
-       if ( status  != STATUS_SUCCESS ) return; 
-       _KN__FK = 1;
-    }
-
     hsa_queue_t* this_Q ;
     if ( stream_num < 0 ) { /*  Sychronous execution */
        this_Q = Sync_CommandQ;
@@ -456,7 +497,23 @@ function write_kernel_template(){
     }
 
     if ( lparm->requires != NULL) {
-       printf("\n THIS TASK REQUIRES ONE OR MORE PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
+       /* For dependent child tasks, wait till all parent kernels are finished.  */
+	   /* FIXME: To use a barrier packet or individual waiting for better performance? 
+	      Barrier packet has a 5-signal limitation today. 
+		  Individual waiting has no such limitation, but is it slower? */
+	   #if 1
+	   #if 1
+	   barrier_sync(stream_num, lparm->requires);
+	   #else
+	   snk_task_t *p = lparm->requires;
+	   while(p != NULL) {
+       	hsa_signal_value_t value = hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+       	// HSA manual uses a while loop. Why? 
+		// while(hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_ACTIVE) != 0);
+		p = p->next;
+	   }
+	   #endif
+	   #endif
     }
     if ( lparm->needs != NULL) {
        printf("\n THIS TASK NEEDS ONE OF A LIST OF PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
@@ -508,14 +565,7 @@ function write_kernel_template(){
        this_aql->workgroup_size_z=1;
     }
 
-    /* Allocate the kernel argument buffer from the correct region.  */   
-    void* thisKernargAddress;
-    hsa_memory_allocate(_CN__KernargRegion, _KN__Kernarg_Segment_Size, &thisKernargAddress);
-
-    /* We may be able to avoid this memcopy by allocating thisKernargAddres first, then setting up args directly */
-    /* This would also eliminate the global _KN__args.  See comments in arg processing code below.   */
-    memcpy(thisKernargAddress, &_KN__args, sizeof(_KN__args));
-
+	/* thisKernargAddress has already been set up in the beginning of this routine */
     /*  Bind kernel argument buffer to the aql packet.  */
     this_aql->kernarg_address = (void*) thisKernargAddress;
     this_aql->kernel_object = _KN__Kernel_Object;
@@ -745,12 +795,19 @@ __SEDCMD=" "
             echo "extern ${__KT} $__KN($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
-
+ 
+	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
+      echo "   if (${__KN}_FK == 0 ) { " >> $__CWRAP
+      echo "     status_t status = ${__KN}_init(); " >> $__CWRAP
+      echo "     if ( status  != STATUS_SUCCESS ) return; " >> $__CWRAP
+      echo "     ${__KN}_FK = 1; " >> $__CWRAP
+      echo "   } " >> $__CWRAP
 #     Write the structure definition for the kernel arguments.
 #     Consider eliminating global _KN__args and memcopy and write directly to thisKernargAddress.
 #     by writing these statements here:
-#        void* thisKernargAddress;
-#        hsa_memory_allocate(_CN__KernargRegion, _KN__Kernarg_Segment_Size, &thisKernargAddress);
+      echo "   /* Allocate the kernel argument buffer from the correct region. */ " >> $__CWRAP
+      echo "   void* thisKernargAddress; " >> $__CWRAP
+      echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
 #     How to map a structure into an malloced memory area?
       echo "   struct ${__KN}_args_struct {" >> $__CWRAP
       NEXTI=0
@@ -779,7 +836,10 @@ __SEDCMD=" "
          NEXTI=$(( NEXTI + 1 ))
       done
       echo "   } __attribute__ ((aligned (16))) ; "  >> $__CWRAP
-      echo "   struct ${__KN}_args_struct ${__KN}_args ; "  >> $__CWRAP
+      #echo "   struct ${__KN}_args_struct ${__KN}_args ; "  >> $__CWRAP
+      echo "   struct ${__KN}_args_struct* ${__KN}_args ; "  >> $__CWRAP
+	  echo "   /* Setup kernel args */ " >> $__CWRAP
+	  echo "   ${__KN}_args = (struct ${__KN}_args_struct*) thisKernargAddress; " >> $__CWRAP
 
 #     Write statements to fill in the argument structure and 
 #     keep track of updated CL arg list and new call list 
@@ -787,12 +847,12 @@ __SEDCMD=" "
 #     to call the real kernel CL function. 
       NEXTI=0
       if [ $GENW_ADD_DUMMY ] ; then 
-         echo "   ${__KN}_args.arg0=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args.arg1=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args.arg2=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args.arg3=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args.arg4=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args.arg5=0 ; "  >> $__CWRAP
+         echo "   ${__KN}_args->arg0=0 ; "  >> $__CWRAP
+         echo "   ${__KN}_args->arg1=0 ; "  >> $__CWRAP
+         echo "   ${__KN}_args->arg2=0 ; "  >> $__CWRAP
+         echo "   ${__KN}_args->arg3=0 ; "  >> $__CWRAP
+         echo "   ${__KN}_args->arg4=0 ; "  >> $__CWRAP
+         echo "   ${__KN}_args->arg5=0 ; "  >> $__CWRAP
          NEXTI=6
       fi
       KERN_NEEDS_CL_WRAPPER="FALSE"
@@ -808,18 +868,18 @@ __SEDCMD=" "
          if [ "$last_char" == "*" ] ; then 
             arglistw="${arglistw}${sepchar}${arg_type} ${arg_name}"
             calllist="${calllist}${sepchar}${arg_name}"
-            echo "   ${__KN}_args.arg${NEXTI} = $arg_name ; "  >> $__CWRAP
+            echo "   ${__KN}_args->arg${NEXTI} = $arg_name ; "  >> $__CWRAP
          else
             is_scalar $simple_arg_type
             if [ $? == 1 ] ; then 
                arglistw="$arglistw${sepchar}${arg_type} $arg_name"
                calllist="${calllist}${sepchar}${arg_name}"
-               echo "   ${__KN}_args.arg${NEXTI} = $arg_name ; "  >> $__CWRAP
+               echo "   ${__KN}_args->arg${NEXTI} = $arg_name ; "  >> $__CWRAP
             else
                KERN_NEEDS_CL_WRAPPER="TRUE"
                arglistw="$arglistw${sepchar}${arg_type}* $arg_name"
                calllist="${calllist}${sepchar}${arg_name}[0]"
-               echo "   ${__KN}_args.arg${NEXTI} = &$arg_name ; "  >> $__CWRAP
+               echo "   ${__KN}_args->arg${NEXTI} = &$arg_name ; "  >> $__CWRAP
             fi
          fi 
          sepchar=","
@@ -861,6 +921,7 @@ __SEDCMD=" "
       write_kernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP
 
 #     if kernel is type snk_task_t*, then return &parentTask else return void 
+# FIXME: Need to rotate and reuse the task array!
       if [ $__KT == "snk_task_t*" ] ; then 
          echo "    return (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);" >> $__CWRAP 
       else

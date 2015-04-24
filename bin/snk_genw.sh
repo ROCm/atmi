@@ -118,7 +118,7 @@ function write_header_template(){
 #endif
 #ifndef __SNK_DEFS
 #define SNK_MAX_STREAMS 8 
-#define SNK_MAX_TASKS 1000
+#define SNK_MAX_TASKS 100001
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
 #define SNK_ORDERED 1
@@ -186,45 +186,67 @@ void barrier_sync(int stream_num, snk_task_t *dep_task_list) {
 	   stream belonging to the current packet. 
     */
 
-	if(stream_num < 0) return; 
+	if(stream_num < 0 || dep_task_list == NULL) return; 
 
     hsa_queue_t *queue = Stream_CommandQ[stream_num];
-
+	int dep_task_count = 0;
+	snk_task_t *head = dep_task_list;
+	while(head != NULL) {
+		dep_task_count++;
+		head = head->next;
+	}
+	
+	/* Keep adding barrier packets in multiples of 5 because that is the maximum signals that 
+	   the HSA barrier packet can support today
+	*/
+	snk_task_t *tasks = dep_task_list;
     hsa_signal_t signal;
     hsa_signal_create(1, 0, NULL, &signal);
-  
-    /* Obtain the write index for the command queue for this stream.  */
-    uint64_t index = hsa_queue_load_write_index_relaxed(queue);
-    const uint32_t queueMask = queue->size - 1;
+	const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 5;
+	/* round up */
+	//printf("Number of dependent tasks: %d\n", dep_task_count);
+	fflush(stdout);
+	int barrier_pkt_count = (dep_task_count + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
+	//printf("Number of barrier packets: %d\n", barrier_pkt_count);
+	fflush(stdout);
+	int barrier_pkt_id = 0;
+	for(barrier_pkt_id = 0; barrier_pkt_id < barrier_pkt_count; barrier_pkt_id++) {
+		/* Obtain the write index for the command queue for this stream.  */
+		uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+		const uint32_t queueMask = queue->size - 1;
 
-    /* Define the barrier packet to be at the calculated queue index address.  */
-    hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
-    memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
-    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
-    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
-    barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
-    barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE; 
-    barrier->completion_signal = signal;
+		/* Define the barrier packet to be at the calculated queue index address.  */
+		hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
+		memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
+		barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+		barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+		barrier->header |= 0 << HSA_PACKET_HEADER_BARRIER;
+		barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE; 
 
-	/* populate all dep_signals */
-	// FIXME: How about more than 5 dependent signals? 
-	int dep_signal_id = 0;
-	snk_task_t *tasks = dep_task_list;
-	while(tasks != NULL) {
-		barrier->dep_signal[dep_signal_id] = tasks->signal; 
-		tasks = tasks->next;
-		dep_signal_id++;
+		/* populate all dep_signals */
+		int dep_signal_id = 0;
+		for(dep_signal_id = 0; dep_signal_id < HSA_BARRIER_MAX_DEPENDENT_TASKS; dep_signal_id++) {
+			if(tasks != NULL) {
+				/* fill out the barrier packet and ring doorbell */
+				barrier->dep_signal[dep_signal_id] = tasks->signal; 
+				tasks = tasks->next;
+			}
+		}
+		if(tasks == NULL) { 
+			/* reached the end of task list */
+			barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
+    		barrier->completion_signal = signal;
+		}
+		/* Increment write index and ring doorbell to dispatch the kernel.  */
+		hsa_queue_store_write_index_relaxed(queue, index+1);
+		hsa_signal_store_relaxed(queue->doorbell_signal, index);
+		//printf("barrier pkt submitted: %d\n", barrier_pkt_id);
 	}
-
-    /* Increment write index and ring doorbell to dispatch the kernel.  */
-    hsa_queue_store_write_index_relaxed(queue, index+1);
-    hsa_signal_store_relaxed(queue->doorbell_signal, index);
 
     /* Wait on completion signal til kernel is finished.  */
     hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
 
     hsa_signal_destroy(signal);
-
 }
 
 extern void stream_sync(int stream_num) {
@@ -498,11 +520,11 @@ function write_kernel_template(){
 
     if ( lparm->requires != NULL) {
        /* For dependent child tasks, wait till all parent kernels are finished.  */
-	   /* FIXME: To use a barrier packet or individual waiting for better performance? 
-	      Barrier packet has a 5-signal limitation today. 
-		  Individual waiting has no such limitation, but is it slower? */
+	   /* FIXME: To use multiple barrier AND packets or individual waiting for better performance? 
+	      KPS benchmark showed that barrier AND was a lot slower, but will keep both implementations
+		  for future use */
 	   #if 1
-	   #if 1
+	   #if 0
 	   barrier_sync(stream_num, lparm->requires);
 	   #else
 	   snk_task_t *p = lparm->requires;
@@ -807,7 +829,10 @@ __SEDCMD=" "
 #     by writing these statements here:
       echo "   /* Allocate the kernel argument buffer from the correct region. */ " >> $__CWRAP
       echo "   void* thisKernargAddress; " >> $__CWRAP
-      echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
+      echo "   /* HSA 1.0F has a bug that serializes all queue operations when hsa_memory_allocate is used. " >> $__CWRAP
+	  echo "	  Revert back to hsa_memory_allocate once bug is fixed. */ " >> $__CWRAP
+	  echo "   thisKernargAddress = malloc(${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
+	  #echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
 #     How to map a structure into an malloced memory area?
       echo "   struct ${__KN}_args_struct {" >> $__CWRAP
       NEXTI=0
@@ -836,7 +861,6 @@ __SEDCMD=" "
          NEXTI=$(( NEXTI + 1 ))
       done
       echo "   } __attribute__ ((aligned (16))) ; "  >> $__CWRAP
-      #echo "   struct ${__KN}_args_struct ${__KN}_args ; "  >> $__CWRAP
       echo "   struct ${__KN}_args_struct* ${__KN}_args ; "  >> $__CWRAP
 	  echo "   /* Setup kernel args */ " >> $__CWRAP
 	  echo "   ${__KN}_args = (struct ${__KN}_args_struct*) thisKernargAddress; " >> $__CWRAP

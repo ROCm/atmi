@@ -118,7 +118,7 @@ function write_header_template(){
 #endif
 #ifndef __SNK_DEFS
 #define SNK_MAX_STREAMS 8 
-#define SNK_MAX_TASKS 100001
+#define SNK_MAX_TASKS 253
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
 #define SNK_ORDERED 1
@@ -347,6 +347,7 @@ hsa_signal_t                     Sync_Signal;
 
 status_t _CN__InitContext(){
 
+    //snk_init_context(params);
     hsa_status_t err;
 
     err = hsa_init();
@@ -469,7 +470,7 @@ extern status_t _KN__init(){
        if ( status  != STATUS_SUCCESS ) return; 
        _CN__FC = 1;
     }
-   
+    //snk_init_kernel(params); 
     hsa_status_t err;
 
     /* Extract the symbol from the executable.  */
@@ -497,7 +498,7 @@ EOF
 
 function write_kernel_template(){
 /bin/cat <<"EOF"
-
+    // snk_kernel();
     /*  Get stream number from launch parameters.       */
     /*  This must be less than SNK_MAX_STREAMS.         */
     /*  If negative, then function call is synchrnous.  */
@@ -827,8 +828,8 @@ __SEDCMD=" "
       echo "   void* thisKernargAddress; " >> $__CWRAP
       echo "   /* HSA 1.0F has a bug that serializes all queue operations when hsa_memory_allocate is used. " >> $__CWRAP
 	  echo "	  Revert back to hsa_memory_allocate once bug is fixed. */ " >> $__CWRAP
-	  echo "   thisKernargAddress = malloc(${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
-	  #echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
+	  #echo "   thisKernargAddress = malloc(${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
+	  echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
 #     How to map a structure into an malloced memory area?
       echo "   struct ${__KN}_args_struct {" >> $__CWRAP
       NEXTI=0

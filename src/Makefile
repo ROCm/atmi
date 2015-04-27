@@ -3,8 +3,30 @@ HSA_RUNTIME_PATH=/opt/hsa
 HSA_LIBHSAIL_PATH=/opt/hsa/lib
 HSA_LLVM_PATH=/opt/amd/cloc/bin
 
-default:
-	g++ -o snk_genw.o -I${HSA_RUNTIME_PATH}/include -O2 -c snk_genw.c
+AR=ar
+ARFLAGS=-cvq
+CC=gcc
+CFLAGS=-O2 -c -fpic
+INC_FLAGS=-I../include -I${HSA_RUNTIME_PATH}/include 
+LIB_FLAGS=-L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -Wl,--no-as-needed -Wl,-rpath=${HSA_RUNTIME_PATH}/lib
+
+OBJS=snk.o
+LIB=libsnk.so
+LIBDIR=../lib
+
+all: $(LIB)
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(LIB_FLAGS) -o $@ $^ 	
+#	$(AR) $(ARFLAGS) $@ $^
+
+%.o: %.c
+	$(CC) -o $@ $(INC_FLAGS) $(CFLAGS) $< $(LIB_FLAGS)
+
+install: $(LIB)
+	cp $^ $(LIBDIR)
+
+.PHONY: clean
 
 clean:
-	rm -rf snk_genw.o
+	rm -rf *.o *.a *.so

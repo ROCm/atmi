@@ -50,6 +50,10 @@
 #include "hsa.h"
 #include "hsa_ext_finalize.h"
 
+/*  set NOTCOHERENT needs this include
+#include "hsa_ext_amd.h"
+*/
+
 #ifdef __cplusplus
 #define _CPPSTRING_ "C" 
 #endif
@@ -58,6 +62,12 @@
 #endif
 
 #ifndef __SNK_DEFS
+enum status_t {
+    STATUS_SUCCESS=0,
+    STATUS_UNKNOWN=1
+};
+typedef enum status_t status_t;
+
 #define SNK_MAX_STREAMS 8 
 #define SNK_MAX_TASKS 253
 extern _CPPSTRING_ void stream_sync(const int stream_num);
@@ -103,5 +113,33 @@ struct snk_image3d_s {
    void *data;
 };
 
+extern snk_task_t   SNK_Tasks[SNK_MAX_TASKS];
+extern int          SNK_NextTaskId;
+
+
+status_t snk_init_context(
+                        hsa_agent_t *_CN__Agent, 
+                        hsa_ext_module_t **_CN__BrigModule,
+                        hsa_ext_program_t *_CN__HsaProgram,
+                        hsa_executable_t *_CN__Executable,
+                        hsa_region_t *_CN__KernargRegion
+                        );
+
+status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
+                            const char *kernel_symbol_name,
+                            uint64_t                         *_KN__Kernel_Object,
+                            uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
+                            uint32_t                         *_KN__Group_Segment_Size,
+                            uint32_t                         *_KN__Private_Segment_Size,
+                            hsa_agent_t *_CN__Agent, 
+                            hsa_executable_t *_CN__Executable
+                            );
+
+void snk_kernel(const snk_lparm_t *lparm, 
+                 uint64_t                         *_KN__Kernel_Object,
+                 uint32_t                         *_KN__Group_Segment_Size,
+                 uint32_t                         *_KN__Private_Segment_Size,
+                 void *thisKernargAddress,
+                 int needs_return_task);
 #define __SNK_DEFS
 #endif //__SNK_DEFS

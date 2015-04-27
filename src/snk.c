@@ -43,7 +43,7 @@
 /* This file is the SNACK library. Idea is to move as much of code as possible
  * from the snk_genw.sh script to a library
  */
-#include "snk_genw.h"
+#include "snk.h"
 
 /*  set NOTCOHERENT needs this include
 #include "hsa_ext_amd.h"
@@ -51,17 +51,11 @@
 
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed.\n", #msg); \
+    printf("%s failed. %x\n", #msg, status); \
     exit(1); \
 } else { \
  /*  printf("%s succeeded.\n", #msg);*/ \
 }
-
-enum status_t {
-    STATUS_SUCCESS=0,
-    STATUS_UNKNOWN=1
-};
-typedef enum status_t status_t;
 
 /* Stream specific globals */
 hsa_queue_t* Stream_CommandQ[SNK_MAX_STREAMS];
@@ -218,12 +212,11 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
 }
 
 status_t snk_init_context(
-                        hsa_agent_t _CN__Agent, 
-                        hsa_ext_module_t *_CN__BrigModule,
-                        char *HSA_BrigMem,
-                        hsa_ext_program_t _CN__HsaProgram,
-                        hsa_executable_t _CN__Executable,
-                        hsa_region_t _CN__KernargRegion
+                        hsa_agent_t *_CN__Agent, 
+                        hsa_ext_module_t **_CN__BrigModule,
+                        hsa_ext_program_t *_CN__HsaProgram,
+                        hsa_executable_t *_CN__Executable,
+                        hsa_region_t *_CN__KernargRegion
                         ) {
 
     hsa_status_t err;
@@ -232,70 +225,70 @@ status_t snk_init_context(
     ErrorCheck(Initializing the hsa runtime, err);
 
     /* Iterate over the agents and pick the gpu agent */
-    err = hsa_iterate_agents(get_gpu_agent, &_CN__Agent);
+    err = hsa_iterate_agents(get_gpu_agent, _CN__Agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
 
     /* Query the name of the agent.  */
     char name[64] = { 0 };
-    err = hsa_agent_get_info(_CN__Agent, HSA_AGENT_INFO_NAME, name);
+    err = hsa_agent_get_info(*_CN__Agent, HSA_AGENT_INFO_NAME, name);
     ErrorCheck(Querying the agent name, err);
     /* printf("The agent name is %s.\n", name); */
 
     /* Query the maximum size of the queue.  */
     uint32_t queue_size = 0;
-    err = hsa_agent_get_info(_CN__Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+    err = hsa_agent_get_info(*_CN__Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
     ErrorCheck(Querying the agent maximum queue size, err);
     /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
 
     /* Load the BRIG binary.  */
-    _CN__BrigModule = (hsa_ext_module_t*) &HSA_BrigMem;
+    //*_CN__BrigModule = (hsa_ext_module_t*) HSA_BrigMem;
 
     /* Create hsa program.  */
-    memset(&_CN__HsaProgram,0,sizeof(hsa_ext_program_t));
-    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &_CN__HsaProgram);
+    memset(_CN__HsaProgram,0,sizeof(hsa_ext_program_t));
+    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, _CN__HsaProgram);
     ErrorCheck(Create the program, err);
 
     /* Add the BRIG module to hsa program.  */
-    err = hsa_ext_program_add_module(_CN__HsaProgram, _CN__BrigModule);
+    err = hsa_ext_program_add_module(*_CN__HsaProgram, *_CN__BrigModule);
     ErrorCheck(Adding the brig module to the program, err);
 
     /* Determine the agents ISA.  */
     hsa_isa_t isa;
-    err = hsa_agent_get_info(_CN__Agent, HSA_AGENT_INFO_ISA, &isa);
+    err = hsa_agent_get_info(*_CN__Agent, HSA_AGENT_INFO_ISA, &isa);
     ErrorCheck(Query the agents isa, err);
 
     /* * Finalize the program and extract the code object.  */
     hsa_ext_control_directives_t control_directives;
     memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
     hsa_code_object_t code_object;
-    err = hsa_ext_program_finalize(_CN__HsaProgram, isa, 0, control_directives, "", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
+    err = hsa_ext_program_finalize(*_CN__HsaProgram, isa, 0, control_directives, "", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
     ErrorCheck(Finalizing the program, err);
 
     /* Destroy the program, it is no longer needed.  */
-    err=hsa_ext_program_destroy(_CN__HsaProgram);
+    err=hsa_ext_program_destroy(*_CN__HsaProgram);
     ErrorCheck(Destroying the program, err);
 
     /* Create the empty executable.  */
-    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &_CN__Executable);
+    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", _CN__Executable);
     ErrorCheck(Create the executable, err);
 
     /* Load the code object.  */
-    err = hsa_executable_load_code_object(_CN__Executable, _CN__Agent, code_object, "");
+    err = hsa_executable_load_code_object(*_CN__Executable, *_CN__Agent, code_object, "");
     ErrorCheck(Loading the code object, err);
 
     /* Freeze the executable; it can now be queried for symbols.  */
-    err = hsa_executable_freeze(_CN__Executable, "");
+    err = hsa_executable_freeze(*_CN__Executable, "");
     ErrorCheck(Freeze the executable, err);
 
     /* Find a memory region that supports kernel arguments.  */
-    _CN__KernargRegion.handle=(uint64_t)-1;
-    hsa_agent_iterate_regions(_CN__Agent, get_kernarg_memory_region, &_CN__KernargRegion);
-    err = (_CN__KernargRegion.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    _CN__KernargRegion->handle=(uint64_t)-1;
+    hsa_agent_iterate_regions(*_CN__Agent, get_kernarg_memory_region, _CN__KernargRegion);
+    err = (_CN__KernargRegion->handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a kernarg memory region, err);
 
     /*  Create a queue using the maximum size.  */
-    err = hsa_queue_create(_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Sync_CommandQ);
+    err = hsa_queue_create(*_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Sync_CommandQ);
     ErrorCheck(Creating the queue, err);
 
     /*  Create signal to wait for the dispatch to finish. this Signal is only used for synchronous execution  */ 
@@ -314,37 +307,38 @@ status_t snk_init_context(
     int stream_num;
     for ( stream_num = 0 ; stream_num < SNK_MAX_STREAMS ; stream_num++){
        /* printf("calling queue create for stream %d\n",stream_num); */
-       err=hsa_queue_create(_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Stream_CommandQ[stream_num]);
+       err=hsa_queue_create(*_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &Stream_CommandQ[stream_num]);
        ErrorCheck(Creating the Stream Command Q, err);
     }
 
     return STATUS_SUCCESS;
 }
 
-status_t snk_init_kernel(hsa_executable_symbol_t          _KN__Symbol,
-                            uint64_t                         _KN__Kernel_Object,
-                            uint32_t                         _KN__Kernarg_Segment_Size, /* May not need to be global */
-                            uint32_t                         _KN__Group_Segment_Size,
-                            uint32_t                         _KN__Private_Segment_Size,
-                            hsa_agent_t _CN__Agent, 
-                            hsa_executable_t _CN__Executable
+status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
+                            const char *kernel_symbol_name,
+                            uint64_t                         *_KN__Kernel_Object,
+                            uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
+                            uint32_t                         *_KN__Group_Segment_Size,
+                            uint32_t                         *_KN__Private_Segment_Size,
+                            hsa_agent_t *_CN__Agent, 
+                            hsa_executable_t *_CN__Executable
                             ) {
 
     hsa_status_t err;
 
     /* Extract the symbol from the executable.  */
     /* printf("Kernel name _KN__: Looking for symbol %s\n","__OpenCL__KN__kernel"); */
-    err = hsa_executable_get_symbol(_CN__Executable, "", "&__OpenCL__KN__kernel", _CN__Agent , 0, &_KN__Symbol);
+    err = hsa_executable_get_symbol(*_CN__Executable, "", kernel_symbol_name, *_CN__Agent , 0, _KN__Symbol);
     ErrorCheck(Extract the symbol from the executable, err);
 
     /* Extract dispatch information from the symbol */
-    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &_KN__Kernel_Object);
+    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, _KN__Kernel_Object);
     ErrorCheck(Extracting the symbol from the executable, err);
-    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &_KN__Kernarg_Segment_Size);
+    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, _KN__Kernarg_Segment_Size);
     ErrorCheck(Extracting the kernarg segment size from the executable, err);
-    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE, &_KN__Group_Segment_Size);
+    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE, _KN__Group_Segment_Size);
     ErrorCheck(Extracting the group segment size from the executable, err);
-    err = hsa_executable_symbol_get_info(_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, &_KN__Private_Segment_Size);
+    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, _KN__Private_Segment_Size);
     ErrorCheck(Extracting the private segment from the executable, err);
 
 
@@ -353,9 +347,9 @@ status_t snk_init_kernel(hsa_executable_symbol_t          _KN__Symbol,
 }                    
 
 void snk_kernel(const snk_lparm_t *lparm, 
-                 uint64_t                         _KN__Kernel_Object,
-                 uint32_t                         _KN__Group_Segment_Size,
-                 uint32_t                         _KN__Private_Segment_Size,
+                 uint64_t                         *_KN__Kernel_Object,
+                 uint32_t                         *_KN__Group_Segment_Size,
+                 uint32_t                         *_KN__Private_Segment_Size,
                  void *thisKernargAddress,
                  int needs_return_task) {
     /*  Get stream number from launch parameters.       */
@@ -446,9 +440,9 @@ void snk_kernel(const snk_lparm_t *lparm,
 	/* thisKernargAddress has already been set up in the beginning of this routine */
     /*  Bind kernel argument buffer to the aql packet.  */
     this_aql->kernarg_address = (void*) thisKernargAddress;
-    this_aql->kernel_object = _KN__Kernel_Object;
-    this_aql->private_segment_size = _KN__Private_Segment_Size;
-    this_aql->group_segment_size = _KN__Group_Segment_Size;
+    this_aql->kernel_object = *_KN__Kernel_Object;
+    this_aql->private_segment_size = *_KN__Private_Segment_Size;
+    this_aql->group_segment_size = *_KN__Group_Segment_Size;
 
     /*  Prepare and set the packet header */ 
     /* Only set barrier bit if asynchrnous execution */

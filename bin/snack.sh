@@ -95,6 +95,7 @@ function usage(){
     -p        <path>         $HSA_LLVM_PATH or <sdir> if HSA_LLVM_PATH not set
                              <sdir> is actual directory of snack.sh 
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
+    -snk      <SNACK RT path> Default=$SNACK_RUNTIME_PATH or /opt/hsa
     -o        <outfilename>  Default=<filename>.<ft> 
 
    Examples:
@@ -170,6 +171,7 @@ while [ $# -gt 0 ] ; do
       -t) 		TMPDIR=$2; shift ;; 
       -p)               HSA_LLVM_PATH=$2; shift ;;
       -rp)              HSA_RUNTIME_PATH=$2; shift ;;
+      -snk)             SNACK_RUNTIME_PATH=$2; shift ;;
       -h) 		usage ;; 
       -help) 		usage ;; 
       --help) 		usage ;; 
@@ -210,6 +212,7 @@ HSA_LLVM_PATH=${HSA_LLVM_PATH:-$sdir}
 GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
+SNACK_RUNTIME_PATH=${SNACK_RUNTIME_PATH:-/opt/hsa}
 CMD_BRI=${CMD_BRI:-hsailasm }
 
 FORTRAN=${FORTRAN:-0};
@@ -240,14 +243,20 @@ if [ ! -d $HSA_LLVM_PATH ] ; then
    echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi
-if [ $MAKEOBJ ] && [ ! -d "$HSA_RUNTIME_PATH/lib" ] ; then 
-   echo "ERROR:  snack.sh -c option needs HSA_RUNTIME_PATH"
-   echo "        Missing directory $HSA_RUNTIME_PATH/lib "
+if [ $MAKEOBJ ] && [ ! -d "$HSA_RUNTIME_PATH/lib" ] && [ ! -d "$SNACK_RUNTIME_PATH/lib" ] ; then 
+   echo "ERROR:  snack.sh -c option needs HSA_RUNTIME_PATH and SNACK_RUNTIME_PATH"
+   echo "        Missing directory $HSA_RUNTIME_PATH/lib or $SNACK_RUNTIME_PATH/lib"
    echo "        Set env variable HSA_RUNTIME_PATH or use -rp option"
+   echo "        Set env variable SNACK_RUNTIME_PATH or use -snk option"
    exit $DEADRC
 fi
 if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
    echo "ERROR:  Missing $HSA_RUNTIME_PATH/include/hsa.h"
+   echo "        snack.sh requires HSA includes"
+   exit $DEADRC
+fi
+if [ $MAKEOBJ ] && [ ! -f $SNACK_RUNTIME_PATH/include/snk.h ] ; then 
+   echo "ERROR:  Missing $SNACK_RUNTIME_PATH/include/snk.h"
    echo "        snack.sh requires HSA includes"
    exit $DEADRC
 fi
@@ -388,6 +397,7 @@ fi
 [ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
 [ $VERBOSE ] && echo "#Info:  LLVM path:	$HSA_LLVM_PATH"
 [ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  Runtime:	$HSA_RUNTIME_PATH"
+[ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  SNACK Runtime:	$SNACK_RUNTIME_PATH"
 [ $KEEPTDIR ] && [ $VERBOSE ] && echo "#Info:  Temp dir:	$TMPDIR" 
 if [ $MAKESTR ] || [ $MAKEOBJ ] ; then  
    [ $VERBOSE ] && echo "#Info:  gcc loc:	$CMD_GCC" 
@@ -511,13 +521,14 @@ fi
 if [ $MAKEOBJ ] ; then 
    [ $VERBOSE ] && echo "#Step:  gcc		snackwrap.c + _brig.h --> $OUTFILE  ..."
    if [ $DRYRUN ] ; then
-      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
    else
-      $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
+      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+      $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+         echo "        $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
         do_err $rc
       fi
    fi

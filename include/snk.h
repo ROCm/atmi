@@ -49,7 +49,7 @@
 #include <string.h>
 #include "hsa.h"
 #include "hsa_ext_finalize.h"
-
+#include <inttypes.h>
 /*  set NOTCOHERENT needs this include
 #include "hsa_ext_amd.h"
 */
@@ -62,6 +62,7 @@
 #endif
 
 #ifndef __SNK_DEFS
+#include "snk_cpu_task.h"
 enum status_t {
     STATUS_SUCCESS=0,
     STATUS_UNKNOWN=1
@@ -69,7 +70,9 @@ enum status_t {
 typedef enum status_t status_t;
 
 #define SNK_MAX_STREAMS 8 
-#define SNK_MAX_TASKS 253
+#define SNK_MAX_TASKS 100001
+#define SNK_MAX_CPU_STREAMS 2 
+#define SNK_MAX_CPU_FUNCTIONS   100
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
 #define SNK_ORDERED 1
@@ -79,6 +82,13 @@ extern _CPPSTRING_ void stream_sync(const int stream_num);
 #ifndef HSA_RUNTIME_INC_HSA_H_
 typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 #endif
+
+enum _snk_device_type_t {
+    SNK_DEVICE_TYPE_CPU = 0,
+    SNK_DEVICE_TYPE_GPU = 1,
+    SNK_DEVICE_TYPE_DSP = 2
+};
+typedef enum _snk_device_type_t snk_device_type_t;
 
 typedef struct snk_task_s snk_task_t;
 struct snk_task_s { 
@@ -97,10 +107,11 @@ struct snk_lparm_s {
    int release_fence_scope;   /* default = 2 */
    snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
    snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
+   snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -122,7 +133,9 @@ status_t snk_init_context(
                         hsa_ext_module_t **_CN__BrigModule,
                         hsa_ext_program_t *_CN__HsaProgram,
                         hsa_executable_t *_CN__Executable,
-                        hsa_region_t *_CN__KernargRegion
+                        hsa_region_t *_CN__KernargRegion,
+                        hsa_agent_t *_CN__CPU_Agent,
+                        hsa_region_t *_CN__CPU_KernargRegion
                         );
 
 status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
@@ -131,15 +144,25 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
                             uint32_t                         *_KN__Group_Segment_Size,
                             uint32_t                         *_KN__Private_Segment_Size,
-                            hsa_agent_t *_CN__Agent, 
-                            hsa_executable_t *_CN__Executable
+                            hsa_agent_t _CN__Agent, 
+                            hsa_executable_t _CN__Executable
                             );
 
 void snk_kernel(const snk_lparm_t *lparm, 
-                 uint64_t                         *_KN__Kernel_Object,
-                 uint32_t                         *_KN__Group_Segment_Size,
-                 uint32_t                         *_KN__Private_Segment_Size,
+                 uint64_t                         _KN__Kernel_Object,
+                 uint32_t                         _KN__Group_Segment_Size,
+                 uint32_t                         _KN__Private_Segment_Size,
                  void *thisKernargAddress,
                  int needs_return_task);
+
+void snk_cpu_kernel(const snk_lparm_t *lparm, 
+                 const cpu_kernel_table_t *_CN__CPU_kernels,
+                 const char *kernel_name,
+                 const uint32_t _KN__cpu_task_num_args);
+
+uint16_t create_header(hsa_packet_type_t type, int barrier);
+void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
+                const size_t num_queues, const size_t capacity,
+                const size_t num_workers);
 #define __SNK_DEFS
 #endif //__SNK_DEFS

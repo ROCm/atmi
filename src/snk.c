@@ -44,6 +44,21 @@
  * from the snk_genw.sh script to a library
  */
 #include "snk.h"
+#include <time.h>
+#include <assert.h>
+
+#define NSECPERSEC 1000000000L
+
+long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
+    long int nanosecs;
+    if ((end_time.tv_nsec-start_time.tv_nsec)<0) nanosecs =
+        ((((long int) end_time.tv_sec- (long int) start_time.tv_sec )-1)*NSECPERSEC ) +
+            ( NSECPERSEC + (long int) end_time.tv_nsec - (long int) start_time.tv_nsec) ;
+    else nanosecs =
+        (((long int) end_time.tv_sec- (long int) start_time.tv_sec )*NSECPERSEC ) +
+            ( (long int) end_time.tv_nsec - (long int) start_time.tv_nsec );
+    return nanosecs;
+}
 
 /*  set NOTCOHERENT needs this include
 #include "hsa_ext_amd.h"
@@ -70,19 +85,24 @@ void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest){
   __atomic_store_n(packet,header|(rest<<16),__ATOMIC_RELEASE);
 }
 
-uint16_t header(hsa_packet_type_t type) {
+uint16_t create_header(hsa_packet_type_t type, int barrier) {
    uint16_t header = type << HSA_PACKET_HEADER_TYPE;
+   header |= barrier << HSA_PACKET_HEADER_BARRIER;
    header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
    header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
    return header;
 }
 
+
+
+/* This does barrier packet chaining, i.e. first packet's completion signal will be
+ * assigned as a dependent signal to the next barrier packet
+ */
 void barrier_sync(int stream_num, snk_task_t *dep_task_list) {
     /* This routine will wait for all dependent packets to complete
        irrespective of their queue number. This will put a barrier packet in the
        stream belonging to the current packet. 
      */
-
     if(stream_num < 0 || dep_task_list == NULL) return; 
 
     hsa_queue_t *queue = Stream_CommandQ[stream_num];
@@ -93,28 +113,29 @@ void barrier_sync(int stream_num, snk_task_t *dep_task_list) {
         head = head->next;
     }
 
+    long t_barrier_wait = 0L;
+    long t_barrier_dispatch = 0L;
     /* Keep adding barrier packets in multiples of 5 because that is the maximum signals that 
        the HSA barrier packet can support today
      */
+    hsa_signal_t last_signal;
+    hsa_signal_create(0, 0, NULL, &last_signal);
     snk_task_t *tasks = dep_task_list;
-    hsa_signal_t signal;
-    hsa_signal_create(1, 0, NULL, &signal);
-    const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 5;
+    const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
     /* round up */
     int barrier_pkt_count = (dep_task_count + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
     int barrier_pkt_id = 0;
+
     for(barrier_pkt_id = 0; barrier_pkt_id < barrier_pkt_count; barrier_pkt_id++) {
+    hsa_signal_t signal;
+    hsa_signal_create(1, 0, NULL, &signal);
         /* Obtain the write index for the command queue for this stream.  */
         uint64_t index = hsa_queue_load_write_index_relaxed(queue);
         const uint32_t queueMask = queue->size - 1;
-
         /* Define the barrier packet to be at the calculated queue index address.  */
         hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
         memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
-        barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
-        barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
-        barrier->header |= 0 << HSA_PACKET_HEADER_BARRIER;
-        barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE; 
+        barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_AND, 0);
 
         /* populate all dep_signals */
         int dep_signal_id = 0;
@@ -125,21 +146,18 @@ void barrier_sync(int stream_num, snk_task_t *dep_task_list) {
                 tasks = tasks->next;
             }
         }
-        if(tasks == NULL) { 
-            /* reached the end of task list */
-            barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
-            barrier->completion_signal = signal;
-        }
+        barrier->dep_signal[4] = last_signal;
+        barrier->completion_signal = signal;
+        last_signal = signal;
         /* Increment write index and ring doorbell to dispatch the kernel.  */
         hsa_queue_store_write_index_relaxed(queue, index+1);
         hsa_signal_store_relaxed(queue->doorbell_signal, index);
-        //printf("barrier pkt submitted: %d\n", barrier_pkt_id);
     }
 
     /* Wait on completion signal til kernel is finished.  */
-    hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+    hsa_signal_wait_acquire(last_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
 
-    hsa_signal_destroy(signal);
+    hsa_signal_destroy(last_signal);
 }
 
 extern void stream_sync(int stream_num) {
@@ -147,7 +165,6 @@ extern void stream_sync(int stream_num) {
        all former dispatch packets were put on the queue for asynchronous asynchrnous 
        executions. This routine will wait for all packets to complete on this queue.
     */
-
     hsa_queue_t *queue = Stream_CommandQ[stream_num];
 
     hsa_signal_t signal;
@@ -160,10 +177,9 @@ extern void stream_sync(int stream_num) {
     /* Define the barrier packet to be at the calculated queue index address.  */
     hsa_barrier_or_packet_t* barrier = &(((hsa_barrier_or_packet_t*)(queue->base_address))[index&queueMask]);
     memset(barrier, 0, sizeof(hsa_barrier_or_packet_t));
-    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
-    barrier->header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
-    barrier->header |= 1 << HSA_PACKET_HEADER_BARRIER;
-    barrier->header |= HSA_PACKET_TYPE_BARRIER_AND << HSA_PACKET_HEADER_TYPE; 
+
+    barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_OR, 1);
+
     barrier->completion_signal = signal;
 
     /* Increment write index and ring doorbell to dispatch the kernel.  */
@@ -171,11 +187,10 @@ extern void stream_sync(int stream_num) {
     hsa_signal_store_relaxed(queue->doorbell_signal, index);
 
     /* Wait on completion signal til kernel is finished.  */
-    hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
-
+    hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
     hsa_signal_destroy(signal);
 
-}  /* End of generated global functions */
+}  
 
 /* Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
    and sets the value of data to the agent handle if it is.
@@ -187,6 +202,37 @@ static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {
     if (HSA_STATUS_SUCCESS == status && HSA_DEVICE_TYPE_GPU == device_type) {
         hsa_agent_t* ret = (hsa_agent_t*)data;
         *ret = agent;
+        return HSA_STATUS_INFO_BREAK;
+    }
+    return HSA_STATUS_SUCCESS;
+}
+
+/* Determines if the given agent is of type HSA_DEVICE_TYPE_CPU
+   and sets the value of data to the agent handle if it is.
+*/
+static hsa_status_t get_cpu_agent(hsa_agent_t agent, void *data) {
+    hsa_status_t status;
+    hsa_device_type_t device_type;
+    status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
+    if (HSA_STATUS_SUCCESS == status && HSA_DEVICE_TYPE_CPU == device_type) {
+        hsa_agent_t* ret = (hsa_agent_t*)data;
+        *ret = agent;
+        return HSA_STATUS_INFO_BREAK;
+    }
+    return HSA_STATUS_SUCCESS;
+}
+
+hsa_status_t get_fine_grained_region(hsa_region_t region, void* data) {
+    hsa_region_segment_t segment;
+    hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT, &segment);
+    if (segment != HSA_REGION_SEGMENT_GLOBAL) {
+        return HSA_STATUS_SUCCESS;
+    }
+    hsa_region_global_flag_t flags;
+    hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &flags);
+    if (flags & HSA_REGION_GLOBAL_FLAG_FINE_GRAINED) {
+        hsa_region_t* ret = (hsa_region_t*) data;
+        *ret = region;
         return HSA_STATUS_INFO_BREAK;
     }
     return HSA_STATUS_SUCCESS;
@@ -211,18 +257,39 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
     return HSA_STATUS_SUCCESS;
 }
 
+
+
 status_t snk_init_context(
                         hsa_agent_t *_CN__Agent, 
                         hsa_ext_module_t **_CN__BrigModule,
                         hsa_ext_program_t *_CN__HsaProgram,
                         hsa_executable_t *_CN__Executable,
-                        hsa_region_t *_CN__KernargRegion
+                        hsa_region_t *_CN__KernargRegion,
+                        hsa_agent_t *_CN__CPU_Agent,
+                        hsa_region_t *_CN__CPU_KernargRegion
                         ) {
 
     hsa_status_t err;
 
     err = hsa_init();
     ErrorCheck(Initializing the hsa runtime, err);
+
+    /* Get a CPU agent, create a pthread to handle packets*/
+    /* Iterate over the agents and pick the cpu agent */
+    err = hsa_iterate_agents(get_cpu_agent, _CN__CPU_Agent);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
+
+    _CN__CPU_KernargRegion->handle=(uint64_t)-1;
+    err = hsa_agent_iterate_regions(*_CN__CPU_Agent, get_fine_grained_region, _CN__CPU_KernargRegion);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    err = (_CN__CPU_KernargRegion->handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    ErrorCheck(Finding a CPU kernarg memory region handle, err);
+
+    int num_queues = 1;
+    int queue_capacity = 32768;
+    int num_workers = 1;
+    cpu_agent_init(*_CN__CPU_Agent, *_CN__CPU_KernargRegion, num_queues, queue_capacity, num_workers);
 
     /* Iterate over the agents and pick the gpu agent */
     err = hsa_iterate_agents(get_gpu_agent, _CN__Agent);
@@ -320,15 +387,15 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
                             uint32_t                         *_KN__Group_Segment_Size,
                             uint32_t                         *_KN__Private_Segment_Size,
-                            hsa_agent_t *_CN__Agent, 
-                            hsa_executable_t *_CN__Executable
+                            hsa_agent_t _CN__Agent, 
+                            hsa_executable_t _CN__Executable
                             ) {
 
     hsa_status_t err;
 
     /* Extract the symbol from the executable.  */
     /* printf("Kernel name _KN__: Looking for symbol %s\n","__OpenCL__KN__kernel"); */
-    err = hsa_executable_get_symbol(*_CN__Executable, "", kernel_symbol_name, *_CN__Agent , 0, _KN__Symbol);
+    err = hsa_executable_get_symbol(_CN__Executable, "", kernel_symbol_name, _CN__Agent , 0, _KN__Symbol);
     ErrorCheck(Extract the symbol from the executable, err);
 
     /* Extract dispatch information from the symbol */
@@ -346,10 +413,89 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
 
 }                    
 
+void snk_cpu_kernel(const snk_lparm_t *lparm, 
+                 const cpu_kernel_table_t *_CN__CPU_kernels,
+                 const char *kernel_name,
+                 const uint32_t _KN__cpu_task_num_args) {
+    /* Iterate over function table and retrieve the ID for kernel_name */
+    
+    if ( lparm->requires != NULL) {
+        /* For dependent child tasks, wait till all parent kernels are finished.  */
+        snk_task_t *p = lparm->requires;
+        while(p != NULL) {
+            hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+            p = p->next;
+        }
+    }
+    if ( lparm->needs != NULL) {
+        printf("\n THIS TASK NEEDS ONE OF A LIST OF PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
+    }
+    uint16_t i;
+    set_cpu_kernel_table(_CN__CPU_kernels);
+    for(i = 0; i < SNK_MAX_CPU_FUNCTIONS; i++) {
+        if(_CN__CPU_kernels[i].name && kernel_name) {
+            if(strcmp(_CN__CPU_kernels[i].name, kernel_name) == 0) {
+                signal_worker(PROCESS_PKT);
+
+                /* ID i is the kernel. Enqueue the function to the soft queue */
+                //printf("CPU Function [%d]: %s has %" PRIu32 " args\n", i, kernel_name, _KN__cpu_task_num_args);
+                /*  Obtain the current queue write index. increases with each call to kernel  */
+                /* FIXME: Add support for more queues by passing a q_id arg to
+                 * this function
+                 */
+                int q_id = 0;
+                agent_t *agent = get_cpu_q_agent();
+                hsa_queue_t *this_Q = agent->queues[q_id];
+
+                uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
+                /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
+
+                /* Find the queue index address to write the packet info into.  */
+                const uint32_t queueMask = this_Q->size - 1;
+                hsa_agent_dispatch_packet_t* this_aql = &(((hsa_agent_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
+                memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
+                /*  FIXME: We need to check for queue overflow here. Do we need
+                 *  to do this for CPU agents too? */
+
+                /* Set the type and return args.
+                 * FIXME: We are considering only void return types for now.*/
+                this_aql->type = (uint16_t)i;
+                //this_aql->return_address = NULL;
+                /* Set function args */
+                int arg_id = 0;
+                for(arg_id = 0; arg_id < _KN__cpu_task_num_args; arg_id++) {
+                    this_aql->arg[arg_id] = _CN__CPU_kernels[i].ptrs[arg_id];
+                }
+                for(; arg_id < 4; arg_id++) {
+                    /* this will let the consumer know when to stop processing
+                     * args */
+                    this_aql->arg[arg_id] = UINT64_MAX;
+                }
+
+                /* If this kernel was declared as snk_task_t*, then use preallocated signal */
+                if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
+                    printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
+                    return ;
+                }
+                /* hsa_signal_store_relaxed(SNK_Tasks[SNK_NextTaskId].signal,1); */
+                this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].signal;
+
+                /*  Prepare and set the packet header */ 
+                /* Only set barrier bit if asynchrnous execution */
+                this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, lparm->barrier);
+
+                /* Increment write index and ring doorbell to dispatch the kernel.  */
+                hsa_queue_store_write_index_relaxed(this_Q, index+1);
+                hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
+            }
+        }
+    }
+}
+
 void snk_kernel(const snk_lparm_t *lparm, 
-                 uint64_t                         *_KN__Kernel_Object,
-                 uint32_t                         *_KN__Group_Segment_Size,
-                 uint32_t                         *_KN__Private_Segment_Size,
+                 uint64_t                         _KN__Kernel_Object,
+                 uint32_t                         _KN__Group_Segment_Size,
+                 uint32_t                         _KN__Private_Segment_Size,
                  void *thisKernargAddress,
                  int needs_return_task) {
     /*  Get stream number from launch parameters.       */
@@ -379,9 +525,9 @@ void snk_kernel(const snk_lparm_t *lparm,
 	   #else
 	   snk_task_t *p = lparm->requires;
 	   while(p != NULL) {
-       	hsa_signal_value_t value = hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
        	// HSA manual uses a while loop. Why? 
-		// while(hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_ACTIVE) != 0);
+		//while(hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED) != 0);
+		hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
 		p = p->next;
 	   }
 	   #endif
@@ -440,13 +586,13 @@ void snk_kernel(const snk_lparm_t *lparm,
 	/* thisKernargAddress has already been set up in the beginning of this routine */
     /*  Bind kernel argument buffer to the aql packet.  */
     this_aql->kernarg_address = (void*) thisKernargAddress;
-    this_aql->kernel_object = *_KN__Kernel_Object;
-    this_aql->private_segment_size = *_KN__Private_Segment_Size;
-    this_aql->group_segment_size = *_KN__Group_Segment_Size;
+    this_aql->kernel_object = _KN__Kernel_Object;
+    this_aql->private_segment_size = _KN__Private_Segment_Size;
+    this_aql->group_segment_size = _KN__Group_Segment_Size;
 
     /*  Prepare and set the packet header */ 
     /* Only set barrier bit if asynchrnous execution */
-    if ( stream_num >= 0 )  this_aql->header |= lparm->barrier << HSA_PACKET_HEADER_BARRIER; 
+    if ( stream_num >= 0 )  this_aql->header = lparm->barrier << HSA_PACKET_HEADER_BARRIER; 
     this_aql->header |= lparm->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
     this_aql->header |= lparm->release_fence_scope  << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
     __atomic_store_n((uint8_t*)(&this_aql->header), (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH, __ATOMIC_RELEASE);

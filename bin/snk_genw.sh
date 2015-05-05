@@ -765,23 +765,33 @@ __SEDCMD=" "
       #fi
       if (( ${NEXT_ARGI} == 0 )) ; then
         echo "   extern void ${__KN}_cpu_impl(void);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"{__KN}\"; " >> $__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function0=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[0] = (uint64_t)0; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[1] = (uint64_t)0; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 1 )) ; then
         echo "   extern void ${__KN}_cpu_impl(uint64_t);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"{__KN}\"; " >> $__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function1=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[1] = (uint64_t)0; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 2 )) ; then
         echo "   extern void ${__KN}_cpu_impl(uint64_t, uint64_t);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"{__KN}\"; " >> $__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function2=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 3 )) ; then
         echo "   extern void ${__KN}_cpu_impl(uint64_t, uint64_t, uint64_t);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"{__KN}\"; " >> $__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function3=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 4 )) ; then
         echo "   extern void ${__KN}_cpu_impl(uint64_t, uint64_t, uint64_t, uint64_t);" >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"{__KN}\"; " >> $__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function4=${__KN}_cpu_impl; " >>$__CWRAP
       fi
 #     Now add the kernel template to wrapper and change all three strings

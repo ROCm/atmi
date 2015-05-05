@@ -148,7 +148,9 @@ struct snk_lparm_s {
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+ 
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -160,6 +162,8 @@ struct snk_image3d_s {
    size_t element_size;
    void *data;
 };
+
+extern _CPPSTRING_ void snk_task_wait(const snk_task_t *task);
 
 #define __SNK_DEFS
 #endif
@@ -294,7 +298,7 @@ C     Set default values
 C     lparm%ndim=1 
 C     lparm%gdims(1)=1
 C     lparm%ldims(1)=64
-C     lparm%stream=-1 
+C     lparm%stream=0 
 C     lparm%barrier=1
 C  
 C  
@@ -764,35 +768,35 @@ __SEDCMD=" "
       #   echo "   int needs_return_task = 0;" >>$__CWRAP
       #fi
       if (( ${NEXT_ARGI} == 0 )) ; then
-        echo "   extern void ${__KN}_cpu_impl(void);" >> $__CWRAP;
+        echo "   extern void ${__KN}(void);" >> $__CWRAP;
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function0=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function0=${__KN}; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[0] = (uint64_t)0; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[1] = (uint64_t)0; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 1 )) ; then
-        echo "   extern void ${__KN}_cpu_impl(uint64_t);" >> $__CWRAP;
+        echo "   extern void ${__KN}(uint64_t);" >> $__CWRAP;
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function1=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function1=${__KN}; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[1] = (uint64_t)0; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 2 )) ; then
-        echo "   extern void ${__KN}_cpu_impl(uint64_t, uint64_t);" >> $__CWRAP;
+        echo "   extern void ${__KN}(uint64_t, uint64_t);" >> $__CWRAP;
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function2=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function2=${__KN}; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 3 )) ; then
-        echo "   extern void ${__KN}_cpu_impl(uint64_t, uint64_t, uint64_t);" >> $__CWRAP;
+        echo "   extern void ${__KN}(uint64_t, uint64_t, uint64_t);" >> $__CWRAP;
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function3=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function3=${__KN}; " >>$__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
       elif (( ${NEXT_ARGI} == 4 )) ; then
-        echo "   extern void ${__KN}_cpu_impl(uint64_t, uint64_t, uint64_t, uint64_t);" >> $__CWRAP
+        echo "   extern void ${__KN}(uint64_t, uint64_t, uint64_t, uint64_t);" >> $__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function4=${__KN}_cpu_impl; " >>$__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function4=${__KN}; " >>$__CWRAP
       fi
 #     Now add the kernel template to wrapper and change all three strings
 #     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_

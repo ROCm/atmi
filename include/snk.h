@@ -111,7 +111,9 @@ struct snk_lparm_s {
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=-1,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+ 
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -127,6 +129,7 @@ struct snk_image3d_s {
 extern snk_task_t   SNK_Tasks[SNK_MAX_TASKS];
 extern int          SNK_NextTaskId;
 
+extern _CPPSTRING_ void snk_task_wait(const snk_task_t *task);
 
 status_t snk_init_context(
                         hsa_agent_t *_CN__Agent, 

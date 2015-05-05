@@ -84,7 +84,7 @@ uint8_t get_packet_type(uint16_t header) {
 
 int process_packet(hsa_queue_t *queue)
 {
-    DEBUG_PRINT("Processing Packet from Queue: %p\n", queue);
+    DEBUG_PRINT("Processing Packet from CPU Queue\n");
 
     uint64_t read_index = hsa_queue_load_read_index_acquire(queue);
     assert(read_index == 0);
@@ -140,18 +140,18 @@ int process_packet(hsa_queue_t *queue)
                                                      case 0: ;
                                                              void (*function0) (void) =
                                                                  (void (*)(void)) _CN__CPU_kernels[packet->type].function.function0;
-                                                             DEBUG_PRINT("Func Ptr: %p Args: NONE\n", 
+                                                             /*DEBUG_PRINT("Func Ptr: %p Args: NONE\n", 
                                                                      function0
-                                                                     );
+                                                                     );*/
                                                              function0(
                                                                      );
                                                              break;
                                                      case 1: ;
                                                              void (*function1) (uint64_t) =
                                                                  (void (*)(uint64_t)) _CN__CPU_kernels[packet->type].function.function1;
-                                                             DEBUG_PRINT("Args: %" PRIu64 "\n", 
+                                                             /*DEBUG_PRINT("Args: %" PRIu64 "\n", 
                                                                      packet->arg[0]
-                                                                     );
+                                                                     );*/
                                                              function1(
                                                                      packet->arg[0]
                                                                      );
@@ -159,10 +159,10 @@ int process_packet(hsa_queue_t *queue)
                                                      case 2: ;
                                                              void (*function2) (uint64_t, uint64_t) =
                                                                  (void (*)(uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function2;
-                                                             DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 "\n", 
+                                                             /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 "\n", 
                                                                      packet->arg[0],
                                                                      packet->arg[1]
-                                                                     );
+                                                                     );*/
                                                              function2(
                                                                      packet->arg[0],
                                                                      packet->arg[1]
@@ -171,11 +171,11 @@ int process_packet(hsa_queue_t *queue)
                                                      case 3: ;
                                                              void (*function3) (uint64_t, uint64_t, uint64_t) =
                                                                  (void (*)(uint64_t, uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function3;
-                                                             DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
+                                                             /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
                                                                      packet->arg[0],
                                                                      packet->arg[1],
                                                                      packet->arg[2]
-                                                                     );
+                                                                     );*/
                                                              function3(
                                                                      packet->arg[0],
                                                                      packet->arg[1],
@@ -185,12 +185,12 @@ int process_packet(hsa_queue_t *queue)
                                                      case 4: ;
                                                              void (*function4) (uint64_t, uint64_t, uint64_t, uint64_t) =
                                                                  (void (*)(uint64_t, uint64_t, uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function4;
-                                                             DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
+                                                             /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
                                                                      packet->arg[0],
                                                                      packet->arg[1],
                                                                      packet->arg[2],
                                                                      packet->arg[3]
-                                                                     );
+                                                                     );*/
                                                              function4(
                                                                      packet->arg[0],
                                                                      packet->arg[1],

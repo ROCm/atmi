@@ -160,6 +160,12 @@ void barrier_sync(int stream_num, snk_task_t *dep_task_list) {
     hsa_signal_destroy(last_signal);
 }
 
+extern void snk_task_wait(const snk_task_t *task) {
+    if(task != NULL) {
+        hsa_signal_wait_acquire(task->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+    }
+}
+
 extern void stream_sync(int stream_num) {
     /* This is a user-callable function that puts a barrier packet into a queue where
        all former dispatch packets were put on the queue for asynchronous asynchrnous 
@@ -418,7 +424,6 @@ void snk_cpu_kernel(const snk_lparm_t *lparm,
                  const char *kernel_name,
                  const uint32_t _KN__cpu_task_num_args) {
     /* Iterate over function table and retrieve the ID for kernel_name */
-    
     if ( lparm->requires != NULL) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
         snk_task_t *p = lparm->requires;
@@ -433,6 +438,7 @@ void snk_cpu_kernel(const snk_lparm_t *lparm,
     uint16_t i;
     set_cpu_kernel_table(_CN__CPU_kernels);
     for(i = 0; i < SNK_MAX_CPU_FUNCTIONS; i++) {
+        //printf("Comparing kernels %s %s\n", _CN__CPU_kernels[i].name, kernel_name);
         if(_CN__CPU_kernels[i].name && kernel_name) {
             if(strcmp(_CN__CPU_kernels[i].name, kernel_name) == 0) {
                 signal_worker(PROCESS_PKT);
@@ -525,8 +531,6 @@ void snk_kernel(const snk_lparm_t *lparm,
 	   #else
 	   snk_task_t *p = lparm->requires;
 	   while(p != NULL) {
-       	// HSA manual uses a while loop. Why? 
-		//while(hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED) != 0);
 		hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
 		p = p->next;
 	   }
@@ -536,7 +540,6 @@ void snk_kernel(const snk_lparm_t *lparm,
     if ( lparm->needs != NULL) {
        printf("\n THIS TASK NEEDS ONE OF A LIST OF PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
     }
-
     /*  Obtain the current queue write index. increases with each call to kernel  */
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
     /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */

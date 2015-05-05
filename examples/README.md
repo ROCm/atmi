@@ -1,34 +1,36 @@
 ```
-Note- If HSAIL-HLC-Stable is used. The tests have to be compiled with CFLAGS=-DDUMMY_ARGS=1. Example make all -DDUMMY_ARGS=1. Make sure to have the compiler and cloc installed in /opt/amd/cloc/bin and the runtime in opt/hsa/ as per the instructions in INSTALL.md
+Make sure to have the compiler and cloc.sh installed in /opt/amd/cloc/bin and 
+the HSA runtime in /opt/hsa as per the instructions in INSTALL.md. 
+
+#  Make a copy of the examples in your home directory 
+cp -r /opt/amd/cloc/examples ~/examples
 
 #For building HSA examples. 
-cd hsa 
-make all
+cd ~/examples/hsa/vector_copy  
+make 
 make test
-
-#For building OKRA examples
-export OKRA_DISABLE_FIX_HSAIL=1
-cd okra
-make all
+cd ~/examples/hsa/vector_copy_async
+make 
 make test
 
 #For SNACK examples
-cd snack/csquares
+cd ~/examples/snack/csquares
 ./buildrun.sh
-cd snack/fortran
+cd ~/examples/snack/fortran
 ./buildrun.sh
-cd snack/helloworld
+cd ~/examples/snack/helloworld
 ./buildrun.sh
 ./buildrun.sh f
 ./buildrun.sh cpp
-cd snack/matmul
+cd ~/examples/snack/matmul
 ./buildrun.sh
-cd snack/multiple_cl_files
+cd ~/examples/snack/multiple_cl_files
 ./buildrun.sh
-cd snack/vector_copy
+cd ~/examples/snack/vector_copy
+./buildrun.sh
+cd ~/examples/snack/async_vecsum
 ./buildrun.sh
 ```
-You can also build and run individually each test case
 
 ----------
 

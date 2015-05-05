@@ -58,7 +58,7 @@ cd ~/git
 git clone https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
 sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-1.2/ubuntu/*.deb
 echo "KERNEL==\"kfd\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/kfd.rules
-sudo cp HSA-Drivers-Linux-AMD/kfd-1.2/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
+sudo cp HSA-Drivers-Linux-AMD/kfd-1.2/libhsakmt.so.1 /opt/hsa/lib
 ```
 
 ## Reboot System

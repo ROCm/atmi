@@ -97,113 +97,121 @@ int process_packet(hsa_queue_t *queue)
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
         int i;
         switch (get_packet_type(packet->header)) {
-            case HSA_PACKET_TYPE_BARRIER_OR: ;
-                                             hsa_barrier_or_packet_t *barrier_or = (hsa_barrier_or_packet_t *)packet; 
-                                             DEBUG_PRINT("Executing OR barrier\n");
-                                             for (i = 0; i < 5; ++i) {
-                                                 if (barrier_or->dep_signal[i].handle != 0) {
-                                                     hsa_signal_wait_acquire(barrier_or->dep_signal[i], 
-                                                             HSA_SIGNAL_CONDITION_EQ,
-                                                             0, UINT64_MAX,
-                                                             HSA_WAIT_STATE_BLOCKED);
-                                                     break;
-                                                 }
-                                             }
-                                             if (barrier_or->completion_signal.handle != 0) {
-                                                 hsa_signal_subtract_release(barrier_or->completion_signal, 1);
-                                             }
-                                             packet_store_release((uint32_t*) barrier_or, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_OR);
-                                             break;
-            case HSA_PACKET_TYPE_BARRIER_AND: ;
-                                              hsa_barrier_and_packet_t *barrier = (hsa_barrier_and_packet_t *)packet; 
-                                              DEBUG_PRINT("Executing AND barrier\n");
-                                              for (i = 0; i < 5; ++i) {
-                                                  if (barrier->dep_signal[i].handle != 0) {
-                                                      hsa_signal_wait_acquire(barrier->dep_signal[i], 
-                                                              HSA_SIGNAL_CONDITION_EQ,
-                                                              0, UINT64_MAX,
-                                                              HSA_WAIT_STATE_BLOCKED);
-                                                  }
-                                              }
-                                              if (barrier->completion_signal.handle != 0) {
-                                                  hsa_signal_subtract_release(barrier->completion_signal, 1);
-                                              }
-                                              packet_store_release((uint32_t*) barrier, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_AND);
-                                              break;
-            case HSA_PACKET_TYPE_AGENT_DISPATCH: ;
-                                                 int num_args = 0;
-                                                 for(num_args = 0; num_args < 4; num_args++) { 
-                                                     if(packet->arg[num_args] == UINT64_MAX) break;
-                                                     //_CN__CPU_kernels[packet->type].ptrs[num_args] = packet->arg[num_args];
-                                                 }
-                                                 switch(num_args) {
-                                                     case 0: ;
-                                                             void (*function0) (void) =
-                                                                 (void (*)(void)) _CN__CPU_kernels[packet->type].function.function0;
-                                                             /*DEBUG_PRINT("Func Ptr: %p Args: NONE\n", 
-                                                                     function0
-                                                                     );*/
-                                                             function0(
-                                                                     );
-                                                             break;
-                                                     case 1: ;
-                                                             void (*function1) (uint64_t) =
-                                                                 (void (*)(uint64_t)) _CN__CPU_kernels[packet->type].function.function1;
-                                                             /*DEBUG_PRINT("Args: %" PRIu64 "\n", 
-                                                                     packet->arg[0]
-                                                                     );*/
-                                                             function1(
-                                                                     packet->arg[0]
-                                                                     );
-                                                             break;
-                                                     case 2: ;
-                                                             void (*function2) (uint64_t, uint64_t) =
-                                                                 (void (*)(uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function2;
-                                                             /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 "\n", 
-                                                                     packet->arg[0],
-                                                                     packet->arg[1]
-                                                                     );*/
-                                                             function2(
-                                                                     packet->arg[0],
-                                                                     packet->arg[1]
-                                                                     );
-                                                             break;
-                                                     case 3: ;
-                                                             void (*function3) (uint64_t, uint64_t, uint64_t) =
-                                                                 (void (*)(uint64_t, uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function3;
-                                                             /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
-                                                                     packet->arg[0],
-                                                                     packet->arg[1],
-                                                                     packet->arg[2]
-                                                                     );*/
-                                                             function3(
-                                                                     packet->arg[0],
-                                                                     packet->arg[1],
-                                                                     packet->arg[2]
-                                                                     );
-                                                             break;
-                                                     case 4: ;
-                                                             void (*function4) (uint64_t, uint64_t, uint64_t, uint64_t) =
-                                                                 (void (*)(uint64_t, uint64_t, uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function4;
-                                                             /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
-                                                                     packet->arg[0],
-                                                                     packet->arg[1],
-                                                                     packet->arg[2],
-                                                                     packet->arg[3]
-                                                                     );*/
-                                                             function4(
-                                                                     packet->arg[0],
-                                                                     packet->arg[1],
-                                                                     packet->arg[2],
-                                                                     packet->arg[3]
-                                                                     );
-                                                             break;
-                                                 }
-                                                 if (packet->completion_signal.handle != 0) {
-                                                     hsa_signal_subtract_release(packet->completion_signal, 1);
-                                                 }
-                                                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
-                                                 break;
+            case HSA_PACKET_TYPE_BARRIER_OR: 
+                ;
+                hsa_barrier_or_packet_t *barrier_or = (hsa_barrier_or_packet_t *)packet; 
+                DEBUG_PRINT("Executing OR barrier\n");
+                for (i = 0; i < 5; ++i) {
+                    if (barrier_or->dep_signal[i].handle != 0) {
+                        hsa_signal_wait_acquire(barrier_or->dep_signal[i], 
+                                HSA_SIGNAL_CONDITION_EQ,
+                                0, UINT64_MAX,
+                                HSA_WAIT_STATE_BLOCKED);
+                        break;
+                    }
+                }
+                if (barrier_or->completion_signal.handle != 0) {
+                    hsa_signal_subtract_release(barrier_or->completion_signal, 1);
+                }
+                packet_store_release((uint32_t*) barrier_or, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_OR);
+                break;
+            case HSA_PACKET_TYPE_BARRIER_AND: 
+                ;
+                hsa_barrier_and_packet_t *barrier = (hsa_barrier_and_packet_t *)packet; 
+                DEBUG_PRINT("Executing AND barrier\n");
+                for (i = 0; i < 5; ++i) {
+                    if (barrier->dep_signal[i].handle != 0) {
+                        hsa_signal_wait_acquire(barrier->dep_signal[i], 
+                                HSA_SIGNAL_CONDITION_EQ,
+                                0, UINT64_MAX,
+                                HSA_WAIT_STATE_BLOCKED);
+                    }
+                }
+                if (barrier->completion_signal.handle != 0) {
+                    hsa_signal_subtract_release(barrier->completion_signal, 1);
+                }
+                packet_store_release((uint32_t*) barrier, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_AND);
+                break;
+            case HSA_PACKET_TYPE_AGENT_DISPATCH: 
+                ;
+                int num_args = 0;
+                for(num_args = 0; num_args < 4; num_args++) { 
+                    if(packet->arg[num_args] == UINT64_MAX) break;
+                    //_CN__CPU_kernels[packet->type].ptrs[num_args] = packet->arg[num_args];
+                }
+                switch(num_args) {
+                    case 0: 
+                        ;
+                        void (*function0) (void) =
+                            (void (*)(void)) _CN__CPU_kernels[packet->type].function.function0;
+                        /*DEBUG_PRINT("Func Ptr: %p Args: NONE\n", 
+                          function0
+                          );*/
+                        function0(
+                                );
+                        break;
+                    case 1: 
+                        ;
+                        void (*function1) (uint64_t) =
+                            (void (*)(uint64_t)) _CN__CPU_kernels[packet->type].function.function1;
+                        /*DEBUG_PRINT("Args: %" PRIu64 "\n", 
+                          packet->arg[0]
+                          );*/
+                        function1(
+                                packet->arg[0]
+                                );
+                        break;
+                    case 2: 
+                        ;
+                        void (*function2) (uint64_t, uint64_t) =
+                            (void (*)(uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function2;
+                        /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 "\n", 
+                          packet->arg[0],
+                          packet->arg[1]
+                          );*/
+                        function2(
+                                packet->arg[0],
+                                packet->arg[1]
+                                );
+                        break;
+                    case 3: 
+                        ;
+                        void (*function3) (uint64_t, uint64_t, uint64_t) =
+                            (void (*)(uint64_t, uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function3;
+                        /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
+                          packet->arg[0],
+                          packet->arg[1],
+                          packet->arg[2]
+                          );*/
+                        function3(
+                                packet->arg[0],
+                                packet->arg[1],
+                                packet->arg[2]
+                                );
+                        break;
+                    case 4: 
+                        ;
+                        void (*function4) (uint64_t, uint64_t, uint64_t, uint64_t) =
+                            (void (*)(uint64_t, uint64_t, uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function4;
+                        /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
+                          packet->arg[0],
+                          packet->arg[1],
+                          packet->arg[2],
+                          packet->arg[3]
+                          );*/
+                        function4(
+                                packet->arg[0],
+                                packet->arg[1],
+                                packet->arg[2],
+                                packet->arg[3]
+                                );
+                        break;
+                }
+                if (packet->completion_signal.handle != 0) {
+                    hsa_signal_subtract_release(packet->completion_signal, 1);
+                }
+                packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
+                break;
         }
         read_index++;
         hsa_queue_store_read_index_release(queue, read_index);

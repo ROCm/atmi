@@ -419,7 +419,7 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
 
 }                    
 
-void snk_cpu_kernel(const snk_lparm_t *lparm, 
+snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm, 
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
                  const uint32_t _KN__cpu_task_num_args) {
@@ -431,9 +431,6 @@ void snk_cpu_kernel(const snk_lparm_t *lparm,
             hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
             p = p->next;
         }
-    }
-    if ( lparm->needs != NULL) {
-        printf("\n THIS TASK NEEDS ONE OF A LIST OF PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
     }
     uint16_t i;
     set_cpu_kernel_table(_CN__CPU_kernels);
@@ -496,14 +493,14 @@ void snk_cpu_kernel(const snk_lparm_t *lparm,
             }
         }
     }
+    return (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);
 }
 
-void snk_kernel(const snk_lparm_t *lparm, 
+snk_task_t *snk_kernel(const snk_lparm_t *lparm, 
                  uint64_t                         _KN__Kernel_Object,
                  uint32_t                         _KN__Group_Segment_Size,
                  uint32_t                         _KN__Private_Segment_Size,
-                 void *thisKernargAddress,
-                 int needs_return_task) {
+                 void *thisKernargAddress) {
     /*  Get stream number from launch parameters.       */
     /*  This must be less than SNK_MAX_STREAMS.         */
     /*  If negative, then function call is synchrnous.  */
@@ -550,15 +547,12 @@ void snk_kernel(const snk_lparm_t *lparm,
 
     /*  FIXME: We need to check for queue overflow here. */
 
-    /* If this kernel was declared as snk_task_t*, then use preallocated signal */
-    if ( needs_return_task == 1) {
         if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
            printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
            return ;
         }
         /* hsa_signal_store_relaxed(SNK_Tasks[SNK_NextTaskId].signal,1); */
         this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].signal;
-    }
 
     if ( stream_num < 0 ) {
        /* Use the global synchrnous signal Sync_Signal */
@@ -609,7 +603,7 @@ void snk_kernel(const snk_lparm_t *lparm,
        hsa_signal_value_t value = hsa_signal_wait_acquire(Sync_Signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
     }
 
-    /*  *** END OF KERNEL LAUNCH TEMPLATE ***  */
+    return (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);
 }
 
 

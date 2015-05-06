@@ -151,14 +151,13 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             hsa_executable_t _CN__Executable
                             );
 
-void snk_kernel(const snk_lparm_t *lparm, 
+snk_task_t *snk_kernel(const snk_lparm_t *lparm, 
                  uint64_t                         _KN__Kernel_Object,
                  uint32_t                         _KN__Group_Segment_Size,
                  uint32_t                         _KN__Private_Segment_Size,
-                 void *thisKernargAddress,
-                 int needs_return_task);
+                 void *thisKernargAddress);
 
-void snk_cpu_kernel(const snk_lparm_t *lparm, 
+snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm, 
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
                  const uint32_t _KN__cpu_task_num_args);

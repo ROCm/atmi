@@ -252,22 +252,21 @@ EOF
 
 function write_cpu_kernel_template(){
 /bin/cat <<"EOF"
-    snk_cpu_kernel(lparm, 
+   return snk_cpu_kernel(lparm, 
                 _CN__CPU_kernels,
                 "_KN_",
                 _KN__cpu_task_num_args);
-    /*  *** END OF KERNEL LAUNCH TEMPLATE ***  */
+   /*  *** END OF KERNEL LAUNCH TEMPLATE ***  */
 EOF
 }
 
 function write_kernel_template(){
 /bin/cat <<"EOF"
-    snk_kernel(lparm, 
+   return snk_kernel(lparm, 
                 _KN__Kernel_Object, 
                 _KN__Group_Segment_Size,
                 _KN__Private_Segment_Size, 
-                thisKernargAddress,
-                needs_return_task
+                thisKernargAddress
                 );
     /*  *** END OF KERNEL LAUNCH TEMPLATE ***  */
 EOF
@@ -445,9 +444,7 @@ __SEDCMD=" "
       __KT=`echo $TYPE_NAME | awk '{print $1}'`
       __ARGL=${line#*(}
 #     force it to return pointer to snk_task_t
-      #if [ "$__KT" == "snk_task_t" ] ; then  
-         __KT="snk_task_t*" 
-      #fi
+      __KT="snk_task_t*" 
          
 
 #     Add the kernel initialization routine to the c wrapper
@@ -477,7 +474,7 @@ __SEDCMD=" "
             echo "extern ${__KT} ${__KN}_gpu($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
-      echo "    printf(\"In SNACK Kernel GPU Function\n\"); " >> $__CWRAP
+      echo "   printf(\"In SNACK Kernel GPU Function\n\"); " >> $__CWRAP
 	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
       echo "   if (${__KN}_FK == 0 ) { " >> $__CWRAP
       echo "     status_t status = ${__KN}_init(); " >> $__CWRAP
@@ -599,24 +596,10 @@ __SEDCMD=" "
          fi
       fi
 
-#     Make sure template knows when to allocate and bind a global signal for this function
-      #if [ $__KT == "snk_task_t*" ] ; then 
-         echo "   int needs_return_task = 1;" >>$__CWRAP
-      #else
-      #   echo "   int needs_return_task = 0;" >>$__CWRAP
-      #fi
-
 #     Now add the kernel template to wrapper and change all three strings
 #     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_
       write_kernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP
 
-#     if kernel is type snk_task_t*, then return &parentTask else return void 
-# FIXME: Need to rotate and reuse the task array!
-      #if [ $__KT == "snk_task_t*" ] ; then 
-         echo "    return (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);" >> $__CWRAP 
-      #else
-      #   echo "    return;" >> $__CWRAP 
-      #fi 
       echo "} " >> $__CWRAP 
       echo "/* ------  End of SNACK function ${__KN} ------ */ " >> $__CWRAP 
 
@@ -642,62 +625,12 @@ __SEDCMD=" "
       echo "     ${__KN}_FK = 1; " >> $__CWRAP
       echo "   } " >> $__CWRAP
 #     Write the structure definition for the kernel arguments.
-#     Consider eliminating global _KN__args and memcopy and write directly to thisKernargAddress.
-#     by writing these statements here:
-      echo "   /* Allocate the kernel argument buffer from the correct region. */ " >> $__CWRAP
-      echo "   void* thisKernargAddress; " >> $__CWRAP
-      echo "   /* FIXME: HSA 1.0F may have a bug that serializes all queue operations when hsa_memory_allocate is used. " >> $__CWRAP
-	  echo "	  Investigate more and revert back to hsa_memory_allocate once bug is fixed. */ " >> $__CWRAP
-	  #echo "   thisKernargAddress = malloc(${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
-      #echo "   int ret = posix_memalign(&thisKernargAddress, 4096, ${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
-	  echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
-#     How to map a structure into an malloced memory area?
-      echo "   struct ${__KN}_args_struct {" >> $__CWRAP
-      NEXTI=0
-      if [ $GENW_ADD_DUMMY ] ; then 
-         echo "      uint64_t arg0;"  >> $__CWRAP
-         echo "      uint64_t arg1;"  >> $__CWRAP
-         echo "      uint64_t arg2;"  >> $__CWRAP
-         echo "      uint64_t arg3;"  >> $__CWRAP
-         echo "      uint64_t arg4;"  >> $__CWRAP
-         echo "      uint64_t arg5;"  >> $__CWRAP
-         NEXTI=6
-      fi
-      IFS=","
-      for _val in $__ARGL ; do 
-         parse_arg $_val
-         if [ "$last_char" == "*" ] ; then 
-            echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
-         else
-            is_scalar $simple_arg_type
-            if [ $? == 1 ] ; then 
-               echo "      ${simple_arg_type} arg${NEXTI};"  >> $__CWRAP
-            else
-               echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
-            fi
-         fi
-         NEXTI=$(( NEXTI + 1 ))
-      done
-      echo "   } __attribute__ ((aligned (16))) ; "  >> $__CWRAP
-      echo "   struct ${__KN}_args_struct* ${__KN}_args ; "  >> $__CWRAP
-	  echo "   /* Setup kernel args */ " >> $__CWRAP
-	  echo "   ${__KN}_args = (struct ${__KN}_args_struct*) thisKernargAddress; " >> $__CWRAP
 
 #     Write statements to fill in the argument structure and 
 #     keep track of updated CL arg list and new call list 
 #     in case we have to create a wrapper CL function.
 #     to call the real kernel CL function. 
-      NEXTI=0
       NEXT_ARGI=0
-      if [ $GENW_ADD_DUMMY ] ; then 
-         echo "   ${__KN}_args->arg0=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args->arg1=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args->arg2=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args->arg3=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args->arg4=0 ; "  >> $__CWRAP
-         echo "   ${__KN}_args->arg5=0 ; "  >> $__CWRAP
-         NEXTI=6
-      fi
       KERN_NEEDS_CL_WRAPPER="FALSE"
       arglistw=""
       calllist=""
@@ -714,29 +647,25 @@ __SEDCMD=" "
          if [ "$last_char" == "*" ] ; then 
             arglistw="${arglistw}${sepchar}${arg_type} ${arg_name}"
             calllist="${calllist}${sepchar}${arg_name}"
-            echo "   ${__KN}_args->arg${NEXTI} = $arg_name ; "  >> $__CWRAP
             echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
          else
             is_scalar $simple_arg_type
             if [ $? == 1 ] ; then 
                arglistw="$arglistw${sepchar}${arg_type} $arg_name"
                calllist="${calllist}${sepchar}${arg_name}"
-               echo "   ${__KN}_args->arg${NEXTI} = $arg_name ; "  >> $__CWRAP
                echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
             else
                KERN_NEEDS_CL_WRAPPER="TRUE"
                arglistw="$arglistw${sepchar}${arg_type}* $arg_name"
                calllist="${calllist}${sepchar}${arg_name}[0]"
-               echo "   ${__KN}_args->arg${NEXTI} = &$arg_name ; "  >> $__CWRAP
                echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[${NEXT_ARGI}] = (uint64_t)&$arg_name; " >>$__CWRAP
             fi
          fi 
          sepchar=","
-         NEXTI=$(( NEXTI + 1 ))
          NEXT_ARGI=$(( NEXT_ARGI + 1 ))
       done
       
-      echo " ${__KN}_cpu_task_num_args = ${NEXT_ARGI}; " >> $__CWRAP;
+      echo "   ${__KN}_cpu_task_num_args = ${NEXT_ARGI}; " >> $__CWRAP;
 #     Write the extra CL if we found call-by-value structs and write the extra CL needed
       if [ "$KERN_NEEDS_CL_WRAPPER" == "TRUE" ] ; then 
          echo "__kernel void ${__WRAPPRE}$__KN($arglistw){ $__KN($calllist) ; } " >> $__EXTRACL
@@ -761,12 +690,6 @@ __SEDCMD=" "
          fi
       fi
 
-#     Make sure template knows when to allocate and bind a global signal for this function
-      #if [ $__KT == "snk_task_t*" ] ; then 
-         echo "   int needs_return_task = 1;" >>$__CWRAP
-      #else
-      #   echo "   int needs_return_task = 0;" >>$__CWRAP
-      #fi
       if (( ${NEXT_ARGI} == 0 )) ; then
         echo "   extern void ${__KN}(void);" >> $__CWRAP;
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
@@ -802,13 +725,6 @@ __SEDCMD=" "
 #     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_
       write_cpu_kernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP
 
-#     if kernel is type snk_task_t*, then return &parentTask else return void 
-# FIXME: Need to rotate and reuse the task array!
-      #if [ $__KT == "snk_task_t*" ] ; then 
-         echo "    return (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);" >> $__CWRAP 
-      #else
-      #   echo "    return;" >> $__CWRAP 
-      #fi 
       echo "} " >> $__CWRAP 
       echo "/* ------  End of SNACK function ${__KN}_cpu ------ */ " >> $__CWRAP 
 

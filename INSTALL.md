@@ -58,7 +58,7 @@ cd ~/git
 git clone https://github.com/HSAfoundation/HSA-Drivers-Linux-AMD.git
 sudo dpkg -i HSA-Drivers-Linux-AMD/kfd-1.2/ubuntu/*.deb
 echo "KERNEL==\"kfd\", MODE=\"0666\"" | sudo tee /etc/udev/rules.d/kfd.rules
-sudo cp HSA-Drivers-Linux-AMD/kfd-1.2/libhsakmt/lnx64a/libhsakmt.so.1 /opt/hsa/lib
+sudo cp HSA-Drivers-Linux-AMD/kfd-1.2/libhsakmt.so.1 /opt/hsa/lib
 ```
 
 ## Reboot System
@@ -113,12 +113,20 @@ As of Cloc version 0.9 the cl frontend clc2 and supporting LLVM 3.6 executables 
 ```
 cd ~/git
 git clone -b CLOC-0.9 https://github.com/HSAfoundation/CLOC.git
-mkdir -p /opt/amd/cloc/bin/
-sudo cp -rp CLOC/bin/ /opt/amd/cloc/bin/
-cd 
-cp -r git/CLOC/examples .
-cd examples/snack/helloworld
+# Install
+mkdir -p /opt/amd/cloc
+sudo cp -rp ~/git/CLOC/bin /opt/amd/cloc
+sudo cp -rp ~/git/CLOC/examples /opt/amd/cloc
+sudo ln -sf /opt/amd/cloc/bin/cloc.sh /usr/local/bin/cloc.sh
+sudo ln -sf /opt/amd/cloc/bin/snack.sh /usr/local/bin/snack.sh
+sudo ln -sf /opt/amd/cloc/bin/printhsail /usr/local/bin/printhsail
+# Test
+cp -r /opt/amd/cloc/examples ~
+cd ~/examples/snack/helloworld
 ./buildrun.sh
+cd ~/examples/hsa/vector_copy
+make
+make test
 ```
 
 ## Set HSA environment variables

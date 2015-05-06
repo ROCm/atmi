@@ -14,7 +14,7 @@ $(TEST_NAME): $(OBJ_FILES) $(COMMON_OBJ_FILES)
 	$(CC) $(LFLAGS) $(OBJ_FILES) -L$(HSA_RUNTIME_PATH)/lib -lhsa-runtime64 -o $(TEST_NAME)
 
 $(TEST_NAME).brig :
-	cloc $(TEST_NAME).cl
+	cloc.sh $(TEST_NAME).cl
 
 obj/%.o: %.c
 	$(CC) -c $(CFLAGS) $(INCS) -o $@ $< -std=c99

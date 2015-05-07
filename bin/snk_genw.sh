@@ -474,7 +474,7 @@ extern status_t _KN__init(){
 
     /* Extract the symbol from the executable.  */
     /* printf("Kernel name _KN__: Looking for symbol %s\n","__OpenCL__KN__kernel"); */
-    err = hsa_executable_get_symbol(_CN__Executable, "", "&__OpenCL__KN__kernel", _CN__Agent , 0, &_KN__Symbol);
+    err = hsa_executable_get_symbol(_CN__Executable, NULL, "&__OpenCL__KN__kernel", _CN__Agent , 0, &_KN__Symbol);
     ErrorCheck(Extract the symbol from the executable, err);
 
     /* Extract dispatch information from the symbol */

@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
     * Extract the symbol from the executable.
     */
     hsa_executable_symbol_t symbol;
-    err = hsa_executable_get_symbol(executable, "", "&__OpenCL_vector_copy_kernel", agent, 0, &symbol);
+    err = hsa_executable_get_symbol(executable, NULL, "&__OpenCL_vector_copy_kernel", agent, 0, &symbol);
     check(Extract the symbol from the executable, err);
 
     /*

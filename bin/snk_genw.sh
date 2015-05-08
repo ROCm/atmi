@@ -344,7 +344,7 @@ function parse_arg() {
    simple_arg_type=`echo $arg_type | awk '{print $NF}' | sed 's/\*//'`
 #  Drop keyword restrict from argument in host callable c function
    if [ "${simple_arg_type}" == "restrict" ] ; then 
-      arg_type=${arg_type%%restrict*}
+      arg_type=${arg_type%%[ *]restrict*}
       simple_arg_type=`echo $arg_type | awk '{print $NF}' | sed 's/\*//'`
    fi
    last_char="${arg_type: $((${#arg_type}-1)):1}"

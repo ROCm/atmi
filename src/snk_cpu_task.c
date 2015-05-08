@@ -44,9 +44,9 @@
 #include "snk_cpu_task.h"
 #include <assert.h>
 
-agent_t *agent;
+agent_t agent[SNK_MAX_CPU_STREAMS];
 
-hsa_signal_t worker_sig;
+hsa_signal_t worker_sig[SNK_MAX_CPU_STREAMS];
 
 pthread_t agent_threads[SNK_MAX_CPU_STREAMS];
 
@@ -59,16 +59,16 @@ void set_cpu_kernel_table(const cpu_kernel_table_t *kernel_table) {
 }
 
 hsa_queue_t* get_cpu_queue(int id) {
-    return agent->queues[id];
+    return agent[id].queue;
 }
 
-agent_t *get_cpu_q_agent() {
-    return agent;
+agent_t get_cpu_q_agent(int id) {
+    return agent[id];
 }
 
-void signal_worker(int signal) {
-    DEBUG_PRINT("Signaling work\n");
-    hsa_signal_store_release(worker_sig, signal);
+void signal_worker(int id, int signal) {
+    DEBUG_PRINT("Signaling work %d\n", signal);
+    hsa_signal_store_release(worker_sig[id], signal);
 }
 
 int is_barrier(uint16_t header) {
@@ -82,7 +82,7 @@ uint8_t get_packet_type(uint16_t header) {
     return (header >> HSA_PACKET_HEADER_TYPE) & 0xFF;
 }
 
-int process_packet(hsa_queue_t *queue)
+int process_packet(hsa_queue_t *queue, int id)
 {
     DEBUG_PRINT("Processing Packet from CPU Queue\n");
 
@@ -225,17 +225,23 @@ int process_packet(hsa_queue_t *queue)
 
     // Finishing this task may free up more tasks, so issue the wakeup command
     DEBUG_PRINT("Signaling more work\n");
-    hsa_signal_store_release(worker_sig, PROCESS_PKT);
+    hsa_signal_store_release(worker_sig[id], PROCESS_PKT);
     return 0;
 }
-
-void *agent_worker(void *agent_args)
-{
+#if 0
+void *agent_worker(void *agent_args) {
+    /* TODO: Investigate more if we really need the inter-thread worker signal. 
+     * Can we just do the below without hanging? */
+    agent_t *agent = (agent_t *) agent_args;
+    process_packet(agent->queue, agent->id);
+}
+#else
+void *agent_worker(void *agent_args) {
     agent_t *agent = (agent_t *) agent_args;
     hsa_signal_value_t sig_value = IDLE;
     while (sig_value == IDLE) {
         DEBUG_PRINT("Worker thread sleeping\n");
-        sig_value = hsa_signal_wait_acquire(worker_sig, HSA_SIGNAL_CONDITION_LT, IDLE,
+        sig_value = hsa_signal_wait_acquire(worker_sig[agent->id], HSA_SIGNAL_CONDITION_LT, IDLE,
                 UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         DEBUG_PRINT("Worker thread waking up\n");
 
@@ -244,38 +250,38 @@ void *agent_worker(void *agent_args)
             break;
         }
 
-        if (PROCESS_PKT == hsa_signal_cas_acq_rel(worker_sig,
+        if (PROCESS_PKT == hsa_signal_cas_acq_rel(worker_sig[agent->id],
                     PROCESS_PKT, IDLE) ) {
-            int i;
-            for (i = 0; i < agent->num_queues; i++) {
-                hsa_queue_t *queue = agent->queues[i];
-                if (!process_packet(queue)) continue;
-            }
+            hsa_queue_t *queue = agent->queue;
+            if (!process_packet(queue, agent->id)) continue;
         }
         sig_value = IDLE;
     }
     return NULL;
 }
-
+#endif
 void
 cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
-                const size_t num_queues, const size_t capacity,
-                const size_t num_workers) {
+                const size_t num_queues, const size_t capacity
+                ) {
     hsa_status_t err;
-    agent = (agent_t *)malloc(sizeof(agent_t));
-    agent->num_queues = num_queues;
-    agent->queues = (hsa_queue_t **)malloc(sizeof(hsa_queue_t*) * num_queues);
     uint32_t i;
     for (i = 0; i < num_queues; i++) {
+        agent[i].num_queues = num_queues;
+        agent[i].id = i;
+        // signal between the host thread and the CPU tasking queue thread
+        err = hsa_signal_create(IDLE, 0, NULL, &worker_sig[i]);
+        check(Creating a HSA signal for agent dispatch worker threads, err);
+
         hsa_signal_t db_signal;
         err = hsa_signal_create(1, 0, NULL, &db_signal);
         check(Creating a HSA signal for agent dispatch db signal, err);
 
         err = hsa_soft_queue_create(cpu_region, capacity, HSA_QUEUE_TYPE_SINGLE,
-                HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &(agent->queues[i]));
+                HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &(agent[i].queue));
         check(Creating an agent queue, err);
 
-        hsa_queue_t *q = agent->queues[i];
+        hsa_queue_t *q = agent[i].queue;
         /* FIXME: Looks like a nasty HSA bug. The doorbell signal that we pass to the 
          * soft queue creation API never seems to be set. Workaround is to 
          * manually set it again like below.
@@ -283,16 +289,12 @@ cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
         q->doorbell_signal = db_signal;
     }
 
-    // signal between the host thread and the CPU tasking queue thread
-    err = hsa_signal_create(IDLE, 0, NULL, &worker_sig);
-    check(Creating a HSA signal for agent dispatch worker threads, err);
-
-    numWorkers = num_workers;
+    numWorkers = num_queues;
     DEBUG_PRINT("Spawning %zu CPU execution threads\n",
-                 num_workers);
+                 numWorkers);
 
-    for (i = 0; i < num_workers; i++) {
-        pthread_create(&agent_threads[i], NULL, agent_worker, (void *)agent);
+    for (i = 0; i < numWorkers; i++) {
+        pthread_create(&agent_threads[i], NULL, agent_worker, (void *)&(agent[i]));
     }
 } 
 
@@ -300,22 +302,15 @@ cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
 void
 agent_fini()
 {
-   #if 1
     DEBUG_PRINT("SIGNALING EXIT\n");
-    hsa_signal_store_release(worker_sig, FINISH);
 
     /* wait for the other threads */
     uint32_t i;
     for (i = 0; i < numWorkers; i++) {
+        hsa_signal_store_release(worker_sig[i], FINISH);
         pthread_join(agent_threads[i], NULL);
+        hsa_queue_destroy(agent[i].queue);
     }
 
-    for (i = 0; i < agent->num_queues; i++) {
-        hsa_queue_destroy(agent->queues[i]);
-    }
-
-    free(agent->queues);
-    free(agent);
-    #endif
     DEBUG_PRINT("agent_fini completed\n");
 }

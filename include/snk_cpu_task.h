@@ -52,8 +52,8 @@ if (status != HSA_STATUS_SUCCESS) { \
     printf("%s failed.\n", #msg); \
     exit(1); \
 }
-#define DEBUG_SNK
-#define VERBOSE_SNK
+//#define DEBUG_SNK
+//#define VERBOSE_SNK
 #ifdef DEBUG_SNK
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else
@@ -96,7 +96,8 @@ typedef struct cpu_kernel_table_s {
 typedef struct agent_t
 {
   int num_queues;
-  hsa_queue_t **queues;
+  int id;
+  hsa_queue_t *queue;
   //hsa_agent_t cpu_agent;
   //hsa_region_t cpu_region;
 } agent_t;
@@ -105,14 +106,15 @@ typedef struct agent_t
  * Simulated CPU Management API
  * --------------------------------------------------------------------------------- */
 void set_cpu_kernel_table(const cpu_kernel_table_t *kernel_table); 
-agent_t *get_cpu_q_agent();
+agent_t get_cpu_q_agent(int id);
 void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
-                const size_t num_queues, const size_t capacity,
-                const size_t num_workers);
+                const size_t num_queues, const size_t capacity
+                );
 void agent_fini();
 hsa_queue_t* get_cpu_queue(int id);
-void signal_worker(int signal);
+void signal_worker(int id, int signal);
 void *agent_worker(void *agent_args);
+int process_packet(hsa_queue_t *queue, int id);
 
 #ifdef __cplusplus
 } //end extern "C" block

@@ -199,7 +199,7 @@ void barrier_sync(int stream_num, const int dep_task_count, snk_task_t **dep_tas
         for(dep_signal_id = 0; dep_signal_id < HSA_BARRIER_MAX_DEPENDENT_TASKS; dep_signal_id++) {
             if(tasks != NULL) {
                 /* fill out the barrier packet and ring doorbell */
-                barrier->dep_signal[dep_signal_id] = tasks->signal; 
+                barrier->dep_signal[dep_signal_id] = tasks->handle; 
                 tasks++;
             }
         }
@@ -219,7 +219,7 @@ void barrier_sync(int stream_num, const int dep_task_count, snk_task_t **dep_tas
 #endif
 extern void snk_task_wait(const snk_task_t *task) {
     if(task != NULL) {
-        hsa_signal_wait_acquire(task->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+        hsa_signal_wait_acquire(task->handle, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
     }
 }
 
@@ -351,8 +351,7 @@ status_t snk_init_context(
 
     int num_queues = SNK_MAX_CPU_STREAMS;
     int queue_capacity = 32768;
-    int num_workers = SNK_MAX_CPU_STREAMS;
-    cpu_agent_init(*_CN__CPU_Agent, *_CN__CPU_KernargRegion, num_queues, queue_capacity, num_workers);
+    cpu_agent_init(*_CN__CPU_Agent, *_CN__CPU_KernargRegion, num_queues, queue_capacity);
 
     /* Iterate over the agents and pick the gpu agent */
     err = hsa_iterate_agents(get_gpu_agent, _CN__Agent);
@@ -429,7 +428,7 @@ status_t snk_init_context(
     /* Initialize all preallocated tasks and signals */
     for ( task_num = 0 ; task_num < SNK_MAX_TASKS; task_num++){
        //SNK_Tasks[task_num].next = NULL;
-       err=hsa_signal_create(1, 0, NULL, &(SNK_Tasks[task_num].signal));
+       err=hsa_signal_create(1, 0, NULL, &(SNK_Tasks[task_num].handle));
        ErrorCheck(Creating a HSA signal, err);
     }
 
@@ -491,11 +490,11 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
         }
     }
     #else
-    if ( lparm->num_tasks_in_wait_tasks > 0) {
+    if ( lparm->num_tasks_in_wait_list > 0) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
         snk_task_t **p = lparm->task_wait_list;
         int idx; 
-        for(idx = 0; idx < lparm->num_tasks_in_wait_tasks; idx++) {
+        for(idx = 0; idx < lparm->num_tasks_in_wait_list; idx++) {
             snk_task_wait(p[idx]);
         }
     }
@@ -513,9 +512,9 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                 /* FIXME: Add support for more queues by passing a q_id arg to
                  * this function
                  */
-                int q_id = 0;
-                agent_t *agent = get_cpu_q_agent();
-                hsa_queue_t *this_Q = agent->queues[q_id];
+                int q_id = lparm->stream;
+                agent_t agent = get_cpu_q_agent(q_id);
+                hsa_queue_t *this_Q = agent.queue;
 
                 uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
                 /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
@@ -549,7 +548,7 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                     return ;
                 }
                 /* hsa_signal_store_relaxed(SNK_Tasks[SNK_NextTaskId].signal,1); */
-                this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].signal;
+                this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].handle;
 
                 /*  Prepare and set the packet header */ 
                 /* Only set barrier bit if asynchrnous execution */
@@ -558,7 +557,7 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                 /* Increment write index and ring doorbell to dispatch the kernel.  */
                 hsa_queue_store_write_index_relaxed(this_Q, index+1);
                 hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-                signal_worker(PROCESS_PKT);
+                signal_worker(q_id, PROCESS_PKT);
             }
         }
     }
@@ -587,20 +586,20 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
     }
 
     //if ( lparm->requires != NULL) {
-    if ( lparm->num_tasks_in_wait_tasks > 0) {
+    if ( lparm->num_tasks_in_wait_list > 0) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
         /* FIXME: To use multiple barrier AND packets or individual waiting for better performance? 
            KPS benchmark showed that barrier AND was a lot slower, but will keep both implementations
            for future use */
 #if 1
 #if 0
-        barrier_sync(stream_num, lparm->num_tasks_in_wait_tasks, lparm->task_wait_list);
+        barrier_sync(stream_num, lparm->num_tasks_in_wait_list, lparm->task_wait_list);
         //barrier_sync(stream_num, lparm->requires);
 #else
         /* For dependent child tasks, wait till all parent kernels are finished.  */
         snk_task_t **p = lparm->task_wait_list;
         int idx; 
-        for(idx = 0; idx < lparm->num_tasks_in_wait_tasks; idx++) {
+        for(idx = 0; idx < lparm->num_tasks_in_wait_list; idx++) {
             snk_task_wait(p[idx]);
         }
         /* 
@@ -613,9 +612,6 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
 #endif
 #endif
     }
-    //if ( lparm->needs != NULL) {
-    //   printf("\n THIS TASK NEEDS ONE OF A LIST OF PARENTS TO COMPLETE BEFORE THIS TASK STARTS \n\n");
-    //}
     /*  Obtain the current queue write index. increases with each call to kernel  */
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
     /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
@@ -631,7 +627,7 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
            return ;
         }
         /* hsa_signal_store_relaxed(SNK_Tasks[SNK_NextTaskId].signal,1); */
-        this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].signal;
+        this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].handle;
 
     if ( stream_num < 0 ) {
        /* Use the global synchrnous signal Sync_Signal */

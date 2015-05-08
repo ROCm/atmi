@@ -71,7 +71,7 @@ typedef enum status_t status_t;
 
 #define SNK_MAX_STREAMS 8 
 #define SNK_MAX_TASKS 100001
-#define SNK_MAX_CPU_STREAMS 1
+#define SNK_MAX_CPU_STREAMS 4
 #define SNK_MAX_CPU_FUNCTIONS   100
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
@@ -90,9 +90,10 @@ enum _snk_device_type_t {
 };
 typedef enum _snk_device_type_t snk_device_type_t;
 
+typedef hsa_signal_t snk_handle_t;
 typedef struct snk_task_s snk_task_t;
 struct snk_task_s { 
-    hsa_signal_t signal ; 
+    snk_handle_t handle; 
     //   snk_task_t* next;
 };
 
@@ -105,8 +106,8 @@ struct snk_lparm_s {
    int barrier;               /* default = SNK_UNORDERED */
    int acquire_fence_scope;   /* default = 2 */
    int release_fence_scope;   /* default = 2 */
-   int num_tasks_in_wait_tasks;
-   snk_task_t** task_wait_list;
+   int num_tasks_in_wait_list;  /* Number of dependent parent tasks, default = 0 */
+   snk_task_t** task_wait_list; /* Array of task pointers to dependent parent tasks, default = NULL */
    //snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
    //snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
    snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
@@ -116,9 +117,9 @@ struct snk_lparm_s {
 //#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
 //#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_list=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_list=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -168,9 +169,6 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                  const uint32_t _KN__cpu_task_num_args);
 
 uint16_t create_header(hsa_packet_type_t type, int barrier);
-void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
-                const size_t num_queues, const size_t capacity,
-                const size_t num_workers);
 
 #define KERNEL_STRUCT_IMPL(name) name##_args_struct
 #define KERNEL_STRUCT(name) KERNEL_STRUCT_IMPL(name)

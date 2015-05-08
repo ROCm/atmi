@@ -108,7 +108,9 @@ enum status_t {
 typedef enum status_t status_t;
 
 #define SNK_MAX_STREAMS 8 
-#define SNK_MAX_TASKS 253
+#define SNK_MAX_TASKS 100001
+#define SNK_MAX_CPU_STREAMS 1
+#define SNK_MAX_CPU_FUNCTIONS   100
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
 #define SNK_ORDERED 1
@@ -127,9 +129,10 @@ enum _snk_device_type_t {
 
 typedef enum _snk_device_type_t snk_device_type_t;
 
+typedef hsa_signal_t snk_handle_t;
 typedef struct snk_task_s snk_task_t;
 struct snk_task_s { 
-    hsa_signal_t signal ; 
+    snk_handle_t handle; 
     //   snk_task_t* next;
 };
 
@@ -142,8 +145,8 @@ struct snk_lparm_s {
    int barrier;               /* default = SNK_UNORDERED */
    int acquire_fence_scope;   /* default = 2 */
    int release_fence_scope;   /* default = 2 */
-   int num_tasks_in_wait_tasks;
-   snk_task_t** task_wait_list;
+   int num_tasks_in_wait_list;  /* Number of dependent parent tasks, default = 0 */
+   snk_task_t** task_wait_list; /* Array of task pointers to dependent parent tasks, default = NULL */
    //snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
    //snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
    snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
@@ -154,9 +157,9 @@ struct snk_lparm_s {
  
 //#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_list=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_list=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
 struct snk_image3d_s { 
@@ -506,7 +509,7 @@ __SEDCMD=" "
             echo "extern ${__KT} ${__KN}_gpu($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
-      echo "   printf(\"In SNACK Kernel GPU Function\n\"); " >> $__CWRAP
+      echo "   printf(\"In SNACK Kernel GPU Function ${__KN}\n\"); " >> $__CWRAP
 	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
       echo "   if (${__KN}_FK == 0 ) { " >> $__CWRAP
       echo "     status_t status = ${__KN}_init(); " >> $__CWRAP
@@ -622,7 +625,7 @@ __SEDCMD=" "
          fi
       fi
  
-      echo "    printf(\"In SNACK Kernel CPU Function\n\"); " >> $__CWRAP
+      echo "   printf(\"In SNACK Kernel CPU Function ${__KN}\n\"); " >> $__CWRAP
 	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
       echo "   if (${__KN}_FK == 0 ) { " >> $__CWRAP
       echo "     status_t status = ${__KN}_init(); " >> $__CWRAP

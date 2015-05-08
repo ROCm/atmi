@@ -71,7 +71,7 @@ typedef enum status_t status_t;
 
 #define SNK_MAX_STREAMS 8 
 #define SNK_MAX_TASKS 100001
-#define SNK_MAX_CPU_STREAMS 2 
+#define SNK_MAX_CPU_STREAMS 1
 #define SNK_MAX_CPU_FUNCTIONS   100
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
@@ -92,8 +92,8 @@ typedef enum _snk_device_type_t snk_device_type_t;
 
 typedef struct snk_task_s snk_task_t;
 struct snk_task_s { 
-   hsa_signal_t signal ; 
-   snk_task_t* next;
+    hsa_signal_t signal ; 
+    //   snk_task_t* next;
 };
 
 typedef struct snk_lparm_s snk_lparm_t;
@@ -105,15 +105,20 @@ struct snk_lparm_s {
    int barrier;               /* default = SNK_UNORDERED */
    int acquire_fence_scope;   /* default = 2 */
    int release_fence_scope;   /* default = 2 */
-   snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
-   snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
+   int num_tasks_in_wait_tasks;
+   snk_task_t** task_wait_list;
+   //snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
+   //snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
    snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+//#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
+//#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+ 
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
@@ -166,5 +171,32 @@ uint16_t create_header(hsa_packet_type_t type, int barrier);
 void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
                 const size_t num_queues, const size_t capacity,
                 const size_t num_workers);
+
+#define KERNEL_STRUCT_IMPL(name) name##_args_struct
+#define KERNEL_STRUCT(name) KERNEL_STRUCT_IMPL(name)
+
+typedef struct snk_kernel_args_s {
+    uint64_t arg0; 
+    uint64_t arg1; 
+    uint64_t arg2; 
+    uint64_t arg3; 
+    uint64_t arg4; 
+    uint64_t arg5; 
+    uint64_t arg6; 
+    uint64_t arg7; 
+    uint64_t arg8; 
+    uint64_t arg9; 
+    uint64_t arg10; 
+    uint64_t arg11; 
+    uint64_t arg12; 
+    uint64_t arg13; 
+    uint64_t arg14; 
+    uint64_t arg15; 
+    uint64_t arg16; 
+    uint64_t arg17; 
+    uint64_t arg18; 
+    uint64_t arg19; 
+} snk_kernel_args_t;
+
 #define __SNK_DEFS
 #endif //__SNK_DEFS

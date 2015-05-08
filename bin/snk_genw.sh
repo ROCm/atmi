@@ -129,8 +129,8 @@ typedef enum _snk_device_type_t snk_device_type_t;
 
 typedef struct snk_task_s snk_task_t;
 struct snk_task_s { 
-   hsa_signal_t signal ; 
-   snk_task_t* next;
+    hsa_signal_t signal ; 
+    //   snk_task_t* next;
 };
 
 typedef struct snk_lparm_s snk_lparm_t;
@@ -142,16 +142,21 @@ struct snk_lparm_s {
    int barrier;               /* default = SNK_UNORDERED */
    int acquire_fence_scope;   /* default = 2 */
    int release_fence_scope;   /* default = 2 */
-   snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
-   snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
+   int num_tasks_in_wait_tasks;
+   snk_task_t** task_wait_list;
+   //snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
+   //snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
    snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+//#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
+//#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+ 
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_tasks=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
 struct snk_image3d_s { 
@@ -463,6 +468,33 @@ __SEDCMD=" "
       done
 
 #     Write start of the SNACK function
+      echo "   struct ${__KN}_args_struct {" >> $__CWRAP
+      NEXTI=0
+      if [ $GENW_ADD_DUMMY ] ; then 
+         echo "      uint64_t arg0;"  >> $__CWRAP
+         echo "      uint64_t arg1;"  >> $__CWRAP
+         echo "      uint64_t arg2;"  >> $__CWRAP
+         echo "      uint64_t arg3;"  >> $__CWRAP
+         echo "      uint64_t arg4;"  >> $__CWRAP
+         echo "      uint64_t arg5;"  >> $__CWRAP
+         NEXTI=6
+      fi
+      IFS=","
+      for _val in $__ARGL ; do 
+         parse_arg $_val
+         if [ "$last_char" == "*" ] ; then 
+            echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
+         else
+            is_scalar $simple_arg_type
+            if [ $? == 1 ] ; then 
+               echo "      ${simple_arg_type} arg${NEXTI};"  >> $__CWRAP
+            else
+               echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
+            fi
+         fi
+         NEXTI=$(( NEXTI + 1 ))
+      done
+      echo "   } __attribute__ ((aligned (16))) ; "  >> $__CWRAP
       echo "/* ------  Start of SNACK function ${__KN} ------ */ " >> $__CWRAP 
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        Add underscore to kernel name and resolve lparm pointer 
@@ -492,33 +524,6 @@ __SEDCMD=" "
       #echo "   int ret = posix_memalign(&thisKernargAddress, 4096, ${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
 	  echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
 #     How to map a structure into an malloced memory area?
-      echo "   struct ${__KN}_args_struct {" >> $__CWRAP
-      NEXTI=0
-      if [ $GENW_ADD_DUMMY ] ; then 
-         echo "      uint64_t arg0;"  >> $__CWRAP
-         echo "      uint64_t arg1;"  >> $__CWRAP
-         echo "      uint64_t arg2;"  >> $__CWRAP
-         echo "      uint64_t arg3;"  >> $__CWRAP
-         echo "      uint64_t arg4;"  >> $__CWRAP
-         echo "      uint64_t arg5;"  >> $__CWRAP
-         NEXTI=6
-      fi
-      IFS=","
-      for _val in $__ARGL ; do 
-         parse_arg $_val
-         if [ "$last_char" == "*" ] ; then 
-            echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
-         else
-            is_scalar $simple_arg_type
-            if [ $? == 1 ] ; then 
-               echo "      ${simple_arg_type} arg${NEXTI};"  >> $__CWRAP
-            else
-               echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
-            fi
-         fi
-         NEXTI=$(( NEXTI + 1 ))
-      done
-      echo "   } __attribute__ ((aligned (16))) ; "  >> $__CWRAP
       echo "   struct ${__KN}_args_struct* ${__KN}_args ; "  >> $__CWRAP
 	  echo "   /* Setup kernel args */ " >> $__CWRAP
 	  echo "   ${__KN}_args = (struct ${__KN}_args_struct*) thisKernargAddress; " >> $__CWRAP

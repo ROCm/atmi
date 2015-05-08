@@ -112,6 +112,7 @@ void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
 void agent_fini();
 hsa_queue_t* get_cpu_queue(int id);
 void signal_worker(int signal);
+void *agent_worker(void *agent_args);
 
 #ifdef __cplusplus
 } //end extern "C" block

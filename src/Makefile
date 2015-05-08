@@ -20,7 +20,7 @@ $(LIB): $(OBJS)
 	$(CC) -shared $(LIB_FLAGS) -o $@ $^ 	
 #	$(AR) $(ARFLAGS) $@ $^
 
-%.o: %.c
+%.o: %.c ../include/%.h
 	$(CC) -o $@ $(INC_FLAGS) $(CFLAGS) $< $(LIB_FLAGS)
 
 install: $(LIB)

@@ -139,6 +139,9 @@ int process_packet(hsa_queue_t *queue)
                     if(packet->arg[num_args] == UINT64_MAX) break;
                     //_CN__CPU_kernels[packet->type].ptrs[num_args] = packet->arg[num_args];
                 }
+                const char *kernel_name = _CN__CPU_kernels[packet->type].name;
+                struct KERNEL_STRUCT(kernel_name) *kernel_args;
+
                 switch(num_args) {
                     case 0: 
                         ;
@@ -154,6 +157,7 @@ int process_packet(hsa_queue_t *queue)
                         ;
                         void (*function1) (uint64_t) =
                             (void (*)(uint64_t)) _CN__CPU_kernels[packet->type].function.function1;
+                        kernel_args = (struct KERNEL_STRUCT(kernel_name) *)packet->arg[0];
                         /*DEBUG_PRINT("Args: %" PRIu64 "\n", 
                           packet->arg[0]
                           );*/

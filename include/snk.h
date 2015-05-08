@@ -166,35 +166,9 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
 snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm, 
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
-                 const uint32_t _KN__cpu_task_num_args);
+                 const uint32_t _KN__cpu_task_num_args,
+                 const snk_kernel_args_t *kernel_args);
 
 uint16_t create_header(hsa_packet_type_t type, int barrier);
-
-#define KERNEL_STRUCT_IMPL(name) name##_args_struct
-#define KERNEL_STRUCT(name) KERNEL_STRUCT_IMPL(name)
-
-typedef struct snk_kernel_args_s {
-    uint64_t arg0; 
-    uint64_t arg1; 
-    uint64_t arg2; 
-    uint64_t arg3; 
-    uint64_t arg4; 
-    uint64_t arg5; 
-    uint64_t arg6; 
-    uint64_t arg7; 
-    uint64_t arg8; 
-    uint64_t arg9; 
-    uint64_t arg10; 
-    uint64_t arg11; 
-    uint64_t arg12; 
-    uint64_t arg13; 
-    uint64_t arg14; 
-    uint64_t arg15; 
-    uint64_t arg16; 
-    uint64_t arg17; 
-    uint64_t arg18; 
-    uint64_t arg19; 
-} snk_kernel_args_t;
-
 #define __SNK_DEFS
 #endif //__SNK_DEFS

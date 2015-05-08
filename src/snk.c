@@ -478,7 +478,8 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
 snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm, 
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
-                 const uint32_t _KN__cpu_task_num_args) {
+                 const uint32_t _KN__cpu_task_num_args,
+                 const snk_kernel_args_t *kernel_args) {
     /* Iterate over function table and retrieve the ID for kernel_name */
     #if 0
     if ( lparm->requires != NULL) {
@@ -531,16 +532,10 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                 this_aql->type = (uint16_t)i;
                 //this_aql->return_address = NULL;
                 /* Set function args */
-                struct KERNEL_STRUCT(kernel_name) *kernel_args;
-                int arg_id = 0;
-                for(arg_id = 0; arg_id < _KN__cpu_task_num_args; arg_id++) {
-                    this_aql->arg[arg_id] = _CN__CPU_kernels[i].ptrs[arg_id];
-                }
-                for(; arg_id < 4; arg_id++) {
-                    /* this will let the consumer know when to stop processing
-                     * args */
-                    this_aql->arg[arg_id] = UINT64_MAX;
-                }
+                this_aql->arg[0] = _KN__cpu_task_num_args;
+                this_aql->arg[1] = (uint64_t) kernel_args;
+                this_aql->arg[2] = UINT64_MAX;
+                this_aql->arg[3] = UINT64_MAX;
 
                 /* If this kernel was declared as snk_task_t*, then use preallocated signal */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {

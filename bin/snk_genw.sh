@@ -263,7 +263,8 @@ function write_cpu_kernel_template(){
    return snk_cpu_kernel(lparm, 
                 _CN__CPU_kernels,
                 "_KN_",
-                _KN__cpu_task_num_args);
+                _KN__cpu_task_num_args,
+                cpu_kernel_arg_list);
    /*  *** END OF KERNEL LAUNCH TEMPLATE ***  */
 EOF
 }
@@ -366,7 +367,7 @@ function parse_arg() {
       simple_arg_type="int"
       arg_type="unsigned short int${__lc}"
    fi
-#   echo "arg_name:$arg_name arg_type:$arg_type  simple_arg_type:$simple_arg_type"
+#   echo "arg_name:$arg_name arg_type:$arg_type  simple_arg_type:$simple_arg_type last_char:$last_char"
 }
 
 #  snk_genw starts here
@@ -471,33 +472,6 @@ __SEDCMD=" "
       done
 
 #     Write start of the SNACK function
-      echo "   struct ${__KN}_args_struct {" >> $__CWRAP
-      NEXTI=0
-      if [ $GENW_ADD_DUMMY ] ; then 
-         echo "      uint64_t arg0;"  >> $__CWRAP
-         echo "      uint64_t arg1;"  >> $__CWRAP
-         echo "      uint64_t arg2;"  >> $__CWRAP
-         echo "      uint64_t arg3;"  >> $__CWRAP
-         echo "      uint64_t arg4;"  >> $__CWRAP
-         echo "      uint64_t arg5;"  >> $__CWRAP
-         NEXTI=6
-      fi
-      IFS=","
-      for _val in $__ARGL ; do 
-         parse_arg $_val
-         if [ "$last_char" == "*" ] ; then 
-            echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
-         else
-            is_scalar $simple_arg_type
-            if [ $? == 1 ] ; then 
-               echo "      ${simple_arg_type} arg${NEXTI};"  >> $__CWRAP
-            else
-               echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
-            fi
-         fi
-         NEXTI=$(( NEXTI + 1 ))
-      done
-      echo "   } __attribute__ ((aligned (16))) ; "  >> $__CWRAP
       echo "/* ------  Start of SNACK function ${__KN} ------ */ " >> $__CWRAP 
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        Add underscore to kernel name and resolve lparm pointer 
@@ -527,6 +501,33 @@ __SEDCMD=" "
       #echo "   int ret = posix_memalign(&thisKernargAddress, 4096, ${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
 	  echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
 #     How to map a structure into an malloced memory area?
+      echo "   struct ${__KN}_args_struct {" >> $__CWRAP
+      NEXTI=0
+      if [ $GENW_ADD_DUMMY ] ; then 
+         echo "      uint64_t arg0;"  >> $__CWRAP
+         echo "      uint64_t arg1;"  >> $__CWRAP
+         echo "      uint64_t arg2;"  >> $__CWRAP
+         echo "      uint64_t arg3;"  >> $__CWRAP
+         echo "      uint64_t arg4;"  >> $__CWRAP
+         echo "      uint64_t arg5;"  >> $__CWRAP
+         NEXTI=6
+      fi
+      IFS=","
+      for _val in $__ARGL ; do 
+         parse_arg $_val
+         if [ "$last_char" == "*" ] ; then 
+            echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
+         else
+            is_scalar $simple_arg_type
+            if [ $? == 1 ] ; then 
+               echo "      ${simple_arg_type} arg${NEXTI};"  >> $__CWRAP
+            else
+               echo "      ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
+            fi
+         fi
+         NEXTI=$(( NEXTI + 1 ))
+      done
+      echo "   } __attribute__ ((aligned (16))) ; "  >> $__CWRAP
       echo "   struct ${__KN}_args_struct* ${__KN}_args ; "  >> $__CWRAP
 	  echo "   /* Setup kernel args */ " >> $__CWRAP
 	  echo "   ${__KN}_args = (struct ${__KN}_args_struct*) thisKernargAddress; " >> $__CWRAP
@@ -556,9 +557,6 @@ __SEDCMD=" "
 #        These echo statments help debug a lot
 #        echo "simple_arg_type=|${simple_arg_type}|" 
 #        echo "arg_type=|${arg_type}|" 
-         if [ $NEXT_ARGI == 4 ] ; then 
-            echo "ERROR!! HSA Supports only 4 args in the soft queue!!"
-         fi
          if [ "$last_char" == "*" ] ; then 
             arglistw="${arglistw}${sepchar}${arg_type} ${arg_name}"
             calllist="${calllist}${sepchar}${arg_name}"
@@ -633,7 +631,7 @@ __SEDCMD=" "
       echo "     ${__KN}_FK = 1; " >> $__CWRAP
       echo "   } " >> $__CWRAP
 #     Write the structure definition for the kernel arguments.
-
+      echo "   snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); " >> $__CWRAP
 #     Write statements to fill in the argument structure and 
 #     keep track of updated CL arg list and new call list 
 #     in case we have to create a wrapper CL function.
@@ -649,24 +647,24 @@ __SEDCMD=" "
 #        These echo statments help debug a lot
 #        echo "simple_arg_type=|${simple_arg_type}|" 
 #        echo "arg_type=|${arg_type}|" 
-         if [ $NEXT_ARGI == 4 ] ; then 
-            echo "ERROR!! HSA Supports only 4 args in the soft queue!!"
+         if [ $NEXT_ARGI == 20 ] ; then 
+            echo "ERROR! SNACK supports only up to 20 args for CPU tasks!"
          fi
          if [ "$last_char" == "*" ] ; then 
             arglistw="${arglistw}${sepchar}${arg_type} ${arg_name}"
             calllist="${calllist}${sepchar}${arg_name}"
-            echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
+            echo "   cpu_kernel_arg_list->args[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
          else
             is_scalar $simple_arg_type
             if [ $? == 1 ] ; then 
                arglistw="$arglistw${sepchar}${arg_type} $arg_name"
                calllist="${calllist}${sepchar}${arg_name}"
-               echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
+               echo "   cpu_kernel_arg_list->args[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
             else
                KERN_NEEDS_CL_WRAPPER="TRUE"
                arglistw="$arglistw${sepchar}${arg_type}* $arg_name"
                calllist="${calllist}${sepchar}${arg_name}[0]"
-               echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[${NEXT_ARGI}] = (uint64_t)&$arg_name; " >>$__CWRAP
+               echo "   cpu_kernel_arg_list->args[${NEXT_ARGI}] = (uint64_t)&$arg_name; " >>$__CWRAP
             fi
          fi 
          sepchar=","
@@ -698,36 +696,20 @@ __SEDCMD=" "
          fi
       fi
 
+      echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
       if (( ${NEXT_ARGI} == 0 )) ; then
         echo "   extern void ${__KN}(void);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
         echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function0=${__KN}; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[0] = (uint64_t)0; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[1] = (uint64_t)0; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
-      elif (( ${NEXT_ARGI} == 1 )) ; then
-        echo "   extern void ${__KN}(uint64_t);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function1=${__KN}; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[1] = (uint64_t)0; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
-      elif (( ${NEXT_ARGI} == 2 )) ; then
-        echo "   extern void ${__KN}(uint64_t, uint64_t);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function2=${__KN}; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[2] = (uint64_t)0; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
-      elif (( ${NEXT_ARGI} == 3 )) ; then
-        echo "   extern void ${__KN}(uint64_t, uint64_t, uint64_t);" >> $__CWRAP;
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function3=${__KN}; " >>$__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].ptrs[3] = (uint64_t)0; " >>$__CWRAP
-      elif (( ${NEXT_ARGI} == 4 )) ; then
-        echo "   extern void ${__KN}(uint64_t, uint64_t, uint64_t, uint64_t);" >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
-        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function4=${__KN}; " >>$__CWRAP
+      elif (( ${NEXT_ARGI} <= 20 )) ; then
+        printf "   extern void ${__KN}(uint64_t" >> $__CWRAP
+        for(( arg_id=2 ; arg_id<=${NEXT_ARGI}; arg_id++ ))
+        do 
+            printf ', uint64_t' >> $__CWRAP; 
+        done
+        printf ');\n' >> $__CWRAP
+        echo "   ${__SN}_CPU_kernels[${__KN_NUM}].function.function${NEXT_ARGI}=${__KN}; " >>$__CWRAP
+      else
+        echo "ERROR! SNACK supports only up to 20 args for CPU tasks!"
       fi
 #     Now add the kernel template to wrapper and change all three strings
 #     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_

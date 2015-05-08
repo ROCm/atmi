@@ -79,6 +79,13 @@ enum {
     IDLE
 };
 
+#define COMMA ,
+#define REPEAT(name)   COMMA name
+#define REPEAT2(name)  REPEAT(name)   REPEAT(name) 
+#define REPEAT4(name)  REPEAT2(name)  REPEAT2(name)
+#define REPEAT8(name)  REPEAT4(name)  REPEAT4(name)
+#define REPEAT16(name) REPEAT8(name) REPEAT8(name)
+
 typedef struct cpu_kernel_table_s {
     const char *name; 
     union {
@@ -87,9 +94,120 @@ typedef struct cpu_kernel_table_s {
         void (*function2) (uint64_t,uint64_t);
         void (*function3) (uint64_t,uint64_t,uint64_t);
         void (*function4) (uint64_t,uint64_t,uint64_t,uint64_t);
+        void (*function5) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function6) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function7) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function8) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function9) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function10) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function11) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function12) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function13) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function14) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function15) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function16) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function17) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function18) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function19) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function20) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
     } function;
-    uint64_t ptrs[4];
 } cpu_kernel_table_t;
+
+
+#define KERNEL_STRUCT_IMPL(name) name##_args_struct
+#define KERNEL_STRUCT(name) KERNEL_STRUCT_IMPL(name)
+
+typedef struct snk_kernel_args_s {
+    uint64_t args[20];
+} snk_kernel_args_t;
 
 
 

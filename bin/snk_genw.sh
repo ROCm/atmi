@@ -206,7 +206,7 @@ status_t _CN__InitContext(){
        How to get rid of the warning "note: expected ‘char **’ but argument is of type ‘char (*)[]’"?
     */
     /* Load the BRIG binary.  */
-    _CN__BrigModule = (hsa_ext_module_t*) &HSA_BrigMem;
+    _CN__BrigModule = (hsa_ext_module_t*) &_CN__HSA_BrigMem;
     return snk_init_context(&_CN__Agent, 
                             &_CN__BrigModule, 
                             &_CN__HsaProgram, 

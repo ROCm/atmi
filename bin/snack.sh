@@ -506,7 +506,7 @@ else
 if [ $DRYRUN ] ; then
    echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
 else
-   echo "char HSA_BrigMem[] = {" > $FULLBRIGHFILE
+   echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLBRIGHFILE
    hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLBRIGHFILE
    rc=$?
    if [ $rc != 0 ] ; then 
@@ -514,7 +514,7 @@ else
       exit $rc
    fi
    echo "};" >> $FULLBRIGHFILE
-   echo "size_t HSA_BrigMemSz = sizeof(HSA_BrigMem);" >> $FULLBRIGHFILE
+   echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLBRIGHFILE
 fi
 
 

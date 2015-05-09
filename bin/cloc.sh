@@ -6,7 +6,7 @@
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.9.0
+PROGVERSION=0.9.1
 #
 # Copyright (c) 2014 ADVANCED MICRO DEVICES, INC.  
 # 

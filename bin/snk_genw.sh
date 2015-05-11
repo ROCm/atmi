@@ -241,6 +241,7 @@ function write_KernelStatics_template(){
 hsa_executable_symbol_t          _KN__Symbol;
 int                              _KN__FK = 0 ; 
 status_t                         _KN__init();
+status_t                         _KN__stop();
 uint64_t                         _KN__Kernel_Object;
 uint32_t                         _KN__Kernarg_Segment_Size; /* May not need to be global */
 uint32_t                         _KN__Group_Segment_Size;
@@ -268,6 +269,24 @@ extern status_t _KN__init(){
                       _CN__Agent,
                       _CN__Executable); 
 } /* end of _KN__init */
+
+
+extern status_t _KN__stop(){
+    status_t err;
+    if (_CN__FC == 0 ) {
+       /* weird, but we cannot stop unless we initialized the context */
+       err = _CN__InitContext();
+       if ( err != STATUS_SUCCESS ) return err; 
+       _CN__FC = 1;
+    }
+    if ( _KN__FK == 1 ) {
+        /*  Currently nothing kernel specific must be recovered */
+       _KN__FK = 0;
+    }
+    return STATUS_SUCCESS;
+
+} /* end of _KN__stop */
+
 
 EOF
 }

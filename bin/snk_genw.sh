@@ -330,7 +330,7 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
 /* Stream specific globals */
 hsa_queue_t* Stream_CommandQ[SNK_MAX_STREAMS];
 snk_task_t   SNK_Tasks[SNK_MAX_TASKS];
-int          SNK_NextTaskId = 0 ;
+static int          SNK_NextTaskId = 0 ;
 
 /* Context(cl file) specific globals */
 hsa_ext_module_t*                _CN__BrigModule;
@@ -370,7 +370,7 @@ status_t _CN__InitContext(){
     /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
 
     /* Load the BRIG binary.  */
-    _CN__BrigModule = (hsa_ext_module_t*) &HSA_BrigMem;
+    _CN__BrigModule = (hsa_ext_module_t*) &_CN__HSA_BrigMem;
 
     /* Create hsa program.  */
     memset(&_CN__HsaProgram,0,sizeof(hsa_ext_program_t));
@@ -452,6 +452,7 @@ function write_KernelStatics_template(){
 hsa_executable_symbol_t          _KN__Symbol;
 int                              _KN__FK = 0 ; 
 status_t                         _KN__init();
+status_t                         _KN__stop();
 uint64_t                         _KN__Kernel_Object;
 uint32_t                         _KN__Kernarg_Segment_Size; /* May not need to be global */
 uint32_t                         _KN__Group_Segment_Size;
@@ -474,7 +475,7 @@ extern status_t _KN__init(){
 
     /* Extract the symbol from the executable.  */
     /* printf("Kernel name _KN__: Looking for symbol %s\n","__OpenCL__KN__kernel"); */
-    err = hsa_executable_get_symbol(_CN__Executable, "", "&__OpenCL__KN__kernel", _CN__Agent , 0, &_KN__Symbol);
+    err = hsa_executable_get_symbol(_CN__Executable, NULL, "&__OpenCL__KN__kernel", _CN__Agent , 0, &_KN__Symbol);
     ErrorCheck(Extract the symbol from the executable, err);
 
     /* Extract dispatch information from the symbol */
@@ -491,6 +492,24 @@ extern status_t _KN__init(){
     return STATUS_SUCCESS;
 
 } /* end of _KN__init */
+
+
+extern status_t _KN__stop(){
+    status_t err;
+    if (_CN__FC == 0 ) {
+       /* weird, but we cannot stop unless we initialized the context */
+       err = _CN__InitContext();
+       if ( err != STATUS_SUCCESS ) return err; 
+       _CN__FC = 1;
+    }
+    if ( _KN__FK == 1 ) {
+        /*  Currently nothing kernel specific must be recovered */
+       _KN__FK = 0;
+    }
+    return STATUS_SUCCESS;
+
+} /* end of _KN__stop */
+
 
 EOF
 }

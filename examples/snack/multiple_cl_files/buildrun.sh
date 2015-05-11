@@ -10,7 +10,7 @@ export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
 #  First compile all files with acclerated functions to create hw.o and hw2.o
 echo 
 echo $HSA_LLVM_PATH snack.sh -q -c hw.cl 
-$HSA_LLVM_PATH snack.sh -q -c hw.cl 
+$HSA_LLVM_PATH/snack.sh -q -c hw.cl 
 echo 
 echo $HSA_LLVM_PATH/snack.sh -q -c -noglobs hw2.cl 
 $HSA_LLVM_PATH/snack.sh -q -c -noglobs hw2.cl 

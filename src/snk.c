@@ -200,6 +200,8 @@ void barrier_sync(int stream_num, const int dep_task_count, snk_task_t **dep_tas
             if(tasks != NULL) {
                 /* fill out the barrier packet and ring doorbell */
                 barrier->dep_signal[dep_signal_id] = tasks->handle; 
+                // TODO: Not convinced about this approach
+                // tasks->state = SNK_ISPARENT; 
                 tasks++;
             }
         }
@@ -215,15 +217,38 @@ void barrier_sync(int stream_num, const int dep_task_count, snk_task_t **dep_tas
     hsa_signal_wait_acquire(last_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
 
     hsa_signal_destroy(last_signal);
+
+    tasks = *dep_task_list;
+    int task_id;
+    for(task_id = 0; task_id < dep_task_count; task_id++) {
+        /* Flag every parent task as completed */
+        /* FIXME: How can HSA tell us if and when a task has failed? */
+        tasks[task_id].state = SNK_COMPLETED;
+    }
 }
 #endif
-extern void snk_task_wait(const snk_task_t *task) {
+extern void snk_task_wait(snk_task_t *task) {
     if(task != NULL) {
         hsa_signal_wait_acquire(task->handle, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+        /* Flag this task as completed */
+        /* FIXME: How can HSA tell us if and when a task has failed? */
+        task->state = SNK_COMPLETED;
     }
 }
 
 extern void stream_sync(int stream_num) {
+    /* FIXME: We need to re-architect streams in SNACK. Currently, each stream
+     * maps to a HSA queue or a pthread with their own numbering scheme. A SNACK
+     * stream should be a logical ordering of tasks (CPU or GPU or any other device. 
+     * When a stream ID is specified in
+     * SNACK, we can add it to a watch list, and when a stream_sync is called, we
+     * can drain the stream and set the task states accordingly. A stream should
+     * not be tied to a particular device. A stream should work across devices,
+     * i.e. tasks of different devices should be able to be part of the same
+     * stream. If the user
+     * wants unordered set of tasks, then why would they even choose a stream?
+     * They will then care only about the dependencies via requires. 
+     */
     /* This is a user-callable function that puts a barrier packet into a queue where
        all former dispatch packets were put on the queue for asynchronous asynchrnous 
        executions. This routine will wait for all packets to complete on this queue.
@@ -491,11 +516,11 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
         }
     }
     #else
-    if ( lparm->num_tasks_in_wait_list > 0) {
+    if ( lparm->num_required > 0) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
-        snk_task_t **p = lparm->task_wait_list;
+        snk_task_t **p = lparm->requires;
         int idx; 
-        for(idx = 0; idx < lparm->num_tasks_in_wait_list; idx++) {
+        for(idx = 0; idx < lparm->num_required; idx++) {
             snk_task_wait(p[idx]);
         }
     }
@@ -552,6 +577,7 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                 /* Increment write index and ring doorbell to dispatch the kernel.  */
                 hsa_queue_store_write_index_relaxed(this_Q, index+1);
                 hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
+                SNK_Tasks[SNK_NextTaskId].state = SNK_DISPATCHED;
                 signal_worker(q_id, PROCESS_PKT);
             }
         }
@@ -581,20 +607,19 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
     }
 
     //if ( lparm->requires != NULL) {
-    if ( lparm->num_tasks_in_wait_list > 0) {
+    if ( lparm->num_required > 0) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
         /* FIXME: To use multiple barrier AND packets or individual waiting for better performance? 
            KPS benchmark showed that barrier AND was a lot slower, but will keep both implementations
            for future use */
 #if 1
 #if 0
-        barrier_sync(stream_num, lparm->num_tasks_in_wait_list, lparm->task_wait_list);
-        //barrier_sync(stream_num, lparm->requires);
+        barrier_sync(stream_num, lparm->num_required, lparm->requires);
 #else
         /* For dependent child tasks, wait till all parent kernels are finished.  */
-        snk_task_t **p = lparm->task_wait_list;
+        snk_task_t **p = lparm->requires;
         int idx; 
-        for(idx = 0; idx < lparm->num_tasks_in_wait_list; idx++) {
+        for(idx = 0; idx < lparm->num_required; idx++) {
             snk_task_wait(p[idx]);
         }
         /* 
@@ -621,7 +646,6 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
            printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
            return ;
         }
-        /* hsa_signal_store_relaxed(SNK_Tasks[SNK_NextTaskId].signal,1); */
         this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].handle;
 
     if ( stream_num < 0 ) {
@@ -667,10 +691,12 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
     /* Increment write index and ring doorbell to dispatch the kernel.  */
     hsa_queue_store_write_index_relaxed(this_Q, index+1);
     hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
+    SNK_Tasks[SNK_NextTaskId].state = SNK_DISPATCHED;
 
     if ( stream_num < 0 ) {
        /* For default synchrnous execution, wait til kernel is finished.  */
        hsa_signal_value_t value = hsa_signal_wait_acquire(Sync_Signal, HSA_SIGNAL_CONDITION_LT, 1, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+       SNK_Tasks[SNK_NextTaskId].state = SNK_COMPLETED;
     }
 
     return (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);

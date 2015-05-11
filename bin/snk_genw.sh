@@ -100,6 +100,7 @@ function write_header_template(){
 #ifndef __cplusplus
 #define _CPPSTRING_ 
 #endif
+
 #ifndef __SNK_DEFS
 enum status_t {
     STATUS_SUCCESS=0,
@@ -109,7 +110,7 @@ typedef enum status_t status_t;
 
 #define SNK_MAX_STREAMS 8 
 #define SNK_MAX_TASKS 100001
-#define SNK_MAX_CPU_STREAMS 1
+#define SNK_MAX_CPU_STREAMS 4
 #define SNK_MAX_CPU_FUNCTIONS   100
 extern _CPPSTRING_ void stream_sync(const int stream_num);
 
@@ -121,20 +122,36 @@ extern _CPPSTRING_ void stream_sync(const int stream_num);
 typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 #endif
 
-enum _snk_device_type_t {
+typedef enum snk_device_type_s {
     SNK_DEVICE_TYPE_CPU = 0,
     SNK_DEVICE_TYPE_GPU = 1,
     SNK_DEVICE_TYPE_DSP = 2
-};
+} snk_device_type_t;
 
-typedef enum _snk_device_type_t snk_device_type_t;
-
+typedef enum snk_state_s {
+    SNK_INITIALIZED = 0,
+    SNK_DISPATCHED  = 1,
+    SNK_COMPLETED   = 2,
+    SNK_FAILED      = 3
+    // , SNK_ISPARENT  = 4 
+    // I am not convinced about a task state being a parent
+    // How is it different from being dispatched? What additional capabilities
+    // will it give the user if they have the knowledge that this task is a
+    // parent?
+} snk_state_t;
+/*
+typedef struct snk_task_profile_s {
+    double dispatch_time;
+    double start_time;
+    double end_time;
+} snk_task_profile_t;
+*/
 typedef hsa_signal_t snk_handle_t;
-typedef struct snk_task_s snk_task_t;
-struct snk_task_s { 
+typedef struct snk_task_s { 
     snk_handle_t handle; 
-    //   snk_task_t* next;
-};
+    snk_state_t state;
+    // snk_task_profile_t profile;
+} snk_task_t;
 
 typedef struct snk_lparm_s snk_lparm_t;
 struct snk_lparm_s { 
@@ -145,21 +162,18 @@ struct snk_lparm_s {
    int barrier;               /* default = SNK_UNORDERED */
    int acquire_fence_scope;   /* default = 2 */
    int release_fence_scope;   /* default = 2 */
-   int num_tasks_in_wait_list;  /* Number of dependent parent tasks, default = 0 */
-   snk_task_t** task_wait_list; /* Array of task pointers to dependent parent tasks, default = NULL */
-   //snk_task_t *requires ;     /* Linked list of required parent tasks, default = NULL  */
-   //snk_task_t *needs ;        /* Linked list of parent tasks where only one must complete, default=NULL */
+   int num_required;          /* Number of required parent tasks, default = 0 */
+   snk_task_t** requires;     /* Array of required parent tasks, default = NULL */
+   int num_needs_any;         /* Number of parent tasks where only one must complete, default = 0 */
+   snk_task_t** needs_any;    /* Array of parent tasks where only one must complete, default = NULL */
    snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-//#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
-//#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.requires=NULL,.needs=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_list=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
- 
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_tasks_in_wait_list=0,.task_wait_list=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
 /* Equivalent host data types for kernel data types */
 typedef struct snk_image3d_s snk_image3d_t;
 struct snk_image3d_s { 
@@ -171,7 +185,7 @@ struct snk_image3d_s {
    void *data;
 };
 
-extern _CPPSTRING_ void snk_task_wait(const snk_task_t *task);
+extern _CPPSTRING_ void snk_task_wait(snk_task_t *task);
 
 #define __SNK_DEFS
 #endif

@@ -95,7 +95,7 @@ function usage(){
     -p        <path>         $HSA_LLVM_PATH or <sdir> if HSA_LLVM_PATH not set
                              <sdir> is actual directory of snack.sh 
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
-    -snk      <SNACK RT path> Default=$SNACK_RUNTIME_PATH or /opt/hsa
+    -snk      <SNACK RT path> Default=$SNACK_RUNTIME_PATH or /opt/amd/cloc
     -o        <outfilename>  Default=<filename>.<ft> 
 
    Examples:
@@ -212,7 +212,7 @@ HSA_LLVM_PATH=${HSA_LLVM_PATH:-$sdir}
 GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
-SNACK_RUNTIME_PATH=${SNACK_RUNTIME_PATH:-/opt/hsa}
+SNACK_RUNTIME_PATH=${SNACK_RUNTIME_PATH:-/opt/amd/cloc}
 CMD_BRI=${CMD_BRI:-hsailasm }
 
 FORTRAN=${FORTRAN:-0};
@@ -427,13 +427,14 @@ else
 #  Not step 2, do normal steps
    [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
    if [ $DRYRUN ] ; then
-      echo "$HSA_LLVM_PATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
+      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
    else
-      $HSA_LLVM_PATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS
+      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
+      $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $HSA_LLVM_PATH/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS"
+         echo "        $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS"
          do_err $rc
       fi
    fi

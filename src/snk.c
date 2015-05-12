@@ -168,6 +168,7 @@ void barrier_sync(int stream_num, const int dep_task_count, snk_task_t **dep_tas
      */
     if(stream_num < 0 || dep_task_list == NULL || dep_task_count <= 0) return; 
 
+    /* CPU queue or GPU queue? */
     hsa_queue_t *queue = Stream_CommandQ[stream_num];
 
     long t_barrier_wait = 0L;
@@ -229,6 +230,7 @@ void barrier_sync(int stream_num, const int dep_task_count, snk_task_t **dep_tas
 #endif
 extern void snk_task_wait(snk_task_t *task) {
     if(task != NULL) {
+        DEBUG_PRINT("Signal Value: %llu\n", task->handle.handle);
         hsa_signal_wait_acquire(task->handle, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
@@ -506,16 +508,6 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                  const uint32_t _KN__cpu_task_num_args,
                  const snk_kernel_args_t *kernel_args) {
     /* Iterate over function table and retrieve the ID for kernel_name */
-    #if 0
-    if ( lparm->requires != NULL) {
-        /* For dependent child tasks, wait till all parent kernels are finished.  */
-        snk_task_t *p = lparm->requires;
-        while(p != NULL) {
-            hsa_signal_wait_acquire(p->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
-            p = p->next;
-        }
-    }
-    #else
     if ( lparm->num_required > 0) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
         snk_task_t **p = lparm->requires;
@@ -524,7 +516,6 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
             snk_task_wait(p[idx]);
         }
     }
-    #endif
     uint16_t i;
     set_cpu_kernel_table(_CN__CPU_kernels);
     for(i = 0; i < SNK_MAX_CPU_FUNCTIONS; i++) {
@@ -543,6 +534,8 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                 hsa_queue_t *this_Q = agent.queue;
 
                 uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
+
+                DEBUG_PRINT("Enqueueing Queue Idx: %d\n", index);
                 /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
 
                 /* Find the queue index address to write the packet info into.  */
@@ -599,6 +592,7 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
        return; 
     }
 
+    printf("DEBUG:Calling GPU kernel\n");  
     hsa_queue_t* this_Q ;
     if ( stream_num < 0 ) { /*  Sychronous execution */
        this_Q = Sync_CommandQ;
@@ -633,8 +627,8 @@ snk_task_t *snk_kernel(const snk_lparm_t *lparm,
 #endif
     }
     /*  Obtain the current queue write index. increases with each call to kernel  */
+    printf("DEBUG:Dependent kernel finished\n");  
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
-    /* printf("DEBUG:Call #%d to kernel \"%s\" \n",(int) index,"_KN_");  */
 
     /* Find the queue index address to write the packet info into.  */
     const uint32_t queueMask = this_Q->size - 1;

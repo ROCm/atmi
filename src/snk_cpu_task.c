@@ -41,7 +41,6 @@
 */ 
 /* This file contains logic for CPU tasking in SNACK */
 #include "snk.h"
-#include "snk_cpu_task.h"
 #include <assert.h>
 
 agent_t agent[SNK_MAX_CPU_STREAMS];
@@ -91,11 +90,13 @@ int process_packet(hsa_queue_t *queue, int id)
     hsa_signal_t doorbell = queue->doorbell_signal;
     /* FIXME: Handle queue overflows */
     while (read_index < queue->size) {
+        DEBUG_PRINT("Read Index: %d Queue Size: %d\n", read_index, queue->size);
         while (hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED) < (hsa_signal_value_t) read_index);
         hsa_agent_dispatch_packet_t* packets = (hsa_agent_dispatch_packet_t*) queue->base_address;
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
         int i;
+        DEBUG_PRINT("Processing CPU task with header: %d\n", get_packet_type(packet->header));
         switch (get_packet_type(packet->header)) {
             case HSA_PACKET_TYPE_BARRIER_OR: 
                 ;
@@ -523,6 +524,7 @@ int process_packet(hsa_queue_t *queue, int id)
                              check(Too many function arguments, HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS);
                              break;
                 }
+                DEBUG_PRINT("Signaling from CPU task: %llu\n", packet->completion_signal.handle);
                 if (packet->completion_signal.handle != 0) {
                     hsa_signal_subtract_release(packet->completion_signal, 1);
                 }
@@ -536,16 +538,44 @@ int process_packet(hsa_queue_t *queue, int id)
     DEBUG_PRINT("Finished executing agent dispatch\n");
 
     // Finishing this task may free up more tasks, so issue the wakeup command
-    DEBUG_PRINT("Signaling more work\n");
-    hsa_signal_store_release(worker_sig[id], PROCESS_PKT);
+    //DEBUG_PRINT("Signaling more work\n");
+    //hsa_signal_store_release(worker_sig[id], PROCESS_PKT);
     return 0;
 }
 #if 0
+typedef struct thread_args_s {
+    int tid;
+    size_t num_queues;
+    size_t capacity;
+    hsa_agent_t cpu_agent;
+    hsa_region_t cpu_region;
+} thread_args_t;
+
 void *agent_worker(void *agent_args) {
     /* TODO: Investigate more if we really need the inter-thread worker signal. 
      * Can we just do the below without hanging? */
-    agent_t *agent = (agent_t *) agent_args;
-    process_packet(agent->queue, agent->id);
+    thread_args_t *args = (thread_args_t *) agent_args; 
+    int tid = args->tid;
+    agent[tid].num_queues = args->num_queues;
+    agent[tid].id = tid;
+
+    hsa_signal_t db_signal;
+    hsa_status_t err;
+    err = hsa_signal_create(1, 0, NULL, &db_signal);
+    check(Creating a HSA signal for agent dispatch db signal, err);
+
+    hsa_queue_t *queue = NULL;
+    err = hsa_soft_queue_create(args->cpu_region, args->capacity, HSA_QUEUE_TYPE_SINGLE,
+            HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &queue);
+    check(Creating an agent queue, err);
+
+    /* FIXME: Looks like a nasty HSA bug. The doorbell signal that we pass to the 
+     * soft queue creation API never seems to be set. Workaround is to 
+     * manually set it again like below.
+     */
+    queue->doorbell_signal = db_signal;
+
+    process_packet(queue, tid);
 }
 #else
 void *agent_worker(void *agent_args) {
@@ -578,6 +608,7 @@ cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
                 ) {
     hsa_status_t err;
     uint32_t i;
+    #if 1
     for (i = 0; i < num_queues; i++) {
         agent[i].num_queues = num_queues;
         agent[i].id = i;
@@ -600,13 +631,23 @@ cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
          */
         q->doorbell_signal = db_signal;
     }
-
+    #endif
     numWorkers = num_queues;
     DEBUG_PRINT("Spawning %zu CPU execution threads\n",
                  numWorkers);
 
     for (i = 0; i < numWorkers; i++) {
+#if 1
         pthread_create(&agent_threads[i], NULL, agent_worker, (void *)&(agent[i]));
+#else
+        thread_args_t args;
+        args.tid = i;
+        args.num_queues = num_queues;
+        args.capacity = capacity;
+        args.cpu_agent = cpu_agent;
+        args.cpu_region = cpu_region;
+        pthread_create(&agent_threads[i], NULL, agent_worker, (void *)&args);
+#endif
     }
 } 
 

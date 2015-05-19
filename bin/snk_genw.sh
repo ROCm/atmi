@@ -88,7 +88,7 @@ function write_copyright_template(){
 
 */ 
 
-#include "snk.h"
+#include "snk_internal.h"
 EOF
 }
 
@@ -304,7 +304,7 @@ EOF
 
 function write_kernel_template(){
 /bin/cat <<"EOF"
-   return snk_kernel(lparm, 
+   return snk_gpu_kernel(lparm, 
                 _KN__Kernel_Object, 
                 _KN__Group_Segment_Size,
                 _KN__Private_Segment_Size, 

@@ -40,14 +40,14 @@
 
 */ 
 /* This file contains logic for CPU tasking in SNACK */
-#include "snk.h"
+#include "snk_internal.h"
 #include <assert.h>
 
-agent_t agent[SNK_MAX_CPU_STREAMS];
+agent_t agent[SNK_MAX_CPU_QUEUES];
 
-hsa_signal_t worker_sig[SNK_MAX_CPU_STREAMS];
+hsa_signal_t worker_sig[SNK_MAX_CPU_QUEUES];
 
-pthread_t agent_threads[SNK_MAX_CPU_STREAMS];
+pthread_t agent_threads[SNK_MAX_CPU_QUEUES];
 
 const cpu_kernel_table_t *_CN__CPU_kernels;
 
@@ -65,7 +65,16 @@ agent_t get_cpu_q_agent(int id) {
     return agent[id];
 }
 
-void signal_worker(int id, int signal) {
+void signal_worker(hsa_queue_t *queue, int signal) {
+    DEBUG_PRINT("Signaling work %d\n", signal);
+    int id;
+    for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
+        if(agent[id].queue == queue) break;
+    }
+    hsa_signal_store_release(worker_sig[id], signal);
+}
+
+void signal_worker_id(int id, int signal) {
     DEBUG_PRINT("Signaling work %d\n", signal);
     hsa_signal_store_release(worker_sig[id], signal);
 }
@@ -90,7 +99,7 @@ int process_packet(hsa_queue_t *queue, int id)
     hsa_signal_t doorbell = queue->doorbell_signal;
     /* FIXME: Handle queue overflows */
     while (read_index < queue->size) {
-        DEBUG_PRINT("Read Index: %d Queue Size: %d\n", read_index, queue->size);
+        DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index, queue->size);
         while (hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED) < (hsa_signal_value_t) read_index);
         hsa_agent_dispatch_packet_t* packets = (hsa_agent_dispatch_packet_t*) queue->base_address;
@@ -138,7 +147,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 const char *kernel_name = _CN__CPU_kernels[packet->type].name;
                 uint64_t num_args = packet->arg[0];
                 snk_kernel_args_t *kernel_args = (snk_kernel_args_t *)(packet->arg[1]);
-                DEBUG_PRINT("Invoking function %s with %u args\n", kernel_name, num_args);
+                DEBUG_PRINT("Invoking function %s with %" PRIu64 " args\n", kernel_name, num_args);
                 switch(num_args) {
                     case 0: 
                         ;
@@ -520,11 +529,11 @@ int process_packet(hsa_queue_t *queue, int id)
                         break;
                     default: 
 
-                        DEBUG_PRINT("Too many function arguments: %u\n", num_args);
+                        DEBUG_PRINT("Too many function arguments: %"  PRIu64 "\n", num_args);
                              check(Too many function arguments, HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS);
                              break;
                 }
-                DEBUG_PRINT("Signaling from CPU task: %llu\n", packet->completion_signal.handle);
+                DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 if (packet->completion_signal.handle != 0) {
                     hsa_signal_subtract_release(packet->completion_signal, 1);
                 }

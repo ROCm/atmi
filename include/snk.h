@@ -39,21 +39,8 @@
   Software License Agreement.
 
 */ 
-/* This file is the SNACK header. Idea is to move as much of code as possible
- * from the snk_genw.sh script to a library
+/* This file defines the Asynchronous Task Management Interface (ATMI)
  */
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
-#include "hsa.h"
-#include "hsa_ext_finalize.h"
-#include <inttypes.h>
-/*  set NOTCOHERENT needs this include
-#include "hsa_ext_amd.h"
-*/
-
 #ifdef __cplusplus
 #define _CPPSTRING_ "C" 
 #endif
@@ -62,218 +49,19 @@
 #endif
 
 #ifndef __SNK_DEFS
-#include <pthread.h>
-
-#define check(msg, status) \
-if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed.\n", #msg); \
-    exit(1); \
-}
-#define DEBUG_SNK
-#define VERBOSE_SNK
-#ifdef DEBUG_SNK
-#define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
-#else
-#define DEBUG_PRINT(...) do{ } while ( false )
-#endif
-
-#ifdef VERBOSE_SNK
-#define VERBOSE_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
-#else
-#define VERBOSE_PRINT(...) do{ } while ( false )
-#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
-/* ---------------------------------------------------------------------------------
- * Simulated CPU Data Structures
- * --------------------------------------------------------------------------------- */
-enum {
-    PROCESS_PKT = 0,
-    FINISH,
-    IDLE
-};
-
-#define COMMA ,
-#define REPEAT(name)   COMMA name
-#define REPEAT2(name)  REPEAT(name)   REPEAT(name) 
-#define REPEAT4(name)  REPEAT2(name)  REPEAT2(name)
-#define REPEAT8(name)  REPEAT4(name)  REPEAT4(name)
-#define REPEAT16(name) REPEAT8(name) REPEAT8(name)
-
-typedef struct cpu_kernel_table_s {
-    const char *name; 
-    union {
-        void (*function0) (void);
-        void (*function1) (uint64_t);
-        void (*function2) (uint64_t,uint64_t);
-        void (*function3) (uint64_t,uint64_t,uint64_t);
-        void (*function4) (uint64_t,uint64_t,uint64_t,uint64_t);
-        void (*function5) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function6) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function7) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function8) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function9) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function10) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function11) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function12) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function13) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function14) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function15) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function16) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function17) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function18) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function19) (uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-        void (*function20) (uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t,
-                            uint64_t,uint64_t);
-    } function;
-} cpu_kernel_table_t;
-
-
-#define KERNEL_STRUCT_IMPL(name) name##_args_struct
-#define KERNEL_STRUCT(name) KERNEL_STRUCT_IMPL(name)
-
-typedef struct snk_kernel_args_s {
-    uint64_t args[20];
-} snk_kernel_args_t;
-
-
-
-typedef struct agent_t
-{
-  int num_queues;
-  int id;
-  hsa_queue_t *queue;
-  //hsa_agent_t cpu_agent;
-  //hsa_region_t cpu_region;
-} agent_t;
-
-/* ---------------------------------------------------------------------------------
- * Simulated CPU Management API
- * --------------------------------------------------------------------------------- */
-void set_cpu_kernel_table(const cpu_kernel_table_t *kernel_table); 
-agent_t get_cpu_q_agent(int id);
-void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
-                const size_t num_queues, const size_t capacity
-                );
-void agent_fini();
-hsa_queue_t* get_cpu_queue(int id);
-void signal_worker(int id, int signal);
-void *agent_worker(void *agent_args);
-int process_packet(hsa_queue_t *queue, int id);
-
-#ifdef __cplusplus
-} //end extern "C" block
-#endif
-enum status_t {
-    STATUS_SUCCESS=0,
-    STATUS_UNKNOWN=1
-};
-typedef enum status_t status_t;
-
 #define SNK_MAX_STREAMS 8 
-#define SNK_MAX_TASKS 100001
-#define SNK_MAX_CPU_STREAMS 4
-#define SNK_MAX_CPU_FUNCTIONS   100
-extern _CPPSTRING_ void stream_sync(const int stream_num);
+#define SNK_MAX_TASKS 4000
 
-#define SNK_ORDERED 1
-#define SNK_UNORDERED 0
+#define SNK_ORDERED 0
+#define SNK_UNORDERED 1
 
-#include <stdint.h>
-#ifndef HSA_RUNTIME_INC_HSA_H_
-typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
-#endif
-
+#define SNK_TRUE    1
+#define SNK_FALSE   0
 typedef enum snk_device_type_s {
     SNK_DEVICE_TYPE_CPU = 0,
     SNK_DEVICE_TYPE_GPU = 1,
@@ -285,33 +73,34 @@ typedef enum snk_state_s {
     SNK_DISPATCHED  = 1,
     SNK_COMPLETED   = 2,
     SNK_FAILED      = 3
-    // , SNK_ISPARENT  = 4 
-    // I am not convinced about a task state being a parent
-    // How is it different from being dispatched? What additional capabilities
-    // will it give the user if they have the knowledge that this task is a
-    // parent?
 } snk_state_t;
-/*
+
 typedef struct snk_task_profile_s {
     double dispatch_time;
     double start_time;
     double end_time;
 } snk_task_profile_t;
-*/
-typedef hsa_signal_t snk_handle_t;
+
+#define snk_handle_t hsa_signal_t
 typedef struct snk_task_s { 
-    snk_handle_t handle; 
+    snk_handle_t handle;
     snk_state_t state;
-    // snk_task_profile_t profile;
+    //snk_task_profile_t* profile;
 } snk_task_t;
+
+typedef char boolean;
+typedef struct snk_stream_s {
+    //char id;
+    boolean ordered;
+} snk_stream_t;
 
 typedef struct snk_lparm_s snk_lparm_t;
 struct snk_lparm_s { 
    int ndim;                  /* default = 1 */
    size_t gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
    size_t ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
-   int stream;                /* default = -1 , synchrnous */
-   int barrier;               /* default = SNK_UNORDERED */
+   snk_stream_t *stream;      /* default = NULL */
+   boolean synchronous;          /* default = SNK_FALSE; */
    int acquire_fence_scope;   /* default = 2 */
    int release_fence_scope;   /* default = 2 */
    int num_required;          /* Number of required parent tasks, default = 0 */
@@ -322,58 +111,16 @@ struct snk_lparm_s {
 } ;
 
 /* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
+#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=NULL,.synchronous=SNK_FALSE,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
  
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
+#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=NULL,.synchronous=SNK_FALSE,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
  
-/* Equivalent host data types for kernel data types */
-typedef struct snk_image3d_s snk_image3d_t;
-struct snk_image3d_s { 
-   unsigned int channel_order; 
-   unsigned int channel_data_type; 
-   size_t width, height, depth;
-   size_t row_pitch, slice_pitch;
-   size_t element_size;
-   void *data;
-};
-
-extern snk_task_t   SNK_Tasks[SNK_MAX_TASKS];
-extern int          SNK_NextTaskId;
-
 extern _CPPSTRING_ void snk_task_wait(snk_task_t *task);
+extern _CPPSTRING_ void snk_stream_sync(snk_stream_t *stream);
 
-status_t snk_init_context(
-                        hsa_agent_t *_CN__Agent, 
-                        hsa_ext_module_t **_CN__BrigModule,
-                        hsa_ext_program_t *_CN__HsaProgram,
-                        hsa_executable_t *_CN__Executable,
-                        hsa_region_t *_CN__KernargRegion,
-                        hsa_agent_t *_CN__CPU_Agent,
-                        hsa_region_t *_CN__CPU_KernargRegion
-                        );
+#ifdef __cplusplus
+} //end extern "C" block
+#endif
 
-status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
-                            const char *kernel_symbol_name,
-                            uint64_t                         *_KN__Kernel_Object,
-                            uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
-                            uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size,
-                            hsa_agent_t _CN__Agent, 
-                            hsa_executable_t _CN__Executable
-                            );
-
-snk_task_t *snk_kernel(const snk_lparm_t *lparm, 
-                 uint64_t                         _KN__Kernel_Object,
-                 uint32_t                         _KN__Group_Segment_Size,
-                 uint32_t                         _KN__Private_Segment_Size,
-                 void *thisKernargAddress);
-
-snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm, 
-                 const cpu_kernel_table_t *_CN__CPU_kernels,
-                 const char *kernel_name,
-                 const uint32_t _KN__cpu_task_num_args,
-                 const snk_kernel_args_t *kernel_args);
-
-uint16_t create_header(hsa_packet_type_t type, int barrier);
 #define __SNK_DEFS
 #endif //__SNK_DEFS

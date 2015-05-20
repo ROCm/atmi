@@ -94,103 +94,183 @@ EOF
 
 function write_header_template(){
 /bin/cat  <<"EOF"
+#ifndef __ATMI_H__
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* Asynchronous Task Management Interface ATMI file: atmi.h                   */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+#define ATMI_VERSION 0
+#define ATMI_RELEASE 1
+#define ATMI_PATCH   0  
+#define ATMI_VRM ((ATMI_VERSION*65536) + (ATMI_RELEASE*256) + ATMI_PATCH)
+
+/*----------------------------------------------------------------------------*/
+/* Enumerated constants and data types                                        */
+/*----------------------------------------------------------------------------*/
+#define ATMI_ORDERED    1
+#define ATMI_UNORDERED  0
+#define ATMI_TRUE       1 
+#define ATMI_FALSE      0
+
+typedef enum atmi_devtype_s {
+    ATMI_DEVTYPE_CPU = 0,
+    ATMI_DEVTYPE_GPU = 1,
+    ATMI_DEVTYPE_DSP = 2
+} atmi_devtype_t;
+
+typedef enum atmi_state_s {
+    ATMI_INITIALIZED = 0,
+    ATMI_DISPATCHED  = 1,
+    ATMI_COMPLETED   = 2,
+    ATMI_FAILED      = 3
+} atmi_state_t;
+
+typedef enum atmi_full_policy_s {
+    ATMI_WAIT        = 0,
+    ATMI_FAIL        = 1,
+    ATMI_DISCARD     = 2
+} atmi_full_policy_t;
+
+typedef char boolean; 
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* atmi_tprofile_t  ATMI Task Profile Data Structure                          */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+typedef struct atmi_tprofile_s {
+   double           dispatch_time;  /*                                        */
+   double           start_time;     /*                                        */
+   double           end_time;       /*                                        */
+} atmi_tprofile_t;
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* atmi_stream_t  ATMI Stream Definition Data Structure                       */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+typedef struct atmi_stream_s {
+   boolean            ordered;      /*                                        */
+   int                maxsize;      /* Number of tasks allowed in stream      */
+   atmi_full_policy_t full_policy;  /* What to do if maxsize reached          */
+} atmi_stream_t;
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* atmi_task_t  ATMI Task Handle Data Structure                               */
+/*              All PIF functions return a pointer to atmi_task_t             */ 
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+typedef void* atmi_handle_t;
+typedef struct atmi_task_s { 
+   atmi_handle_t    handle;
+   atmi_state_t     state;          /* Eventually consistent state of task    */
+   atmi_tprofile_t* profile;        /* Profile if reqeusted by lparm          */
+} atmi_task_t;
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* atmi_lparm_t  ATMI Launch Parameter Data Structure                         */
+/*                                                                            */
+/* atmi_lparm_t is the key data structure for ATMI.  It defines the task      */ 
+/* launch parameters.  The Platform Interface Function PIF will act on        */
+/* information provided by this data structure. The last argument of every    */
+/* PIF is an lparm structure.                                                 */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+typedef struct atmi_lparm_s { 
+   int              ndim;           /* Thread dimensions: 0,1,2, or 3         */
+   size_t           gdims[3];       /* # of global threads for each dimension */
+   size_t           ldims[3];       /* Thread group size for each dimension   */
+   atmi_stream_t*   stream;         /* Group for this task, Default= NULL     */
+   boolean          waitable;       /* Create signal for task, default = F    */
+   boolean          synchronous;    /* Async or Sync,  default = F (async)    */
+   int              acquire_scope;  /* Memory model, default = 2              */
+   int              release_scope;  /* Memory model, default = 2              */
+   int              num_required;   /* # of required parent tasks, default 0  */
+   atmi_task_t**    requires;       /* Array of required parent tasks         */
+   int              num_needs_any;  /* # needed parents, only 1 must complete */
+   atmi_task_t**    needs_any;      /* Array of needed parent tasks           */
+   atmi_devtype_t   devtype;        /* ATMI_DEVTYPE_GPU or ATMI_DEVTYPE_CPU   */
+   atmi_tprofile_t* profile;        /* Points to tprofile if metrics desired  */ 
+   int              atmi_id;        /* Constant that PIFs can check for       */
+} atmi_lparm_t ;
+/*----------------------------------------------------------------------------*/
+
+/* String macros to initialize popular default launch parameters.             */ 
+#define ATMI_LPARM_CPU(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=0,.gdims={1},.ldims={1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_CPU,.profile=NULL,.atmi_id=ATMI_VRM} ; X = &_ ## X ;
+
+#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM} ; X = &_ ## X ;
+ 
+#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=2,.gdims={Y,Z},.ldims={64,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM} ; X = &_ ## X ;
+ 
+#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=3,.gdims={Y,Z,V},.ldims={8,8,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM} ; X = &_ ## X ;
+
+#define __ATMI_H__
+#endif //__ATMI_H__
+
 #ifdef __cplusplus
 #define _CPPSTRING_ "C" 
 #endif
 #ifndef __cplusplus
 #define _CPPSTRING_ 
 #endif
-
-#ifndef __SNK_DEFS
-enum status_t {
-    STATUS_SUCCESS=0,
-    STATUS_UNKNOWN=1
-};
-typedef enum status_t status_t;
-
-#define SNK_MAX_STREAMS 8 
-#define SNK_MAX_TASKS 100001
-#define SNK_MAX_CPU_STREAMS 4
-#define SNK_MAX_CPU_FUNCTIONS   100
-extern _CPPSTRING_ void stream_sync(const int stream_num);
-
-#define SNK_ORDERED 1
-#define SNK_UNORDERED 0
-
-#include <stdint.h>
-#ifndef HSA_RUNTIME_INC_HSA_H_
-typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
-#endif
-
-typedef enum snk_device_type_s {
-    SNK_DEVICE_TYPE_CPU = 0,
-    SNK_DEVICE_TYPE_GPU = 1,
-    SNK_DEVICE_TYPE_DSP = 2
-} snk_device_type_t;
-
-typedef enum snk_state_s {
-    SNK_INITIALIZED = 0,
-    SNK_DISPATCHED  = 1,
-    SNK_COMPLETED   = 2,
-    SNK_FAILED      = 3
-    // , SNK_ISPARENT  = 4 
-    // I am not convinced about a task state being a parent
-    // How is it different from being dispatched? What additional capabilities
-    // will it give the user if they have the knowledge that this task is a
-    // parent?
-} snk_state_t;
-/*
-typedef struct snk_task_profile_s {
-    double dispatch_time;
-    double start_time;
-    double end_time;
-} snk_task_profile_t;
-*/
-typedef hsa_signal_t snk_handle_t;
-typedef struct snk_task_s { 
-    snk_handle_t handle; 
-    snk_state_t state;
-    // snk_task_profile_t profile;
-} snk_task_t;
-
-typedef struct snk_lparm_s snk_lparm_t;
-struct snk_lparm_s { 
-   int ndim;                  /* default = 1 */
-   size_t gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
-   size_t ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
-   int stream;                /* default = -1 , synchrnous */
-   int barrier;               /* default = SNK_UNORDERED */
-   int acquire_fence_scope;   /* default = 2 */
-   int release_fence_scope;   /* default = 2 */
-   int num_required;          /* Number of required parent tasks, default = 0 */
-   snk_task_t** requires;     /* Array of required parent tasks, default = NULL */
-   int num_needs_any;         /* Number of parent tasks where only one must complete, default = 0 */
-   snk_task_t** needs_any;    /* Array of parent tasks where only one must complete, default = NULL */
-   snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
-} ;
-
-/* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
- 
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=0,.barrier=SNK_UNORDERED,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
- 
-/* Equivalent host data types for kernel data types */
-typedef struct snk_image3d_s snk_image3d_t;
-struct snk_image3d_s { 
-   unsigned int channel_order; 
-   unsigned int channel_data_type; 
-   size_t width, height, depth;
-   size_t row_pitch, slice_pitch;
-   size_t element_size;
-   void *data;
-};
-
-extern _CPPSTRING_ void snk_task_wait(snk_task_t *task);
-
-#define __SNK_DEFS
-#endif
 EOF
 }
+function write_sync_functions_template(){
+/bin/cat  <<"EOF"
+/*----------------------------------------------------------------------------*/
+/* String macros that look like an API, but actually implement feature by     */
+/* calling a null kernel under specific conditions.                           */ 
+/*----------------------------------------------------------------------------*/
+#define SYNC_STREAM(str) \
+{ \
+    ATMI_LPARM_CPU(__lparm_sync_kernel); \
+    __lparm_sync_kernel->synchronous = ATMI_TRUE; \
+    __lparm_sync_kernel->stream = str; \
+    __sync_kernel_cpu(__lparm_sync_kernel); \
+}
+
+#define SYNC_TASK(task) \
+{ \
+    ATMI_LPARM_CPU(__lparm_sync_kernel); \
+    __lparm_sync_kernel->synchronous = ATMI_TRUE; \
+    __lparm_sync_kernel->num_required = 1; \
+    __lparm_sync_kernel->requires = &task; \
+    __sync_kernel_cpu(__lparm_sync_kernel); \
+}
+
+/*----------------------------------------------------------------------------*/
+/* ATMI Example: HelloWorld                                                   */ 
+/*----------------------------------------------------------------------------*/
+/* 
+#include <string.h>
+#include <stdlib.h>
+#include <iostream>
+using namespace std;
+#include "atmi.h"
+#include "hw.h"
+int main(int argc, char* argv[]) {
+	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
+	size_t strlength = strlen(input);
+	char *output = (char*) malloc(strlength + 1);
+        ATMI_LPARM_1D(lparm,strlength);
+        lparm->synchronous=ATMI_TRUE;
+        decode(input,output,lparm);
+	output[strlength] = '\0';
+	cout << output << endl;
+	free(output);
+	return 0;
+}
+__kernel void decode(__global const char* in, __global char* out) {
+	out[get_global_id(0)] = in[get_global_id(0)] + 1;
+}
+*/
+
+
+EOF
+} # end of bash function write_global_functions_template() 
 function write_global_functions_template(){
 /bin/cat  <<"EOF"
 
@@ -240,7 +320,11 @@ function write_KernelStatics_template(){
 /* Kernel specific globals, one set for each kernel  */
 hsa_executable_symbol_t          _KN__Symbol;
 int                              _KN__FK = 0 ; 
+int                              _KN__CPU_FK = 0 ; 
+int                              _KN__GPU_FK = 0 ; 
 status_t                         _KN__init();
+status_t                         _KN__gpu_init();
+status_t                         _KN__cpu_init();
 status_t                         _KN__stop();
 uint64_t                         _KN__Kernel_Object;
 uint32_t                         _KN__Kernarg_Segment_Size; /* May not need to be global */
@@ -260,7 +344,36 @@ extern status_t _KN__init(){
        if ( status  != STATUS_SUCCESS ) return; 
        _CN__FC = 1;
     }
-    return snk_init_kernel(&_KN__Symbol, 
+    snk_init_cpu_kernel();
+    return snk_init_gpu_kernel(&_KN__Symbol, 
+                      "&__OpenCL__KN__kernel",
+                      &_KN__Kernel_Object,
+                      &_KN__Kernarg_Segment_Size,
+                      &_KN__Group_Segment_Size,
+                      &_KN__Private_Segment_Size,
+                      _CN__Agent,
+                      _CN__Executable); 
+} /* end of _KN__init */
+
+extern status_t _KN__cpu_init(){
+
+    if (_CN__FC == 0 ) {
+       status_t status = _CN__InitContext();
+       if ( status  != STATUS_SUCCESS ) return; 
+       _CN__FC = 1;
+    }
+    return snk_init_cpu_kernel();
+} /* end of _KN__init */
+
+
+extern status_t _KN__gpu_init(){
+
+    if (_CN__FC == 0 ) {
+       status_t status = _CN__InitContext();
+       if ( status  != STATUS_SUCCESS ) return; 
+       _CN__FC = 1;
+    }
+    return snk_init_gpu_kernel(&_KN__Symbol, 
                       "&__OpenCL__KN__kernel",
                       &_KN__Kernel_Object,
                       &_KN__Kernarg_Segment_Size,
@@ -324,7 +437,7 @@ else
 /bin/cat >launch_params.f <<"EOF"
 C     INCLUDE launch_params.f in your FORTRAN source so you can set dimensions.
       use, intrinsic :: ISO_C_BINDING
-      type, BIND(C) :: snk_lparm_t
+      type, BIND(C) :: atmi_lparm_t
           integer (C_INT) :: ndim = 1
           integer (C_SIZE_T) :: gdims(3) = (/ 1 , 0, 0 /)
           integer (C_SIZE_T) :: ldims(3) = (/ 64, 0, 0 /)
@@ -332,8 +445,8 @@ C     INCLUDE launch_params.f in your FORTRAN source so you can set dimensions.
           integer (C_INT) :: barrier = 1
           integer (C_INT) :: acquire_fence_scope = 2
           integer (C_INT) :: release_fence_scope = 2
-      end type snk_lparm_t
-      type (snk_lparm_t) lparm
+      end type atmi_lparm_t
+      type (atmi_lparm_t) lparm
 C  
 C     Set default values
 C     lparm%ndim=1 
@@ -424,6 +537,7 @@ __IS_FORTRAN=$8
 __NO_GLOB_FUNS=$9
 
 # Intermediate files.
+__SYNCCL=${__TMPD}/sync.cl
 __EXTRACL=${__TMPD}/extra.cl
 __KARGLIST=${__TMPD}/klist
 __ARGL=""
@@ -437,8 +551,11 @@ __SEDCMD=" "
 #      echo
 #   fi
 
+   cat ${__CLF} > ${__SYNCCL}
+   echo "__kernel void __sync_kernel() {}" >> ${__SYNCCL}
+
 #  Read the CLF and build a list of kernels and args, one kernel and set of args per line of KARGLIST file
-   cpp $__CLF | sed -e '/__kernel/,/)/!d' |  sed -e ':a;$!N;s/\n/ /;ta;P;D' | sed -e 's/__kernel/\n__kernel/g'  | grep "__kernel" | \
+   cpp $__SYNCCL | sed -e '/__kernel/,/)/!d' |  sed -e ':a;$!N;s/\n/ /;ta;P;D' | sed -e 's/__kernel/\n__kernel/g'  | grep "__kernel" | \
    sed -e "s/__kernel//;s/__global//g;s/{//g;s/ \*/\*/g"  | cut -d\) -f1 | sed -e "s/\*/\* /g;s/__restrict__//g" >$__KARGLIST
 
 #  The header and extra-cl files must start empty because lines are incrementally added to end of file
@@ -485,8 +602,8 @@ __SEDCMD=" "
       __KN=`echo $TYPE_NAME | awk '{print $2}'`
       __KT=`echo $TYPE_NAME | awk '{print $1}'`
       __ARGL=${line#*(}
-#     force it to return pointer to snk_task_t
-      __KT="snk_task_t*" 
+#     force it to return pointer to atmi_task_t
+      __KT="atmi_task_t*" 
          
 
 #     Add the kernel initialization routine to the c wrapper
@@ -508,20 +625,20 @@ __SEDCMD=" "
       echo "/* ------  Start of SNACK function ${__KN} ------ */ " >> $__CWRAP 
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        Add underscore to kernel name and resolve lparm pointer 
-         echo "extern ${__KT} ${__KN}_gpu_($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
+         echo "extern ${__KT} ${__KN}_gpu_($__CFN_ARGL, const atmi_lparm_t * lparm) {" >>$__CWRAP
       else  
          if [ "$__CFN_ARGL" == "" ] ; then 
-            echo "extern ${__KT} ${__KN}_gpu(const snk_lparm_t * lparm) {" >>$__CWRAP
+            echo "extern ${__KT} ${__KN}_gpu(const atmi_lparm_t * lparm) {" >>$__CWRAP
          else
-            echo "extern ${__KT} ${__KN}_gpu($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
+            echo "extern ${__KT} ${__KN}_gpu($__CFN_ARGL, const atmi_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
       echo "   printf(\"In SNACK Kernel GPU Function ${__KN}\n\"); " >> $__CWRAP
 	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
-      echo "   if (${__KN}_FK == 0 ) { " >> $__CWRAP
-      echo "     status_t status = ${__KN}_init(); " >> $__CWRAP
+      echo "   if (${__KN}_GPU_FK == 0 ) { " >> $__CWRAP
+      echo "     status_t status = ${__KN}_gpu_init(); " >> $__CWRAP
       echo "     if ( status  != STATUS_SUCCESS ) return; " >> $__CWRAP
-      echo "     ${__KN}_FK = 1; " >> $__CWRAP
+      echo "     ${__KN}_GPU_FK = 1; " >> $__CWRAP
       echo "   } " >> $__CWRAP
 #     Write the structure definition for the kernel arguments.
 #     Consider eliminating global _KN__args and memcopy and write directly to thisKernargAddress.
@@ -626,12 +743,12 @@ __SEDCMD=" "
 #     Write the prototype to the header file
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        don't use headers for fortran but it is a good reference for how to call from fortran
-         echo "extern _CPPSTRING_ $__KT ${__KN}_gpu_($__PROTO_ARGL, const snk_lparm_t * lparm_p);" >>$__HDRF
+         echo "extern _CPPSTRING_ $__KT ${__KN}_gpu_($__PROTO_ARGL, const atmi_lparm_t * lparm_p);" >>$__HDRF
       else
          if [ "$__PROTO_ARGL" == "" ] ; then 
-            echo "extern _CPPSTRING_ $__KT ${__KN}_gpu(const snk_lparm_t * lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ $__KT ${__KN}_gpu(const atmi_lparm_t * lparm);" >>$__HDRF
          else
-            echo "extern _CPPSTRING_ $__KT ${__KN}_gpu($__PROTO_ARGL, const snk_lparm_t * lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ $__KT ${__KN}_gpu($__PROTO_ARGL, const atmi_lparm_t * lparm);" >>$__HDRF
          fi
       fi
 
@@ -647,21 +764,21 @@ __SEDCMD=" "
       echo "/* ------  Start of SNACK function ${__KN}_cpu ------ */ " >> $__CWRAP 
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        Add underscore to kernel name and resolve lparm pointer 
-         echo "extern ${__KT} ${__KN}_cpu_($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
+         echo "extern ${__KT} ${__KN}_cpu_($__CFN_ARGL, const atmi_lparm_t * lparm) {" >>$__CWRAP
       else  
          if [ "$__CFN_ARGL" == "" ] ; then 
-            echo "extern ${__KT} ${__KN}_cpu(const snk_lparm_t * lparm) {" >>$__CWRAP
+            echo "extern ${__KT} ${__KN}_cpu(const atmi_lparm_t * lparm) {" >>$__CWRAP
          else
-            echo "extern ${__KT} ${__KN}_cpu($__CFN_ARGL, const snk_lparm_t * lparm) {" >>$__CWRAP
+            echo "extern ${__KT} ${__KN}_cpu($__CFN_ARGL, const atmi_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
  
       echo "   printf(\"In SNACK Kernel CPU Function ${__KN}\n\"); " >> $__CWRAP
 	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
-      echo "   if (${__KN}_FK == 0 ) { " >> $__CWRAP
-      echo "     status_t status = ${__KN}_init(); " >> $__CWRAP
+      echo "   if (${__KN}_CPU_FK == 0 ) { " >> $__CWRAP
+      echo "     status_t status = ${__KN}_cpu_init(); " >> $__CWRAP
       echo "     if ( status  != STATUS_SUCCESS ) return; " >> $__CWRAP
-      echo "     ${__KN}_FK = 1; " >> $__CWRAP
+      echo "     ${__KN}_CPU_FK = 1; " >> $__CWRAP
       echo "   } " >> $__CWRAP
 #     Write the structure definition for the kernel arguments.
       echo "   snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); " >> $__CWRAP
@@ -720,12 +837,12 @@ __SEDCMD=" "
 #     Write the prototype CPU function to the header file
       if [ "$__IS_FORTRAN" == "1" ] ; then 
 #        don't use headers for fortran but it is a good reference for how to call from fortran
-         echo "extern _CPPSTRING_ $__KT ${__KN}_cpu_($__PROTO_ARGL, const snk_lparm_t * lparm_p);" >>$__HDRF
+         echo "extern _CPPSTRING_ $__KT ${__KN}_cpu_($__PROTO_ARGL, const atmi_lparm_t * lparm_p);" >>$__HDRF
       else
          if [ "$__PROTO_ARGL" == "" ] ; then 
-            echo "extern _CPPSTRING_ $__KT ${__KN}_cpu(const snk_lparm_t * lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ $__KT ${__KN}_cpu(const atmi_lparm_t * lparm);" >>$__HDRF
          else
-            echo "extern _CPPSTRING_ $__KT ${__KN}_cpu($__PROTO_ARGL, const snk_lparm_t * lparm);" >>$__HDRF
+            echo "extern _CPPSTRING_ $__KT ${__KN}_cpu($__PROTO_ARGL, const atmi_lparm_t * lparm);" >>$__HDRF
          fi
       fi
 
@@ -757,20 +874,22 @@ __SEDCMD=" "
 #  END OF WHILE LOOP TO PROCESS EACH KERNEL IN THE CL FILE
    done < $__KARGLIST
 
+   echo "void __sync_kernel() {printf(\"In sync kernel\n\"); }" >> ${__CWRAP}
 
    if [ "$__IS_FORTRAN" == "1" ] ; then 
       write_fortran_lparm_t
    fi
 
+   write_sync_functions_template >>$__HDRF
 #  Write the updated CL
    if [ "$__SEDCMD" != " " ] ; then 
 #     Remove extra spaces, then change "__kernel void" to "void" if they have call-by-value structs
 #     Still could fail if __kernel void _FN_ split across multple lines, FIX THIS
       awk '$1=$1'  $__CLF | sed -e "$__SEDCMD" > $__UPDATED_CL
-      cat $__EXTRACL | sed -e "s/ snk_task_t/ void/g" >> $__UPDATED_CL
+      cat $__EXTRACL | sed -e "s/ atmi_task_t/ void/g" >> $__UPDATED_CL
    else 
 #  No changes to the CL file are needed, so just make a copy
-      cat $__CLF | sed -e "s/ snk_task_t/ void/g" > $__UPDATED_CL
+      cat $__CLF | sed -e "s/ atmi_task_t/ void/g" > $__UPDATED_CL
    fi
 
    rm $__KARGLIST

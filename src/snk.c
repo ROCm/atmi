@@ -67,7 +67,7 @@ long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
     printf("%s failed. %x\n", #msg, status); \
-    exit(1); \
+    /*exit(1); */\
 } else { \
  /*  printf("%s succeeded.\n", #msg);*/ \
 }
@@ -76,16 +76,17 @@ if (status != HSA_STATUS_SUCCESS) { \
  * stream and its tasks. Which was the latest 
  * device used, latest queue used and also a 
  * pool of tasks for synchronization if need be */
-snk_stream_table_t StreamTable[SNK_MAX_STREAMS];
-//snk_task_table_t TaskTable[SNK_MAX_TASKS];
+atmi_stream_table_t StreamTable[ATMI_MAX_STREAMS];
+//atmi_task_table_t TaskTable[SNK_MAX_TASKS];
 
 /* Stream specific globals */
 hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
-snk_task_t   SNK_Tasks[SNK_MAX_TASKS];
+atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
+hsa_signal_t  SNK_Signals[SNK_MAX_TASKS];
 int          SNK_NextTaskId = 0 ;
-snk_stream_t snk_default_stream_obj = {SNK_ORDERED};
-int          SNK_NextGPUQueueID[SNK_MAX_STREAMS];
-int          SNK_NextCPUQueueID[SNK_MAX_STREAMS];
+atmi_stream_t snk_default_stream_obj = {ATMI_ORDERED};
+int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
+int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
 void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest){
   __atomic_store_n(packet,header|(rest<<16),__ATOMIC_RELEASE);
@@ -100,10 +101,9 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {
    return header;
 }
 
-hsa_signal_t barrier_async(hsa_queue_t *queue, const int dep_task_count, snk_task_t **dep_task_list) {
-    /* This routine will wait for all dependent packets to complete
-       irrespective of their queue number. This will put a barrier packet in the
-       stream belonging to the current packet. 
+hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list) {
+    /* This routine will enqueue a barrier packet for all dependent packets to complete
+       irrespective of their stream
      */
 
     long t_barrier_wait = 0L;
@@ -114,7 +114,8 @@ hsa_signal_t barrier_async(hsa_queue_t *queue, const int dep_task_count, snk_tas
     hsa_signal_t last_signal;
     if(queue == NULL || dep_task_list == NULL || dep_task_count <= 0) return last_signal;
     hsa_signal_create(0, 0, NULL, &last_signal);
-    snk_task_t *tasks = *dep_task_list;
+    atmi_task_t **tasks = dep_task_list;
+    int tasks_remaining = dep_task_count;
     const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
     /* round up */
     int barrier_pkt_count = (dep_task_count + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
@@ -133,13 +134,18 @@ hsa_signal_t barrier_async(hsa_queue_t *queue, const int dep_task_count, snk_tas
 
         /* populate all dep_signals */
         int dep_signal_id = 0;
+        int iter = 0;
         for(dep_signal_id = 0; dep_signal_id < HSA_BARRIER_MAX_DEPENDENT_TASKS; dep_signal_id++) {
-            if(tasks != NULL) {
+            if(*tasks != NULL && tasks_remaining > 0) {
+                DEBUG_PRINT("Barrier Packet %d\n", iter);
+                iter++;
                 /* fill out the barrier packet and ring doorbell */
-                barrier->dep_signal[dep_signal_id] = tasks->handle; 
+                barrier->dep_signal[dep_signal_id] = *((hsa_signal_t *)((*tasks)->handle)); 
+                DEBUG_PRINT("Enqueue wait for signal handle: %" PRIu64 "\n", barrier->dep_signal[dep_signal_id].handle);
                 // TODO: Not convinced about this approach
                 // tasks->state = SNK_ISPARENT; 
                 tasks++;
+                tasks_remaining--;
             }
         }
         barrier->dep_signal[4] = last_signal;
@@ -152,39 +158,39 @@ hsa_signal_t barrier_async(hsa_queue_t *queue, const int dep_task_count, snk_tas
     return last_signal;
 }
 
-void barrier_gpu_sync(hsa_queue_t *queue, const int dep_task_count, snk_task_t **dep_task_list, int wait_flag) {
-    hsa_signal_t last_signal = barrier_async(queue, dep_task_count, dep_task_list);
-    /* Wait on completion signal til kernel is finished.  */
-    /* We should just enqueue barrier packet; host should not wait for it 
-     * HSA will deal with waiting */
-    if(wait_flag == 1) {
+void enqueue_barrier_gpu(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list, int wait_flag) {
+    hsa_signal_t last_signal = enqueue_barrier(queue, dep_task_count, dep_task_list);
+    /* Wait on completion signal if blockine */
+    if(wait_flag == SNK_WAIT) {
         hsa_signal_wait_acquire(last_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         hsa_signal_destroy(last_signal);
     }
 }
 
-void barrier_cpu_sync(hsa_queue_t *queue, const int dep_task_count, snk_task_t **dep_task_list, int wait_flag) {
-    hsa_signal_t last_signal = barrier_async(queue, dep_task_count, dep_task_list);
+void enqueue_barrier_cpu(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list, int wait_flag) {
+    hsa_signal_t last_signal = enqueue_barrier(queue, dep_task_count, dep_task_list);
     signal_worker(queue, PROCESS_PKT);
-    /* Wait on completion signal til kernel is finished.  */
-    /* We should just enqueue barrier packet; host should not wait for it 
-     * HSA will deal with waiting */
-    if(wait_flag == 1) {
+    /* Wait on completion signal if blockine */
+    if(wait_flag == SNK_WAIT) {
         hsa_signal_wait_acquire(last_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         hsa_signal_destroy(last_signal);
     }
 }
 
-extern void snk_task_wait(snk_task_t *task) {
+extern void snk_task_wait(atmi_task_t *task) {
     if(task != NULL) {
-        DEBUG_PRINT("Signal Value: %" PRIu64 "\n", task->handle.handle);
-        hsa_signal_wait_acquire(task->handle, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
+        DEBUG_PRINT("Signal Value: %" PRIu64 "\n", ((hsa_signal_t *)(task->handle))->handle);
+        hsa_signal_wait_acquire(*((hsa_signal_t *)(task->handle)), HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
-        task->state = SNK_COMPLETED;
+        task->state = ATMI_COMPLETED;
     }
 
     return;// STATUS_SUCCESS;
+}
+
+extern void atmi_task_wait(atmi_task_t *task) {
+    snk_task_wait(task);
 }
 
 status_t queue_sync(hsa_queue_t *queue) {
@@ -290,10 +296,10 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
     return HSA_STATUS_SUCCESS;
 }
 
-int get_stream_id(snk_stream_t *stream) {
+int get_stream_id(atmi_stream_t *stream) {
     int stream_id;
     int ret_stream_id = -1;
-    for(stream_id = 0; stream_id < SNK_MAX_STREAMS; stream_id++) {
+    for(stream_id = 0; stream_id < ATMI_MAX_STREAMS; stream_id++) {
         if(StreamTable[stream_id].stream != NULL) {
             if(StreamTable[stream_id].stream == stream) {
                 /* stream found */
@@ -305,16 +311,18 @@ int get_stream_id(snk_stream_t *stream) {
     return ret_stream_id;
 }
 
-extern void snk_stream_sync(snk_stream_t *stream) {
+extern void snk_stream_sync(atmi_stream_t *stream) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         /* simply return because this is as good as a no-op */
         return;// STATUS_SUCCESS;
     }
 
-    if(stream->ordered == SNK_TRUE) {
+    if(stream->ordered == ATMI_TRUE) {
         /* just insert a barrier packet to the CPU and GPU queues and wait */
+        DEBUG_PRINT("Waiting for GPU Q\n");
         queue_sync(StreamTable[stream_num].gpu_queue);
+        DEBUG_PRINT("Waiting for CPU Q\n");
         queue_sync(StreamTable[stream_num].cpu_queue);
     }
     else {
@@ -326,7 +334,7 @@ extern void snk_stream_sync(snk_stream_t *stream) {
             task_head = task_head->next;
         }
         if(num_tasks > 0) {
-            snk_task_t **tasks = (snk_task_t **)malloc(sizeof(snk_task_t *) * num_tasks);
+            atmi_task_t **tasks = (atmi_task_t **)malloc(sizeof(atmi_task_t *) * num_tasks);
             int task_id = 0;
             task_head = StreamTable[stream_num].tasks;
             for(task_id = 0; task_id < num_tasks; task_id++) {
@@ -334,11 +342,10 @@ extern void snk_stream_sync(snk_stream_t *stream) {
                 task_head = task_head->next;
             }
             
-            int wait_flag = 1;
             if(StreamTable[stream_num].gpu_queue != NULL) 
-                barrier_gpu_sync(StreamTable[stream_num].gpu_queue, num_tasks, tasks, wait_flag);
+                enqueue_barrier_gpu(StreamTable[stream_num].gpu_queue, num_tasks, tasks, SNK_WAIT);
             else if(StreamTable[stream_num].cpu_queue != NULL) 
-                barrier_cpu_sync(StreamTable[stream_num].cpu_queue, num_tasks, tasks, wait_flag);
+                enqueue_barrier_cpu(StreamTable[stream_num].cpu_queue, num_tasks, tasks, SNK_WAIT);
             else {
                 int idx; 
                 for(idx = 0; idx < num_tasks; idx++) {
@@ -346,12 +353,12 @@ extern void snk_stream_sync(snk_stream_t *stream) {
                 }
             }
             free(tasks);
-            reset_tasks(stream);
         }
     }
+    reset_tasks(stream);
 }
 
-hsa_queue_t *acquire_and_set_next_cpu_queue(snk_stream_t *stream) {
+hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_t *stream) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         DEBUG_PRINT("Stream unregistered\n");
@@ -360,7 +367,7 @@ hsa_queue_t *acquire_and_set_next_cpu_queue(snk_stream_t *stream) {
     int ret_queue_id = SNK_NextCPUQueueID[stream_num];
     /* use the same queue if the stream is ordered */
     /* otherwise, round robin the queue ID for unordered streams */
-    if(stream->ordered == SNK_FALSE) {
+    if(stream->ordered == ATMI_FALSE) {
         SNK_NextCPUQueueID[stream_num] = (ret_queue_id + 1) % SNK_MAX_CPU_QUEUES;
     }
     hsa_queue_t *queue = get_cpu_queue(ret_queue_id);
@@ -368,7 +375,7 @@ hsa_queue_t *acquire_and_set_next_cpu_queue(snk_stream_t *stream) {
     return queue;
 }
 
-hsa_queue_t *acquire_and_set_next_gpu_queue(snk_stream_t *stream) {
+hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_t *stream) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         DEBUG_PRINT("Stream unregistered\n");
@@ -377,7 +384,7 @@ hsa_queue_t *acquire_and_set_next_gpu_queue(snk_stream_t *stream) {
     int ret_queue_id = SNK_NextGPUQueueID[stream_num];
     /* use the same queue if the stream is ordered */
     /* otherwise, round robin the queue ID for unordered streams */
-    if(stream->ordered == SNK_FALSE) {
+    if(stream->ordered == ATMI_FALSE) {
         SNK_NextGPUQueueID[stream_num] = (ret_queue_id + 1) % SNK_MAX_GPU_QUEUES;
     }
     hsa_queue_t *queue = GPU_CommandQ[ret_queue_id];
@@ -385,7 +392,7 @@ hsa_queue_t *acquire_and_set_next_gpu_queue(snk_stream_t *stream) {
     return queue;
 }
 
-status_t reset_tasks(snk_stream_t *stream) {
+status_t reset_tasks(atmi_stream_t *stream) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         DEBUG_PRINT("Stream unregistered\n");
@@ -405,8 +412,8 @@ status_t reset_tasks(snk_stream_t *stream) {
     return STATUS_SUCCESS;
 }
 
-status_t check_change_in_device_type(snk_stream_t *stream, snk_device_type_t new_task_device_type) {
-    if(stream->ordered == SNK_UNORDERED) return STATUS_SUCCESS;
+status_t check_change_in_device_type(atmi_stream_t *stream, atmi_devtype_t new_task_device_type) {
+    if(stream->ordered != ATMI_ORDERED) return STATUS_SUCCESS;
 
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
@@ -415,52 +422,53 @@ status_t check_change_in_device_type(snk_stream_t *stream, snk_device_type_t new
     }
 
     if(StreamTable[stream_num].tasks != NULL) {
+        DEBUG_PRINT("Devtype: %d waiting for task %p\n", new_task_device_type, StreamTable[stream_num].tasks->task);
         if(StreamTable[stream_num].last_device_type != new_task_device_type) {
             /* device changed. introduce a dependency here for ordered streams */
             int num_required = 1;
-            snk_task_t **requires = &(StreamTable[stream_num].tasks->task);
+            atmi_task_t *requires = StreamTable[stream_num].tasks->task;
 
-            if(new_task_device_type == SNK_DEVICE_TYPE_GPU) {
+            if(new_task_device_type == ATMI_DEVTYPE_GPU) {
                 hsa_queue_t* this_Q = acquire_and_set_next_gpu_queue(stream);
                 if(this_Q) {
-                    int wait_flag = 0;
-                    barrier_gpu_sync(this_Q, num_required, requires, wait_flag);
+                    enqueue_barrier_gpu(this_Q, num_required, &requires, SNK_NOWAIT);
                 }
             }
             else {
                 hsa_queue_t* this_Q = acquire_and_set_next_cpu_queue(stream);
                 if(this_Q) {
-                    int wait_flag = 0;
-                    barrier_cpu_sync(this_Q, num_required, requires, wait_flag);
+                    enqueue_barrier_cpu(this_Q, num_required, &requires, SNK_NOWAIT);
                 }
             }
         }
     }
 }
 
-status_t register_gpu_task(snk_stream_t *stream, snk_task_t *task) {
+status_t register_gpu_task(atmi_stream_t *stream, atmi_task_t *task) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         DEBUG_PRINT("Stream unregistered\n");
         return STATUS_ERROR;
     }
-    StreamTable[stream_num].last_device_type = SNK_DEVICE_TYPE_GPU;
+    StreamTable[stream_num].last_device_type = ATMI_DEVTYPE_GPU;
 
+    DEBUG_PRINT("Registering GPU task: ");
     return register_task(stream_num, task);
 }
 
-status_t register_cpu_task(snk_stream_t *stream, snk_task_t *task) {
+status_t register_cpu_task(atmi_stream_t *stream, atmi_task_t *task) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         DEBUG_PRINT("Stream unregistered\n");
         return STATUS_ERROR;
     }
-    StreamTable[stream_num].last_device_type = SNK_DEVICE_TYPE_CPU;
+    StreamTable[stream_num].last_device_type = ATMI_DEVTYPE_CPU;
 
+    DEBUG_PRINT("Registering CPU task: ");
     return register_task(stream_num, task);
 }
 
-status_t register_task(int stream_num, snk_task_t *task) {
+status_t register_task(int stream_num, atmi_task_t *task) {
     snk_task_list_t *node = (snk_task_list_t *)malloc(sizeof(snk_task_list_t));
     node->task = task;
     node->next = NULL;
@@ -471,16 +479,17 @@ status_t register_task(int stream_num, snk_task_t *task) {
         StreamTable[stream_num].tasks = node;
         node->next = cur;
     }
+    DEBUG_PRINT("%p\n", task);
     return STATUS_SUCCESS;
 }
 
-status_t register_stream(snk_stream_t *stream) {
+status_t register_stream(atmi_stream_t *stream) {
     /* Check if the stream exists in the stream table. 
      * If no, then add this stream to the stream table.
      */
     int stream_id;
     int stream_found = 0;
-    for(stream_id = 0; stream_id < SNK_MAX_STREAMS; stream_id++) {
+    for(stream_id = 0; stream_id < ATMI_MAX_STREAMS; stream_id++) {
         if(StreamTable[stream_id].stream != NULL) {
             if(StreamTable[stream_id].stream == stream) {
                 /* stream found */
@@ -493,8 +502,8 @@ status_t register_stream(snk_stream_t *stream) {
             break;
         }
     }
-    if(stream_id >= SNK_MAX_STREAMS) {
-       printf(" ERROR! Too many streams created! Stream count must be less than %d.\n", SNK_MAX_STREAMS);
+    if(stream_id >= ATMI_MAX_STREAMS) {
+       printf(" ERROR! Too many streams created! Stream count must be less than %d.\n", ATMI_MAX_STREAMS);
        return STATUS_ERROR;
     }
     if(stream_found == 0) {
@@ -605,7 +614,8 @@ status_t snk_init_context(
        //SNK_Tasks[task_num].next = NULL;
        //err=hsa_signal_create(1, 0, NULL, &(TaskTable[task_num].handle));
        //TaskTable[task_num].task = &(SNK_Tasks[task_num]);
-       err=hsa_signal_create(1, 0, NULL, &(SNK_Tasks[task_num].handle));
+       err=hsa_signal_create(1, 0, NULL, &SNK_Signals[task_num]);
+       SNK_Tasks[task_num].handle = (void *)(&SNK_Signals[task_num]);
        ErrorCheck(Creating a HSA signal, err);
     }
 
@@ -617,7 +627,7 @@ status_t snk_init_context(
        ErrorCheck(Creating the Stream Command Q, err);
     }
 
-    for(stream_num = 0; stream_num < SNK_MAX_STREAMS; stream_num++) {
+    for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
         /* round robin streams to queues */
         SNK_NextGPUQueueID[stream_num] = stream_num % SNK_MAX_GPU_QUEUES;
         SNK_NextCPUQueueID[stream_num] = stream_num % SNK_MAX_CPU_QUEUES;
@@ -626,7 +636,11 @@ status_t snk_init_context(
     return STATUS_SUCCESS;
 }
 
-status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
+status_t snk_init_cpu_kernel() {
+    return STATUS_SUCCESS;
+}
+
+status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             const char *kernel_symbol_name,
                             uint64_t                         *_KN__Kernel_Object,
                             uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
@@ -658,12 +672,12 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
 
 }                    
 
-snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm, 
+atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
                  const uint32_t _KN__cpu_task_num_args,
                  const snk_kernel_args_t *kernel_args) {
-    snk_stream_t *stream = NULL;
+    atmi_stream_t *stream = NULL;
     if(lparm->stream == NULL) {
         stream = &snk_default_stream_obj;
     } else {
@@ -675,16 +689,14 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
     hsa_queue_t* this_Q = acquire_and_set_next_cpu_queue(stream);
     if(!this_Q) return NULL;
 
-    check_change_in_device_type(stream, SNK_DEVICE_TYPE_GPU);
     if ( lparm->num_required > 0) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
 #if 1
 #if 1
-        int wait_flag = 0;
-        barrier_cpu_sync(this_Q, lparm->num_required, lparm->requires, wait_flag);
+        enqueue_barrier_cpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
 #else
         /* For dependent child tasks, wait till all parent kernels are finished.  */
-        snk_task_t **p = lparm->requires;
+        atmi_task_t **p = lparm->requires;
         int idx; 
         for(idx = 0; idx < lparm->num_required; idx++) {
             snk_task_wait(p[idx]);
@@ -692,16 +704,21 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
 #endif
 #endif
     }
-    if ( /*stream->ordered == SNK_TRUE &&*/ lparm->synchronous == SNK_TRUE ) { 
+    #if 0
+    else if ( /*stream->ordered == ATMI_TRUE &&*/ lparm->synchronous == ATMI_TRUE ) { 
        /*  Sychronous execution */
        /* FIXME: need to think if sync execution on unordered streams really need to syn all pending tasks */
        snk_stream_sync(stream);
+    }
+    #endif
+    else {        
+        check_change_in_device_type(stream, ATMI_DEVTYPE_CPU);
     }
 
     /* Iterate over function table and retrieve the ID for kernel_name */
     uint16_t i;
     set_cpu_kernel_table(_CN__CPU_kernels);
-    snk_task_t *ret = NULL;
+    atmi_task_t *ret = NULL;
     for(i = 0; i < SNK_MAX_CPU_FUNCTIONS; i++) {
         //printf("Comparing kernels %s %s\n", _CN__CPU_kernels[i].name, kernel_name);
         if(_CN__CPU_kernels[i].name && kernel_name) {
@@ -732,12 +749,12 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                 this_aql->arg[2] = UINT64_MAX;
                 this_aql->arg[3] = UINT64_MAX;
 
-                /* If this kernel was declared as snk_task_t*, then use preallocated signal */
+                /* If this kernel was declared as atmi_task_t*, then use preallocated signal */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
                     printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
                     return ;
                 }
-                this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].handle;
+                this_aql->completion_signal = *((hsa_signal_t *)(SNK_Tasks[SNK_NextTaskId].handle));
 
                 /*  Prepare and set the packet header */ 
                 /* Only set barrier bit if asynchrnous execution */
@@ -746,13 +763,13 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
                 /* Increment write index and ring doorbell to dispatch the kernel.  */
                 hsa_queue_store_write_index_relaxed(this_Q, index+1);
                 hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-                SNK_Tasks[SNK_NextTaskId].state = SNK_DISPATCHED;
+                SNK_Tasks[SNK_NextTaskId].state = ATMI_DISPATCHED;
                 signal_worker(this_Q, PROCESS_PKT);
-                ret = (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);
-                if ( lparm->synchronous == SNK_TRUE ) { /*  Sychronous execution */
+                ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);
+                if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
                     /* For default synchrnous execution, wait til kernel is finished.  */
                     hsa_signal_value_t value = hsa_signal_wait_acquire(this_aql->completion_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
-                    SNK_Tasks[SNK_NextTaskId].state = SNK_COMPLETED;
+                    SNK_Tasks[SNK_NextTaskId].state = ATMI_COMPLETED;
                     reset_tasks(stream);
                 }
                 else {
@@ -765,12 +782,12 @@ snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm,
     return ret;
 }
 
-snk_task_t *snk_gpu_kernel(const snk_lparm_t *lparm, 
+atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm, 
                  uint64_t                         _KN__Kernel_Object,
                  uint32_t                         _KN__Group_Segment_Size,
                  uint32_t                         _KN__Private_Segment_Size,
                  void *thisKernargAddress) {
-    snk_stream_t *stream = NULL;
+    atmi_stream_t *stream = NULL;
     if(lparm->stream == NULL) {
         stream = &snk_default_stream_obj;
     } else {
@@ -782,16 +799,14 @@ snk_task_t *snk_gpu_kernel(const snk_lparm_t *lparm,
     hsa_queue_t* this_Q = acquire_and_set_next_gpu_queue(stream);
     if(!this_Q) return NULL;
 
-    check_change_in_device_type(stream, SNK_DEVICE_TYPE_GPU);
     if ( lparm->num_required > 0) {
-        /* For dependent child tasks, wait till all parent kernels are finished.  */
+        /* For dependent child tasks, add dependent parent kernels to barriers.  */
 #if 1
 #if 1
-        int wait_flag = 0;
-        barrier_gpu_sync(this_Q, lparm->num_required, lparm->requires, wait_flag);
+        enqueue_barrier_gpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
 #else
         /* For dependent child tasks, wait till all parent kernels are finished.  */
-        snk_task_t **p = lparm->requires;
+        atmi_task_t **p = lparm->requires;
         int idx; 
         for(idx = 0; idx < lparm->num_required; idx++) {
             snk_task_wait(p[idx]);
@@ -799,10 +814,15 @@ snk_task_t *snk_gpu_kernel(const snk_lparm_t *lparm,
 #endif
 #endif
     }
-    if ( /*stream->ordered == SNK_TRUE &&*/ lparm->synchronous == SNK_TRUE ) { 
+    #if 0
+    else if ( /*stream->ordered == ATMI_TRUE &&*/ lparm->synchronous == ATMI_TRUE ) { 
        /*  Sychronous execution */
        /* FIXME: need to think if sync execution on unordered streams really need to syn all pending tasks */
        snk_stream_sync(stream);
+    }
+    #endif
+    else {        
+        check_change_in_device_type(stream, ATMI_DEVTYPE_GPU);
     }
 
     /*  Obtain the current queue write index. increases with each call to kernel  */
@@ -819,7 +839,7 @@ snk_task_t *snk_gpu_kernel(const snk_lparm_t *lparm,
            printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
            return ;
         }
-        this_aql->completion_signal = SNK_Tasks[SNK_NextTaskId].handle;
+        this_aql->completion_signal = *((hsa_signal_t*)(SNK_Tasks[SNK_NextTaskId].handle));
 
     /*  Process lparm values */
     /*  this_aql.dimensions=(uint16_t) lparm->ndim; */
@@ -855,13 +875,13 @@ snk_task_t *snk_gpu_kernel(const snk_lparm_t *lparm,
     /* Increment write index and ring doorbell to dispatch the kernel.  */
     hsa_queue_store_write_index_relaxed(this_Q, index+1);
     hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-    SNK_Tasks[SNK_NextTaskId].state = SNK_DISPATCHED;
+    SNK_Tasks[SNK_NextTaskId].state = ATMI_DISPATCHED;
 
-    snk_task_t *ret = (snk_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);
-    if ( lparm->synchronous == SNK_TRUE ) { /*  Sychronous execution */
+    atmi_task_t *ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId++]);
+    if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
        /* For default synchrnous execution, wait til kernel is finished.  */
        hsa_signal_value_t value = hsa_signal_wait_acquire(this_aql->completion_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
-       SNK_Tasks[SNK_NextTaskId].state = SNK_COMPLETED;
+       SNK_Tasks[SNK_NextTaskId].state = ATMI_COMPLETED;
        reset_tasks(stream);
     }
     else {

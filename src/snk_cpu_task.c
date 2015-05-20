@@ -131,6 +131,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 DEBUG_PRINT("Executing AND barrier\n");
                 for (i = 0; i < 5; ++i) {
                     if (barrier->dep_signal[i].handle != 0) {
+                        DEBUG_PRINT("Waiting for signal handle: %" PRIu64 "\n", barrier->dep_signal[i].handle);
                         hsa_signal_wait_acquire(barrier->dep_signal[i], 
                                 HSA_SIGNAL_CONDITION_EQ,
                                 0, UINT64_MAX,

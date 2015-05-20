@@ -255,8 +255,8 @@ if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then
    echo "        snack.sh requires HSA includes"
    exit $DEADRC
 fi
-if [ $MAKEOBJ ] && [ ! -f $SNACK_RUNTIME_PATH/include/snk.h ] ; then 
-   echo "ERROR:  Missing $SNACK_RUNTIME_PATH/include/snk.h"
+if [ $MAKEOBJ ] && [ ! -f $SNACK_RUNTIME_PATH/include/atmi.h ] ; then 
+   echo "ERROR:  Missing $SNACK_RUNTIME_PATH/include/atmi.h"
    echo "        snack.sh requires HSA includes"
    exit $DEADRC
 fi

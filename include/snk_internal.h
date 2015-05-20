@@ -13,13 +13,21 @@
 #include "hsa_ext_amd.h"
 */
 
-#include "snk.h"
+//#include "snk.h"
+#include "atmi.h"
 
 #include <pthread.h>
+#define ATMI_MAX_STREAMS            8 
+#define ATMI_MAX_TASKS_PER_STREAM   500
 
 #define SNK_MAX_CPU_QUEUES 4
 #define SNK_MAX_GPU_QUEUES 8
 #define SNK_MAX_CPU_FUNCTIONS   100
+
+#define SNK_MAX_TASKS   ((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
+
+#define SNK_WAIT    1
+#define SNK_NOWAIT  0
 
 #define check(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
@@ -207,35 +215,35 @@ void *agent_worker(void *agent_args);
 int process_packet(hsa_queue_t *queue, int id);
 
 typedef struct snk_task_list_s {
-    snk_task_t *task;
+    atmi_task_t *task;
     struct snk_task_list_s *next;
 } snk_task_list_t;
 
-typedef struct snk_stream_table_s {
-    snk_stream_t *stream;
+typedef struct atmi_stream_table_s {
+    atmi_stream_t *stream;
     snk_task_list_t *tasks;
     hsa_queue_t *gpu_queue;
     hsa_queue_t *cpu_queue;
-    snk_device_type_t last_device_type;
-}snk_stream_table_t;
+    atmi_devtype_t last_device_type;
+}atmi_stream_table_t;
 
 /*
-typedef struct snk_task_table_s {
-    snk_task_t *task;
+typedef struct atmi_task_table_s {
+    atmi_task_t *task;
     hsa_signal_t handle;
-} snk_task_table_t;
+} atmi_task_table_t;
 */
-extern snk_task_t   SNK_Tasks[SNK_MAX_TASKS];
+extern atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
 extern int          SNK_NextTaskId;
 
-int get_stream_id(snk_stream_t *stream);
-hsa_queue_t *acquire_and_set_next_cpu_queue(snk_stream_t *stream);
-hsa_queue_t *acquire_and_set_next_gpu_queue(snk_stream_t *stream);
-status_t reset_tasks(snk_stream_t *stream);
-status_t register_cpu_task(snk_stream_t *stream, snk_task_t *task);
-status_t register_gpu_task(snk_stream_t *stream, snk_task_t *task);
-status_t register_task(int stream_num, snk_task_t *task);
-status_t register_stream(snk_stream_t *stream);
+int get_stream_id(atmi_stream_t *stream);
+hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_t *stream);
+hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_t *stream);
+status_t reset_tasks(atmi_stream_t *stream);
+status_t register_cpu_task(atmi_stream_t *stream, atmi_task_t *task);
+status_t register_gpu_task(atmi_stream_t *stream, atmi_task_t *task);
+status_t register_task(int stream_num, atmi_task_t *task);
+status_t register_stream(atmi_stream_t *stream);
 
 status_t snk_init_context(
                         hsa_agent_t *_CN__Agent, 
@@ -247,7 +255,8 @@ status_t snk_init_context(
                         hsa_region_t *_CN__CPU_KernargRegion
                         );
 
-status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
+status_t snk_init_cpu_kernel();
+status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             const char *kernel_symbol_name,
                             uint64_t                         *_KN__Kernel_Object,
                             uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
@@ -257,13 +266,13 @@ status_t snk_init_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             hsa_executable_t _CN__Executable
                             );
 
-snk_task_t *snk_gpu_kernel(const snk_lparm_t *lparm, 
+atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm, 
                  uint64_t                         _KN__Kernel_Object,
                  uint32_t                         _KN__Group_Segment_Size,
                  uint32_t                         _KN__Private_Segment_Size,
                  void *thisKernargAddress);
 
-snk_task_t *snk_cpu_kernel(const snk_lparm_t *lparm, 
+atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
                  const uint32_t _KN__cpu_task_num_args,

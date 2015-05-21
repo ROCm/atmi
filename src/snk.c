@@ -317,13 +317,15 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         /* simply return because this is as good as a no-op */
         return;// STATUS_SUCCESS;
     }
-
+    if(StreamTable[stream_num].tasks == NULL ) return;
     if(stream->ordered == ATMI_TRUE) {
         /* just insert a barrier packet to the CPU and GPU queues and wait */
         DEBUG_PRINT("Waiting for GPU Q\n");
         queue_sync(StreamTable[stream_num].gpu_queue);
         DEBUG_PRINT("Waiting for CPU Q\n");
         queue_sync(StreamTable[stream_num].cpu_queue);
+        if(StreamTable[stream_num].cpu_queue) 
+            signal_worker(StreamTable[stream_num].cpu_queue, PROCESS_PKT);
     }
     else {
         /* wait on each one of the tasks in the task bag */
@@ -412,7 +414,7 @@ status_t reset_tasks(atmi_stream_t *stream) {
     return STATUS_SUCCESS;
 }
 
-status_t check_change_in_device_type(atmi_stream_t *stream, atmi_devtype_t new_task_device_type) {
+status_t check_change_in_device_type(atmi_stream_t *stream, hsa_queue_t *queue, atmi_devtype_t new_task_device_type) {
     if(stream->ordered != ATMI_ORDERED) return STATUS_SUCCESS;
 
     int stream_num = get_stream_id(stream); 
@@ -422,22 +424,20 @@ status_t check_change_in_device_type(atmi_stream_t *stream, atmi_devtype_t new_t
     }
 
     if(StreamTable[stream_num].tasks != NULL) {
-        DEBUG_PRINT("Devtype: %d waiting for task %p\n", new_task_device_type, StreamTable[stream_num].tasks->task);
         if(StreamTable[stream_num].last_device_type != new_task_device_type) {
+            DEBUG_PRINT("Devtype: %d waiting for task %p\n", new_task_device_type, StreamTable[stream_num].tasks->task);
             /* device changed. introduce a dependency here for ordered streams */
             int num_required = 1;
             atmi_task_t *requires = StreamTable[stream_num].tasks->task;
 
             if(new_task_device_type == ATMI_DEVTYPE_GPU) {
-                hsa_queue_t* this_Q = acquire_and_set_next_gpu_queue(stream);
-                if(this_Q) {
-                    enqueue_barrier_gpu(this_Q, num_required, &requires, SNK_NOWAIT);
+                if(queue) {
+                    enqueue_barrier_gpu(queue, num_required, &requires, SNK_NOWAIT);
                 }
             }
             else {
-                hsa_queue_t* this_Q = acquire_and_set_next_cpu_queue(stream);
-                if(this_Q) {
-                    enqueue_barrier_cpu(this_Q, num_required, &requires, SNK_NOWAIT);
+                if(queue) {
+                    enqueue_barrier_cpu(queue, num_required, &requires, SNK_NOWAIT);
                 }
             }
         }
@@ -685,10 +685,10 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     }
     register_stream(stream);
 
-    printf("DEBUG:Calling CPU kernel\n");  
     hsa_queue_t* this_Q = acquire_and_set_next_cpu_queue(stream);
     if(!this_Q) return NULL;
 
+    check_change_in_device_type(stream, this_Q, ATMI_DEVTYPE_CPU);
     if ( lparm->num_required > 0) {
         /* For dependent child tasks, wait till all parent kernels are finished.  */
 #if 1
@@ -711,9 +711,6 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
        snk_stream_sync(stream);
     }
     #endif
-    else {        
-        check_change_in_device_type(stream, ATMI_DEVTYPE_CPU);
-    }
 
     /* Iterate over function table and retrieve the ID for kernel_name */
     uint16_t i;
@@ -770,7 +767,9 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                     /* For default synchrnous execution, wait til kernel is finished.  */
                     hsa_signal_value_t value = hsa_signal_wait_acquire(this_aql->completion_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
                     SNK_Tasks[SNK_NextTaskId].state = ATMI_COMPLETED;
-                    reset_tasks(stream);
+                    //reset_tasks(stream);
+                    // FIXME: This has to change for unordered streams! Why should we flush the entire stream for every sync kernel?
+                    snk_stream_sync(stream);
                 }
                 else {
                     register_cpu_task(stream, ret);
@@ -795,10 +794,10 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     }
     register_stream(stream);
 
-    printf("DEBUG:Calling GPU kernel\n");  
     hsa_queue_t* this_Q = acquire_and_set_next_gpu_queue(stream);
     if(!this_Q) return NULL;
 
+    check_change_in_device_type(stream, this_Q, ATMI_DEVTYPE_GPU);
     if ( lparm->num_required > 0) {
         /* For dependent child tasks, add dependent parent kernels to barriers.  */
 #if 1
@@ -821,12 +820,8 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
        snk_stream_sync(stream);
     }
     #endif
-    else {        
-        check_change_in_device_type(stream, ATMI_DEVTYPE_GPU);
-    }
 
     /*  Obtain the current queue write index. increases with each call to kernel  */
-    printf("DEBUG:Dependent kernel enqueued\n");  
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
 
     /* Find the queue index address to write the packet info into.  */
@@ -882,7 +877,9 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
        /* For default synchrnous execution, wait til kernel is finished.  */
        hsa_signal_value_t value = hsa_signal_wait_acquire(this_aql->completion_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
        SNK_Tasks[SNK_NextTaskId].state = ATMI_COMPLETED;
-       reset_tasks(stream);
+       //reset_tasks(stream);
+       // FIXME: This has to change for unordered streams! Why should we flush the entire stream for every sync kernel?
+       snk_stream_sync(stream);
     }
     else {
        register_gpu_task(stream, ret);

@@ -633,7 +633,7 @@ __SEDCMD=" "
             echo "extern ${__KT} ${__KN}_gpu($__CFN_ARGL, const atmi_lparm_t * lparm) {" >>$__CWRAP
          fi
       fi
-      echo "   printf(\"In SNACK Kernel GPU Function ${__KN}\n\"); " >> $__CWRAP
+      #echo "   printf(\"In SNACK Kernel GPU Function ${__KN}\n\"); " >> $__CWRAP
 	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
       echo "   if (${__KN}_GPU_FK == 0 ) { " >> $__CWRAP
       echo "     status_t status = ${__KN}_gpu_init(); " >> $__CWRAP
@@ -647,9 +647,9 @@ __SEDCMD=" "
       echo "   void* thisKernargAddress; " >> $__CWRAP
       echo "   /* FIXME: HSA 1.0F may have a bug that serializes all queue operations when hsa_memory_allocate is used. " >> $__CWRAP
 	  echo "	  Investigate more and revert back to hsa_memory_allocate once bug is fixed. */ " >> $__CWRAP
-	  #echo "   thisKernargAddress = malloc(${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
+	  echo "   thisKernargAddress = malloc(${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
       #echo "   int ret = posix_memalign(&thisKernargAddress, 4096, ${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
-	  echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
+	  #echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
 #     How to map a structure into an malloced memory area?
       echo "   struct ${__KN}_args_struct {" >> $__CWRAP
       NEXTI=0
@@ -773,7 +773,7 @@ __SEDCMD=" "
          fi
       fi
  
-      echo "   printf(\"In SNACK Kernel CPU Function ${__KN}\n\"); " >> $__CWRAP
+      #echo "   printf(\"In SNACK Kernel CPU Function ${__KN}\n\"); " >> $__CWRAP
 	  echo "   /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
       echo "   if (${__KN}_CPU_FK == 0 ) { " >> $__CWRAP
       echo "     status_t status = ${__KN}_cpu_init(); " >> $__CWRAP
@@ -874,7 +874,7 @@ __SEDCMD=" "
 #  END OF WHILE LOOP TO PROCESS EACH KERNEL IN THE CL FILE
    done < $__KARGLIST
 
-   echo "void __sync_kernel() {printf(\"In sync kernel\n\"); }" >> ${__CWRAP}
+   echo "void __sync_kernel() {}" >> ${__CWRAP}
 
    if [ "$__IS_FORTRAN" == "1" ] ; then 
       write_fortran_lparm_t

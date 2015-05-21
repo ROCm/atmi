@@ -1,126 +1,218 @@
-/*
+#ifndef __SNK_H__
+#define __SNK_H__
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <string.h>
+#include <inttypes.h>
 
-  Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  
+#include "hsa.h"
+#include "hsa_ext_finalize.h"
+/*  set NOTCOHERENT needs this include
+#include "hsa_ext_amd.h"
+*/
 
-  AMD is granting you permission to use this software and documentation (if any) (collectively, the 
-  Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
-  Materials.  If you do not have a copy of the Software License Agreement, contact your AMD 
-  representative for a copy.
+#include "atmi.h"
 
-  You agree that you will not reverse engineer or decompile the Materials, in whole or in part, except for 
-  example code which is provided in source code form and as allowed by applicable law.
+#define ATMI_MAX_STREAMS            8 
+#define ATMI_MAX_TASKS_PER_STREAM   500
 
-  WARRANTY DISCLAIMER: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
-  KIND.  AMD DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT 
-  LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
-  PURPOSE, TITLE, NON-INFRINGEMENT, THAT THE SOFTWARE WILL RUN UNINTERRUPTED OR ERROR-
-  FREE OR WARRANTIES ARISING FROM CUSTOM OF TRADE OR COURSE OF USAGE.  THE ENTIRE RISK 
-  ASSOCIATED WITH THE USE OF THE SOFTWARE IS ASSUMED BY YOU.  Some jurisdictions do not 
-  allow the exclusion of implied warranties, so the above exclusion may not apply to You. 
+#define SNK_MAX_CPU_QUEUES 4
+#define SNK_MAX_GPU_QUEUES 8
+#define SNK_MAX_CPU_FUNCTIONS   100
 
-  LIMITATION OF LIABILITY AND INDEMNIFICATION:  AMD AND ITS LICENSORS WILL NOT, 
-  UNDER ANY CIRCUMSTANCES BE LIABLE TO YOU FOR ANY PUNITIVE, DIRECT, INCIDENTAL, 
-  INDIRECT, SPECIAL OR CONSEQUENTIAL DAMAGES ARISING FROM USE OF THE SOFTWARE OR THIS 
-  AGREEMENT EVEN IF AMD AND ITS LICENSORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH 
-  DAMAGES.  In no event shall AMD's total liability to You for all damages, losses, and 
-  causes of action (whether in contract, tort (including negligence) or otherwise) 
-  exceed the amount of $100 USD.  You agree to defend, indemnify and hold harmless 
-  AMD and its licensors, and any of their directors, officers, employees, affiliates or 
-  agents from and against any and all loss, damage, liability and other expenses 
-  (including reasonable attorneys' fees), resulting from Your use of the Software or 
-  violation of the terms and conditions of this Agreement.  
+#define SNK_MAX_TASKS   ((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
 
-  U.S. GOVERNMENT RESTRICTED RIGHTS: The Materials are provided with "RESTRICTED RIGHTS." 
-  Use, duplication, or disclosure by the Government is subject to the restrictions as set 
-  forth in FAR 52.227-14 and DFAR252.227-7013, et seq., or its successor.  Use of the 
-  Materials by the Government constitutes acknowledgement of AMD's proprietary rights in them.
+#define SNK_WAIT    1
+#define SNK_NOWAIT  0
 
-  EXPORT RESTRICTIONS: The Materials may be subject to export restrictions as stated in the 
-  Software License Agreement.
-
-*/ 
-/* This file defines the Asynchronous Task Management Interface (ATMI)
- */
-#ifdef __cplusplus
-#define _CPPSTRING_ "C" 
-#endif
-#ifndef __cplusplus
-#define _CPPSTRING_ 
+#define check(msg, status) \
+if (status != HSA_STATUS_SUCCESS) { \
+    printf("%s failed.\n", #msg); \
+    exit(1); \
+}
+//#define DEBUG_SNK
+//#define VERBOSE_SNK
+#ifdef DEBUG_SNK
+#define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
+#else
+#define DEBUG_PRINT(...) do{ } while ( false )
 #endif
 
-#ifndef __SNK_DEFS
-
-#ifdef __cplusplus
-extern "C" {
-#endif // __cplusplus
-
-#define SNK_MAX_STREAMS 8 
-#define SNK_MAX_TASKS 4000
-
-#define SNK_ORDERED 0
-#define SNK_UNORDERED 1
-
-#define SNK_TRUE    1
-#define SNK_FALSE   0
-typedef enum snk_device_type_s {
-    SNK_DEVICE_TYPE_CPU = 0,
-    SNK_DEVICE_TYPE_GPU = 1,
-    SNK_DEVICE_TYPE_DSP = 2
-} snk_device_type_t;
-
-typedef enum snk_state_s {
-    SNK_INITIALIZED = 0,
-    SNK_DISPATCHED  = 1,
-    SNK_COMPLETED   = 2,
-    SNK_FAILED      = 3
-} snk_state_t;
-
-typedef struct snk_task_profile_s {
-    double dispatch_time;
-    double start_time;
-    double end_time;
-} snk_task_profile_t;
-
-#define snk_handle_t hsa_signal_t
-typedef struct snk_task_s { 
-    snk_handle_t handle;
-    snk_state_t state;
-    //snk_task_profile_t* profile;
-} snk_task_t;
-
-typedef char boolean;
-typedef struct snk_stream_s {
-    //char id;
-    boolean ordered;
-} snk_stream_t;
-
-typedef struct snk_lparm_s snk_lparm_t;
-struct snk_lparm_s { 
-   int ndim;                  /* default = 1 */
-   size_t gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
-   size_t ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
-   snk_stream_t *stream;      /* default = NULL */
-   boolean synchronous;          /* default = SNK_FALSE; */
-   int acquire_fence_scope;   /* default = 2 */
-   int release_fence_scope;   /* default = 2 */
-   int num_required;          /* Number of required parent tasks, default = 0 */
-   snk_task_t** requires;     /* Array of required parent tasks, default = NULL */
-   int num_needs_any;         /* Number of parent tasks where only one must complete, default = 0 */
-   snk_task_t** needs_any;    /* Array of parent tasks where only one must complete, default = NULL */
-   snk_device_type_t device_type; /* default = SNK_DEVICE_TYPE_GPU */
-} ;
-
-/* This string macro is used to declare launch parameters set default values  */
-#define SNK_INIT_LPARM(X,Y) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=NULL,.synchronous=SNK_FALSE,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_GPU} ; X = &_ ## X ;
- 
-#define SNK_INIT_CPU_LPARM(X) snk_lparm_t * X ; snk_lparm_t  _ ## X ={.ndim=1,.gdims={1},.ldims={1},.stream=NULL,.synchronous=SNK_FALSE,.acquire_fence_scope=2,.release_fence_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.device_type=SNK_DEVICE_TYPE_CPU} ; X = &_ ## X ;
- 
-extern _CPPSTRING_ void snk_task_wait(snk_task_t *task);
-extern _CPPSTRING_ void snk_stream_sync(snk_stream_t *stream);
-
-#ifdef __cplusplus
-} //end extern "C" block
+#ifdef VERBOSE_SNK
+#define VERBOSE_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
+#else
+#define VERBOSE_PRINT(...) do{ } while ( false )
 #endif
 
-#define __SNK_DEFS
-#endif //__SNK_DEFS
+#ifndef HSA_RUNTIME_INC_HSA_H_
+typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
+#endif
+
+typedef enum status_t {
+    STATUS_SUCCESS=0,
+    STATUS_UNKNOWN=1,
+    STATUS_ERROR=2
+} status_t;
+
+typedef struct snk_kernel_args_s {
+    uint64_t args[20];
+} snk_kernel_args_t;
+
+#define COMMA ,
+#define REPEAT(name)   COMMA name
+#define REPEAT2(name)  REPEAT(name)   REPEAT(name) 
+#define REPEAT4(name)  REPEAT2(name)  REPEAT2(name)
+#define REPEAT8(name)  REPEAT4(name)  REPEAT4(name)
+#define REPEAT16(name) REPEAT8(name) REPEAT8(name)
+
+typedef struct cpu_kernel_table_s {
+    const char *name; 
+    union {
+        void (*function0) (void);
+        void (*function1) (uint64_t);
+        void (*function2) (uint64_t,uint64_t);
+        void (*function3) (uint64_t,uint64_t,uint64_t);
+        void (*function4) (uint64_t,uint64_t,uint64_t,uint64_t);
+        void (*function5) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function6) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function7) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function8) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function9) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function10) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function11) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function12) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function13) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function14) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function15) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function16) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function17) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function18) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function19) (uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+        void (*function20) (uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t,
+                            uint64_t,uint64_t);
+    } function;
+} cpu_kernel_table_t;
+
+
+status_t snk_init_context(
+                        hsa_agent_t *_CN__Agent, 
+                        hsa_ext_module_t **_CN__BrigModule,
+                        hsa_ext_program_t *_CN__HsaProgram,
+                        hsa_executable_t *_CN__Executable,
+                        hsa_region_t *_CN__KernargRegion,
+                        hsa_agent_t *_CN__CPU_Agent,
+                        hsa_region_t *_CN__CPU_KernargRegion
+                        );
+
+status_t snk_init_cpu_kernel();
+status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
+                            const char *kernel_symbol_name,
+                            uint64_t                         *_KN__Kernel_Object,
+                            uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
+                            uint32_t                         *_KN__Group_Segment_Size,
+                            uint32_t                         *_KN__Private_Segment_Size,
+                            hsa_agent_t _CN__Agent, 
+                            hsa_executable_t _CN__Executable
+                            );
+
+atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm, 
+                 uint64_t                         _KN__Kernel_Object,
+                 uint32_t                         _KN__Group_Segment_Size,
+                 uint32_t                         _KN__Private_Segment_Size,
+                 void *thisKernargAddress);
+
+atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
+                 const cpu_kernel_table_t *_CN__CPU_kernels,
+                 const char *kernel_name,
+                 const uint32_t _KN__cpu_task_num_args,
+                 const snk_kernel_args_t *kernel_args);
+#endif // __SNK_H__

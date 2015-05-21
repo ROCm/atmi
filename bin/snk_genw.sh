@@ -88,7 +88,7 @@ function write_copyright_template(){
 
 */ 
 
-#include "snk_internal.h"
+#include "snk.h"
 EOF
 }
 

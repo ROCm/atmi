@@ -94,6 +94,7 @@ EOF
 
 function write_header_template(){
 /bin/cat  <<"EOF"
+
 #ifndef __ATMI_H__
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
@@ -140,9 +141,9 @@ typedef char boolean;
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 typedef struct atmi_tprofile_s {
-   double           dispatch_time;  /*                                        */
-   double           start_time;     /*                                        */
-   double           end_time;       /*                                        */
+   unsigned long int dispatch_time;  /*                                       */
+   unsigned long int start_time;     /*                                       */
+   unsigned long int end_time;       /*                                       */
 } atmi_tprofile_t;
 
 /*----------------------------------------------------------------------------*/
@@ -209,13 +210,14 @@ typedef struct atmi_lparm_s {
 
 #define __ATMI_H__
 #endif //__ATMI_H__
-
 #ifdef __cplusplus
 #define _CPPSTRING_ "C" 
 #endif
 #ifndef __cplusplus
 #define _CPPSTRING_ 
 #endif
+extern _CPPSTRING_ void atmi_stream_sync(atmi_stream_t *stream);
+extern _CPPSTRING_ void atmi_task_wait(atmi_task_t *task);
 EOF
 }
 function write_sync_functions_template(){
@@ -267,7 +269,6 @@ __kernel void decode(__global const char* in, __global char* out) {
 	out[get_global_id(0)] = in[get_global_id(0)] + 1;
 }
 */
-
 
 EOF
 } # end of bash function write_global_functions_template() 

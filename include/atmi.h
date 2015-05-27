@@ -44,9 +44,9 @@ typedef char boolean;
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 typedef struct atmi_tprofile_s {
-   double           dispatch_time;  /*                                        */
-   double           start_time;     /*                                        */
-   double           end_time;       /*                                        */
+   unsigned long int dispatch_time;  /*                                       */
+   unsigned long int start_time;     /*                                       */
+   unsigned long int end_time;       /*                                       */
 } atmi_tprofile_t;
 
 /*----------------------------------------------------------------------------*/
@@ -158,7 +158,6 @@ __kernel void decode(__global const char* in, __global char* out) {
 	out[get_global_id(0)] = in[get_global_id(0)] + 1;
 }
 */
-
 #define __ATMI_H__
 #endif //__ATMI_H__
 #ifdef __cplusplus
@@ -167,3 +166,5 @@ __kernel void decode(__global const char* in, __global char* out) {
 #ifndef __cplusplus
 #define _CPPSTRING_ 
 #endif
+extern _CPPSTRING_ void atmi_stream_sync(atmi_stream_t *stream);
+extern _CPPSTRING_ void atmi_task_wait(atmi_task_t *task);

@@ -53,6 +53,8 @@ const cpu_kernel_table_t *_CN__CPU_kernels;
 
 size_t numWorkers;
 
+extern struct timespec context_init_time;
+
 void set_cpu_kernel_table(const cpu_kernel_table_t *kernel_table) {
     _CN__CPU_kernels = kernel_table;
 }
@@ -94,6 +96,8 @@ int process_packet(hsa_queue_t *queue, int id)
 {
     DEBUG_PRINT("Processing Packet from CPU Queue\n");
 
+    uint64_t start_time_ns; 
+    uint64_t end_time_ns; 
     uint64_t read_index = hsa_queue_load_read_index_acquire(queue);
     assert(read_index == 0);
     hsa_signal_t doorbell = queue->doorbell_signal;
@@ -102,6 +106,10 @@ int process_packet(hsa_queue_t *queue, int id)
         DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index, queue->size);
         while (hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED) < (hsa_signal_value_t) read_index);
+        atmi_task_t *this_task = NULL; // will be assigned to collect metrics
+        struct timespec start_time, end_time;
+        clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
+        start_time_ns = get_nanosecs(context_init_time, start_time);
         hsa_agent_dispatch_packet_t* packets = (hsa_agent_dispatch_packet_t*) queue->base_address;
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
         int i;
@@ -120,9 +128,6 @@ int process_packet(hsa_queue_t *queue, int id)
                         break;
                     }
                 }
-                if (barrier_or->completion_signal.handle != 0) {
-                    hsa_signal_subtract_release(barrier_or->completion_signal, 1);
-                }
                 packet_store_release((uint32_t*) barrier_or, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_OR);
                 break;
             case HSA_PACKET_TYPE_BARRIER_AND: 
@@ -138,9 +143,6 @@ int process_packet(hsa_queue_t *queue, int id)
                                 HSA_WAIT_STATE_BLOCKED);
                     }
                 }
-                if (barrier->completion_signal.handle != 0) {
-                    hsa_signal_subtract_release(barrier->completion_signal, 1);
-                }
                 packet_store_release((uint32_t*) barrier, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_AND);
                 break;
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
@@ -148,6 +150,9 @@ int process_packet(hsa_queue_t *queue, int id)
                 const char *kernel_name = _CN__CPU_kernels[packet->type].name;
                 uint64_t num_args = packet->arg[0];
                 snk_kernel_args_t *kernel_args = (snk_kernel_args_t *)(packet->arg[1]);
+                if(num_args > 0) assert(kernel_args != NULL);
+                this_task = (atmi_task_t *)(packet->arg[2]);
+                assert(this_task != NULL);
                 DEBUG_PRINT("Invoking function %s with %" PRIu64 " args\n", kernel_name, num_args);
                 switch(num_args) {
                     case 0: 
@@ -188,11 +193,6 @@ int process_packet(hsa_queue_t *queue, int id)
                         ;
                         void (*function3) (uint64_t REPEAT2(uint64_t)) =
                             (void (*)(uint64_t REPEAT2(uint64_t))) _CN__CPU_kernels[packet->type].function.function3;
-                        /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
-                          kernel_args->args[0],
-                          kernel_args->args[1],
-                          kernel_args->args[2]
-                          );*/
                         function3(
                                 kernel_args->args[0],
                                 kernel_args->args[1],
@@ -203,12 +203,6 @@ int process_packet(hsa_queue_t *queue, int id)
                         ;
                         void (*function4) (uint64_t REPEAT2(uint64_t) REPEAT(uint64_t)) =
                             (void (*)(uint64_t REPEAT2(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function4;
-                        /*DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
-                          kernel_args->args[0],
-                          kernel_args->args[1],
-                          kernel_args->args[2],
-                          kernel_args->args[3]
-                          );*/
                         function4(
                                 kernel_args->args[0],
                                 kernel_args->args[1],
@@ -535,11 +529,21 @@ int process_packet(hsa_queue_t *queue, int id)
                              break;
                 }
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
-                if (packet->completion_signal.handle != 0) {
-                    hsa_signal_subtract_release(packet->completion_signal, 1);
-                }
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
                 break;
+        }
+        if (packet->completion_signal.handle != 0) {
+            hsa_signal_subtract_release(packet->completion_signal, 1);
+        }
+        clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
+        end_time_ns = get_nanosecs(context_init_time, end_time);
+        if(this_task != NULL) {
+            if(this_task->profile != NULL) {
+                this_task->profile->end_time = end_time_ns;
+                this_task->profile->start_time = start_time_ns;
+                DEBUG_PRINT("Task %p timing info (%" PRIu64", %" PRIu64")\n", 
+                        this_task, start_time_ns, end_time_ns);
+            }
         }
         read_index++;
         hsa_queue_store_read_index_release(queue, read_index);
@@ -635,6 +639,9 @@ cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
         check(Creating an agent queue, err);
 
         hsa_queue_t *q = agent[i].queue;
+        //err = hsa_ext_set_profiling( q, 1); 
+        //check(Enabling CPU profiling support, err); 
+        //profiling does not work for CPU queues
         /* FIXME: Looks like a nasty HSA bug. The doorbell signal that we pass to the 
          * soft queue creation API never seems to be set. Workaround is to 
          * manually set it again like below.

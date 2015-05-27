@@ -6,6 +6,11 @@
  * Simulated CPU Data Structures and API
  * --------------------------------------------------------------------------------- */
 
+typedef struct hsa_amd_dispatch_time_s { 
+    uint64_t start; 
+    uint64_t end; 
+} hsa_amd_dispatch_time_t;
+
 typedef struct agent_t
 {
   int num_queues;
@@ -34,6 +39,7 @@ int process_packet(hsa_queue_t *queue, int id);
 
 typedef struct snk_task_list_s {
     atmi_task_t *task;
+    atmi_devtype_t devtype;
     struct snk_task_list_s *next;
 } snk_task_list_t;
 
@@ -52,17 +58,20 @@ typedef struct atmi_task_table_s {
 } atmi_task_table_t;
 */
 extern atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
-extern int          SNK_NextTaskId;
+extern int           SNK_NextTaskId;
 
 int get_stream_id(atmi_stream_t *stream);
 hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_t *stream);
 hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_t *stream);
-status_t reset_tasks(atmi_stream_t *stream);
-status_t register_cpu_task(atmi_stream_t *stream, atmi_task_t *task);
-status_t register_gpu_task(atmi_stream_t *stream, atmi_task_t *task);
-status_t register_task(int stream_num, atmi_task_t *task);
+status_t clear_saved_tasks(atmi_stream_t *stream);
+status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype);
 status_t register_stream(atmi_stream_t *stream);
 
 uint16_t create_header(hsa_packet_type_t type, int barrier);
+
+hsa_status_t HSA_API hsa_ext_set_profiling(hsa_queue_t* queue, int enable); 
+hsa_status_t HSA_API hsa_ext_get_dispatch_times(hsa_agent_t agent, 
+        hsa_signal_t signal, 
+        hsa_amd_dispatch_time_t* time);
 
 #endif //__SNK_INTERNAL

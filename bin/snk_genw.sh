@@ -282,7 +282,6 @@ function write_context_template(){
 /bin/cat  <<"EOF"
 
 /* Context(cl file) specific globals */
-hsa_ext_module_t*                _CN__BrigModule;
 hsa_agent_t                      _CN__Agent;
 hsa_agent_t                      _CN__CPU_Agent;
 hsa_ext_program_t                _CN__HsaProgram;
@@ -296,14 +295,8 @@ cpu_kernel_table_t _CN__CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
 #include "_CN__brig.h" 
 
 status_t _CN__InitContext(){
-
-    /* FIXME: Move loading the BRIG binary to the libsnk.
-       How to get rid of the warning "note: expected ‘char **’ but argument is of type ‘char (*)[]’"?
-    */
-    /* Load the BRIG binary.  */
-    _CN__BrigModule = (hsa_ext_module_t*) &_CN__HSA_BrigMem;
     return snk_init_context(&_CN__Agent, 
-                            &_CN__BrigModule, 
+                            _CN__HSA_BrigMem,
                             &_CN__HsaProgram, 
                             &_CN__Executable, 
                             &_CN__KernargRegion,

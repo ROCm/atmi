@@ -185,7 +185,7 @@ typedef struct cpu_kernel_table_s {
 
 status_t snk_init_context(
                         hsa_agent_t *_CN__Agent, 
-                        hsa_ext_module_t **_CN__BrigModule,
+                        char _CN__HSA_BrigMem[],
                         hsa_ext_program_t *_CN__HsaProgram,
                         hsa_executable_t *_CN__Executable,
                         hsa_region_t *_CN__KernargRegion,

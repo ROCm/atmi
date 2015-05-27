@@ -537,7 +537,7 @@ status_t register_stream(atmi_stream_t *stream) {
 /* -------------- SNACK launch functions -------------------------- */
 status_t snk_init_context(
                         hsa_agent_t *_CN__Agent, 
-                        hsa_ext_module_t **_CN__BrigModule,
+                        char _CN__HSA_BrigMem[],
                         hsa_ext_program_t *_CN__HsaProgram,
                         hsa_executable_t *_CN__Executable,
                         hsa_region_t *_CN__KernargRegion,
@@ -585,16 +585,13 @@ status_t snk_init_context(
     ErrorCheck(Querying the agent maximum queue size, err);
     /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
 
-    /* Load the BRIG binary.  */
-    //*_CN__BrigModule = (hsa_ext_module_t*) HSA_BrigMem;
-
     /* Create hsa program.  */
     memset(_CN__HsaProgram,0,sizeof(hsa_ext_program_t));
     err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, _CN__HsaProgram);
     ErrorCheck(Create the program, err);
 
     /* Add the BRIG module to hsa program.  */
-    err = hsa_ext_program_add_module(*_CN__HsaProgram, *_CN__BrigModule);
+    err = hsa_ext_program_add_module(*_CN__HsaProgram, (hsa_ext_module_t)_CN__HSA_BrigMem);
     ErrorCheck(Adding the brig module to the program, err);
 
     /* Determine the agents ISA.  */

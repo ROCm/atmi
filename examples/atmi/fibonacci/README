@@ -1,0 +1,6 @@
+There are 3 implementations
+
+1) Naive: CPU parent task creates two CPU child tasks and waits for the children to complete (fork-join)
+2) BFS (super experimental): Recursion uses DFS (a stack) while BFS uses a queue. This version tries to just launch tasks and creates no dependencies between them. All in-flight tasks wait for a second and then synchronize
+3) DFS (default): Call a bottom-up recursion top-down by creating the leaf nodes as parents and the root node as the final task that the host thread needs to wait on.
+

@@ -45,6 +45,7 @@ typedef char boolean;
 /*----------------------------------------------------------------------------*/
 typedef struct atmi_tprofile_s {
    unsigned long int dispatch_time;  /*                                       */
+   unsigned long int ready_time;     /*                                       */
    unsigned long int start_time;     /*                                       */
    unsigned long int end_time;       /*                                       */
 } atmi_tprofile_t;
@@ -111,6 +112,12 @@ typedef struct atmi_lparm_s {
  
 #define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=3,.gdims={Y,Z,V},.ldims={8,8,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM} ; X = &_ ## X ;
 
+#define ATMI_STREAM(NAME) atmi_stream_t * NAME; atmi_stream_t _ ## NAME ={.ordered=ATMI_TRUE} ; NAME = &_ ## NAME ; 
+
+#define ATMI_PROFILE(NAME) NAME = malloc(sizeof(atmi_tprofile_t));
+
+#define ATMI_PROFILE_NEW(NAME) atmi_tprofile_t * NAME ; atmi_tprofile_t _ ## NAME ={.dispatch_time=0,.ready_time=0,.start_time=0,.end_time=0} ; NAME = &_ ## NAME;
+
 /*----------------------------------------------------------------------------*/
 /* String macros that look like an API, but actually implement feature by     */
 /* calling a null kernel under specific conditions.                           */ 
@@ -120,7 +127,7 @@ typedef struct atmi_lparm_s {
     ATMI_LPARM_CPU(__lparm_sync_kernel); \
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
     __lparm_sync_kernel->stream = stream; \
-    __sync_kernel_gpu(__lparm_sync_kernel); \
+    __sync_kernel_cpu(__lparm_sync_kernel); \
 }
 
 #define SYNC_TASK(task) \
@@ -129,7 +136,7 @@ typedef struct atmi_lparm_s {
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
     __lparm_sync_kernel->num_required = 1; \
     __lparm_sync_kernel->requires = &task; \
-    __sync_kernel_gpu(__lparm_sync_kernel); \
+    __sync_kernel_cpu(__lparm_sync_kernel); \
 }
 
 /*----------------------------------------------------------------------------*/

@@ -334,7 +334,7 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         /* wait on each one of the tasks in the task bag */
         #if 1
         snk_task_list_t *task_head = StreamTable[stream_num].tasks;
-        printf("Waiting for async unordered tasks\n");
+        DEBUG_PRINT("Waiting for async unordered tasks\n");
         while(task_head) {
             snk_task_wait(task_head->task);
             task_head = task_head->next;
@@ -384,6 +384,7 @@ hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_t *stream) {
         return NULL;
     }
     int ret_queue_id = SNK_NextCPUQueueID[stream_num];
+    DEBUG_PRINT("Q ID: %d\n", ret_queue_id);
     /* use the same queue if the stream is ordered */
     /* otherwise, round robin the queue ID for unordered streams */
     if(stream->ordered == ATMI_FALSE) {
@@ -631,9 +632,6 @@ status_t snk_init_context(
     int task_num;
     /* Initialize all preallocated tasks and signals */
     for ( task_num = 0 ; task_num < SNK_MAX_TASKS; task_num++){
-       //SNK_Tasks[task_num].next = NULL;
-       //err=hsa_signal_create(1, 0, NULL, &(TaskTable[task_num].handle));
-       //TaskTable[task_num].task = &(SNK_Tasks[task_num]);
        err=hsa_signal_create(1, 0, NULL, &SNK_Signals[task_num]);
        SNK_Tasks[task_num].handle = (void *)(&SNK_Signals[task_num]);
        ErrorCheck(Creating a HSA signal, err);
@@ -907,7 +905,8 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
        /* For default synchrnous execution, wait til kernel is finished.  */
        hsa_signal_value_t value = hsa_signal_wait_acquire(this_aql->completion_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
        ret->state = ATMI_COMPLETED;
-       if(lparm->num_required == 0) { 
+       // FIXME: Move this up before the kernel launch
+       if(lparm->num_required == 0 && lparm->num_needs_any == 0) { 
            // Greg's logic is to flush the entire stream if the task is sync and has no dependencies */
            // FIXME: This has to change for unordered streams. Why should we flush the entire stream 
            // for every sync kernel in an unordered stream?

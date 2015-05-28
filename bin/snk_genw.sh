@@ -222,6 +222,8 @@ EOF
 }
 function write_sync_functions_template(){
 /bin/cat  <<"EOF"
+#ifndef __ATMI_SYNC_KERNELS__
+#define __ATMI_SYNC_KERNELS__
 /*----------------------------------------------------------------------------*/
 /* String macros that look like an API, but actually implement feature by     */
 /* calling a null kernel under specific conditions.                           */ 
@@ -243,6 +245,7 @@ function write_sync_functions_template(){
     __sync_kernel_cpu(__lparm_sync_kernel); \
 }
 
+#endif // __ATMI_SYNC_KERNELS__
 /*----------------------------------------------------------------------------*/
 /* ATMI Example: HelloWorld                                                   */ 
 /*----------------------------------------------------------------------------*/
@@ -272,6 +275,16 @@ __kernel void decode(__global const char* in, __global char* out) {
 
 EOF
 } # end of bash function write_global_functions_template() 
+
+function write_sync_function_definition(){
+/bin/cat  <<"EOF"
+#ifndef __SYNC_KERNEL_HEADER__
+#define __SYNC_KERNEL_HEADER__
+extern _CPPSTRING_ void __sync_kernel() {}
+#endif //__SYNC_KERNEL_HEADER__
+EOF
+}
+
 function write_global_functions_template(){
 /bin/cat  <<"EOF"
 
@@ -456,7 +469,7 @@ fi
 
 
 function is_scalar() {
-    scalartypes="int,float,char,double,void,size_t,image3d_t"
+    scalartypes="int,float,char,double,void,size_t,image3d_t,long,long long"
     local stype
     IFS=","
     for stype in $scalartypes ; do 
@@ -868,13 +881,14 @@ __SEDCMD=" "
 #  END OF WHILE LOOP TO PROCESS EACH KERNEL IN THE CL FILE
    done < $__KARGLIST
 
-   echo "void __sync_kernel() {}" >> ${__CWRAP}
 
    if [ "$__IS_FORTRAN" == "1" ] ; then 
       write_fortran_lparm_t
    fi
 
    write_sync_functions_template >>$__HDRF
+   write_sync_function_definition >>$__HDRF
+
 #  Write the updated CL
    if [ "$__SEDCMD" != " " ] ; then 
 #     Remove extra spaces, then change "__kernel void" to "void" if they have call-by-value structs

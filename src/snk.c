@@ -186,7 +186,7 @@ extern void snk_task_wait(atmi_task_t *task) {
         hsa_signal_wait_acquire(*((hsa_signal_t *)(task->handle)), HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
-        task->state = ATMI_COMPLETED;
+        set_task_state(task, ATMI_COMPLETED);
     }
 
     return;// STATUS_SUCCESS;
@@ -314,6 +314,31 @@ int get_stream_id(atmi_stream_t *stream) {
     return ret_stream_id;
 }
 
+void set_task_state(atmi_task_t *t, atmi_state_t state) {
+    t->state = state;
+}
+
+void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype) {
+    hsa_status_t err;
+    if(task->profile != NULL) {
+        hsa_signal_t signal = *(hsa_signal_t *)(task->handle);
+        hsa_amd_dispatch_time_t metrics;
+        if(devtype == ATMI_DEVTYPE_GPU) {
+            err = hsa_ext_get_dispatch_times(*snk_gpu_agent, 
+                    signal, &metrics); 
+            ErrorCheck(Profiling GPU dispatch, err);
+            task->profile->start_time = metrics.start;
+            task->profile->end_time = metrics.end;
+            task->profile->dispatch_time = metrics.start;
+            task->profile->ready_time = metrics.start;
+        }
+        else {
+            /* metrics for CPU tasks will be populated in the 
+             * worker pthread itself. No special function call */
+        }
+    }
+}
+
 extern void snk_stream_sync(atmi_stream_t *stream) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
@@ -329,6 +354,13 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         queue_sync(StreamTable[stream_num].cpu_queue);
         if(StreamTable[stream_num].cpu_queue) 
             signal_worker(StreamTable[stream_num].cpu_queue, PROCESS_PKT);
+        snk_task_list_t *task_head = StreamTable[stream_num].tasks;
+        DEBUG_PRINT("Waiting for async unordered tasks\n");
+        while(task_head) {
+            set_task_state(task_head->task, ATMI_COMPLETED);
+            set_task_metrics(task_head->task, task_head->devtype);
+            task_head = task_head->next;
+        }
     }
     else {
         /* wait on each one of the tasks in the task bag */
@@ -337,6 +369,7 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         while(task_head) {
             snk_task_wait(task_head->task);
+            set_task_metrics(task_head->task, task_head->devtype);
             task_head = task_head->next;
         }
         #else
@@ -423,22 +456,6 @@ status_t clear_saved_tasks(atmi_stream_t *stream) {
     snk_task_list_t *cur = StreamTable[stream_num].tasks;
     snk_task_list_t *prev = cur;
     while(cur != NULL ){
-        atmi_task_t* task = cur->task;
-        if(task->profile != NULL) {
-            hsa_signal_t signal = *(hsa_signal_t *)(task->handle);
-            hsa_amd_dispatch_time_t metrics;
-            if(cur->devtype == ATMI_DEVTYPE_GPU) {
-                err = hsa_ext_get_dispatch_times(*snk_gpu_agent, 
-                        signal, &metrics); 
-                ErrorCheck(Profiling GPU dispatch, err);
-                task->profile->start_time = metrics.start;
-                task->profile->end_time = metrics.end;
-            }
-            else {
-                /* metrics for CPU tasks will be populated in the 
-                 * worker pthread itself. No special function call */
-            }
-        }
         cur = cur->next;
         free(prev);
         prev = cur;
@@ -725,6 +742,14 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     if ( lparm->num_required > 0) {
         enqueue_barrier_cpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
     }
+    else if(lparm->synchronous == ATMI_TRUE && lparm->num_required == 0 && lparm->num_needs_any == 0
+                    //&& stream->ordered == ATMI_TRUE
+                    ) { 
+        // Greg's logic is to flush the entire stream if the task is sync and has no dependencies */
+        // FIXME: This has to change for unordered streams. Why should we flush the entire stream 
+        // for every sync kernel in an unordered stream?
+        snk_stream_sync(stream);
+    }
 
     /* Iterate over function table and retrieve the ID for kernel_name */
     uint16_t i;
@@ -782,23 +807,18 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                     /* If stream is unordered, sync ONLY this packet */
                     this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE);
 
+                /* Store dispatched time */
+                if(ret->profile) ret->profile->dispatch_time = get_nanosecs(context_init_time, dispatch_time);
+                set_task_state(ret, ATMI_DISPATCHED);
                 /* Increment write index and ring doorbell to dispatch the kernel.  */
                 hsa_queue_store_write_index_relaxed(this_Q, index+1);
                 hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-                /* Store dispatched time */
-                if(ret->profile) ret->profile->dispatch_time = get_nanosecs(context_init_time, dispatch_time);
-                ret->state = ATMI_DISPATCHED;
                 signal_worker(this_Q, PROCESS_PKT);
                 if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
                     /* For default synchrnous execution, wait til kernel is finished.  */
-                    hsa_signal_value_t value = hsa_signal_wait_acquire(this_aql->completion_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
-                    ret->state = ATMI_COMPLETED;
-                    if(lparm->num_required == 0) { 
-                        // Greg's logic is to flush the entire stream if the task is sync and has no dependencies */
-                        // FIXME: This has to change for unordered streams. Why should we flush the entire stream 
-                        // for every sync kernel in an unordered stream?
-                        snk_stream_sync(stream);
-                    }
+                    snk_task_wait(ret);
+                    set_task_state(ret, ATMI_COMPLETED);
+                    set_task_metrics(ret, ATMI_DEVTYPE_CPU);
                 }
                 else {
                     /* add task to the corresponding row in the stream table */
@@ -839,6 +859,14 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
     if ( lparm->num_required > 0) {
         enqueue_barrier_gpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
+    }
+    else if(lparm->synchronous == ATMI_TRUE && lparm->num_required == 0 && lparm->num_needs_any == 0
+                    //&& stream->ordered == ATMI_TRUE
+                    ) { 
+        // Greg's logic is to flush the entire stream if the task is sync and has no dependencies */
+        // FIXME: This has to change for unordered streams. Why should we flush the entire stream 
+        // for every sync kernel in an unordered stream?
+        snk_stream_sync(stream);
     }
 
     /* FIXME: REUSE SIGNALS!! */
@@ -899,19 +927,13 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     /* Increment write index and ring doorbell to dispatch the kernel.  */
     hsa_queue_store_write_index_relaxed(this_Q, index+1);
     hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-    ret->state = ATMI_DISPATCHED;
+    set_task_state(ret, ATMI_DISPATCHED);
 
     if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
-       /* For default synchrnous execution, wait til kernel is finished.  */
-       hsa_signal_value_t value = hsa_signal_wait_acquire(this_aql->completion_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
-       ret->state = ATMI_COMPLETED;
-       // FIXME: Move this up before the kernel launch
-       if(lparm->num_required == 0 && lparm->num_needs_any == 0) { 
-           // Greg's logic is to flush the entire stream if the task is sync and has no dependencies */
-           // FIXME: This has to change for unordered streams. Why should we flush the entire stream 
-           // for every sync kernel in an unordered stream?
-           snk_stream_sync(stream);
-       }
+        /* For default synchrnous execution, wait til kernel is finished.  */
+        snk_task_wait(ret);
+        set_task_state(ret, ATMI_COMPLETED);
+        set_task_metrics(ret, ATMI_DEVTYPE_GPU);
     }
     else {
        /* add task to the corresponding row in the stream table */

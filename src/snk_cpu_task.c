@@ -541,6 +541,7 @@ int process_packet(hsa_queue_t *queue, int id)
             if(this_task->profile != NULL) {
                 this_task->profile->end_time = end_time_ns;
                 this_task->profile->start_time = start_time_ns;
+                this_task->profile->ready_time = start_time_ns;
                 DEBUG_PRINT("Task %p timing info (%" PRIu64", %" PRIu64")\n", 
                         this_task, start_time_ns, end_time_ns);
             }

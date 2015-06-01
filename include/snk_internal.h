@@ -66,6 +66,8 @@ hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_t *stream);
 status_t clear_saved_tasks(atmi_stream_t *stream);
 status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype);
 status_t register_stream(atmi_stream_t *stream);
+void set_task_state(atmi_task_t *t, atmi_state_t state);
+void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype);
 
 uint16_t create_header(hsa_packet_type_t type, int barrier);
 

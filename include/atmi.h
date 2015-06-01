@@ -122,6 +122,7 @@ typedef struct atmi_lparm_s {
 /* String macros that look like an API, but actually implement feature by     */
 /* calling a null kernel under specific conditions.                           */ 
 /*----------------------------------------------------------------------------*/
+#if 0
 #define SYNC_STREAM(stream) \
 { \
     ATMI_LPARM_CPU(__lparm_sync_kernel); \
@@ -138,7 +139,7 @@ typedef struct atmi_lparm_s {
     __lparm_sync_kernel->requires = &task; \
     __sync_kernel_cpu(__lparm_sync_kernel); \
 }
-
+#endif
 /*----------------------------------------------------------------------------*/
 /* ATMI Example: HelloWorld                                                   */ 
 /*----------------------------------------------------------------------------*/

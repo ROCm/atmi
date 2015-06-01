@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdlib.h>
 #include "fibonacci.h"
 using namespace std;
 
@@ -10,14 +11,12 @@ extern "C" void sum(int *a, int *b, int *c) {
 
 /*  Recursive Fibonacci */
 void fib(const int n , int *result , atmi_task_t **my_sum_task) {
-    if(n < 2) { 
+    if (n < 2) { 
         *result = n; 
         *my_sum_task = NULL;
     } else {
         atmi_task_t *task_sum1;
         atmi_task_t *task_sum2; 
-        // create the below from the heap; otherwise, the local
-        // variables will go out of scope at the end of the function
         int *result1 = new int;
         int *result2 = new int;
         fib(n-1,result1,&task_sum1);
@@ -38,8 +37,11 @@ void fib(const int n , int *result , atmi_task_t **my_sum_task) {
     }
 }
 
-int main() {
-    const int N = 20;
+int main(int argc, char *argv[]) {
+    int N = 5;
+    if(argc > 1) {
+        N = atoi(argv[1]);
+    }
     int result;
 
     atmi_task_t *root_sum_task;

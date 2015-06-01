@@ -5,6 +5,7 @@
 [ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib
 [ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/cloc/bin
 [ -z $SNACK_RUNTIME_PATH ] && SNACK_RUNTIME_PATH=$HOME/git/CLOC.ashwinma
+SNACK_INC=$SNACK_RUNTIME_PATH/include
 export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$SNACK_RUNTIME_PATH/lib:$LD_LIBRARY_PATH
 echo $LD_LIBRARY_PATH
 # Compile accelerated functions
@@ -15,8 +16,8 @@ snack.sh -snk $SNACK_RUNTIME_PATH -v -gccopt 3 -c  helloKernel.cl
 
 echo 
 if [ -f hello ] ; then rm hello ; fi
-echo g++ -o hello helloKernel.o hello.cpp -O3 -lelf -L$SNACK_RUNTIME_PATH/lib -lsnk -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 
-g++ -o hello hello.cpp -g helloKernel.o -O3 -lelf -L$SNACK_RUNTIME_PATH/lib -lsnk -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 
+echo g++ -o hello helloKernel.o hello.cpp -O3 -lelf -L$SNACK_RUNTIME_PATH/lib -lsnk -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -I$SNACK_INC
+g++ -o hello hello.cpp -g helloKernel.o -O3 -lelf -L$SNACK_RUNTIME_PATH/lib -lsnk -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -I$SNACK_INC
 
 #  Execute
 echo

@@ -126,11 +126,11 @@ int main(int argc, char **argv) {
    lparm1->ldims[0] = WKG_SIZE;
    lparm1->synchronous = ATMI_TRUE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
-   for(int i=0; i<vec1_len-1; i++) sum8192Kernel_gpu(&invec[i*SUMS_PER_WKG],&outvec1[i],lparm1); 
-   sum8192KernelN_gpu( ((VECLEN+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &invec[(vec1_len-1)*SUMS_PER_WKG],&outvec1[vec1_len-1],lparm1); 
+   for(int i=0; i<vec1_len-1; i++) sum8192Kernel_pif(lparm1,&invec[i*SUMS_PER_WKG],&outvec1[i]); 
+   sum8192KernelN_pif(lparm1, ((VECLEN+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &invec[(vec1_len-1)*SUMS_PER_WKG],&outvec1[vec1_len-1]); 
 
-   for(int i=0; i<vec2_len-1; i++)  sum8192Kernel_gpu(&outvec1[i*SUMS_PER_WKG],&outvec2[i],lparm1); 
-   sum8192KernelN_gpu( ((vec1_len+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &outvec1[(vec2_len-1)*SUMS_PER_WKG],&outvec2[vec2_len-1],lparm1); 
+   for(int i=0; i<vec2_len-1; i++)  sum8192Kernel_pif(lparm1, &outvec1[i*SUMS_PER_WKG],&outvec2[i]); 
+   sum8192KernelN_pif(lparm1, ((vec1_len+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &outvec1[(vec2_len-1)*SUMS_PER_WKG],&outvec2[vec2_len-1]); 
    result = 0;
    for(int i=0; i<vec2_len; i++)  result += outvec2[i]; 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
@@ -153,11 +153,11 @@ int main(int argc, char **argv) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
    #ifdef USE_DAG
    atmi_task_t *requires[VECLEN];
-   for(int i=0; i<vec1_len-1; i++) requires[i] = sum8192Kernel_gpu(&invec[i*SUMS_PER_WKG],&outvec1[i],lparm1); 
-   requires[vec1_len - 1] = sum8192KernelN_gpu( ((VECLEN+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &invec[(vec1_len-1)*SUMS_PER_WKG],&outvec1[vec1_len-1],lparm1); 
+   for(int i=0; i<vec1_len-1; i++) requires[i] = sum8192Kernel_pif(lparm1, &invec[i*SUMS_PER_WKG],&outvec1[i]); 
+   requires[vec1_len - 1] = sum8192KernelN_pif(lparm1, ((VECLEN+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &invec[(vec1_len-1)*SUMS_PER_WKG],&outvec1[vec1_len-1]); 
    #else
-   for(int i=0; i<vec1_len-1; i++) sum8192Kernel_gpu(&invec[i*SUMS_PER_WKG],&outvec1[i],lparm1); 
-   sum8192KernelN_gpu( ((VECLEN+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &invec[(vec1_len-1)*SUMS_PER_WKG],&outvec1[vec1_len-1],lparm1); 
+   for(int i=0; i<vec1_len-1; i++) sum8192Kernel_pif(lparm1, &invec[i*SUMS_PER_WKG],&outvec1[i]); 
+   sum8192KernelN_pif(lparm1, ((VECLEN+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &invec[(vec1_len-1)*SUMS_PER_WKG],&outvec1[vec1_len-1]); 
    #endif
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 
@@ -170,13 +170,13 @@ int main(int argc, char **argv) {
    //SYNC_STREAM(&s1);  /* Wait for all the kernels to complete before summing remaining terms */
    #endif
    #ifdef USE_DAG
-   sum8192KernelN_gpu( ((vec1_len+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &outvec1[(vec2_len-1)*SUMS_PER_WKG],&outvec2[vec2_len-1],lparm1); 
+   sum8192KernelN_pif(lparm1, ((vec1_len+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &outvec1[(vec2_len-1)*SUMS_PER_WKG],&outvec2[vec2_len-1]); 
    lparm1->requires = NULL;
    lparm1->num_required = 0; 
-   for(int i=0; i<vec2_len-1; i++)  sum8192Kernel_gpu(&outvec1[i*SUMS_PER_WKG],&outvec2[i],lparm1); 
+   for(int i=0; i<vec2_len-1; i++)  sum8192Kernel_pif(lparm1, &outvec1[i*SUMS_PER_WKG],&outvec2[i]); 
    #else
-   for(int i=0; i<vec2_len-1; i++)  sum8192Kernel_gpu(&outvec1[i*SUMS_PER_WKG],&outvec2[i],lparm1); 
-   sum8192KernelN_gpu( ((vec1_len+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &outvec1[(vec2_len-1)*SUMS_PER_WKG],&outvec2[vec2_len-1],lparm1); 
+   for(int i=0; i<vec2_len-1; i++)  sum8192Kernel_pif(lparm1, &outvec1[i*SUMS_PER_WKG],&outvec2[i]); 
+   sum8192KernelN_pif(lparm1, ((vec1_len+SUMS_PER_WKG-1) % SUMS_PER_WKG)+1, &outvec1[(vec2_len-1)*SUMS_PER_WKG],&outvec2[vec2_len-1]); 
    //SYNC_STREAM(&s1);  /* Wait for all the kernels to complete before summing remaining terms */
    #endif
    result = 0;

@@ -427,14 +427,14 @@ else
 #  Not step 2, do normal steps
    [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
    if [ $DRYRUN ] ; then
-      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
+      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH" 
    else
-      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS" 
-      $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS
+      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH" 
+      $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS"
+         echo "        $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH"
          do_err $rc
       fi
    fi
@@ -445,16 +445,16 @@ else
    fi
    [ $VERBOSE ] && echo "#Step:  cloc.sh		cl --> brig ..."
    if [ $DRYRUN ] ; then
-      echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR -I$SNACK_RUNTIME_PATH/include"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
    else 
       [ $CLOCVERBOSE ] && echo " " && echo "#------ Start cloc.sh output ------"
-      [ $CLOCVERBOSE ] && echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
-      $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl
+      [ $CLOCVERBOSE ] && echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$SNACK_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$SNACK_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl
       rc=$?
       [ $CLOCVERBOSE ] && echo "#------ End cloc.sh output ------" && echo " " 
       if [ $rc != 0 ] ; then 
          echo "ERROR:  cloc.sh failed with return code $rc.  Command was:"
-         echo "        $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+         echo "        $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$SNACK_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
          do_err $rc
       fi
       if [ $GEN_IL ] ; then 

@@ -11,15 +11,6 @@ echo $LD_LIBRARY_PATH
 # Compile accelerated functions
 echo 
 if [ -f hw.o ] ; then rm hw.o ; fi
-echo snack.sh -snk $SNACK_RUNTIME_PATH -v -gccopt 3 -c  hw.cl
-snack.sh -snk $SNACK_RUNTIME_PATH -v -gccopt 3 -c  hw.cl
+echo snack.sh -snk $SNACK_RUNTIME_PATH -v -gccopt 3 hw.cl
+snack.sh -snk $SNACK_RUNTIME_PATH -v -gccopt 3 hw.cl
 
-echo 
-if [ -f hello ] ; then rm hello ; fi
-echo g++ -o hello hw.o HelloWorld.cpp -O3 -lelf -L$SNACK_RUNTIME_PATH/lib -lsnk -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -I$SNACK_INC
-g++ -o hello HelloWorld.cpp -g hw.o -O3 -lelf -L$SNACK_RUNTIME_PATH/lib -lsnk -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -I$SNACK_INC
-
-#  Execute
-echo
-echo ./hello 
-./hello 

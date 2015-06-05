@@ -33,7 +33,7 @@ void fib(const int n , int *result , atmi_task_t **my_sum_task) {
             lparm_child->num_required +=1;
         }
         lparm_child->requires = requires;
-        *my_sum_task = sum_cpu(result1,result2,result,lparm_child);
+        *my_sum_task = sum_pif(lparm_child,result1,result2,result);
     }
 }
 

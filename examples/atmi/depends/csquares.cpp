@@ -73,42 +73,42 @@ int main(int argc, char *argv[]) {
 
 #ifdef GPU_TASKS
    // Dispatch init_kernel and set even_gpu_lp to require init to complete
-   init_tasks[0] = init_kernel_gpu(inArray,init_gpu_lp);
+   init_tasks[0] = init_kernel_pif(init_gpu_lp, inArray);
    even_gpu_lp->num_required = 1;
    even_gpu_lp->requires = init_tasks;
 
    // Dispatch 2 even_squares kernels and build dependency list for odd_squares.
-   even_tasks[0] = even_squares_kernel_gpu(inArray,outArray,even_gpu_lp);
-   even_tasks[1] = even_squares_kernel_gpu(&inArray[N/2],&outArray[N/2],even_gpu_lp);
+   even_tasks[0] = even_squares_kernel_pif(even_gpu_lp, inArray, outArray);
+   even_tasks[1] = even_squares_kernel_pif(even_gpu_lp, &inArray[N/2], &outArray[N/2]);
    odd_gpu_lp->num_required = 2;
    odd_gpu_lp->requires = even_tasks;
   
    // Now dispatch odd_squares kernel dependent on BOTH even_squares  
-   atmi_task_t* ret_task = odd_squares_kernel_gpu(outArray,odd_gpu_lp);
+   atmi_task_t* ret_task = odd_squares_kernel_pif(odd_gpu_lp, outArray);
 #else
    // Dispatch init_kernel and set even_gpu_lp to require init to complete
-   init_tasks[0] = init_kernel_cpu(inArray,init_cpu_lp);
+   init_tasks[0] = init_kernel_pif(init_cpu_lp, inArray);
    even_gpu_lp->num_required = 1;
    even_gpu_lp->requires = init_tasks;
 
    // Dispatch 2 even_squares kernels and build dependency list for odd_squares.
-   even_tasks[0] = even_squares_kernel_gpu(inArray,outArray,even_gpu_lp);
-   even_tasks[1] = even_squares_kernel_gpu(&inArray[N/2],&outArray[N/2],even_gpu_lp);
-   //odd_cpu_lp->num_required = 2;
-   //odd_cpu_lp->requires = even_tasks;
-   SYNC_STREAM(0);
+   even_tasks[0] = even_squares_kernel_pif(even_gpu_lp, inArray, outArray);
+   even_tasks[1] = even_squares_kernel_pif(even_gpu_lp, &inArray[N/2], &outArray[N/2]);
+   odd_cpu_lp->num_required = 2;
+   odd_cpu_lp->requires = even_tasks;
    // Now dispatch odd_squares kernel dependent on BOTH even_squares  
    atmi_tprofile_t odd_cpu_profile; 
    odd_cpu_lp->profile = &odd_cpu_profile;
-   atmi_task_t* ret_task = odd_squares_kernel_cpu(outArray,odd_cpu_lp);
+   atmi_task_t* ret_task = odd_squares_kernel_pif(odd_cpu_lp, outArray);
 #endif
    // Wait for all kernels to complete
-   SYNC_TASK(ret_task);
-   cout << "Last Task Dispatch Timestamp: " << ret_task->profile->dispatch_time << endl;
-   cout << "Last Task Start Timestamp: " << ret_task->profile->start_time << endl;
-   cout << "Last Task End Timestamp: " << ret_task->profile->end_time << endl;
-   cout << "Last Task Wait_Time: " << ret_task->profile->start_time - ret_task->profile->dispatch_time << " ns" << endl;
-   cout << "Last Task Time: " << ret_task->profile->end_time - ret_task->profile->start_time << " ns" << endl;
+   SYNC_STREAM(0);
+   //SYNC_TASK(ret_task);
+   //cout << "Last Task Dispatch Timestamp: " << ret_task->profile->dispatch_time << endl;
+   //cout << "Last Task Start Timestamp: " << ret_task->profile->start_time << endl;
+   //cout << "Last Task End Timestamp: " << ret_task->profile->end_time << endl;
+   //cout << "Last Task Wait_Time: " << ret_task->profile->start_time - ret_task->profile->dispatch_time << " ns" << endl;
+   //cout << "Last Task Time: " << ret_task->profile->end_time - ret_task->profile->start_time << " ns" << endl;
    // Check results
    bool passed = true;
    for (int i=0; i<N; i++) {

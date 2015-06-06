@@ -1,5 +1,5 @@
 #define INT_TYPE int
-__kernel void sum4096Kernel(__global const INT_TYPE * x,  __global INT_TYPE * result) {
+__kernel void sum4096Kernel(__global atmi_task_t *thisTask, __global const INT_TYPE * x,  __global INT_TYPE * result) {
    __local INT_TYPE buffer[512];
    int gid=get_global_id(0);
    buffer[gid] = x[gid] + x[gid+512] + x[gid+1024] + x[gid+1536] +
@@ -18,7 +18,7 @@ __kernel void sum4096Kernel(__global const INT_TYPE * x,  __global INT_TYPE * re
    if(gid<2)    buffer[gid] = buffer[gid]+buffer[gid+2];
    if(gid == 0) result[0] = buffer[0] + buffer[1]; 
 }
-__kernel void sum4096KernelN(const int N, __global const INT_TYPE * x, __global INT_TYPE * result) {
+__kernel void sum4096KernelN(__global atmi_task_t *thisTask, const int N, __global const INT_TYPE * x, __global INT_TYPE * result) {
    __local INT_TYPE buffer[512];
    int gid=get_global_id(0) ;
    buffer[gid] = 0;
@@ -47,7 +47,7 @@ __kernel void sum4096KernelN(const int N, __global const INT_TYPE * x, __global 
    }
 }
 
-__kernel void sum8192Kernel(__global const INT_TYPE * x,  __global INT_TYPE * result) {
+__kernel void sum8192Kernel(__global atmi_task_t *thisTask, __global const INT_TYPE * x,  __global INT_TYPE * result) {
    __local INT_TYPE buffer[512];
    int gid=get_global_id(0);
    buffer[gid] = x[gid] + x[gid+512] + x[gid+1024] + x[gid+1536] +
@@ -68,7 +68,7 @@ __kernel void sum8192Kernel(__global const INT_TYPE * x,  __global INT_TYPE * re
    if(gid<2)    buffer[gid] = buffer[gid]+buffer[gid+2];
    if(gid == 0) result[0] = buffer[0] + buffer[1]; 
 }
-__kernel void sum8192KernelN(const int N, __global const INT_TYPE * x, __global INT_TYPE * result) {
+__kernel void sum8192KernelN(__global atmi_task_t *thisTask, const int N, __global const INT_TYPE * x, __global INT_TYPE * result) {
    __local INT_TYPE buffer[512];
    int gid=get_global_id(0) ;
    buffer[gid] = 0;
@@ -104,7 +104,7 @@ __kernel void sum8192KernelN(const int N, __global const INT_TYPE * x, __global 
       if(gid == 0) result[0] = buffer[0] +buffer[1];
    }
 }
-__kernel void sum1024Kernel(__global const INT_TYPE * x,  __global INT_TYPE * result) {
+__kernel void sum1024Kernel(__global atmi_task_t *thisTask, __global const INT_TYPE * x,  __global INT_TYPE * result) {
    __local INT_TYPE buffer[512];
    int gid=get_global_id(0);
    buffer[gid] = x[gid] + x[gid+512];
@@ -122,7 +122,7 @@ __kernel void sum1024Kernel(__global const INT_TYPE * x,  __global INT_TYPE * re
    if(gid<2)    buffer[gid] = buffer[gid]+buffer[gid+2];
    if(gid == 0) result[0] = buffer[0] + buffer[1]; 
 }
-__kernel void sum1024KernelN(const int N, __global const INT_TYPE * x, __global INT_TYPE * result) {
+__kernel void sum1024KernelN(__global atmi_task_t *thisTask, const int N, __global const INT_TYPE * x, __global INT_TYPE * result) {
    __local INT_TYPE buffer[512];
    int gid=get_global_id(0) ;
    buffer[gid] = 0;
@@ -145,7 +145,7 @@ __kernel void sum1024KernelN(const int N, __global const INT_TYPE * x, __global 
    }
 }
 
-__kernel void sum64Kernel(__global const INT_TYPE *x,  __global INT_TYPE * result) {
+__kernel void sum64Kernel(__global atmi_task_t *thisTask, __global const INT_TYPE *x,  __global INT_TYPE * result) {
    __local INT_TYPE buffer[64];
    int gid=get_global_id(0);
    buffer[gid] = x[gid] ;
@@ -156,7 +156,7 @@ __kernel void sum64Kernel(__global const INT_TYPE *x,  __global INT_TYPE * resul
    if(gid<2) buffer[gid]=buffer[gid]+buffer[gid+2];
    if(gid == 0) result[0] = buffer[0] + buffer[1]; 
 }
-__kernel void sum64KernelN(const int N, __global const INT_TYPE *x, __global INT_TYPE * result) {
+__kernel void sum64KernelN(__global atmi_task_t *thisTask, const int N, __global const INT_TYPE *x, __global INT_TYPE * result) {
    __local INT_TYPE buffer[64];
    int gid=get_global_id(0);
    buffer[gid] = 0;

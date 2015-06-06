@@ -214,5 +214,5 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
                  const uint32_t _KN__cpu_task_num_args,
-                 const snk_kernel_args_t *kernel_args);
+                 snk_kernel_args_t *kernel_args);
 #endif // __SNK_H__

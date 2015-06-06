@@ -24,14 +24,14 @@ typedef int TYPE;
 
 static const int N = 16000; /* multiple of 4 for demo */
 
-extern "C" void init_kernel(int *in) {
+extern "C" void init_kernel(atmi_task_t *thisTask, int *in) {
 	int i;
     for(i = 0; i < N; i++)
 	    in[i] = (int)  i;
 }
 
 /*  Middle children calculate squares for even numbers */
-extern "C" void even_squares_kernel(
+extern "C" void even_squares_kernel(atmi_task_t *thisTask, 
    const int *in , int *out) 
 {
     int ctr;
@@ -46,7 +46,7 @@ extern "C" void even_squares_kernel(
         (X-1)**2 = X**2 - 2X + 1 
     so  X**2 = ((X-1)**2) + 2X - 1
 */
-extern "C" void odd_squares_kernel(int *out) 
+extern "C" void odd_squares_kernel(atmi_task_t *thisTask, int *out) 
 {
     int ctr;
     for(ctr = 0; ctr < N/2; ctr++) {

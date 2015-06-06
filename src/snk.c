@@ -717,7 +717,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
                  const uint32_t _KN__cpu_task_num_args,
-                 const snk_kernel_args_t *kernel_args) {
+                 snk_kernel_args_t *kernel_args) {
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
@@ -767,6 +767,9 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                 }
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                 
+                /* pass this task handle to the kernel as an argument */
+                kernel_args->args[0] = (uint64_t) ret;
+
                 /* Get profiling object. Can be NULL? */
                 ret->profile = lparm->profile;
                 /* ID i is the kernel. Enqueue the function to the soft queue */
@@ -876,6 +879,20 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     }
     atmi_task_t *ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
 
+    /* pass this task handle to the kernel as an argument */
+    struct kernel_args_struct {
+        uint64_t arg0;
+        uint64_t arg1;
+        uint64_t arg2;
+        uint64_t arg3;
+        uint64_t arg4;
+        uint64_t arg5;
+        atmi_task_t* arg6;
+        /* other fields no needed to set task handle? */
+    } __attribute__((aligned(16)));
+    struct kernel_args_struct *kargs = (struct kernel_args_struct *)thisKernargAddress;
+    kargs->arg6 = ret;
+
     /* Get profiling object. Can be NULL? */
     ret->profile = lparm->profile;
 
@@ -945,6 +962,22 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
-
-
-
+#if 0
+// below exploration for nested tasks
+atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm, 
+                 const cpu_kernel_table_t *_CN__CPU_kernels,
+                 const char *kernel_name,
+                 const uint32_t _KN__cpu_task_num_args,
+                 const snk_kernel_args_t *kernel_args) {
+    atmi_task_t *ret = NULL;
+    /*if(lparm->nested == ATMI_TRUE) {
+        ret = snk_create_cpu_kernel(lparm, _CN__CPU_kernels, kernel_name,
+                 _KN__cpu_task_num_args, kernel_args);
+    }
+    else */{
+        ret = snk_cpu_kernel(lparm, _CN__CPU_kernels, kernel_name,
+                 _KN__cpu_task_num_args, kernel_args);
+    }
+    return ret;
+}                 
+#endif

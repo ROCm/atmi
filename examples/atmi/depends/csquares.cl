@@ -1,3 +1,4 @@
+#include "atmi.h"
 /*
    File:  csquares.cl 
 
@@ -6,13 +7,13 @@
    It is just a simple demo of dependencies. 
 */
 /*  Parent kernel initializes input array */
-__kernel void init_kernel(__global int *in) {
+__kernel void init_kernel(__global atmi_task_t *thisTask, __global int *in) {
 	int i = get_global_id(0);
 	in[i] = (int)  i;
 }
 
 /*  Middle children calculate squares for even numbers */
-__kernel void even_squares_kernel(
+__kernel void even_squares_kernel(__global atmi_task_t *thisTask, 
    __global const int *in , __global int *out) 
 {
 	int i = get_global_id(0)*2;
@@ -24,7 +25,7 @@ __kernel void even_squares_kernel(
         (X-1)**2 = X**2 - 2X + 1 
     so  X**2 = ((X-1)**2) + 2X - 1
 */
-__kernel void odd_squares_kernel( __global int *out) 
+__kernel void odd_squares_kernel(__global atmi_task_t *thisTask, __global int *out) 
 {
 	int i = (get_global_id(0)*2) + 1;
 	out[i] = out[i-1] + (2*i) - 1; 

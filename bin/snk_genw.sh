@@ -157,7 +157,7 @@ function write_sync_function_definition(){
 /bin/cat  <<"EOF"
 #ifndef __SYNC_KERNEL_HEADER__
 #define __SYNC_KERNEL_HEADER__
-extern _CPPSTRING_ void __sync_kernel() {}
+extern _CPPSTRING_ void __sync_kernel(atmi_task_t *thisTask) {}
 #endif //__SYNC_KERNEL_HEADER__
 EOF
 }
@@ -435,7 +435,7 @@ __SEDCMD=" "
 #   fi
 
    cat ${__CLF} > ${__SYNCCL}
-   echo "__kernel void __sync_kernel() {}" >> ${__SYNCCL}
+   echo "__kernel void __sync_kernel(atmi_task_t *thisTask) {}" >> ${__SYNCCL}
 
 #  Read the CLF and build a list of kernels and args, one kernel and set of args per line of KARGLIST file
    cpp -I$__SNACK_RUNTIME_PATH/include $__SYNCCL | sed -e '/__kernel/,/)/!d' |  sed -e ':a;$!N;s/\n/ /;ta;P;D' | sed -e 's/__kernel/\n__kernel/g'  | grep "__kernel" | \
@@ -497,11 +497,15 @@ __SEDCMD=" "
       __PROTO_ARGL=""
       sepchar=""
       IFS=","
+      NEXTI=0
       for _val in $__ARGL ; do 
+         if ((NEXTI > 0)) ; then 
          parse_arg $_val
          __CFN_ARGL="${__CFN_ARGL}${sepchar}${simple_arg_type}${last_char} ${arg_name}"
          __PROTO_ARGL="${__PROTO_ARGL}${sepchar}${arg_type} ${arg_name}"
          sepchar=","
+         fi
+         NEXTI=$(( NEXTI + 1 ))
       done
 
 #     Write start of the SNACK function
@@ -544,10 +548,12 @@ __SEDCMD=" "
          echo "       uint64_t arg3;"  >> $__CWRAP
          echo "       uint64_t arg4;"  >> $__CWRAP
          echo "       uint64_t arg5;"  >> $__CWRAP
+         echo "       atmi_task_t* arg6;"  >> $__CWRAP
          NEXTI=6
       fi
       IFS=","
       for _val in $__ARGL ; do 
+         if ((NEXTI != 6)) ; then 
          parse_arg $_val
          if [ "$last_char" == "*" ] ; then 
             echo "       ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
@@ -558,6 +564,7 @@ __SEDCMD=" "
             else
                echo "       ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
             fi
+         fi
          fi
          NEXTI=$(( NEXTI + 1 ))
       done
@@ -579,6 +586,7 @@ __SEDCMD=" "
          echo "    ${__KN}_args->arg3=0 ; "  >> $__CWRAP
          echo "    ${__KN}_args->arg4=0 ; "  >> $__CWRAP
          echo "    ${__KN}_args->arg5=0 ; "  >> $__CWRAP
+         echo "    ${__KN}_args->arg6=NULL ; "  >> $__CWRAP
          NEXTI=6
       fi
       KERN_NEEDS_CL_WRAPPER="FALSE"
@@ -587,6 +595,7 @@ __SEDCMD=" "
       sepchar=""
       IFS=","
       for _val in $__ARGL ; do 
+         if ((NEXTI != 6)) ; then 
          parse_arg $_val
 #        These echo statments help debug a lot
 #        echo "simple_arg_type=|${simple_arg_type}|" 
@@ -609,6 +618,7 @@ __SEDCMD=" "
             fi
          fi 
          sepchar=","
+         fi
          NEXTI=$(( NEXTI + 1 ))
          NEXT_ARGI=$(( NEXT_ARGI + 1 ))
       done
@@ -655,6 +665,8 @@ __SEDCMD=" "
 #     keep track of updated CL arg list and new call list 
 #     in case we have to create a wrapper CL function.
 #     to call the real kernel CL function. 
+      echo "    cpu_kernel_arg_list->args[0] = (uint64_t)NULL; " >>$__CWRAP
+
       NEXT_ARGI=0
       KERN_NEEDS_CL_WRAPPER="FALSE"
       arglistw=""
@@ -662,6 +674,7 @@ __SEDCMD=" "
       sepchar=""
       IFS=","
       for _val in $__ARGL ; do 
+         if ((NEXT_ARGI != 0)) ; then 
          parse_arg $_val
 #        These echo statments help debug a lot
 #        echo "simple_arg_type=|${simple_arg_type}|" 
@@ -687,6 +700,7 @@ __SEDCMD=" "
             fi
          fi 
          sepchar=","
+         fi
          NEXT_ARGI=$(( NEXT_ARGI + 1 ))
       done
       

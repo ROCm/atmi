@@ -13,7 +13,7 @@
 #define INT_TYPE int 
 //#define USE_DAG
 
-extern "C" void sum64Kernel(const INT_TYPE * x,  INT_TYPE * result) {
+extern "C" void sum64Kernel(atmi_task_t *thisTask, const INT_TYPE * x,  INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < 64; i++) {
@@ -21,7 +21,7 @@ extern "C" void sum64Kernel(const INT_TYPE * x,  INT_TYPE * result) {
     }
 }
 
-extern "C" void sum64KernelN(const int N, const INT_TYPE * x, INT_TYPE * result) {
+extern "C" void sum64KernelN(atmi_task_t *thisTask, const int N, const INT_TYPE * x, INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < N; i++) {
@@ -29,7 +29,7 @@ extern "C" void sum64KernelN(const int N, const INT_TYPE * x, INT_TYPE * result)
     }
 }
 
-extern "C" void sum1024Kernel(const INT_TYPE * x,  INT_TYPE * result) {
+extern "C" void sum1024Kernel(atmi_task_t *thisTask, const INT_TYPE * x,  INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < 1024; i++) {
@@ -37,7 +37,7 @@ extern "C" void sum1024Kernel(const INT_TYPE * x,  INT_TYPE * result) {
     }
 }
 
-extern "C" void sum1024KernelN(const int N, const INT_TYPE * x, INT_TYPE * result) {
+extern "C" void sum1024KernelN(atmi_task_t *thisTask, const int N, const INT_TYPE * x, INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < N; i++) {
@@ -45,7 +45,7 @@ extern "C" void sum1024KernelN(const int N, const INT_TYPE * x, INT_TYPE * resul
     }
 }
 
-extern "C" void sum4096Kernel(const INT_TYPE * x,  INT_TYPE * result) {
+extern "C" void sum4096Kernel(atmi_task_t *thisTask, const INT_TYPE * x,  INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < 4096; i++) {
@@ -53,7 +53,7 @@ extern "C" void sum4096Kernel(const INT_TYPE * x,  INT_TYPE * result) {
     }
 }
 
-extern "C" void sum4096KernelN(const int N, const INT_TYPE * x, INT_TYPE * result) {
+extern "C" void sum4096KernelN(atmi_task_t *thisTask, const int N, const INT_TYPE * x, INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < N; i++) {
@@ -61,7 +61,7 @@ extern "C" void sum4096KernelN(const int N, const INT_TYPE * x, INT_TYPE * resul
     }
 }
 
-extern "C" void sum8192Kernel(const INT_TYPE * x,  INT_TYPE * result) {
+extern "C" void sum8192Kernel(atmi_task_t *thisTask, const INT_TYPE * x,  INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < 8192; i++) {
@@ -69,7 +69,7 @@ extern "C" void sum8192Kernel(const INT_TYPE * x,  INT_TYPE * result) {
     }
 }
 
-extern "C" void sum8192KernelN(const int N, const INT_TYPE * x, INT_TYPE * result) {
+extern "C" void sum8192KernelN(atmi_task_t *thisTask, const int N, const INT_TYPE * x, INT_TYPE * result) {
     int i = 0;
     result[0] = 0;
     for(i = 0; i < N; i++) {

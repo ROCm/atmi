@@ -8,7 +8,7 @@ TARGET_GCC_FLAGS=-O3 -lelf -L${SNACK_RUNTIME_PATH}/lib -lsnk -L${HSA_RUNTIME_PAT
 LIB=libsnk_cpupifgen.so
 LIBDIR=../../lib
 
-PLUGIN_SOURCE_FILES= multi_target_gcc_plugin.c
+PLUGIN_SOURCE_FILES= cpu_pifgen_gcc_plugin.c
 GCCPLUGINS_DIR:= $(shell $(TARGET_GCC) -print-file-name=plugin)
 	CXXFLAGS+= -I$(GCCPLUGINS_DIR)/include -fPIC -fno-rtti -O2
 

@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DEBUG_SNK_PLUGIN
+//#define DEBUG_SNK_PLUGIN
 #ifdef DEBUG_SNK_PLUGIN
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else

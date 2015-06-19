@@ -180,8 +180,6 @@ hsa_region_t                     _CN__KernargRegion;
 hsa_region_t                     _CN__CPU_KernargRegion;
 int                              _CN__FC = 0; 
 
-cpu_kernel_table_t _CN__CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
-
 #include "_CN__brig.h" 
 
 status_t _CN__InitContext(){
@@ -208,7 +206,7 @@ int                              _KN__CPU_FK = 0 ;
 int                              _KN__GPU_FK = 0 ; 
 status_t                         _KN__init();
 status_t                         _KN__gpu_init();
-status_t                         _KN__cpu_init();
+status_t                         _KN__cpu_init(const char *kernel_name, const int num_args, snk_generic_fp fn_ptr);
 status_t                         _KN__stop();
 uint64_t                         _KN__Kernel_Object;
 uint32_t                         _KN__Kernarg_Segment_Size; /* May not need to be global */
@@ -228,7 +226,7 @@ extern status_t _KN__init(){
        if ( status  != STATUS_SUCCESS ) return; 
        _CN__FC = 1;
     }
-    snk_init_cpu_kernel();
+    //snk_init_cpu_kernel();
     return snk_init_gpu_kernel(&_KN__Symbol, 
                       "&__OpenCL__KN__kernel",
                       &_KN__Kernel_Object,
@@ -239,14 +237,18 @@ extern status_t _KN__init(){
                       _CN__Executable); 
 } /* end of _KN__init */
 
-extern status_t _KN__cpu_init(){
+extern status_t _KN__cpu_init(const char *kernel_name, 
+                             const int num_args, 
+                             snk_generic_fp fn_ptr){
 
     if (_CN__FC == 0 ) {
        status_t status = _CN__InitContext();
        if ( status  != STATUS_SUCCESS ) return; 
        _CN__FC = 1;
     }
-    return snk_init_cpu_kernel();
+    return snk_init_cpu_kernel(kernel_name, 
+                             num_args, 
+                             fn_ptr);
 } /* end of _KN__init */
 
 
@@ -291,9 +293,7 @@ EOF
 function write_cpu_kernel_template(){
 /bin/cat <<"EOF"
     return snk_cpu_kernel(lparm, 
-                _CN__CPU_kernels,
                 "_KN_",
-                _KN__cpu_task_num_args,
                 cpu_kernel_arg_list);
 EOF
 }
@@ -653,12 +653,6 @@ __SEDCMD=" "
       echo "  } " >>$__CWRAP
       echo "  else if(lparm->devtype == ATMI_DEVTYPE_CPU) { " >>$__CWRAP
       #echo "   printf(\"In SNACK Kernel CPU Function ${__KN}\n\"); " >> $__CWRAP
-	  echo "    /* Kernel initialization has to be done before kernel arguments are set/inspected */ " >> $__CWRAP
-      echo "    if (${__KN}_CPU_FK == 0 ) { " >> $__CWRAP
-      echo "      status_t status = ${__KN}_cpu_init(); " >> $__CWRAP
-      echo "      if ( status  != STATUS_SUCCESS ) return; " >> $__CWRAP
-      echo "      ${__KN}_CPU_FK = 1; " >> $__CWRAP
-      echo "    } " >> $__CWRAP
 #     Write the structure definition for the kernel arguments.
       echo "    snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); " >> $__CWRAP
 #     Write statements to fill in the argument structure and 
@@ -704,7 +698,7 @@ __SEDCMD=" "
          NEXT_ARGI=$(( NEXT_ARGI + 1 ))
       done
       
-      echo "    ${__KN}_cpu_task_num_args = ${NEXT_ARGI}; " >> $__CWRAP;
+      echo "    int num_args = ${NEXT_ARGI}; " >> $__CWRAP;
 #     Write the extra CL if we found call-by-value structs and write the extra CL needed
       if [ "$KERN_NEEDS_CL_WRAPPER" == "TRUE" ] ; then 
          echo "__kernel void ${__WRAPPRE}$__KN($arglistw){ $__KN($calllist) ; } " >> $__EXTRACL
@@ -716,10 +710,8 @@ __SEDCMD=" "
          __FN="\&__OpenCL_${__KN}_kernel"
       fi
 
-      echo "    ${__SN}_CPU_kernels[${__KN_NUM}].name = \"${__KN}\"; " >> $__CWRAP
       if (( ${NEXT_ARGI} == 0 )) ; then
         echo "    extern void ${__KN}(void);" >> $__CWRAP;
-        echo "    ${__SN}_CPU_kernels[${__KN_NUM}].function.function0=${__KN}; " >>$__CWRAP
       elif (( ${NEXT_ARGI} <= 20 )) ; then
         printf "    extern void ${__KN}(uint64_t" >> $__CWRAP
         for(( arg_id=2 ; arg_id<=${NEXT_ARGI}; arg_id++ ))
@@ -727,10 +719,15 @@ __SEDCMD=" "
             printf ', uint64_t' >> $__CWRAP; 
         done
         printf ');\n' >> $__CWRAP
-        echo "    ${__SN}_CPU_kernels[${__KN_NUM}].function.function${NEXT_ARGI}=${__KN}; " >>$__CWRAP
       else
         echo "ERROR! SNACK supports only up to 20 args for CPU tasks!"
       fi
+	  echo "    /* Kernel initialization has to be done after kernel arguments are set/inspected */ " >> $__CWRAP
+      echo "    if (${__KN}_CPU_FK == 0 ) { " >> $__CWRAP
+      echo "      status_t status = ${__KN}_cpu_init(\"${__KN}\",num_args,(snk_generic_fp)${__KN}); " >> $__CWRAP
+      echo "      if ( status  != STATUS_SUCCESS ) return; " >> $__CWRAP
+      echo "      ${__KN}_CPU_FK = 1; " >> $__CWRAP
+      echo "    } " >> $__CWRAP
 #     Now add the kernel template to wrapper and change all three strings
 #     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_
       write_cpu_kernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP

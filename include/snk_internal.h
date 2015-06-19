@@ -6,11 +6,6 @@
  * Simulated CPU Data Structures and API
  * --------------------------------------------------------------------------------- */
 
-typedef struct hsa_amd_dispatch_time_s { 
-    uint64_t start; 
-    uint64_t end; 
-} hsa_amd_dispatch_time_t;
-
 typedef struct agent_t
 {
   int num_queues;
@@ -26,7 +21,6 @@ enum {
     IDLE
 };
 
-void set_cpu_kernel_table(const cpu_kernel_table_t *kernel_table); 
 agent_t get_cpu_q_agent(int id);
 void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
                 const size_t num_queues, const size_t capacity
@@ -71,9 +65,15 @@ void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype);
 
 uint16_t create_header(hsa_packet_type_t type, int barrier);
 
-hsa_status_t HSA_API hsa_ext_set_profiling(hsa_queue_t* queue, int enable); 
-hsa_status_t HSA_API hsa_ext_get_dispatch_times(hsa_agent_t agent, 
-        hsa_signal_t signal, 
-        hsa_amd_dispatch_time_t* time);
+#if 1
+typedef struct hsa_amd_profiling_dispatch_time_s { 
+    uint64_t start; 
+    uint64_t end; 
+} hsa_amd_profiling_dispatch_time_t;
+hsa_status_t HSA_API hsa_amd_profiling_set_profiler_enabled(hsa_queue_t* queue, int enable);
+hsa_status_t HSA_API hsa_amd_profiling_get_dispatch_time(
+    hsa_agent_t agent, hsa_signal_t signal,
+    hsa_amd_profiling_dispatch_time_t* time);
 
+#endif 
 #endif //__SNK_INTERNAL

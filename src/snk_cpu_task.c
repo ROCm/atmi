@@ -49,15 +49,12 @@ hsa_signal_t worker_sig[SNK_MAX_CPU_QUEUES];
 
 pthread_t agent_threads[SNK_MAX_CPU_QUEUES];
 
-const cpu_kernel_table_t *_CN__CPU_kernels;
+cpu_kernel_table_t snk_CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
+int snk_kernel_counter;
 
 size_t numWorkers;
 
 extern struct timespec context_init_time;
-
-void set_cpu_kernel_table(const cpu_kernel_table_t *kernel_table) {
-    _CN__CPU_kernels = kernel_table;
-}
 
 hsa_queue_t* get_cpu_queue(int id) {
     return agent[id].queue;
@@ -147,7 +144,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 break;
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
                 ;
-                const char *kernel_name = _CN__CPU_kernels[packet->type].name;
+                const char *kernel_name = snk_CPU_kernels[packet->type].name;
                 uint64_t num_args = packet->arg[0];
                 snk_kernel_args_t *kernel_args = (snk_kernel_args_t *)(packet->arg[1]);
                 if(num_args > 0) assert(kernel_args != NULL);
@@ -158,7 +155,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 0: 
                         ;
                         void (*function0) (void) =
-                            (void (*)(void)) _CN__CPU_kernels[packet->type].function.function0;
+                            (void (*)(void)) snk_CPU_kernels[packet->type].function;
                         DEBUG_PRINT("Func Ptr: %p Args: NONE\n", 
                                 function0
                                 );
@@ -168,7 +165,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 1: 
                         ;
                         void (*function1) (uint64_t) =
-                            (void (*)(uint64_t)) _CN__CPU_kernels[packet->type].function.function1;
+                            (void (*)(uint64_t)) snk_CPU_kernels[packet->type].function;
                         DEBUG_PRINT("Args: %" PRIu64 "\n", 
                                 kernel_args->args[0]
                                 );
@@ -179,7 +176,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 2: 
                         ;
                         void (*function2) (uint64_t, uint64_t) =
-                            (void (*)(uint64_t, uint64_t)) _CN__CPU_kernels[packet->type].function.function2;
+                            (void (*)(uint64_t, uint64_t)) snk_CPU_kernels[packet->type].function;
                         DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 "\n", 
                                 kernel_args->args[0],
                                 kernel_args->args[1]
@@ -192,7 +189,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 3: 
                         ;
                         void (*function3) (uint64_t REPEAT2(uint64_t)) =
-                            (void (*)(uint64_t REPEAT2(uint64_t))) _CN__CPU_kernels[packet->type].function.function3;
+                            (void (*)(uint64_t REPEAT2(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function3(
                                 kernel_args->args[0],
                                 kernel_args->args[1],
@@ -202,7 +199,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 4: 
                         ;
                         void (*function4) (uint64_t REPEAT2(uint64_t) REPEAT(uint64_t)) =
-                            (void (*)(uint64_t REPEAT2(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function4;
+                            (void (*)(uint64_t REPEAT2(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function4(
                                 kernel_args->args[0],
                                 kernel_args->args[1],
@@ -213,7 +210,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 5: 
                         ;
                         void (*function5) (uint64_t REPEAT4(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t))) _CN__CPU_kernels[packet->type].function.function5;
+                            (void (*)(uint64_t REPEAT4(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function5(
                                 kernel_args->args[0],
                                 kernel_args->args[1],
@@ -225,7 +222,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 6: 
                         ;
                         void (*function6) (uint64_t REPEAT4(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function6;
+                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function6(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -238,7 +235,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 7: 
                         ;
                         void (*function7) (uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t))) _CN__CPU_kernels[packet->type].function.function7;
+                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function7(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -252,7 +249,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 8: 
                         ;
                         void (*function8) (uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function8;
+                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function8(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -267,7 +264,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 9: 
                         ;
                         void (*function9) (uint64_t REPEAT8(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t))) _CN__CPU_kernels[packet->type].function.function9;
+                            (void (*)(uint64_t REPEAT8(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function9(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -283,7 +280,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 10: 
                         ;
                         void (*function10) (uint64_t REPEAT8(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function10;
+                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function10(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -300,7 +297,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 11: 
                         ;
                         void (*function11) (uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t))) _CN__CPU_kernels[packet->type].function.function11;
+                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function11(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -318,7 +315,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 12: 
                         ;
                         void (*function12) (uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function12;
+                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function12(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -337,7 +334,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 13: 
                         ;
                         void (*function13) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t))) _CN__CPU_kernels[packet->type].function.function13;
+                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function13(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -357,7 +354,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 14: 
                         ;
                         void (*function14) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function14;
+                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function14(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -378,7 +375,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 15: 
                         ;
                         void (*function15) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t))) _CN__CPU_kernels[packet->type].function.function15;
+                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function15(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -400,7 +397,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 16: 
                         ;
                         void (*function16) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function16;
+                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function16(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -423,7 +420,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 17: 
                         ;
                         void (*function17) (uint64_t REPEAT16(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t))) _CN__CPU_kernels[packet->type].function.function17;
+                            (void (*)(uint64_t REPEAT16(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function17(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -447,7 +444,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 18: 
                         ;
                         void (*function18) (uint64_t REPEAT16(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function18;
+                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function18(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -472,7 +469,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 19: 
                         ;
                         void (*function19) (uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t))) _CN__CPU_kernels[packet->type].function.function19;
+                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function19(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]
@@ -498,7 +495,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     case 20: 
                         ;
                         void (*function20) (uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) _CN__CPU_kernels[packet->type].function.function20;
+                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_CPU_kernels[packet->type].function;
                         function20(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]

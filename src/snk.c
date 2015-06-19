@@ -49,14 +49,13 @@
 
 #define NSECPERSEC 1000000000L
 
-/*  set NOTCOHERENT needs this include
-#include "hsa_ext_amd.h"
-*/
+//  set NOTCOHERENT needs this include
+//#include "hsa_ext_amd.h"
 
 /* -------------- Helper functions -------------------------- */
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed. %x\n", #msg, status); \
+    printf("%s failed. 0x%x\n", #msg, status); \
     /*exit(1); */\
 } else { \
  /*  printf("%s succeeded.\n", #msg);*/ \
@@ -79,6 +78,11 @@ int          SNK_NextTaskId = 0 ;
 atmi_stream_t snk_default_stream_obj = {ATMI_ORDERED};
 int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
+
+extern cpu_kernel_table_t snk_CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
+extern int snk_kernel_counter;
+
+static int tasks_initialized;
 
 struct timespec context_init_time;
 static int context_init_time_init = 0;
@@ -182,7 +186,7 @@ void enqueue_barrier_cpu(hsa_queue_t *queue, const int dep_task_count, atmi_task
 
 extern void snk_task_wait(atmi_task_t *task) {
     if(task != NULL) {
-        DEBUG_PRINT("Signal Value: %" PRIu64 "\n", ((hsa_signal_t *)(task->handle))->handle);
+        //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", ((hsa_signal_t *)(task->handle))->handle);
         hsa_signal_wait_acquire(*((hsa_signal_t *)(task->handle)), HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
@@ -314,7 +318,9 @@ int get_stream_id(atmi_stream_t *stream) {
     return ret_stream_id;
 }
 
-void set_task_state(atmi_task_t *t, atmi_state_t state) {
+void set_task_state(atmi_task_t *t, const atmi_state_t state) {
+    //atmi_state_t *cur_state = (atmi_state_t *)(&(t->state));
+    //*cur_state = state;
     t->state = state;
 }
 
@@ -322,9 +328,9 @@ void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype) {
     hsa_status_t err;
     if(task->profile != NULL) {
         hsa_signal_t signal = *(hsa_signal_t *)(task->handle);
-        hsa_amd_dispatch_time_t metrics;
+        hsa_amd_profiling_dispatch_time_t metrics;
         if(devtype == ATMI_DEVTYPE_GPU) {
-            err = hsa_ext_get_dispatch_times(*snk_gpu_agent, 
+            err = hsa_amd_profiling_get_dispatch_time(*snk_gpu_agent, 
                     signal, &metrics); 
             ErrorCheck(Profiling GPU dispatch, err);
             task->profile->start_time = metrics.start;
@@ -553,6 +559,18 @@ status_t register_stream(atmi_stream_t *stream) {
 }
 
 /* -------------- SNACK launch functions -------------------------- */
+void init_tasks() {
+    hsa_status_t err;
+    int task_num;
+    /* Initialize all preallocated tasks and signals */
+    for ( task_num = 0 ; task_num < SNK_MAX_TASKS; task_num++){
+       err=hsa_signal_create(1, 0, NULL, &SNK_Signals[task_num]);
+       SNK_Tasks[task_num].handle = (void *)(&SNK_Signals[task_num]);
+       ErrorCheck(Creating a HSA signal, err);
+    }
+
+}
+
 status_t snk_init_context(
                         hsa_agent_t *_CN__Agent, 
                         char _CN__HSA_BrigMem[],
@@ -562,12 +580,27 @@ status_t snk_init_context(
                         hsa_agent_t *_CN__CPU_Agent,
                         hsa_region_t *_CN__CPU_KernargRegion
                         ) {
+    snk_init_gpu_context(_CN__Agent, 
+                         _CN__HSA_BrigMem, 
+                         _CN__HsaProgram,
+                         _CN__Executable,
+                         _CN__KernargRegion);
 
+    snk_init_cpu_context(_CN__CPU_Agent,
+                         _CN__CPU_KernargRegion);
+
+    return STATUS_SUCCESS;
+}
+
+status_t snk_init_cpu_context(
+                        hsa_agent_t *_CN__CPU_Agent,
+                        hsa_region_t *_CN__CPU_KernargRegion
+                        ) {
     hsa_status_t err;
 
+    snk_kernel_counter = 0;
     err = hsa_init();
     ErrorCheck(Initializing the hsa runtime, err);
-
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
     err = hsa_iterate_agents(get_cpu_agent, _CN__CPU_Agent);
@@ -584,13 +617,39 @@ status_t snk_init_context(
     int queue_capacity = 32768;
     cpu_agent_init(*_CN__CPU_Agent, *_CN__CPU_KernargRegion, num_queues, queue_capacity);
 
+    snk_cpu_agent = _CN__CPU_Agent;
+    
+    int stream_num;
+    for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
+        /* round robin streams to queues */
+        SNK_NextCPUQueueID[stream_num] = stream_num % SNK_MAX_CPU_QUEUES;
+    }
+
+    if(tasks_initialized == 0) {
+        init_tasks();
+        tasks_initialized = 1;
+    }
+    return STATUS_SUCCESS;
+}
+
+status_t snk_init_gpu_context(
+                        hsa_agent_t *_CN__Agent, 
+                        char _CN__HSA_BrigMem[],
+                        hsa_ext_program_t *_CN__HsaProgram,
+                        hsa_executable_t *_CN__Executable,
+                        hsa_region_t *_CN__KernargRegion
+                        ) {
+
+    hsa_status_t err;
+
+    err = hsa_init();
+    ErrorCheck(Initializing the hsa runtime, err);
     /* Iterate over the agents and pick the gpu agent */
     err = hsa_iterate_agents(get_gpu_agent, _CN__Agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
     
     snk_gpu_agent = _CN__Agent;
-    snk_cpu_agent = _CN__CPU_Agent;
     /* Query the name of the agent.  */
     char name[64] = { 0 };
     err = hsa_agent_get_info(*_CN__Agent, HSA_AGENT_INFO_NAME, name);
@@ -646,38 +705,44 @@ status_t snk_init_context(
     err = (_CN__KernargRegion->handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a kernarg memory region, err);
 
-    int task_num;
-    /* Initialize all preallocated tasks and signals */
-    for ( task_num = 0 ; task_num < SNK_MAX_TASKS; task_num++){
-       err=hsa_signal_create(1, 0, NULL, &SNK_Signals[task_num]);
-       SNK_Tasks[task_num].handle = (void *)(&SNK_Signals[task_num]);
-       ErrorCheck(Creating a HSA signal, err);
-    }
-
     /* Create queues and signals for each stream. */
     int stream_num;
     for ( stream_num = 0 ; stream_num < SNK_MAX_GPU_QUEUES ; stream_num++){
-        /* printf("calling queue create for stream %d\n",stream_num); */
        err=hsa_queue_create(*_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &GPU_CommandQ[stream_num]);
        ErrorCheck(Creating the Stream Command Q, err);
-       err = hsa_ext_set_profiling( GPU_CommandQ[stream_num], 1); 
+       err = hsa_amd_profiling_set_profiler_enabled( GPU_CommandQ[stream_num], 1); 
        ErrorCheck(Enabling profiling support, err); 
     }
 
     for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
         /* round robin streams to queues */
         SNK_NextGPUQueueID[stream_num] = stream_num % SNK_MAX_GPU_QUEUES;
-        SNK_NextCPUQueueID[stream_num] = stream_num % SNK_MAX_CPU_QUEUES;
     }
 
     if(context_init_time_init == 0) {
         clock_gettime(CLOCK_MONOTONIC_RAW,&context_init_time);
         context_init_time_init = 1;
     }
+
+    if(tasks_initialized == 0) {
+        init_tasks();
+        tasks_initialized = 1;
+    }
     return STATUS_SUCCESS;
 }
 
-status_t snk_init_cpu_kernel() {
+status_t snk_init_cpu_kernel(const char *kernel_name, 
+                             const int num_params, 
+                             snk_generic_fp fn_ptr) {
+    if(snk_kernel_counter < 0 || snk_kernel_counter >= SNK_MAX_CPU_FUNCTIONS) {
+        DEBUG_PRINT("Too many CPU functions. Increase SNK_MAX_CPU_FUNCTIONS value.\n");
+        return STATUS_ERROR;
+    }
+    DEBUG_PRINT("Kernel Name: %s, Num args: %d\n", kernel_name, num_params);
+    snk_CPU_kernels[snk_kernel_counter].name = kernel_name;
+    snk_CPU_kernels[snk_kernel_counter].num_params = num_params;
+    snk_CPU_kernels[snk_kernel_counter].function = fn_ptr; 
+    snk_kernel_counter++;
     return STATUS_SUCCESS;
 }
 
@@ -692,10 +757,9 @@ status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             ) {
 
     hsa_status_t err;
-
     /* Extract the symbol from the executable.  */
-    /* printf("Kernel name _KN__: Looking for symbol %s\n","__OpenCL__KN__kernel"); */
-    err = hsa_executable_get_symbol(_CN__Executable, "", kernel_symbol_name, _CN__Agent , 0, _KN__Symbol);
+    DEBUG_PRINT("Kernel name _KN__: Looking for symbol %s\n", kernel_symbol_name); 
+    err = hsa_executable_get_symbol(_CN__Executable, NULL, kernel_symbol_name, _CN__Agent , 0, _KN__Symbol);
     ErrorCheck(Extract the symbol from the executable, err);
 
     /* Extract dispatch information from the symbol */
@@ -714,9 +778,7 @@ status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
 }                    
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
-                 const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
-                 const uint32_t _KN__cpu_task_num_args,
                  snk_kernel_args_t *kernel_args) {
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
@@ -753,18 +815,17 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
 
     /* Iterate over function table and retrieve the ID for kernel_name */
     uint16_t i;
-    /* Store/save CPU kernel table that is generated in the SNACK wrapper */
-    set_cpu_kernel_table(_CN__CPU_kernels);
     atmi_task_t *ret = NULL;
     for(i = 0; i < SNK_MAX_CPU_FUNCTIONS; i++) {
-        //DEBUG_PRINT("Comparing kernels %s %s\n", _CN__CPU_kernels[i].name, kernel_name);
-        if(_CN__CPU_kernels[i].name && kernel_name) {
-            if(strcmp(_CN__CPU_kernels[i].name, kernel_name) == 0) {
+        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_CPU_kernels[i].name, kernel_name);
+        if(snk_CPU_kernels[i].name && kernel_name) {
+            if(strcmp(snk_CPU_kernels[i].name, kernel_name) == 0) {
                 /* FIXME: REUSE SIGNALS!! */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
                     printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
                     return ;
                 }
+                const uint32_t num_params = snk_CPU_kernels[i].num_params;
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                 
                 /* pass this task handle to the kernel as an argument */
@@ -791,7 +852,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                 /* FIXME: We are considering only void return types for now.*/
                 //this_aql->return_address = NULL;
                 /* Set function args */
-                this_aql->arg[0] = _KN__cpu_task_num_args;
+                this_aql->arg[0] = num_params;
                 this_aql->arg[1] = (uint64_t) kernel_args;
                 this_aql->arg[2] = (uint64_t) ret; // pass task handle to fill in metrics
                 this_aql->arg[3] = UINT64_MAX;
@@ -962,22 +1023,19 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
-#if 0
 // below exploration for nested tasks
 atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm, 
-                 const cpu_kernel_table_t *_CN__CPU_kernels,
                  const char *kernel_name,
-                 const uint32_t _KN__cpu_task_num_args,
-                 const snk_kernel_args_t *kernel_args) {
+                 snk_kernel_args_t *kernel_args) {
     atmi_task_t *ret = NULL;
     /*if(lparm->nested == ATMI_TRUE) {
-        ret = snk_create_cpu_kernel(lparm, _CN__CPU_kernels, kernel_name,
-                 _KN__cpu_task_num_args, kernel_args);
+        ret = snk_create_cpu_kernel(lparm, kernel_name,
+                 kernel_args);
     }
-    else */{
-        ret = snk_cpu_kernel(lparm, _CN__CPU_kernels, kernel_name,
-                 _KN__cpu_task_num_args, kernel_args);
-    }
+    else {*/
+        ret = snk_cpu_kernel(lparm, kernel_name,
+                 kernel_args);
+    //}
     return ret;
-}                 
-#endif
+}
+

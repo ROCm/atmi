@@ -60,7 +60,7 @@ extern status_t %s_cpu_init(const char *kernel_name, \n\
                             snk_generic_fp fn_ptr){ \n\
     if (%s_CPU_FC == 0 ) { \n\
         status_t status = %s_InitCPUContext();\n\
-        if ( status  != STATUS_SUCCESS ) return;\n\
+        if ( status  != STATUS_SUCCESS ) return STATUS_ERROR;\n\
         %s_CPU_FC = 1;\n\
     }\n\
     return snk_init_cpu_kernel(kernel_name, num_params, fn_ptr);\n\
@@ -247,13 +247,12 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
     pp_printf(&buffer, "int %s_CPU_FK;\n", fn_name);
     pp_printf(&buffer, "%s { \n", pif_decl);
     pp_printf(&buffer, "    /* launcher code (PIF definition) */\n");
-    pp_printf(&buffer, "    printf(\"In PIF Def\\n\"); \n");
     pp_printf(&buffer, "\n\
     /* Kernel initialization has to be done before kernel arguments are set/inspected */ \n\
     extern %s\n\
     if (%s_CPU_FK == 0 ) { \n\
         status_t status = %s_cpu_init(\"%s\", %d, (snk_generic_fp)%s); \n\
-        if ( status  != STATUS_SUCCESS ) return; \n\
+        if ( status  != STATUS_SUCCESS ) return NULL; \n\
         %s_CPU_FK = 1; \n\
     } \n\
     snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n\

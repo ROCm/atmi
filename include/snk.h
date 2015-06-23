@@ -15,6 +15,10 @@
 
 #include "atmi.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define ATMI_MAX_STREAMS            8 
 #define ATMI_MAX_TASKS_PER_STREAM   125
 
@@ -56,16 +60,30 @@ typedef enum status_t {
     STATUS_ERROR=2
 } status_t;
 
+typedef void (*snk_generic_fp)(void);
+typedef struct snk_cpu_kernel_s {
+    const char *kernel_name; 
+    snk_generic_fp function;
+} snk_cpu_kernel_t;
+
+typedef struct snk_gpu_kernel_s {
+    const char *kernel_name; 
+    /* other fields? 
+     * hsa_program?
+     * hsa_executable?
+     */
+} snk_gpu_kernel_t;
+
 typedef struct snk_kernel_args_s {
     uint64_t args[20];
 } snk_kernel_args_t;
 
-typedef void (*snk_generic_fp)(void);
-typedef struct cpu_kernel_table_s {
-    const char *name; 
+typedef struct snk_pif_kernel_table_s {
+    const char *pif_name; 
     int num_params;
-    snk_generic_fp function;
-} cpu_kernel_table_t;
+    snk_cpu_kernel_t cpu_kernel;
+    snk_gpu_kernel_t gpu_kernel;
+} snk_pif_kernel_table_t;
 
 #define COMMA ,
 #define REPEAT(name)   COMMA name
@@ -83,10 +101,7 @@ status_t snk_init_context(
                         hsa_agent_t *_CN__CPU_Agent,
                         hsa_region_t *_CN__CPU_KernargRegion
                         );
-status_t snk_init_cpu_context(
-                        hsa_agent_t *_CN__CPU_Agent,
-                        hsa_region_t *_CN__CPU_KernargRegion
-                        );
+status_t snk_init_cpu_context();
 status_t snk_init_gpu_context(
                         hsa_agent_t *_CN__Agent, 
                         char _CN__HSA_BrigMem[],
@@ -95,9 +110,12 @@ status_t snk_init_gpu_context(
                         hsa_region_t *_CN__KernargRegion
                         );
 
-status_t snk_init_cpu_kernel(const char *kernel_name, 
+status_t snk_init_cpu_kernel(
+                             const char *pif_name, 
                              const int num_params, 
+                             const char *kernel_name, 
                              snk_generic_fp fn_ptr);
+status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], int sz);
 status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             const char *kernel_symbol_name,
                             uint64_t                         *_KN__Kernel_Object,
@@ -115,7 +133,10 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                  void *thisKernargAddress);
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
-                 const char *kernel_name,
+                 const char *pif_name,
                  snk_kernel_args_t *kernel_args);
 
+#ifdef __cplusplus
+}
+#endif
 #endif // __SNK_H__

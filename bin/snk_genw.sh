@@ -97,70 +97,6 @@ function write_header_template(){
 #include "atmi.h"
 EOF
 }
-function write_sync_functions_template(){
-/bin/cat  <<"EOF"
-#ifndef __ATMI_SYNC_KERNELS__
-#define __ATMI_SYNC_KERNELS__
-/*----------------------------------------------------------------------------*/
-/* String macros that look like an API, but actually implement feature by     */
-/* calling a null kernel under specific conditions.                           */ 
-/*----------------------------------------------------------------------------*/
-#define SYNC_STREAM(str) \
-{ \
-    ATMI_LPARM_CPU(__lparm_sync_kernel); \
-    __lparm_sync_kernel->synchronous = ATMI_TRUE; \
-    __lparm_sync_kernel->stream = str; \
-    __sync_kernel_pif(__lparm_sync_kernel); \
-}
-
-#define SYNC_TASK(task) \
-{ \
-    ATMI_LPARM_CPU(__lparm_sync_kernel); \
-    __lparm_sync_kernel->synchronous = ATMI_TRUE; \
-    __lparm_sync_kernel->num_required = 1; \
-    __lparm_sync_kernel->requires = &task; \
-    __sync_kernel_pif(__lparm_sync_kernel); \
-}
-
-#endif // __ATMI_SYNC_KERNELS__
-/*----------------------------------------------------------------------------*/
-/* ATMI Example: HelloWorld                                                   */ 
-/*----------------------------------------------------------------------------*/
-/* 
-#include <string.h>
-#include <stdlib.h>
-#include <iostream>
-using namespace std;
-#include "atmi.h"
-#include "hw.h"
-int main(int argc, char* argv[]) {
-	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
-	size_t strlength = strlen(input);
-	char *output = (char*) malloc(strlength + 1);
-        ATMI_LPARM_1D(lparm,strlength);
-        lparm->synchronous=ATMI_TRUE;
-        decode_pif(lparm,input,output);
-	output[strlength] = '\0';
-	cout << output << endl;
-	free(output);
-	return 0;
-}
-__kernel void decode(__global const char* in, __global char* out) {
-	out[get_global_id(0)] = in[get_global_id(0)] + 1;
-}
-*/
-
-EOF
-} # end of bash function write_global_functions_template() 
-
-function write_sync_function_definition(){
-/bin/cat  <<"EOF"
-#ifndef __SYNC_KERNEL_HEADER__
-#define __SYNC_KERNEL_HEADER__
-extern _CPPSTRING_ void __sync_kernel(atmi_task_t *thisTask) {}
-#endif //__SYNC_KERNEL_HEADER__
-EOF
-}
 
 function write_global_functions_template(){
 /bin/cat  <<"EOF"
@@ -202,17 +138,14 @@ function write_KernelStatics_template(){
 /* Kernel specific globals, one set for each kernel  */
 hsa_executable_symbol_t          _KN__Symbol;
 int                              _KN__FK = 0 ; 
-int                              _KN__CPU_FK = 0 ; 
 int                              _KN__GPU_FK = 0 ; 
 status_t                         _KN__init();
 status_t                         _KN__gpu_init();
-status_t                         _KN__cpu_init(const char *kernel_name, const int num_args, snk_generic_fp fn_ptr);
 status_t                         _KN__stop();
 uint64_t                         _KN__Kernel_Object;
 uint32_t                         _KN__Kernarg_Segment_Size; /* May not need to be global */
 uint32_t                         _KN__Group_Segment_Size;
 uint32_t                         _KN__Private_Segment_Size;
-uint32_t                         _KN__cpu_task_num_args;
 
 EOF
 }
@@ -235,20 +168,6 @@ extern status_t _KN__init(){
                       &_KN__Private_Segment_Size,
                       _CN__Agent,
                       _CN__Executable); 
-} /* end of _KN__init */
-
-extern status_t _KN__cpu_init(const char *kernel_name, 
-                             const int num_args, 
-                             snk_generic_fp fn_ptr){
-
-    if (_CN__FC == 0 ) {
-       status_t status = _CN__InitContext();
-       if ( status  != STATUS_SUCCESS ) return; 
-       _CN__FC = 1;
-    }
-    return snk_init_cpu_kernel(kernel_name, 
-                             num_args, 
-                             fn_ptr);
 } /* end of _KN__init */
 
 
@@ -287,14 +206,6 @@ extern status_t _KN__stop(){
 } /* end of _KN__stop */
 
 
-EOF
-}
-
-function write_cpu_kernel_template(){
-/bin/cat <<"EOF"
-    return snk_cpu_kernel(lparm, 
-                "_KN_",
-                cpu_kernel_arg_list);
 EOF
 }
 
@@ -475,8 +386,6 @@ __SEDCMD=" "
 #      1) SNACK function declaration
 #      2) Build structure for kernel arguments 
 #      3) Write values to kernel argument structure
-
-   sed_sepchar=""
    __KN_NUM=0
    while read line ; do 
    ((__KN_NUM++))
@@ -652,86 +561,6 @@ __SEDCMD=" "
 
       echo "  } " >>$__CWRAP
       echo "  else if(lparm->devtype == ATMI_DEVTYPE_CPU) { " >>$__CWRAP
-      #echo "   printf(\"In SNACK Kernel CPU Function ${__KN}\n\"); " >> $__CWRAP
-#     Write the structure definition for the kernel arguments.
-      echo "    snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); " >> $__CWRAP
-#     Write statements to fill in the argument structure and 
-#     keep track of updated CL arg list and new call list 
-#     in case we have to create a wrapper CL function.
-#     to call the real kernel CL function. 
-      echo "    cpu_kernel_arg_list->args[0] = (uint64_t)NULL; " >>$__CWRAP
-
-      NEXT_ARGI=0
-      KERN_NEEDS_CL_WRAPPER="FALSE"
-      arglistw=""
-      calllist=""
-      sepchar=""
-      IFS=","
-      for _val in $__ARGL ; do 
-         if ((NEXT_ARGI != 0)) ; then 
-         parse_arg $_val
-#        These echo statments help debug a lot
-#        echo "simple_arg_type=|${simple_arg_type}|" 
-#        echo "arg_type=|${arg_type}|" 
-         if [ $NEXT_ARGI == 20 ] ; then 
-            echo "ERROR! SNACK supports only up to 20 args for CPU tasks!"
-         fi
-         if [ "$last_char" == "*" ] ; then 
-            arglistw="${arglistw}${sepchar}${arg_type} ${arg_name}"
-            calllist="${calllist}${sepchar}${arg_name}"
-            echo "    cpu_kernel_arg_list->args[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
-         else
-            is_scalar $simple_arg_type
-            if [ $? == 1 ] ; then 
-               arglistw="$arglistw${sepchar}${arg_type} $arg_name"
-               calllist="${calllist}${sepchar}${arg_name}"
-               echo "    cpu_kernel_arg_list->args[${NEXT_ARGI}] = (uint64_t)$arg_name; " >>$__CWRAP
-            else
-               KERN_NEEDS_CL_WRAPPER="TRUE"
-               arglistw="$arglistw${sepchar}${arg_type}* $arg_name"
-               calllist="${calllist}${sepchar}${arg_name}[0]"
-               echo "    cpu_kernel_arg_list->args[${NEXT_ARGI}] = (uint64_t)&$arg_name; " >>$__CWRAP
-            fi
-         fi 
-         sepchar=","
-         fi
-         NEXT_ARGI=$(( NEXT_ARGI + 1 ))
-      done
-      
-      echo "    int num_args = ${NEXT_ARGI}; " >> $__CWRAP;
-#     Write the extra CL if we found call-by-value structs and write the extra CL needed
-      if [ "$KERN_NEEDS_CL_WRAPPER" == "TRUE" ] ; then 
-         echo "__kernel void ${__WRAPPRE}$__KN($arglistw){ $__KN($calllist) ; } " >> $__EXTRACL
-         __FN="\&__OpenCL_${__WRAPPRE}${__KN}_kernel"
-#        change the original __kernel (external callable) to internal callable
-         __SEDCMD="${__SEDCMD}${sed_sepchar}s/__kernel void $__KN /void $__KN/;s/__kernel void $__KN(/void $__KN(/"
-         sed_sepchar=";"
-      else
-         __FN="\&__OpenCL_${__KN}_kernel"
-      fi
-
-      if (( ${NEXT_ARGI} == 0 )) ; then
-        echo "    extern void ${__KN}(void);" >> $__CWRAP;
-      elif (( ${NEXT_ARGI} <= 20 )) ; then
-        printf "    extern void ${__KN}(uint64_t" >> $__CWRAP
-        for(( arg_id=2 ; arg_id<=${NEXT_ARGI}; arg_id++ ))
-        do 
-            printf ', uint64_t' >> $__CWRAP; 
-        done
-        printf ');\n' >> $__CWRAP
-      else
-        echo "ERROR! SNACK supports only up to 20 args for CPU tasks!"
-      fi
-	  echo "    /* Kernel initialization has to be done after kernel arguments are set/inspected */ " >> $__CWRAP
-      echo "    if (${__KN}_CPU_FK == 0 ) { " >> $__CWRAP
-      echo "      status_t status = ${__KN}_cpu_init(\"${__KN}\",num_args,(snk_generic_fp)${__KN}); " >> $__CWRAP
-      echo "      if ( status  != STATUS_SUCCESS ) return; " >> $__CWRAP
-      echo "      ${__KN}_CPU_FK = 1; " >> $__CWRAP
-      echo "    } " >> $__CWRAP
-#     Now add the kernel template to wrapper and change all three strings
-#     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_
-      write_cpu_kernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP
-
       echo "  } " >>$__CWRAP
       echo "} " >> $__CWRAP 
       echo "/* ------  End of ATMI's PIF function ${__KN}_pif ------ */ " >> $__CWRAP 
@@ -746,9 +575,6 @@ __SEDCMD=" "
    if [ "$__IS_FORTRAN" == "1" ] ; then 
       write_fortran_lparm_t
    fi
-
-   write_sync_functions_template >>$__HDRF
-   write_sync_function_definition >>$__HDRF
 
 #  Write the updated CL
    if [ "$__SEDCMD" != " " ] ; then 

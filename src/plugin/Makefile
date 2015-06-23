@@ -16,13 +16,15 @@ $(LIB): $(PLUGIN_SOURCE_FILES)
 	$(HOST_GCC) -shared $(CXXFLAGS) $^ -o $@
 
 test: hello.c
-	$(TARGET_GCC) -o hello.o -c $^ -fplugin=./$(LIB) $(TARGET_GCC_FLAGS) 
-	$(TARGET_GCC) -o hello_def.o -c $^.pif.def.c $(TARGET_GCC_FLAGS)
-	$(TARGET_GCC) -o hello hello_def.o hello.o $(TARGET_GCC_FLAGS) 
+	$(HOST_GCC) -c hello.h -fplugin=./$(LIB) $(TARGET_GCC_FLAGS) 
+	$(HOST_GCC) -o hello $^ $(TARGET_GCC_FLAGS) 
+	#$(TARGET_GCC) -o -fdump-tree-all hello.o -c $^ -fplugin=./$(LIB) $(TARGET_GCC_FLAGS) 
+	#$(TARGET_GCC) -o hello_def.o -c $^.pif.def.c $(TARGET_GCC_FLAGS)
+	#$(TARGET_GCC) -o hello hello_def.o hello.o $(TARGET_GCC_FLAGS) 
 test2: hello2.c
-	$(TARGET_GCC) -o hello2.o -c $^ -fplugin=./$(LIB) $(TARGET_GCC_FLAGS) 
-	$(TARGET_GCC) -o hello2_def.o -c $^.pif.def.c $(TARGET_GCC_FLAGS)
-	$(TARGET_GCC) -o hello2 hello2_def.o hello2.o $(TARGET_GCC_FLAGS) 
+	$(TARGET_GCC) -o hello2 $^ -fplugin=./$(LIB) $(TARGET_GCC_FLAGS) 
+	#$(TARGET_GCC) -o hello2_def.o -c $^.pif.def.c $(TARGET_GCC_FLAGS)
+	#$(TARGET_GCC) -o hello2 hello2_def.o hello2.o $(TARGET_GCC_FLAGS) 
 
 
 install: $(LIB)

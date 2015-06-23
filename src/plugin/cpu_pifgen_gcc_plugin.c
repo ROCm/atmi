@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-//#define DEBUG_SNK_PLUGIN
+#define DEBUG_SNK_PLUGIN
 #ifdef DEBUG_SNK_PLUGIN
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else
@@ -27,53 +27,22 @@ static pretty_printer buffer;
 static int initialized = 0;
 
 
-void write_headers(FILE *fp, const char *context_name, const char *pif_name) {
+void write_headers(FILE *fp, const char *filename) {
     fprintf(fp, "\
-#include \"snk.h\"\n\
 #include \"atmi.h\"\n\
+#include \"snk.h\"\n\
 \n\
-hsa_agent_t                      %s_CPU_Agent;\n\
-hsa_region_t                     %s_CPU_KernargRegion;\n\
-int                              %s_CPU_FC = 0; \n\n\
-int                              %s_CPU_FK = 0; \n\n\
-\n\
-status_t %s_InitCPUContext(){ \n\
-    return snk_init_cpu_context( \n\
-      &%s_CPU_Agent,\n\
-      &%s_CPU_KernargRegion\n\
-    );\n\
-} \n\n\
-", context_name, 
-context_name, 
-context_name, 
-pif_name,
-   context_name, 
-   context_name, 
-   context_name);
+#include \"%s.kerneldecls.h\"\n\
+", filename);
 }
 
-void write_kernel_inits(FILE *fp, const char *fn_name, const char *context_name) {
-    
-    fprintf(fp, "\
-extern status_t %s_cpu_init(const char *kernel_name, \n\
-                            const int num_params, \n\
-                            snk_generic_fp fn_ptr){ \n\
-    if (%s_CPU_FC == 0 ) { \n\
-        status_t status = %s_InitCPUContext();\n\
-        if ( status  != STATUS_SUCCESS ) return STATUS_ERROR;\n\
-        %s_CPU_FC = 1;\n\
-    }\n\
-    return snk_init_cpu_kernel(kernel_name, num_params, fn_ptr);\n\
-} /* end of init */\n\n\
-", fn_name, context_name, context_name, context_name);
-}
-
-/* Attribute handler callback */
-static tree
-handle_user_attribute (tree *node, tree name, tree args,
-        int flags, bool *no_add_attrs)
-{
-    return NULL_TREE;
+void write_kerneldecls(FILE *fp) {
+fprintf(fp, "#ifdef __cplusplus \n\
+#define _CPPSTRING_ \"C\" \n\
+#endif \n\
+#ifndef __cplusplus \n\
+#define _CPPSTRING_ \n\
+#endif \n");
 }
 
 void generate_task(char *text, const char *fn_name, const int num_params, char *fn_decl) {
@@ -83,12 +52,17 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(");
+    strcat(fn_decl, "(atmi_task_t *var0, ");
     
     int var_idx = 0;
-    for(var_idx = 0; var_idx < num_params; var_idx++) {
+    pch = strtok (NULL, ",)");
+    //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
+    for(var_idx = 1; var_idx < num_params; var_idx++) {
+        pch = strtok (NULL, ",)");
+    //    DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        strcat(fn_decl, pch);
         char var_decl[64] = {0}; 
-        sprintf(var_decl, "uint64_t var%d", var_idx);
+        sprintf(var_decl, " var%d", var_idx);
         strcat(fn_decl, var_decl);
         if(var_idx == num_params - 1) // last param must end with )
             strcat(fn_decl, ")");
@@ -98,30 +72,9 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     strcat(fn_decl, ";");
 }
 
-void generate_task_pif(char *text, const char *fn_name, const int num_params, char *fn_decl) {
-    char *pch = strtok(text,"<");
-    if(pch != NULL) strcpy(fn_decl, pch);
-    pch = strtok (NULL, ">");
-    strcat(fn_decl, fn_name);
-    strcat(fn_decl, "_pif");
-    pch = strtok (NULL, "(");
-    if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(");
-    
-    int var_idx = 0;
-    for(var_idx = 0; var_idx < num_params; var_idx++) {
-        char var_decl[64] = {0}; 
-        sprintf(var_decl, "uint64_t var%d", var_idx);
-        strcat(fn_decl, var_decl);
-        if(var_idx == num_params - 1) // last param must end with )
-            strcat(fn_decl, ")");
-        else
-            strcat(fn_decl, ",");
-    }
-}
-
 void generate_pif(char *text, const char *fn_name, const int num_params, char *fn_decl) {
     char *pch = strtok(text,"<");
+    // return atmi_task_t *
     if(pch != NULL) strcpy(fn_decl, "atmi_task_t *");
     pch = strtok (NULL, ">");
     strcat(fn_decl, fn_name);
@@ -131,10 +84,10 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     
     int var_idx = 0;
     pch = strtok (NULL, ",)");
-    DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
+    //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
     for(var_idx = 1; var_idx < num_params; var_idx++) {
         pch = strtok (NULL, ",)");
-        DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        //DEBUG_PRINT("Parsing this string now: %s\n", pch);
         strcat(fn_decl, pch);
         char var_decl[64] = {0}; 
         sprintf(var_decl, " var%d", var_idx);
@@ -146,33 +99,53 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     }
 }
 
+#define MAX_PIFS 100
+char pif_call_table[MAX_PIFS][1024];
+int get_pif_counter(const char *pif_name) {
+    int i;
+    int pif_counter = 0;
+    for(i = 0; i < MAX_PIFS; i++) {
+        if(pif_call_table[i] && strcmp(pif_name, pif_call_table[i]) == 0) {
+            pif_counter++;
+        }
+    }
+    return pif_counter;
+}
+
+void register_pif(const char *pif_name, int index) {
+    strcpy(pif_call_table[index],pif_name);
+}
+
 static tree
 handle_cpu_task_attribute (tree *node, tree name, tree args,
         int flags, bool *no_add_attrs)
 {
+    DEBUG_PRINT("Handling __attribute__ %s\n", IDENTIFIER_POINTER(name));
     //if(strcmp(IDENTIFIER_POINTER(name), "atmi_cpu_task") != 0) {
     //    return NULL_TREE;
     //}
     static int counter = 0;
     tree decl = *node;
-    char f_genw_filename[1024];
-    memset(f_genw_filename, 0, 1024);
-    strcpy(f_genw_filename, DECL_SOURCE_FILE(decl));
-    strcat(f_genw_filename, ".pif.def.c");
-    FILE *f_genw = NULL;
+    char pifdefs_filename[1024];
+    memset(pifdefs_filename, 0, 1024);
+    strcpy(pifdefs_filename, DECL_SOURCE_FILE(decl));
+    strcat(pifdefs_filename, ".pifdefs.h");
+    
+    char kerneldecls_filename[1024];
+    memset(kerneldecls_filename, 0, 1024);
+    strcpy(kerneldecls_filename, DECL_SOURCE_FILE(decl));
+    strcat(kerneldecls_filename, ".kerneldecls.h");
 
-    char context_name[1024];
-    memset(context_name, 0, 1024);
-    strcpy(context_name, DECL_SOURCE_FILE(decl));
-    char *pch_context = strchr(context_name, '.');
-    while(pch_context != NULL) {
-        *pch_context = '_';
-        pch_context = strchr(pch_context + 1, '.');
-    }
-    DEBUG_PRINT("Context name: %s\n", context_name);
+    FILE *fp_pifdefs_genw = NULL;
+    FILE *fp_kerneldecls_genw = NULL;
+
+    char this_filename[1024];
+    memset(this_filename, 0, 1024);
+    strcpy(this_filename, DECL_SOURCE_FILE(decl));
+    DEBUG_PRINT("Translation Unit Filename: %s\n", this_filename);
     //
     // Print the arguments of the attribute
-    DEBUG_PRINT("Fn Attribute: %s\nFn Attribute Params: ", IDENTIFIER_POINTER( name ));
+    DEBUG_PRINT("Task Attribute Params: ");
     char pif_name[1024]; 
     int attrib_id = 0;
     for( tree itrArgument = args; itrArgument != NULL_TREE; itrArgument = TREE_CHAIN( itrArgument ) )
@@ -193,13 +166,30 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
     }
     DEBUG_PRINT("\n"); 
 
+    char piftable_filename[1024];
+    memset(piftable_filename, 0, 1024);
+    strcpy(piftable_filename, pif_name);
+    strcat(piftable_filename, ".piftable.h");
+    FILE *fp_piftable_genw = NULL;
+
     if(counter == 0) { // first time write, then append
-        f_genw = fopen(f_genw_filename, "w");
-        write_headers(f_genw, context_name, pif_name);
+        fp_pifdefs_genw = fopen(pifdefs_filename, "w");
+        fp_kerneldecls_genw = fopen(kerneldecls_filename, "w");
+        write_headers(fp_pifdefs_genw, this_filename);
+        write_kerneldecls(fp_kerneldecls_genw);
     } else {
-        f_genw = fopen(f_genw_filename, "a");
+        fp_pifdefs_genw = fopen(pifdefs_filename, "a");
+        fp_kerneldecls_genw = fopen(kerneldecls_filename, "a");
     }
 
+    int pif_counter = get_pif_counter(pif_name); 
+    if(pif_counter == 0) {
+        fp_piftable_genw = fopen(piftable_filename, "w");
+    } else {
+        fp_piftable_genw = fopen(piftable_filename, "a");
+    }
+    register_pif(pif_name, counter);
+    
     FILE *f_tmp = fopen("tmp.pif.def.c", "w");
     if (!initialized) {
         //pp_construct (&buffer, /* prefix */NULL, /* line-width */0);
@@ -209,13 +199,13 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
     buffer.buffer->stream = f_tmp;
 
     const char* fn_name = IDENTIFIER_POINTER(DECL_NAME(decl));
-    DEBUG_PRINT("Fn Name: %s\n", fn_name); 
+    DEBUG_PRINT("Task Name: %s\n", fn_name); 
 
     tree fn_type = TREE_TYPE(decl);
-    //print_generic_stmt(f_genw, fn_type, TDF_RAW);
+    //print_generic_stmt(fp_pifdefs_genw, fn_type, TDF_RAW);
     dump_generic_node (&buffer, fn_type, 0, TDF_RAW, true);
     char *text = (char *) pp_formatted_text (&buffer);
-    DEBUG_PRINT("Plugin Fn dump: %s\n", text);
+    DEBUG_PRINT("Plugin Task dump: %s\n", text);
 
     int text_sz = strlen(text); 
     char text_dup[2048]; 
@@ -233,57 +223,55 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
 
     char pif_decl[2048];
     char fn_decl[2048];
-    char fn_pif_decl[2048];
 
     generate_pif(text, pif_name, num_params, pif_decl); 
     DEBUG_PRINT("PIF Decl: %s\n", pif_decl);
     
     generate_task(text_dup, fn_name, num_params, fn_decl); 
-    DEBUG_PRINT("FN Decl: %s\n", fn_decl);
-    
-    generate_task_pif(text_dup, fn_name, num_params, fn_pif_decl); 
-    DEBUG_PRINT("FN specific PIF Decl: %s\n", fn_pif_decl);
-    
-    pp_printf(&buffer, "int %s_CPU_FK;\n", fn_name);
-    pp_printf(&buffer, "%s { \n", pif_decl);
-    pp_printf(&buffer, "    /* launcher code (PIF definition) */\n");
-    pp_printf(&buffer, "\n\
-    /* Kernel initialization has to be done before kernel arguments are set/inspected */ \n\
-    extern %s\n\
-    if (%s_CPU_FK == 0 ) { \n\
-        status_t status = %s_cpu_init(\"%s\", %d, (snk_generic_fp)%s); \n\
-        if ( status  != STATUS_SUCCESS ) return NULL; \n\
-        %s_CPU_FK = 1; \n\
-    } \n\
-    snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n\
-    ", fn_decl,
-    fn_name,  
-    fn_name, fn_name, num_params, fn_name, 
-    fn_name); 
-    pp_printf(&buffer, "cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
-        ");
-    int arg_idx;
-    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-        pp_printf(&buffer, "\n\
-    cpu_kernel_arg_list->args[%d] = (uint64_t)var%d; \
-        ", arg_idx, arg_idx);
-    }
-    pp_printf(&buffer, "\n\
-    return snk_cpu_kernel(lparm, \n\
-        \"%s\", \n\
-        cpu_kernel_arg_list); \n\
-    ", 
-    fn_name);
-    pp_printf(&buffer, "\n\
-}\n");
-    // FIXME: Output the PIF only once after aggregating all 
-    // function declarations? Need to think of additional params
-    // for alternate kernel execution
-    char *buf_text = (char *)pp_formatted_text(&buffer);
-    write_kernel_inits(f_genw, fn_name, context_name);
-    fputs (buf_text, f_genw);
-    pp_clear_output_area(&buffer);
+    DEBUG_PRINT("Task Decl: %s\n", fn_decl);
+   
+    if(pif_counter == 0) { //first time PIF is called 
+        pp_printf(&buffer, "snk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
+        pp_printf(&buffer, "    #include \"%s.piftable.h\"\n", pif_name);
+        pp_printf(&buffer, "};\n");
 
+        pp_printf(&buffer, "int %s_FK;\n", pif_name);
+        pp_printf(&buffer, "%s { \n", pif_decl);
+        pp_printf(&buffer, "    /* launcher code (PIF definition) */\n");
+        pp_printf(&buffer, "\
+    if (%s_FK == 0 ) { \n\
+        snk_pif_init(%s_pif_fn_table, sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]));\n\
+        %s_FK = 1; \n\
+    } \n\
+    snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n", 
+                pif_name,
+                pif_name, pif_name, pif_name,
+                pif_name);
+        pp_printf(&buffer, "    cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
+                ");
+        int arg_idx;
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf(&buffer, "\n\
+    cpu_kernel_arg_list->args[%d] = (uint64_t)var%d;", arg_idx, arg_idx);
+        }
+        pp_printf(&buffer, "\n\
+    return snk_cpu_kernel(lparm, \n\
+                    \"%s\", \n\
+                    cpu_kernel_arg_list); \n\
+                ", 
+                pif_name);
+        pp_printf(&buffer, "\n\
+}\n");
+        // FIXME: Output the PIF only once after aggregating all 
+        // function declarations? Need to think of additional params
+        // for alternate kernel execution
+        char *buf_text = (char *)pp_formatted_text(&buffer);
+        fputs (buf_text, fp_pifdefs_genw);
+        pp_clear_output_area(&buffer);
+    }
+    fprintf(fp_kerneldecls_genw, "extern _CPPSTRING_ %s\n", fn_decl);
+    fprintf(fp_piftable_genw, "{.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
+            pif_name, num_params, fn_name, fn_name);
     //int idx = 0;
     // TODO: Think about the below and verify the better approach for 
     // parameter parsing. Ignore below if above code works.
@@ -302,21 +290,39 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
     //}
     //debug_tree_chain(arg);
     //}
-    fclose(f_genw);
-    counter++;
+    fclose(fp_pifdefs_genw);
+    fclose(fp_kerneldecls_genw);
+    fclose(fp_piftable_genw);
+
     fclose(f_tmp);
     int ret_del = remove("tmp.pif.def.c");
     if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.pif.def.c\n");
+    
+    counter++;
     return NULL_TREE;
 }
 
+void
+handle_pre_generic (void *event_data, void *data)
+{
+    tree fndecl = (tree) event_data;
+    tree arg;
+    for (arg = DECL_ARGUMENTS(fndecl); arg; arg = TREE_CHAIN (arg)) {
+        tree attr;
+        for (attr = DECL_ATTRIBUTES (arg); attr; attr = TREE_CHAIN (attr)) {
+            tree attrname = TREE_PURPOSE (attr);
+            tree attrargs = TREE_VALUE (attr);
+            warning (0, G_("attribute '%s' on param '%s' of function %s"),
+                    IDENTIFIER_POINTER (attrname),
+                    IDENTIFIER_POINTER (DECL_NAME (arg)),
+                    IDENTIFIER_POINTER (DECL_NAME (fndecl))
+                    );
+        }
+    }
+}
 /* Attribute definition */
-static struct attribute_spec devtype_attr =
+static struct attribute_spec launch_info_attr =
 { "launch_info", 0, 2, false,  false, false, handle_cpu_task_attribute, false };
-//{ "atmi_cpu_task", 0, 1, false,  false, false, handle_cpu_task_attribute, false };
-
-static struct attribute_spec launcher_attr =
-{ "launcher", 0, 2, false,  false, false, handle_user_attribute, false };
 
 /* Plugin callback called during attribute registration.
  * Registered with register_callback (plugin_name, PLUGIN_ATTRIBUTES,
@@ -326,9 +332,7 @@ static void
 register_attributes (void *event_data, void *data)
 {
     warning (0, G_("Callback to register attributes"));
-    register_attribute (&devtype_attr);
-//    register_attribute (&launcher_attr);
-    DEBUG_PRINT("Done registering attributes\n");
+    register_attribute (&launch_info_attr);
 }/* Plugin callback called during attribute registration.
  * Registered with register_callback (plugin_name, PLUGIN_ATTRIBUTES,
  * register_attributes, NULL)
@@ -337,8 +341,28 @@ register_attributes (void *event_data, void *data)
 static void
 register_headers (void *event_data, void *data)
 {
-//    warning (0, G_("Callback to register header files"));
-//    DEBUG_PRINT("Done registering header files: %s\n", (const char *)event_data);
+    //warning (0, G_("Callback to register header files"));
+    DEBUG_PRINT("Done registering header files: %s for input file: %s\n", (const char *)event_data, main_input_filename);
+}
+
+static void
+register_start_unit (void *event_data, void *data)
+{
+    warning (0, G_("Callback at start of compilation unit"));
+    #if 0
+    char pifdefs_filename[1024];
+    memset(pifdefs_filename, 0, 1024);
+    strcpy(pifdefs_filename, main_input_filename);
+    strcat(pifdefs_filename, ".pifdefs.h");
+
+    FILE *fp = fopen(pifdefs_filename, "w");
+    fprintf(fp, "");
+    fclose(fp);
+    
+   /* FILE *fp1 = fopen(main_input_filename, "a");
+    fprintf(fp1, "#include \"%s\"", pifdefs_filename);
+    fclose(fp1);*/
+    #endif
 }
 
 int plugin_init(struct plugin_name_args *plugin_info,
@@ -348,6 +372,15 @@ int plugin_init(struct plugin_name_args *plugin_info,
 
     DEBUG_PRINT("In plugin init function\n");
 
+    register_callback (plugin_name, 
+                    //PLUGIN_PASS_EXECUTION,
+                    PLUGIN_START_UNIT,
+                    //PLUGIN_OVERRIDE_GATE,
+                    //PLUGIN_PRAGMAS,
+                    //PLUGIN_NEW_PASS,
+                    register_start_unit, NULL);
+    //register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
+    //                      handle_pre_generic, NULL);
     register_callback (plugin_name, PLUGIN_ATTRIBUTES,
                   register_attributes, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,

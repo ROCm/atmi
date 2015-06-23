@@ -69,8 +69,10 @@ atmi_stream_table_t StreamTable[ATMI_MAX_STREAMS];
 //atmi_task_table_t TaskTable[SNK_MAX_TASKS];
 
 /* Stream specific globals */
+hsa_agent_t snk_cpu_agent;
+hsa_region_t snk_cpu_KernargRegion;
+int g_cpu_initialized = 0;
 hsa_agent_t* snk_gpu_agent;
-hsa_agent_t* snk_cpu_agent;
 hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
 hsa_signal_t  SNK_Signals[SNK_MAX_TASKS];
@@ -79,7 +81,7 @@ atmi_stream_t snk_default_stream_obj = {ATMI_ORDERED};
 int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
-extern cpu_kernel_table_t snk_CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
+extern snk_pif_kernel_table_t snk_CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
 extern int snk_kernel_counter;
 
 static int tasks_initialized;
@@ -586,16 +588,14 @@ status_t snk_init_context(
                          _CN__Executable,
                          _CN__KernargRegion);
 
-    snk_init_cpu_context(_CN__CPU_Agent,
-                         _CN__CPU_KernargRegion);
+    snk_init_cpu_context();
 
     return STATUS_SUCCESS;
 }
 
-status_t snk_init_cpu_context(
-                        hsa_agent_t *_CN__CPU_Agent,
-                        hsa_region_t *_CN__CPU_KernargRegion
-                        ) {
+status_t snk_init_cpu_context() {
+    if(g_cpu_initialized != 0) return;
+    
     hsa_status_t err;
 
     snk_kernel_counter = 0;
@@ -603,22 +603,20 @@ status_t snk_init_cpu_context(
     ErrorCheck(Initializing the hsa runtime, err);
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
-    err = hsa_iterate_agents(get_cpu_agent, _CN__CPU_Agent);
+    err = hsa_iterate_agents(get_cpu_agent, &snk_cpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
 
-    _CN__CPU_KernargRegion->handle=(uint64_t)-1;
-    err = hsa_agent_iterate_regions(*_CN__CPU_Agent, get_fine_grained_region, _CN__CPU_KernargRegion);
+    snk_cpu_KernargRegion.handle=(uint64_t)-1;
+    err = hsa_agent_iterate_regions(snk_cpu_agent, get_fine_grained_region, &snk_cpu_KernargRegion);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    err = (_CN__CPU_KernargRegion->handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    err = (snk_cpu_KernargRegion.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a CPU kernarg memory region handle, err);
 
     int num_queues = SNK_MAX_CPU_QUEUES;
     int queue_capacity = 32768;
-    cpu_agent_init(*_CN__CPU_Agent, *_CN__CPU_KernargRegion, num_queues, queue_capacity);
+    cpu_agent_init(snk_cpu_agent, snk_cpu_KernargRegion, num_queues, queue_capacity);
 
-    snk_cpu_agent = _CN__CPU_Agent;
-    
     int stream_num;
     for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
         /* round robin streams to queues */
@@ -629,6 +627,7 @@ status_t snk_init_cpu_context(
         init_tasks();
         tasks_initialized = 1;
     }
+    g_cpu_initialized = 1;
     return STATUS_SUCCESS;
 }
 
@@ -731,19 +730,38 @@ status_t snk_init_gpu_context(
     return STATUS_SUCCESS;
 }
 
-status_t snk_init_cpu_kernel(const char *kernel_name, 
+status_t snk_init_cpu_kernel(
+                             const char *pif_name, 
                              const int num_params, 
+                             const char *kernel_name, 
                              snk_generic_fp fn_ptr) {
+    snk_init_cpu_context(); 
+
     if(snk_kernel_counter < 0 || snk_kernel_counter >= SNK_MAX_CPU_FUNCTIONS) {
         DEBUG_PRINT("Too many CPU functions. Increase SNK_MAX_CPU_FUNCTIONS value.\n");
         return STATUS_ERROR;
     }
     DEBUG_PRINT("Kernel Name: %s, Num args: %d\n", kernel_name, num_params);
-    snk_CPU_kernels[snk_kernel_counter].name = kernel_name;
+    snk_CPU_kernels[snk_kernel_counter].pif_name = pif_name;
     snk_CPU_kernels[snk_kernel_counter].num_params = num_params;
-    snk_CPU_kernels[snk_kernel_counter].function = fn_ptr; 
+    snk_CPU_kernels[snk_kernel_counter].cpu_kernel.kernel_name = kernel_name;
+    snk_CPU_kernels[snk_kernel_counter].cpu_kernel.function = fn_ptr; 
     snk_kernel_counter++;
     return STATUS_SUCCESS;
+}
+
+status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], const int sz) {
+    int i;
+    // FIXME: Move away from a flat table structure to a hierarchical table where
+    // each PIF has a table of potential kernels!
+    DEBUG_PRINT("Number of kernels for pif: %lu / %lu\n", sizeof(pif_fn_table), sizeof(pif_fn_table[0]));
+    for (i = 0; i < sz; i++) {
+       snk_init_cpu_kernel(
+                           pif_fn_table[i].pif_name, 
+                           pif_fn_table[i].num_params,
+                           pif_fn_table[i].cpu_kernel.kernel_name, 
+                           pif_fn_table[i].cpu_kernel.function);
+    }
 }
 
 status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
@@ -778,8 +796,9 @@ status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
 }                    
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
-                 const char *kernel_name,
+                 const char *pif_name,
                  snk_kernel_args_t *kernel_args) {
+    
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
@@ -813,13 +832,18 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
         snk_stream_sync(stream);
     }
 
-    /* Iterate over function table and retrieve the ID for kernel_name */
+    /* FIXME: Iterate over function table and retrieve the best kernel_name */
     uint16_t i;
     atmi_task_t *ret = NULL;
+    int this_kernel_iter = 0;
     for(i = 0; i < SNK_MAX_CPU_FUNCTIONS; i++) {
-        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_CPU_kernels[i].name, kernel_name);
-        if(snk_CPU_kernels[i].name && kernel_name) {
-            if(strcmp(snk_CPU_kernels[i].name, kernel_name) == 0) {
+        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_CPU_kernels[i].pif_name, pif_name);
+        if(snk_CPU_kernels[i].pif_name && pif_name) {
+            if(strcmp(snk_CPU_kernels[i].pif_name, pif_name) == 0) {
+                if(this_kernel_iter != lparm->kernel_id) {
+                    this_kernel_iter++;
+                    continue;
+                }
                 /* FIXME: REUSE SIGNALS!! */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
                     printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
@@ -834,7 +858,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                 /* Get profiling object. Can be NULL? */
                 ret->profile = lparm->profile;
                 /* ID i is the kernel. Enqueue the function to the soft queue */
-                //DEBUG_PRINT("CPU Function [%d]: %s has %" PRIu32 " args\n", i, kernel_name, _KN__cpu_task_num_args);
+                //DEBUG_PRINT("CPU Function [%d]: %s has %" PRIu32 " args\n", i, pif_name, _KN__cpu_task_num_args);
                 /*  Obtain the current queue write index. increases with each call to kernel  */
                 uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
 
@@ -848,6 +872,8 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  *  to do this for CPU agents too? */
 
                 /* Set the type and return args.*/
+                // FIXME FIXME FIXME: Use the hierarchical pif-kernel table to
+                // choose the best kernel. Don't use a flat table structure
                 this_aql->type = (uint16_t)i;
                 /* FIXME: We are considering only void return types for now.*/
                 //this_aql->return_address = NULL;
@@ -891,6 +917,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
 
                 //SNK_NextTaskId = (SNK_NextTaskId + 1) % SNK_MAX_TASKS;
                 SNK_NextTaskId++;
+                break;
             }
         }
     }

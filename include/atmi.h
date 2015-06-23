@@ -1,4 +1,5 @@
 #ifndef __ATMI_H__
+#include <stdio.h>
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Asynchronous Task Management Interface ATMI file: atmi.h                   */
@@ -102,18 +103,19 @@ typedef struct atmi_lparm_s {
    atmi_devtype_t   devtype;        /* ATMI_DEVTYPE_GPU or ATMI_DEVTYPE_CPU   */
    atmi_tprofile_t* profile;        /* Points to tprofile if metrics desired  */ 
    int              atmi_id;        /* Constant that PIFs can check for       */
-   boolean          nested;         /* This task may create more tasks        */
+   int              kernel_id;
+//   boolean          nested;         /* This task may create more tasks        */
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
 
 /* String macros to initialize popular default launch parameters.             */ 
-#define ATMI_LPARM_CPU(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=0,.gdims={1},.ldims={1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_CPU,.profile=NULL,.atmi_id=ATMI_VRM,.nested=ATMI_FALSE} ; X = &_ ## X ;
+#define ATMI_LPARM_CPU(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=0,.gdims={1},.ldims={1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_CPU,.profile=NULL,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
 
-#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM,.nested=ATMI_FALSE} ; X = &_ ## X ;
+#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
  
-#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=2,.gdims={Y,Z},.ldims={64,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM,.nested=ATMI_FALSE} ; X = &_ ## X ;
+#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=2,.gdims={Y,Z},.ldims={64,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
  
-#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=3,.gdims={Y,Z,V},.ldims={8,8,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM,.nested=ATMI_FALSE} ; X = &_ ## X ;
+#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=3,.gdims={Y,Z,V},.ldims={8,8,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_GPU,.profile=NULL,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
 
 #define ATMI_STREAM(NAME) atmi_stream_t * NAME; atmi_stream_t _ ## NAME ={.ordered=ATMI_TRUE} ; NAME = &_ ## NAME ; 
 
@@ -125,6 +127,16 @@ typedef struct atmi_lparm_s {
 /* String macros that look like an API, but actually implement feature by     */
 /* calling a null kernel under specific conditions.                           */ 
 /*----------------------------------------------------------------------------*/
+#ifdef __cplusplus
+#define _CPPSTRING_ "C" 
+#endif
+#ifndef __cplusplus
+#define _CPPSTRING_ 
+#endif
+extern _CPPSTRING_ void atmi_stream_sync(atmi_stream_t *stream);
+extern _CPPSTRING_ void atmi_task_wait(atmi_task_t *task);
+extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
+
 #if 1
 #define SYNC_STREAM(stream) \
 { \
@@ -171,11 +183,3 @@ __kernel void decode(__global const char* in, __global char* out) {
 */
 #define __ATMI_H__
 #endif //__ATMI_H__
-#ifdef __cplusplus
-#define _CPPSTRING_ "C" 
-#endif
-#ifndef __cplusplus
-#define _CPPSTRING_ 
-#endif
-extern _CPPSTRING_ void atmi_stream_sync(atmi_stream_t *stream);
-extern _CPPSTRING_ void atmi_task_wait(atmi_task_t *task);

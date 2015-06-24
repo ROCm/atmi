@@ -15,9 +15,5 @@ GCCPLUGINS_DIR:= $(shell $(CC) -print-file-name=plugin)
 $(LIB): $(PLUGIN_SOURCE_FILES)
 	$(CPLUSPLUS) -shared $(CXXFLAGS) $^ -o $@
 
-test: hello.c
-	$(CC) -o hello.o -c $^ -fplugin=./$(LIB) $(CC_FLAGS) 
-	$(CC) -o hello hello.o $^.pifdefs.c $(CC_FLAGS)
-
 install: $(LIB)
 	cp $^ $(LIBDIR)/

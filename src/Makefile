@@ -24,7 +24,7 @@ $(LIB): $(OBJS)
 	$(CC) -o $@ $(INC_FLAGS) $(CFLAGS) $< $(LIB_FLAGS)
 
 install: $(LIB)
-	cp $^ $(LIBDIR)
+	cp $^ $(LIBDIR)/
 
 .PHONY: clean
 

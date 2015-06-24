@@ -1,9 +1,11 @@
 #include <iostream>
 #include <stdlib.h>
-#include "fibonacci.h"
+#include "atmi.h"
 using namespace std;
 
-extern "C" void sum(int *a, int *b, int *c) {
+extern "C" void sum_cpu_k1(atmi_task_t *t, int *a, int *b, int *c) __attribute__((launch_info("cpu", "sum")));
+
+extern "C" void sum_cpu_k1(atmi_task_t *t, int *a, int *b, int *c) { 
     *c = *a + *b;
     delete a;
     delete b;
@@ -33,12 +35,12 @@ void fib(const int n , int *result , atmi_task_t **my_sum_task) {
             lparm_child->num_required +=1;
         }
         lparm_child->requires = requires;
-        *my_sum_task = sum_pif(lparm_child,result1,result2,result);
+        *my_sum_task = sum(lparm_child,result1,result2,result);
     }
 }
 
 int main(int argc, char *argv[]) {
-    int N = 5;
+    int N = 10;
     if(argc > 1) {
         N = atoi(argv[1]);
     }

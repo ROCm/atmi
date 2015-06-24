@@ -108,10 +108,7 @@ function write_context_template(){
 /bin/cat  <<"EOF"
 
 /* Context(cl file) specific globals */
-hsa_agent_t                      _CN__Agent;
 hsa_agent_t                      _CN__CPU_Agent;
-hsa_ext_program_t                _CN__HsaProgram;
-hsa_executable_t                 _CN__Executable;
 hsa_region_t                     _CN__KernargRegion;
 hsa_region_t                     _CN__CPU_KernargRegion;
 int                              _CN__FC = 0; 
@@ -119,10 +116,8 @@ int                              _CN__FC = 0;
 #include "_CN__brig.h" 
 
 status_t _CN__InitContext(){
-    return snk_init_context(&_CN__Agent, 
+    return snk_init_context(
                             _CN__HSA_BrigMem,
-                            &_CN__HsaProgram, 
-                            &_CN__Executable, 
                             &_CN__KernargRegion,
                             &_CN__CPU_Agent,
                             &_CN__CPU_KernargRegion
@@ -165,9 +160,8 @@ extern status_t _KN__init(){
                       &_KN__Kernel_Object,
                       &_KN__Kernarg_Segment_Size,
                       &_KN__Group_Segment_Size,
-                      &_KN__Private_Segment_Size,
-                      _CN__Agent,
-                      _CN__Executable); 
+                      &_KN__Private_Segment_Size
+                      ); 
 } /* end of _KN__init */
 
 
@@ -183,9 +177,8 @@ extern status_t _KN__gpu_init(){
                       &_KN__Kernel_Object,
                       &_KN__Kernarg_Segment_Size,
                       &_KN__Group_Segment_Size,
-                      &_KN__Private_Segment_Size,
-                      _CN__Agent,
-                      _CN__Executable); 
+                      &_KN__Private_Segment_Size
+                      ); 
 } /* end of _KN__init */
 
 
@@ -331,7 +324,6 @@ __NO_GLOB_FUNS=$9
 
 __SNACK_RUNTIME_PATH=${10}
 # Intermediate files.
-__SYNCCL=${__TMPD}/sync.cl
 __EXTRACL=${__TMPD}/extra.cl
 __KARGLIST=${__TMPD}/klist
 __ARGL=""
@@ -345,11 +337,8 @@ __SEDCMD=" "
 #      echo
 #   fi
 
-   cat ${__CLF} > ${__SYNCCL}
-   echo "__kernel void __sync_kernel(atmi_task_t *thisTask) {}" >> ${__SYNCCL}
-
 #  Read the CLF and build a list of kernels and args, one kernel and set of args per line of KARGLIST file
-   cpp -I$__SNACK_RUNTIME_PATH/include $__SYNCCL | sed -e '/__kernel/,/)/!d' |  sed -e ':a;$!N;s/\n/ /;ta;P;D' | sed -e 's/__kernel/\n__kernel/g'  | grep "__kernel" | \
+   cpp -I$__SNACK_RUNTIME_PATH/include $__CLF | sed -e '/__kernel/,/)/!d' |  sed -e ':a;$!N;s/\n/ /;ta;P;D' | sed -e 's/__kernel/\n__kernel/g'  | grep "__kernel" | \
    sed -e "s/__kernel//;s/__global//g;s/{//g;s/ \*/\*/g"  | cut -d\) -f1 | sed -e "s/\*/\* /g;s/__restrict__//g" >$__KARGLIST
 
 #  The header and extra-cl files must start empty because lines are incrementally added to end of file
@@ -379,7 +368,7 @@ __SEDCMD=" "
    fi
 
 #  Add includes from CL to the generated C wrapper.
-   grep "^#include " $__SYNCCL >> $__CWRAP
+   grep "^#include " $__CLF >> $__CWRAP
 
 #  Process each cl __kernel and its arguments stored as one line in the KARGLIST file
 #  We need to process list of args 3 times in this loop.  

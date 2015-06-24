@@ -70,9 +70,11 @@ atmi_stream_table_t StreamTable[ATMI_MAX_STREAMS];
 
 /* Stream specific globals */
 hsa_agent_t snk_cpu_agent;
+hsa_ext_program_t snk_hsa_program;
+hsa_executable_t snk_executable;
 hsa_region_t snk_cpu_KernargRegion;
 int g_cpu_initialized = 0;
-hsa_agent_t* snk_gpu_agent;
+hsa_agent_t snk_gpu_agent;
 hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
 hsa_signal_t  SNK_Signals[SNK_MAX_TASKS];
@@ -332,7 +334,7 @@ void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype) {
         hsa_signal_t signal = *(hsa_signal_t *)(task->handle);
         hsa_amd_profiling_dispatch_time_t metrics;
         if(devtype == ATMI_DEVTYPE_GPU) {
-            err = hsa_amd_profiling_get_dispatch_time(*snk_gpu_agent, 
+            err = hsa_amd_profiling_get_dispatch_time(snk_gpu_agent, 
                     signal, &metrics); 
             ErrorCheck(Profiling GPU dispatch, err);
             task->profile->start_time = metrics.start;
@@ -574,18 +576,13 @@ void init_tasks() {
 }
 
 status_t snk_init_context(
-                        hsa_agent_t *_CN__Agent, 
                         char _CN__HSA_BrigMem[],
-                        hsa_ext_program_t *_CN__HsaProgram,
-                        hsa_executable_t *_CN__Executable,
                         hsa_region_t *_CN__KernargRegion,
                         hsa_agent_t *_CN__CPU_Agent,
                         hsa_region_t *_CN__CPU_KernargRegion
                         ) {
-    snk_init_gpu_context(_CN__Agent, 
+    snk_init_gpu_context( 
                          _CN__HSA_BrigMem, 
-                         _CN__HsaProgram,
-                         _CN__Executable,
                          _CN__KernargRegion);
 
     snk_init_cpu_context();
@@ -632,10 +629,7 @@ status_t snk_init_cpu_context() {
 }
 
 status_t snk_init_gpu_context(
-                        hsa_agent_t *_CN__Agent, 
                         char _CN__HSA_BrigMem[],
-                        hsa_ext_program_t *_CN__HsaProgram,
-                        hsa_executable_t *_CN__Executable,
                         hsa_region_t *_CN__KernargRegion
                         ) {
 
@@ -644,70 +638,69 @@ status_t snk_init_gpu_context(
     err = hsa_init();
     ErrorCheck(Initializing the hsa runtime, err);
     /* Iterate over the agents and pick the gpu agent */
-    err = hsa_iterate_agents(get_gpu_agent, _CN__Agent);
+    err = hsa_iterate_agents(get_gpu_agent, &snk_gpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
     
-    snk_gpu_agent = _CN__Agent;
     /* Query the name of the agent.  */
     char name[64] = { 0 };
-    err = hsa_agent_get_info(*_CN__Agent, HSA_AGENT_INFO_NAME, name);
+    err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_NAME, name);
     ErrorCheck(Querying the agent name, err);
     /* printf("The agent name is %s.\n", name); */
 
     /* Query the maximum size of the queue.  */
     uint32_t queue_size = 0;
-    err = hsa_agent_get_info(*_CN__Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+    err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
     ErrorCheck(Querying the agent maximum queue size, err);
     /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
 
     /* Create hsa program.  */
-    memset(_CN__HsaProgram,0,sizeof(hsa_ext_program_t));
-    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, _CN__HsaProgram);
+    memset(&snk_hsa_program,0,sizeof(hsa_ext_program_t));
+    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &snk_hsa_program);
     ErrorCheck(Create the program, err);
 
     /* Add the BRIG module to hsa program.  */
-    err = hsa_ext_program_add_module(*_CN__HsaProgram, (hsa_ext_module_t)_CN__HSA_BrigMem);
+    err = hsa_ext_program_add_module(snk_hsa_program, (hsa_ext_module_t)_CN__HSA_BrigMem);
     ErrorCheck(Adding the brig module to the program, err);
 
     /* Determine the agents ISA.  */
     hsa_isa_t isa;
-    err = hsa_agent_get_info(*_CN__Agent, HSA_AGENT_INFO_ISA, &isa);
+    err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_ISA, &isa);
     ErrorCheck(Query the agents isa, err);
 
     /* * Finalize the program and extract the code object.  */
     hsa_ext_control_directives_t control_directives;
     memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
     hsa_code_object_t code_object;
-    err = hsa_ext_program_finalize(*_CN__HsaProgram, isa, 0, control_directives, "", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
+    err = hsa_ext_program_finalize(snk_hsa_program, isa, 0, control_directives, "", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
     ErrorCheck(Finalizing the program, err);
 
     /* Destroy the program, it is no longer needed.  */
-    err=hsa_ext_program_destroy(*_CN__HsaProgram);
+    err=hsa_ext_program_destroy(snk_hsa_program);
     ErrorCheck(Destroying the program, err);
 
     /* Create the empty executable.  */
-    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", _CN__Executable);
+    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &snk_executable);
     ErrorCheck(Create the executable, err);
 
     /* Load the code object.  */
-    err = hsa_executable_load_code_object(*_CN__Executable, *_CN__Agent, code_object, "");
+    err = hsa_executable_load_code_object(snk_executable, snk_gpu_agent, code_object, "");
     ErrorCheck(Loading the code object, err);
 
     /* Freeze the executable; it can now be queried for symbols.  */
-    err = hsa_executable_freeze(*_CN__Executable, "");
+    err = hsa_executable_freeze(snk_executable, "");
     ErrorCheck(Freeze the executable, err);
 
     /* Find a memory region that supports kernel arguments.  */
     _CN__KernargRegion->handle=(uint64_t)-1;
-    hsa_agent_iterate_regions(*_CN__Agent, get_kernarg_memory_region, _CN__KernargRegion);
+    hsa_agent_iterate_regions(snk_gpu_agent, get_kernarg_memory_region, _CN__KernargRegion);
     err = (_CN__KernargRegion->handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a kernarg memory region, err);
 
     /* Create queues and signals for each stream. */
     int stream_num;
     for ( stream_num = 0 ; stream_num < SNK_MAX_GPU_QUEUES ; stream_num++){
-       err=hsa_queue_create(*_CN__Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &GPU_CommandQ[stream_num]);
+       err=hsa_queue_create(snk_gpu_agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &GPU_CommandQ[stream_num]);
        ErrorCheck(Creating the Stream Command Q, err);
        err = hsa_amd_profiling_set_profiler_enabled( GPU_CommandQ[stream_num], 1); 
        ErrorCheck(Enabling profiling support, err); 
@@ -769,15 +762,13 @@ status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             uint64_t                         *_KN__Kernel_Object,
                             uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
                             uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size,
-                            hsa_agent_t _CN__Agent, 
-                            hsa_executable_t _CN__Executable
+                            uint32_t                         *_KN__Private_Segment_Size
                             ) {
 
     hsa_status_t err;
     /* Extract the symbol from the executable.  */
     DEBUG_PRINT("Kernel name _KN__: Looking for symbol %s\n", kernel_symbol_name); 
-    err = hsa_executable_get_symbol(_CN__Executable, NULL, kernel_symbol_name, _CN__Agent , 0, _KN__Symbol);
+    err = hsa_executable_get_symbol(snk_executable, NULL, kernel_symbol_name, snk_gpu_agent, 0, _KN__Symbol);
     ErrorCheck(Extract the symbol from the executable, err);
 
     /* Extract dispatch information from the symbol */

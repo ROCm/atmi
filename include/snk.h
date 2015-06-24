@@ -93,20 +93,14 @@ typedef struct snk_pif_kernel_table_s {
 #define REPEAT16(name) REPEAT8(name) REPEAT8(name)
 
 status_t snk_init_context(
-                        hsa_agent_t *_CN__Agent, 
                         char _CN__HSA_BrigMem[],
-                        hsa_ext_program_t *_CN__HsaProgram,
-                        hsa_executable_t *_CN__Executable,
                         hsa_region_t *_CN__KernargRegion,
                         hsa_agent_t *_CN__CPU_Agent,
                         hsa_region_t *_CN__CPU_KernargRegion
                         );
 status_t snk_init_cpu_context();
 status_t snk_init_gpu_context(
-                        hsa_agent_t *_CN__Agent, 
                         char _CN__HSA_BrigMem[],
-                        hsa_ext_program_t *_CN__HsaProgram,
-                        hsa_executable_t *_CN__Executable,
                         hsa_region_t *_CN__KernargRegion
                         );
 
@@ -121,9 +115,7 @@ status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
                             uint64_t                         *_KN__Kernel_Object,
                             uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
                             uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size,
-                            hsa_agent_t _CN__Agent, 
-                            hsa_executable_t _CN__Executable
+                            uint32_t                         *_KN__Private_Segment_Size
                             );
 
 atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm, 

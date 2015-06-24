@@ -1,6 +1,7 @@
 #include <gcc-plugin.h>
 #include <plugin-version.h>
 #include <plugin.h>
+#include <c-family/c-common.h>
 #include <tree.h>
 #include <intl.h>
 #include <diagnostic.h>
@@ -11,6 +12,9 @@
 #include <dumpfile.h>
 #include <stdio.h>
 #include <string.h>
+#include <stringpool.h>
+#include <langhooks.h>
+
 
 #define DEBUG_SNK_PLUGIN
 #ifdef DEBUG_SNK_PLUGIN
@@ -36,7 +40,7 @@ void write_headers(FILE *fp, const char *filename) {
 ", filename);
 }
 
-void write_kerneldecls(FILE *fp) {
+void write_cpp_warning_header(FILE *fp) {
 fprintf(fp, "#ifdef __cplusplus \n\
 #define _CPPSTRING_ \"C\" \n\
 #endif \n\
@@ -99,6 +103,75 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     }
 }
 
+void push_declaration(const char *pif_name, tree fn_type, int num_params) {
+    //char pif[2048];
+    //strcpy(pif, pif_name);
+
+    tree fndecl;
+    tree pifdecl = get_identifier(pif_name);
+
+    fndecl = build_decl(DECL_SOURCE_LOCATION(pifdecl),
+                        FUNCTION_DECL, pifdecl, fn_type);
+
+    DECL_EXTERNAL(fndecl) = 0;
+    DECL_ARTIFICIAL (fndecl) = true;
+    //TREE_PUBLIC (fndecl) = TREE_PUBLIC (pifdecl);
+    TREE_STATIC (fndecl) = false;
+    TREE_USED (fndecl) = true;
+    DECL_EXTERNAL (fndecl) = true;
+    DECL_CONTEXT (fndecl) = NULL_TREE;
+
+    print_generic_stmt(stdout, fndecl, TDF_RAW);
+    
+    tree arg;
+    function_args_iterator args_iter;
+    tree new_fn_type = NULL_TREE;
+    tree new_fn_arglist = NULL_TREE;
+    int iter = 0;
+    tree new_ret_type = NULL_TREE;
+    FOREACH_FUNCTION_ARGS(fn_type, arg, args_iter)
+    {
+     print_generic_stmt(stdout, arg, TDF_RAW);
+     if(iter == 0) {
+        //new_ret_type = arg;
+        tree type_decl = lookup_name(get_identifier("atmi_lparm_t"));
+        arg = build_pointer_type(TREE_TYPE(type_decl));
+        //arg = ptr_type_node;
+     }
+     else if(iter >= num_params)
+        break;
+     new_fn_arglist = tree_cons(NULL_TREE, arg, new_fn_arglist);
+
+     iter++;
+    //debug_tree_chain(arg);
+    }
+    tree ret_type_decl = lookup_name(get_identifier("atmi_task_t"));
+    new_ret_type = build_pointer_type(TREE_TYPE(ret_type_decl));
+    new_fn_type = build_function_type(new_ret_type, nreverse(new_fn_arglist));
+    tree new_fndecl = build_decl(DECL_SOURCE_LOCATION(pifdecl),
+                        FUNCTION_DECL, pifdecl, new_fn_type);
+    //print_generic_stmt(stdout, new_fn_type, TDF_RAW);
+    // By now, fndecl should be a tree for the entire PIF declaration
+    DEBUG_PRINT("Now printing new fn_type\n");
+    print_generic_stmt(stdout, new_fndecl, TDF_RAW);
+    FOREACH_FUNCTION_ARGS(new_fn_type, arg, args_iter)
+    {
+     print_generic_stmt(stdout, arg, TDF_RAW);
+    // debug_tree_chain(arg);
+    }
+    DECL_ARTIFICIAL (new_fndecl) = 1;
+    TREE_PUBLIC (new_fndecl) = TREE_PUBLIC (pifdecl);
+    TREE_STATIC (new_fndecl) = 0;
+    TREE_USED (new_fndecl) = 1;
+    DECL_EXTERNAL (new_fndecl) = 1;
+    DECL_CONTEXT (new_fndecl) = NULL_TREE;
+
+//    push_file_scope();
+//    new_fndecl = c_linkage_bindings(new_fndecl);
+    pushdecl(new_fndecl);
+//     pushdecl_top_level(new_fndecl);
+}
+
 #define MAX_PIFS 100
 char pif_call_table[MAX_PIFS][1024];
 int get_pif_counter(const char *pif_name) {
@@ -129,7 +202,7 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
     char pifdefs_filename[1024];
     memset(pifdefs_filename, 0, 1024);
     strcpy(pifdefs_filename, DECL_SOURCE_FILE(decl));
-    strcat(pifdefs_filename, ".pifdefs.h");
+    strcat(pifdefs_filename, ".pifdefs.c");
     
     char kerneldecls_filename[1024];
     memset(kerneldecls_filename, 0, 1024);
@@ -176,7 +249,8 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
         fp_pifdefs_genw = fopen(pifdefs_filename, "w");
         fp_kerneldecls_genw = fopen(kerneldecls_filename, "w");
         write_headers(fp_pifdefs_genw, this_filename);
-        write_kerneldecls(fp_kerneldecls_genw);
+        write_cpp_warning_header(fp_pifdefs_genw);
+        write_cpp_warning_header(fp_kerneldecls_genw);
     } else {
         fp_pifdefs_genw = fopen(pifdefs_filename, "a");
         fp_kerneldecls_genw = fopen(kerneldecls_filename, "a");
@@ -236,7 +310,7 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
         pp_printf(&buffer, "};\n");
 
         pp_printf(&buffer, "int %s_FK;\n", pif_name);
-        pp_printf(&buffer, "%s { \n", pif_decl);
+        pp_printf(&buffer, "extern _CPPSTRING_ %s { \n", pif_decl);
         pp_printf(&buffer, "    /* launcher code (PIF definition) */\n");
         pp_printf(&buffer, "\
     if (%s_FK == 0 ) { \n\
@@ -298,6 +372,8 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
     int ret_del = remove("tmp.pif.def.c");
     if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.pif.def.c\n");
     
+    if(counter == 0)
+        push_declaration(pif_name, fn_type, num_params);
     counter++;
     return NULL_TREE;
 }
@@ -371,7 +447,7 @@ int plugin_init(struct plugin_name_args *plugin_info,
         return 1;
 
     DEBUG_PRINT("In plugin init function\n");
-
+#if 0
     register_callback (plugin_name, 
                     //PLUGIN_PASS_EXECUTION,
                     PLUGIN_START_UNIT,
@@ -381,10 +457,11 @@ int plugin_init(struct plugin_name_args *plugin_info,
                     register_start_unit, NULL);
     //register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
     //                      handle_pre_generic, NULL);
-    register_callback (plugin_name, PLUGIN_ATTRIBUTES,
-                  register_attributes, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
                   register_headers, NULL);
+#endif
+    register_callback (plugin_name, PLUGIN_ATTRIBUTES,
+                  register_attributes, NULL);
     return 0;
 }
 

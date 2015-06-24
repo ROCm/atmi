@@ -16,7 +16,7 @@
 #include <langhooks.h>
 
 
-#define DEBUG_SNK_PLUGIN
+//#define DEBUG_SNK_PLUGIN
 #ifdef DEBUG_SNK_PLUGIN
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else
@@ -104,24 +104,13 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
 }
 
 void push_declaration(const char *pif_name, tree fn_type, int num_params) {
-    //char pif[2048];
-    //strcpy(pif, pif_name);
-
     tree fndecl;
     tree pifdecl = get_identifier(pif_name);
 
     fndecl = build_decl(DECL_SOURCE_LOCATION(pifdecl),
                         FUNCTION_DECL, pifdecl, fn_type);
 
-    DECL_EXTERNAL(fndecl) = 0;
-    DECL_ARTIFICIAL (fndecl) = true;
-    //TREE_PUBLIC (fndecl) = TREE_PUBLIC (pifdecl);
-    TREE_STATIC (fndecl) = false;
-    TREE_USED (fndecl) = true;
-    DECL_EXTERNAL (fndecl) = true;
-    DECL_CONTEXT (fndecl) = NULL_TREE;
-
-    print_generic_stmt(stdout, fndecl, TDF_RAW);
+    //print_generic_stmt(stdout, fndecl, TDF_RAW);
     
     tree arg;
     function_args_iterator args_iter;
@@ -131,45 +120,57 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
     tree new_ret_type = NULL_TREE;
     FOREACH_FUNCTION_ARGS(fn_type, arg, args_iter)
     {
-     print_generic_stmt(stdout, arg, TDF_RAW);
-     if(iter == 0) {
-        //new_ret_type = arg;
-        tree type_decl = lookup_name(get_identifier("atmi_lparm_t"));
-        arg = build_pointer_type(TREE_TYPE(type_decl));
-        //arg = ptr_type_node;
-     }
-     else if(iter >= num_params)
-        break;
-     new_fn_arglist = tree_cons(NULL_TREE, arg, new_fn_arglist);
+        //print_generic_stmt(stdout, arg, TDF_RAW);
+        if(iter == 0) {
+            // replace atmi_task_t of the task with atmi_lparm_t for the PIF
+            //new_ret_type = arg;
+            tree type_decl = lookup_name(get_identifier("atmi_lparm_t"));
+            tree new_arg = build_pointer_type(TREE_TYPE(type_decl));
+            //arg = ptr_type_node;
+            new_fn_arglist = tree_cons(NULL_TREE, new_arg, new_fn_arglist);
+        }
+        else if(iter >= num_params)
+            break;
+        else
+            new_fn_arglist = tree_cons(NULL_TREE, arg, new_fn_arglist);
 
-     iter++;
-    //debug_tree_chain(arg);
+        iter++;
+        //debug_tree_chain(arg);
     }
+    // return atmi_task_t *
     tree ret_type_decl = lookup_name(get_identifier("atmi_task_t"));
     new_ret_type = build_pointer_type(TREE_TYPE(ret_type_decl));
     new_fn_type = build_function_type(new_ret_type, nreverse(new_fn_arglist));
+    
+    // build the PIF declaration 
     tree new_fndecl = build_decl(DECL_SOURCE_LOCATION(pifdecl),
                         FUNCTION_DECL, pifdecl, new_fn_type);
     //print_generic_stmt(stdout, new_fn_type, TDF_RAW);
-    // By now, fndecl should be a tree for the entire PIF declaration
+
+    // By now, new_fndecl should be a tree for the entire PIF declaration
+#ifdef DEBUG_SNK_PLUGIN    
     DEBUG_PRINT("Now printing new fn_type\n");
     print_generic_stmt(stdout, new_fndecl, TDF_RAW);
     FOREACH_FUNCTION_ARGS(new_fn_type, arg, args_iter)
     {
-     print_generic_stmt(stdout, arg, TDF_RAW);
-    // debug_tree_chain(arg);
+        print_generic_stmt(stdout, arg, TDF_RAW);
+        // debug_tree_chain(arg);
     }
+#endif
+    // more access specifiers to the declaration
     DECL_ARTIFICIAL (new_fndecl) = 1;
     TREE_PUBLIC (new_fndecl) = TREE_PUBLIC (pifdecl);
     TREE_STATIC (new_fndecl) = 0;
     TREE_USED (new_fndecl) = 1;
-    DECL_EXTERNAL (new_fndecl) = 1;
-    DECL_CONTEXT (new_fndecl) = NULL_TREE;
+    // do NOT use the below flag because C programs fail. Some ANSI C nonsense
+    // that I am still yet to understand. C++ programs work fine with or 
+    // without them, so we are going without because these declarations are in 
+    // global scope anyway.
+    //DECL_EXTERNAL (new_fndecl) = 1;
+    DECL_CONTEXT (new_fndecl) = current_function_decl;
 
-//    push_file_scope();
-//    new_fndecl = c_linkage_bindings(new_fndecl);
+    // finally, push the new function declaration to the same compilation unit
     pushdecl(new_fndecl);
-//     pushdecl_top_level(new_fndecl);
 }
 
 #define MAX_PIFS 100
@@ -407,7 +408,7 @@ static struct attribute_spec launch_info_attr =
 static void
 register_attributes (void *event_data, void *data)
 {
-    warning (0, G_("Callback to register attributes"));
+    DEBUG_PRINT("Callback to register attributes\n");
     register_attribute (&launch_info_attr);
 }/* Plugin callback called during attribute registration.
  * Registered with register_callback (plugin_name, PLUGIN_ATTRIBUTES,

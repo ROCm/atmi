@@ -1,6 +1,6 @@
 ```
 ===========================================================
-  CLOC Release License
+  ATMI Release License
 ===========================================================
 The University of Illinois/NCSA 
 Open Source License (NCSA)

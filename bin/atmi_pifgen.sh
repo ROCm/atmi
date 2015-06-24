@@ -23,7 +23,7 @@
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.9.1
+PROGVERSION=0.1.0
 #
 # Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  Patent pending.
 # 

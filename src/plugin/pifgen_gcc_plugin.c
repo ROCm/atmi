@@ -16,8 +16,8 @@
 #include <langhooks.h>
 
 
-//#define DEBUG_SNK_PLUGIN
-#ifdef DEBUG_SNK_PLUGIN
+//#define DEBUG_ATMI_RT_PLUGIN
+#ifdef DEBUG_ATMI_RT_PLUGIN
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else
 #define DEBUG_PRINT(...) do{ } while ( false )
@@ -148,7 +148,7 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
     //print_generic_stmt(stdout, new_fn_type, TDF_RAW);
 
     // By now, new_fndecl should be a tree for the entire PIF declaration
-#ifdef DEBUG_SNK_PLUGIN    
+#ifdef DEBUG_ATMI_RT_PLUGIN    
     DEBUG_PRINT("Now printing new fn_type\n");
     print_generic_stmt(stdout, new_fndecl, TDF_RAW);
     FOREACH_FUNCTION_ARGS(new_fn_type, arg, args_iter)
@@ -191,13 +191,11 @@ void register_pif(const char *pif_name, int index) {
 }
 
 static tree
-handle_cpu_task_attribute (tree *node, tree name, tree args,
+handle_task_impl_attribute (tree *node, tree name, tree args,
         int flags, bool *no_add_attrs)
 {
     DEBUG_PRINT("Handling __attribute__ %s\n", IDENTIFIER_POINTER(name));
-    //if(strcmp(IDENTIFIER_POINTER(name), "atmi_cpu_task") != 0) {
-    //    return NULL_TREE;
-    //}
+
     static int counter = 0;
     tree decl = *node;
     char pifdefs_filename[1024];
@@ -373,7 +371,7 @@ handle_cpu_task_attribute (tree *node, tree name, tree args,
     int ret_del = remove("tmp.pif.def.c");
     if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.pif.def.c\n");
     
-    if(counter == 0)
+    if(pif_counter == 0)
         push_declaration(pif_name, fn_type, num_params);
     counter++;
     return NULL_TREE;
@@ -398,8 +396,8 @@ handle_pre_generic (void *event_data, void *data)
     }
 }
 /* Attribute definition */
-static struct attribute_spec launch_info_attr =
-{ "launch_info", 0, 2, false,  false, false, handle_cpu_task_attribute, false };
+static struct attribute_spec atmi_task_impl_attr =
+{ "atmi_task_impl", 0, 2, false,  false, false, handle_task_impl_attribute, false };
 
 /* Plugin callback called during attribute registration.
  * Registered with register_callback (plugin_name, PLUGIN_ATTRIBUTES,
@@ -409,7 +407,7 @@ static void
 register_attributes (void *event_data, void *data)
 {
     DEBUG_PRINT("Callback to register attributes\n");
-    register_attribute (&launch_info_attr);
+    register_attribute (&atmi_task_impl_attr);
 }/* Plugin callback called during attribute registration.
  * Registered with register_callback (plugin_name, PLUGIN_ATTRIBUTES,
  * register_attributes, NULL)
@@ -425,7 +423,13 @@ register_headers (void *event_data, void *data)
 static void
 register_start_unit (void *event_data, void *data)
 {
-    warning (0, G_("Callback at start of compilation unit"));
+    //warning (0, G_("Callback at start of compilation unit"));
+    //tree kernel_type = get_identifier("__kernel");
+    //kernel_type = TYPE_STUB_DECL(kernel_type);
+    //print_generic_stmt(stdout, kernel_type, TDF_RAW);         
+    //tree tdecl = add_builtin_type ("__kernel", access_public_node);
+    //TYPE_NAME (access_public_node) = tdecl;
+    //print_generic_stmt(stdout, tdecl, TDF_RAW);         
     #if 0
     char pifdefs_filename[1024];
     memset(pifdefs_filename, 0, 1024);
@@ -448,7 +452,6 @@ int plugin_init(struct plugin_name_args *plugin_info,
         return 1;
 
     DEBUG_PRINT("In plugin init function\n");
-#if 0
     register_callback (plugin_name, 
                     //PLUGIN_PASS_EXECUTION,
                     PLUGIN_START_UNIT,
@@ -456,6 +459,7 @@ int plugin_init(struct plugin_name_args *plugin_info,
                     //PLUGIN_PRAGMAS,
                     //PLUGIN_NEW_PASS,
                     register_start_unit, NULL);
+#if 0
     //register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
     //                      handle_pre_generic, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,

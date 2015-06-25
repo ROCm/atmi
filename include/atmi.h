@@ -1,5 +1,4 @@
 #ifndef __ATMI_H__
-#include <stdio.h>
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Asynchronous Task Management Interface ATMI file: atmi.h                   */
@@ -89,8 +88,8 @@ typedef struct atmi_task_s {
 /*----------------------------------------------------------------------------*/
 typedef struct atmi_lparm_s { 
    int              ndim;           /* Thread dimensions: 0,1,2, or 3         */
-   size_t           gdims[3];       /* # of global threads for each dimension */
-   size_t           ldims[3];       /* Thread group size for each dimension   */
+   unsigned long           gdims[3];       /* # of global threads for each dimension */
+   unsigned long           ldims[3];       /* Thread group size for each dimension   */
    atmi_stream_t*   stream;         /* Group for this task, Default= NULL     */
    boolean          waitable;       /* Create signal for task, default = F    */
    boolean          synchronous;    /* Async or Sync,  default = F (async)    */
@@ -138,11 +137,11 @@ extern _CPPSTRING_ void atmi_task_wait(atmi_task_t *task);
 extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
 
 #if 1
-#define SYNC_STREAM(stream) \
+#define SYNC_STREAM(s) \
 { \
     ATMI_LPARM_CPU(__lparm_sync_kernel); \
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
-    __lparm_sync_kernel->stream = stream; \
+    __lparm_sync_kernel->stream = s; \
     __sync_kernel_pif(__lparm_sync_kernel); \
 }
 
@@ -167,7 +166,7 @@ using namespace std;
 #include "hw.h"
 int main(int argc, char* argv[]) {
 	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
-	size_t strlength = strlen(input);
+	unsigned long strlength = strlen(input);
 	char *output = (char*) malloc(strlength + 1);
         ATMI_LPARM_1D(lparm,strlength);
         lparm->synchronous=ATMI_TRUE;

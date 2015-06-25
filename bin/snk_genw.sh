@@ -132,7 +132,6 @@ function write_KernelStatics_template(){
 
 /* Kernel specific globals, one set for each kernel  */
 hsa_executable_symbol_t          _KN__Symbol;
-int                              _KN__FK = 0 ; 
 int                              _KN__GPU_FK = 0 ; 
 status_t                         _KN__init();
 status_t                         _KN__gpu_init();
@@ -190,9 +189,9 @@ extern status_t _KN__stop(){
        if ( err != STATUS_SUCCESS ) return err; 
        _CN__FC = 1;
     }
-    if ( _KN__FK == 1 ) {
+    if ( _KN__GPU_FK == 1 ) {
         /*  Currently nothing kernel specific must be recovered */
-       _KN__FK = 0;
+       _KN__GPU_FK = 0;
     }
     return STATUS_SUCCESS;
 

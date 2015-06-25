@@ -74,6 +74,8 @@ hsa_ext_program_t snk_hsa_program;
 hsa_executable_t snk_executable;
 hsa_region_t snk_cpu_KernargRegion;
 int g_cpu_initialized = 0;
+int g_hsa_initialized = 0;
+int g_gpu_initialized = 0;
 hsa_agent_t snk_gpu_agent;
 hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
@@ -86,7 +88,7 @@ int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 extern snk_pif_kernel_table_t snk_CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
 extern int snk_kernel_counter;
 
-static int tasks_initialized;
+int g_tasks_initialized = 0;
 
 struct timespec context_init_time;
 static int context_init_time_init = 0;
@@ -564,6 +566,7 @@ status_t register_stream(atmi_stream_t *stream) {
 
 /* -------------- SNACK launch functions -------------------------- */
 void init_tasks() {
+    if(g_tasks_initialized != 0) return;
     hsa_status_t err;
     int task_num;
     /* Initialize all preallocated tasks and signals */
@@ -572,7 +575,7 @@ void init_tasks() {
        SNK_Tasks[task_num].handle = (void *)(&SNK_Signals[task_num]);
        ErrorCheck(Creating a HSA signal, err);
     }
-
+    g_tasks_initialized = 1;
 }
 
 status_t snk_init_context(
@@ -590,14 +593,20 @@ status_t snk_init_context(
     return STATUS_SUCCESS;
 }
 
+void init_hsa() {
+    if(g_hsa_initialized == 0) {
+        snk_kernel_counter = 0;
+        status_t err = hsa_init();
+        ErrorCheck(Initializing the hsa runtime, err);
+        g_hsa_initialized = 1;
+    }
+}
+
 status_t snk_init_cpu_context() {
     if(g_cpu_initialized != 0) return;
     
     hsa_status_t err;
-
-    snk_kernel_counter = 0;
-    err = hsa_init();
-    ErrorCheck(Initializing the hsa runtime, err);
+    init_hsa();
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
     err = hsa_iterate_agents(get_cpu_agent, &snk_cpu_agent);
@@ -620,10 +629,7 @@ status_t snk_init_cpu_context() {
         SNK_NextCPUQueueID[stream_num] = stream_num % SNK_MAX_CPU_QUEUES;
     }
 
-    if(tasks_initialized == 0) {
-        init_tasks();
-        tasks_initialized = 1;
-    }
+    init_tasks();
     g_cpu_initialized = 1;
     return STATUS_SUCCESS;
 }
@@ -633,10 +639,11 @@ status_t snk_init_gpu_context(
                         hsa_region_t *_CN__KernargRegion
                         ) {
 
+    if(g_gpu_initialized != 0) return;
+    
     hsa_status_t err;
 
-    err = hsa_init();
-    ErrorCheck(Initializing the hsa runtime, err);
+    init_hsa();
     /* Iterate over the agents and pick the gpu agent */
     err = hsa_iterate_agents(get_gpu_agent, &snk_gpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
@@ -716,10 +723,8 @@ status_t snk_init_gpu_context(
         context_init_time_init = 1;
     }
 
-    if(tasks_initialized == 0) {
-        init_tasks();
-        tasks_initialized = 1;
-    }
+    init_tasks();
+    g_gpu_initialized = 1;
     return STATUS_SUCCESS;
 }
 
@@ -811,6 +816,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     check_change_in_device_type(stream, this_Q, ATMI_DEVTYPE_CPU);
 
     /* For dependent child tasks, wait till all parent kernels are finished.  */
+    DEBUG_PRINT("Pif %s requires %d task\n", pif_name, lparm->num_required);
     if ( lparm->num_required > 0) {
         enqueue_barrier_cpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
     }

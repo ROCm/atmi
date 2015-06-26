@@ -15,7 +15,11 @@
 #include <stringpool.h>
 #include <langhooks.h>
 
-
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+using namespace std;
 //#define DEBUG_ATMI_RT_PLUGIN
 #ifdef DEBUG_ATMI_RT_PLUGIN
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
@@ -25,19 +29,23 @@
 
 int plugin_is_GPL_compatible;
 
-static const char *plugin_name = "snack";
+static const char *plugin_name = "atmi_pifgen";
 
-static pretty_printer buffer;
+static std::map<std::string, int> pif_table;
+typedef struct pif_printers_s {
+   pretty_printer *pifdefs; 
+   pretty_printer *fn_table; 
+} pif_printers_t;
+static std::vector<pif_printers_t> pif_printers;
+
+static pretty_printer g_kerneldecls;
+
 static int initialized = 0;
 
-
-void write_headers(FILE *fp, const char *filename) {
+void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
-#include \"snk.h\"\n\
-\n\
-#include \"%s.kerneldecls.h\"\n\
-", filename);
+#include \"snk.h\"\n\n");
 }
 
 void write_cpp_warning_header(FILE *fp) {
@@ -46,7 +54,7 @@ fprintf(fp, "#ifdef __cplusplus \n\
 #endif \n\
 #ifndef __cplusplus \n\
 #define _CPPSTRING_ \n\
-#endif \n");
+#endif \n\n");
 }
 
 void generate_task(char *text, const char *fn_name, const int num_params, char *fn_decl) {
@@ -173,21 +181,31 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
     pushdecl(new_fndecl);
 }
 
-#define MAX_PIFS 100
-char pif_call_table[MAX_PIFS][1024];
-int get_pif_counter(const char *pif_name) {
-    int i;
-    int pif_counter = 0;
-    for(i = 0; i < MAX_PIFS; i++) {
-        if(pif_call_table[i] && strcmp(pif_name, pif_call_table[i]) == 0) {
-            pif_counter++;
-        }
+int get_pif_index(const char *pif_name) {
+    /*DEBUG_PRINT("Looking up PIF %s\n", pif_name);
+    for(std::map<std::string, int>::iterator it = pif_table.begin();
+        it != pif_table.end(); it++) {
+        DEBUG_PRINT("%s, %d\n", it->first.c_str(), it->second);
     }
-    return pif_counter;
+    */
+    if(pif_table.find(std::string(pif_name)) != pif_table.end()) {
+        return pif_table[pif_name];
+    }
+    return -1;
 }
 
-void register_pif(const char *pif_name, int index) {
-    strcpy(pif_call_table[index],pif_name);
+void register_pif(const char *pif_name) {
+    std::string pif_name_str(pif_name);
+    if(pif_table.find(pif_name_str) == pif_table.end()) {
+        pif_table[pif_name_str] = pif_printers.size();
+        //pif_table.insert(std::pair<std::string,int>(pif_name_str, pif_printers.size()));
+        pif_printers_t pp;
+        pp.pifdefs = new pretty_printer;
+        pp.fn_table = new pretty_printer;
+        pp_needs_newline ((pp.pifdefs)) = true;
+        pp_needs_newline ((pp.fn_table)) = true;
+        pif_printers.push_back(pp);
+    }
 }
 
 static tree
@@ -196,26 +214,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 {
     DEBUG_PRINT("Handling __attribute__ %s\n", IDENTIFIER_POINTER(name));
 
-    static int counter = 0;
     tree decl = *node;
-    char pifdefs_filename[1024];
-    memset(pifdefs_filename, 0, 1024);
-    strcpy(pifdefs_filename, DECL_SOURCE_FILE(decl));
-    strcat(pifdefs_filename, ".pifdefs.c");
-    
-    char kerneldecls_filename[1024];
-    memset(kerneldecls_filename, 0, 1024);
-    strcpy(kerneldecls_filename, DECL_SOURCE_FILE(decl));
-    strcat(kerneldecls_filename, ".kerneldecls.h");
-
-    FILE *fp_pifdefs_genw = NULL;
-    FILE *fp_kerneldecls_genw = NULL;
-
-    char this_filename[1024];
-    memset(this_filename, 0, 1024);
-    strcpy(this_filename, DECL_SOURCE_FILE(decl));
-    DEBUG_PRINT("Translation Unit Filename: %s\n", this_filename);
-    //
     // Print the arguments of the attribute
     DEBUG_PRINT("Task Attribute Params: ");
     char pif_name[1024]; 
@@ -238,52 +237,36 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     }
     DEBUG_PRINT("\n"); 
 
-    char piftable_filename[1024];
-    memset(piftable_filename, 0, 1024);
-    strcpy(piftable_filename, pif_name);
-    strcat(piftable_filename, ".piftable.h");
-    FILE *fp_piftable_genw = NULL;
-
-    if(counter == 0) { // first time write, then append
-        fp_pifdefs_genw = fopen(pifdefs_filename, "w");
-        fp_kerneldecls_genw = fopen(kerneldecls_filename, "w");
-        write_headers(fp_pifdefs_genw, this_filename);
-        write_cpp_warning_header(fp_pifdefs_genw);
-        write_cpp_warning_header(fp_kerneldecls_genw);
-    } else {
-        fp_pifdefs_genw = fopen(pifdefs_filename, "a");
-        fp_kerneldecls_genw = fopen(kerneldecls_filename, "a");
-    }
-
-    int pif_counter = get_pif_counter(pif_name); 
-    if(pif_counter == 0) {
-        fp_piftable_genw = fopen(piftable_filename, "w");
-    } else {
-        fp_piftable_genw = fopen(piftable_filename, "a");
-    }
-    register_pif(pif_name, counter);
+    int is_new_pif = (get_pif_index(pif_name) == -1) ? 1 : 0;
+    DEBUG_PRINT("New PIF? %d\n", is_new_pif);
+    register_pif(pif_name);
+    int pif_index = get_pif_index(pif_name); 
     
     FILE *f_tmp = fopen("tmp.pif.def.c", "w");
+    pretty_printer tmp_buffer;
     if (!initialized) {
         //pp_construct (&buffer, /* prefix */NULL, /* line-width */0);
-        pp_needs_newline (&buffer) = true;
+        pp_needs_newline (&tmp_buffer) = true;
         initialized = 1;
     }
-    buffer.buffer->stream = f_tmp;
+    tmp_buffer.buffer->stream = f_tmp;
 
     const char* fn_name = IDENTIFIER_POINTER(DECL_NAME(decl));
     DEBUG_PRINT("Task Name: %s\n", fn_name); 
 
     tree fn_type = TREE_TYPE(decl);
     //print_generic_stmt(fp_pifdefs_genw, fn_type, TDF_RAW);
-    dump_generic_node (&buffer, fn_type, 0, TDF_RAW, true);
-    char *text = (char *) pp_formatted_text (&buffer);
+    dump_generic_node (&tmp_buffer, fn_type, 0, TDF_RAW, true);
+    char *text = (char *) pp_formatted_text (&tmp_buffer);
     DEBUG_PRINT("Plugin Task dump: %s\n", text);
 
     int text_sz = strlen(text); 
     char text_dup[2048]; 
     strcpy(text_dup, text);
-    pp_flush (&buffer);
+    pp_flush (&tmp_buffer);
+    fclose(f_tmp);
+    int ret_del = remove("tmp.pif.def.c");
+    if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.pif.def.c\n");
     
     int num_commas = 0;
     char *commas = strpbrk(text, ",");
@@ -303,15 +286,11 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     generate_task(text_dup, fn_name, num_params, fn_decl); 
     DEBUG_PRINT("Task Decl: %s\n", fn_decl);
    
-    if(pif_counter == 0) { //first time PIF is called 
-        pp_printf(&buffer, "snk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
-        pp_printf(&buffer, "    #include \"%s.piftable.h\"\n", pif_name);
-        pp_printf(&buffer, "};\n");
-
-        pp_printf(&buffer, "int %s_FK;\n", pif_name);
-        pp_printf(&buffer, "extern _CPPSTRING_ %s { \n", pif_decl);
-        pp_printf(&buffer, "    /* launcher code (PIF definition) */\n");
-        pp_printf(&buffer, "\
+    if(is_new_pif == 1) { //first time PIF is called 
+        pp_printf((pif_printers[pif_index].pifdefs), "\nint %s_FK;\n", pif_name);
+        pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ %s { \n", pif_decl);
+        pp_printf((pif_printers[pif_index].pifdefs), "    /* launcher code (PIF definition) */\n");
+        pp_printf((pif_printers[pif_index].pifdefs), "\
     if (%s_FK == 0 ) { \n\
         snk_pif_init(%s_pif_fn_table, sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]));\n\
         %s_FK = 1; \n\
@@ -320,30 +299,28 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 pif_name,
                 pif_name, pif_name, pif_name,
                 pif_name);
-        pp_printf(&buffer, "    cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
+        pp_printf((pif_printers[pif_index].pifdefs), "    cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
                 ");
         int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf(&buffer, "\n\
+            pp_printf((pif_printers[pif_index].pifdefs), "\n\
     cpu_kernel_arg_list->args[%d] = (uint64_t)var%d;", arg_idx, arg_idx);
         }
-        pp_printf(&buffer, "\n\
+        pp_printf((pif_printers[pif_index].pifdefs), "\n\
     return snk_cpu_kernel(lparm, \n\
                     \"%s\", \n\
                     cpu_kernel_arg_list); \n\
                 ", 
                 pif_name);
-        pp_printf(&buffer, "\n\
-}\n");
-        // FIXME: Output the PIF only once after aggregating all 
-        // function declarations? Need to think of additional params
-        // for alternate kernel execution
-        char *buf_text = (char *)pp_formatted_text(&buffer);
-        fputs (buf_text, fp_pifdefs_genw);
-        pp_clear_output_area(&buffer);
+        pp_printf((pif_printers[pif_index].pifdefs), "\n\
+}\n\n");
+        
+        /* add PIF function table definition */
+        pp_printf((pif_printers[pif_index].fn_table), "\nsnk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
     }
-    fprintf(fp_kerneldecls_genw, "extern _CPPSTRING_ %s\n", fn_decl);
-    fprintf(fp_piftable_genw, "{.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
+    pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
+    pp_printf((pif_printers[pif_index].fn_table), "\
+    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
     //int idx = 0;
     // TODO: Think about the below and verify the better approach for 
@@ -363,38 +340,13 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     //}
     //debug_tree_chain(arg);
     //}
-    fclose(fp_pifdefs_genw);
-    fclose(fp_kerneldecls_genw);
-    fclose(fp_piftable_genw);
 
-    fclose(f_tmp);
-    int ret_del = remove("tmp.pif.def.c");
-    if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.pif.def.c\n");
-    
-    if(pif_counter == 0)
+    if(is_new_pif == 1) {
         push_declaration(pif_name, fn_type, num_params);
-    counter++;
+    }
     return NULL_TREE;
 }
 
-void
-handle_pre_generic (void *event_data, void *data)
-{
-    tree fndecl = (tree) event_data;
-    tree arg;
-    for (arg = DECL_ARGUMENTS(fndecl); arg; arg = TREE_CHAIN (arg)) {
-        tree attr;
-        for (attr = DECL_ATTRIBUTES (arg); attr; attr = TREE_CHAIN (attr)) {
-            tree attrname = TREE_PURPOSE (attr);
-            tree attrargs = TREE_VALUE (attr);
-            warning (0, G_("attribute '%s' on param '%s' of function %s"),
-                    IDENTIFIER_POINTER (attrname),
-                    IDENTIFIER_POINTER (DECL_NAME (arg)),
-                    IDENTIFIER_POINTER (DECL_NAME (fndecl))
-                    );
-        }
-    }
-}
 /* Attribute definition */
 static struct attribute_spec atmi_task_impl_attr =
 { "atmi_task_impl", 0, 2, false,  false, false, handle_task_impl_attribute, false };
@@ -421,29 +373,48 @@ register_headers (void *event_data, void *data)
 }
 
 static void
-register_start_unit (void *event_data, void *data)
-{
-    //warning (0, G_("Callback at start of compilation unit"));
+register_finish_unit (void *event_data, void *data) {
+    /* Dump all the generated code into one .c file */
+    DEBUG_PRINT("Callback at end of compilation unit\n");
+    char pifdefs_filename[1024];
+    memset(pifdefs_filename, 0, 1024);
+    strcpy(pifdefs_filename, main_input_filename);
+    strcat(pifdefs_filename, ".pifdefs.c");
+    FILE *fp_pifdefs_genw = fopen(pifdefs_filename, "w");
+    write_headers(fp_pifdefs_genw);
+    write_cpp_warning_header(fp_pifdefs_genw);
+    /* 1) dump kernel impl declarations (fn pointers */
+    char *decl_text = (char *)pp_formatted_text(&g_kerneldecls);
+    fputs (decl_text, fp_pifdefs_genw);
+    pp_clear_output_area(&g_kerneldecls);
+
+    /* 2) dump piftable array and PIF definition */
+    for(std::vector<pif_printers_t>::iterator it = pif_printers.begin(); 
+        it != pif_printers.end(); it++) {
+        /* create piftable */
+        char *piftable_text = (char *)pp_formatted_text(it->fn_table);
+        fputs (piftable_text, fp_pifdefs_genw);
+        fprintf(fp_pifdefs_genw, "};\n");
+        pp_clear_output_area((it->fn_table));
+
+        /* PIF definition */
+        char *pif_text = (char *)pp_formatted_text(it->pifdefs);
+        fputs (pif_text, fp_pifdefs_genw);
+        pp_clear_output_area((it->pifdefs));
+    }
+    fclose(fp_pifdefs_genw);
+}
+
+static void
+register_start_unit (void *event_data, void *data) {
+    DEBUG_PRINT("Callback at start of compilation unit\n");
+    pp_needs_newline (&g_kerneldecls) = true;
     //tree kernel_type = get_identifier("__kernel");
     //kernel_type = TYPE_STUB_DECL(kernel_type);
     //print_generic_stmt(stdout, kernel_type, TDF_RAW);         
     //tree tdecl = add_builtin_type ("__kernel", access_public_node);
     //TYPE_NAME (access_public_node) = tdecl;
     //print_generic_stmt(stdout, tdecl, TDF_RAW);         
-    #if 0
-    char pifdefs_filename[1024];
-    memset(pifdefs_filename, 0, 1024);
-    strcpy(pifdefs_filename, main_input_filename);
-    strcat(pifdefs_filename, ".pifdefs.h");
-
-    FILE *fp = fopen(pifdefs_filename, "w");
-    fprintf(fp, "");
-    fclose(fp);
-    
-   /* FILE *fp1 = fopen(main_input_filename, "a");
-    fprintf(fp1, "#include \"%s\"", pifdefs_filename);
-    fclose(fp1);*/
-    #endif
 }
 
 int plugin_init(struct plugin_name_args *plugin_info,
@@ -452,21 +423,18 @@ int plugin_init(struct plugin_name_args *plugin_info,
         return 1;
 
     DEBUG_PRINT("In plugin init function\n");
-    register_callback (plugin_name, 
-                    //PLUGIN_PASS_EXECUTION,
-                    PLUGIN_START_UNIT,
-                    //PLUGIN_OVERRIDE_GATE,
-                    //PLUGIN_PRAGMAS,
-                    //PLUGIN_NEW_PASS,
+    register_callback (plugin_name, PLUGIN_START_UNIT,
                     register_start_unit, NULL);
+    register_callback (plugin_name, PLUGIN_FINISH_UNIT,
+                  register_finish_unit, NULL);
+    register_callback (plugin_name, PLUGIN_ATTRIBUTES,
+                  register_attributes, NULL);
 #if 0
     //register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
     //                      handle_pre_generic, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
                   register_headers, NULL);
 #endif
-    register_callback (plugin_name, PLUGIN_ATTRIBUTES,
-                  register_attributes, NULL);
     return 0;
 }
 

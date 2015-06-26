@@ -7,8 +7,8 @@
 #ifndef __cplusplus 
 #define _CPPSTRING_ 
 #endif 
-extern _CPPSTRING_ void helloWorld_cpu_1(atmi_task_t *thisTask, const char *a) __attribute__((launch_info("cpu", "helloWorld")));
-extern _CPPSTRING_ void helloWorld_cpu_2(atmi_task_t *thisTask, const char *a) __attribute__((launch_info("cpu", "helloWorld")));
+extern _CPPSTRING_ void helloWorld_cpu_1(atmi_task_t *thisTask, const char *a) __attribute__((atmi_task_impl("cpu", "helloWorld")));
+extern _CPPSTRING_ void helloWorld_cpu_2(atmi_task_t *thisTask, const char *a) __attribute__((atmi_task_impl("cpu", "helloWorld")));
 
 void helloWorld_cpu_1(atmi_task_t *thisTask, const char *a) {
     printf("In Task One: \"%s\"\n", a);

@@ -30,7 +30,7 @@
 #include <iterator>
 
 using namespace std;
-#define DEBUG_ATMI_RT_PLUGIN
+//#define DEBUG_ATMI_RT_PLUGIN
 #ifdef DEBUG_ATMI_RT_PLUGIN
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else
@@ -67,7 +67,7 @@ static int initialized = 0;
 void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
-#include \"snk.h\"\n\n");
+#include \"atmi_rt.h\"\n\n");
 }
 
 void write_cpp_warning_header(FILE *fp) {

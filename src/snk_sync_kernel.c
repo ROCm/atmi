@@ -1,4 +1,4 @@
-#include "snk.h"
+#include "atmi_rt.h"
 #include "atmi.h"
 
 /* Null kernel */

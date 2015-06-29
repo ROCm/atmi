@@ -36,7 +36,7 @@ if (status != HSA_STATUS_SUCCESS) { \
     printf("%s failed.\n", #msg); \
     exit(1); \
 }
-#define DEBUG_SNK
+//#define DEBUG_SNK
 //#define VERBOSE_SNK
 #ifdef DEBUG_SNK
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
@@ -84,13 +84,6 @@ typedef struct snk_pif_kernel_table_s {
     snk_cpu_kernel_t cpu_kernel;
     snk_gpu_kernel_t gpu_kernel;
 } snk_pif_kernel_table_t;
-
-#define COMMA ,
-#define REPEAT(name)   COMMA name
-#define REPEAT2(name)  REPEAT(name)   REPEAT(name) 
-#define REPEAT4(name)  REPEAT2(name)  REPEAT2(name)
-#define REPEAT8(name)  REPEAT4(name)  REPEAT4(name)
-#define REPEAT16(name) REPEAT8(name) REPEAT8(name)
 
 status_t snk_init_context(
                         char _CN__HSA_BrigMem[],

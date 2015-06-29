@@ -1,10 +1,17 @@
 #ifndef __SNK_INTERNAL
 #define __SNK_INTERNAL
-#include "snk.h"
+#include "atmi_rt.h"
 #include <pthread.h>
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
  * --------------------------------------------------------------------------------- */
+#define COMMA ,
+#define REPEAT(name)   COMMA name
+#define REPEAT2(name)  REPEAT(name)   REPEAT(name) 
+#define REPEAT4(name)  REPEAT2(name)  REPEAT2(name)
+#define REPEAT8(name)  REPEAT4(name)  REPEAT4(name)
+#define REPEAT16(name) REPEAT8(name) REPEAT8(name)
+
 
 typedef struct agent_t
 {

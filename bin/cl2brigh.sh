@@ -66,11 +66,8 @@ PROGVERSION=0.1.0
 function usage(){
 /bin/cat 2>&1 <<"EOF" 
 
-   snack: Generate host-callable "snack" functions for GPU kernels.
-          Snack generates the source code and headers for each kernel 
-          in the input filename.cl file.  The -c option will compile 
-          the source with gcc so you can link with your host application.
-          Host applicaton requires no API to use snack functions.
+   Converts a CL file to the BRIG char array that can be later loaded in
+   HSA modules.
 
    Usage: snack.sh [ options ] filename.cl
 
@@ -90,12 +87,12 @@ function usage(){
    Options with values:
     -opt      <LLVM opt>     Default=2, passed to cloc.sh to build HSAIL 
     -gccopt   <gcc opt>      Default=2, gcc optimization for snack wrapper
-    -t        <tempdir>      Default=/tmp/snk_$$, Temp dir for files
+    -t        <tempdir>      Default=/tmp/atmi_$$, Temp dir for files
     -s        <symbolname>   Default=filename 
     -p        <path>         $HSA_LLVM_PATH or <sdir> if HSA_LLVM_PATH not set
                              <sdir> is actual directory of snack.sh 
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
-    -snk      <SNACK RT path> Default=$SNACK_RUNTIME_PATH or /opt/amd/cloc
+    -atmi     <ATMI RT path> Default=$ATMI_RUNTIME_PATH or /opt/amd/atmi
     -o        <outfilename>  Default=<filename>.<ft> 
 
    Examples:
@@ -171,7 +168,7 @@ while [ $# -gt 0 ] ; do
       -t) 		TMPDIR=$2; shift ;; 
       -p)               HSA_LLVM_PATH=$2; shift ;;
       -rp)              HSA_RUNTIME_PATH=$2; shift ;;
-      -snk)             SNACK_RUNTIME_PATH=$2; shift ;;
+      -atmi)             ATMI_RUNTIME_PATH=$2; shift ;;
       -h) 		usage ;; 
       -help) 		usage ;; 
       --help) 		usage ;; 
@@ -197,8 +194,8 @@ fi
 
 if [ ! -z $1 ]; then 
    echo " "
-   echo "WARNING:  Snack can only process one .cl file at a time."
-   echo "          You can call snack multiple times to get multiple outputs."
+   echo "WARNING:  This script can only process one .cl file at a time."
+   echo "          You can call the script multiple times to get multiple outputs."
    echo "          Argument $LASTARG will be processed. "
    echo "          These args are ignored: $@"
    echo " "
@@ -212,7 +209,7 @@ HSA_LLVM_PATH=${HSA_LLVM_PATH:-$sdir}
 GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
-SNACK_RUNTIME_PATH=${SNACK_RUNTIME_PATH:-/opt/amd/cloc}
+ATMI_RUNTIME_PATH=${ATMI_RUNTIME_PATH:-/opt/amd/atmi}
 CMD_BRI=${CMD_BRI:-hsailasm }
 
 FORTRAN=${FORTRAN:-0};
@@ -243,11 +240,11 @@ if [ ! -d $HSA_LLVM_PATH ] ; then
    echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi
-if [ $MAKEOBJ ] && [ ! -d "$HSA_RUNTIME_PATH/lib" ] && [ ! -d "$SNACK_RUNTIME_PATH/lib" ] ; then 
-   echo "ERROR:  snack.sh -c option needs HSA_RUNTIME_PATH and SNACK_RUNTIME_PATH"
-   echo "        Missing directory $HSA_RUNTIME_PATH/lib or $SNACK_RUNTIME_PATH/lib"
+if [ $MAKEOBJ ] && [ ! -d "$HSA_RUNTIME_PATH/lib" ] && [ ! -d "$ATMI_RUNTIME_PATH/lib" ] ; then 
+   echo "ERROR:  snack.sh -c option needs HSA_RUNTIME_PATH and ATMI_RUNTIME_PATH"
+   echo "        Missing directory $HSA_RUNTIME_PATH/lib or $ATMI_RUNTIME_PATH/lib"
    echo "        Set env variable HSA_RUNTIME_PATH or use -rp option"
-   echo "        Set env variable SNACK_RUNTIME_PATH or use -snk option"
+   echo "        Set env variable ATMI_RUNTIME_PATH or use -atmi option"
    exit $DEADRC
 fi
 if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
@@ -255,8 +252,8 @@ if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then
    echo "        snack.sh requires HSA includes"
    exit $DEADRC
 fi
-if [ $MAKEOBJ ] && [ ! -f $SNACK_RUNTIME_PATH/include/atmi.h ] ; then 
-   echo "ERROR:  Missing $SNACK_RUNTIME_PATH/include/atmi.h"
+if [ $MAKEOBJ ] && [ ! -f $ATMI_RUNTIME_PATH/include/atmi.h ] ; then 
+   echo "ERROR:  Missing $ATMI_RUNTIME_PATH/include/atmi.h"
    echo "        snack.sh requires HSA includes"
    exit $DEADRC
 fi
@@ -312,7 +309,7 @@ if [ $HSAIL_OPT_STEP2 ] ; then
    [ $VERBOSE ] && echo " " && echo "#WARN:  ***** Step 2 of manual HSAIL optimization process detected. ***** "
 fi
 
-TMPDIR=${TMPDIR:-/tmp/snk_$$}
+TMPDIR=${TMPDIR:-/tmp/atmi_$$}
 if [ -d $TMPDIR ] ; then 
    KEEPTDIR=true
 else 
@@ -355,14 +352,14 @@ if [ $MAKESTR ] && [ $GEN_IL ] ; then
    exit $DEADRC
 fi 
 
-[ $VERBOSE ] && echo "#Info:  Version:	snack.sh $PROGVERSION" 
+[ $VERBOSE ] && echo "#Info:  Version:	cl2brigh.sh $PROGVERSION" 
 
 if [ $HSAIL_OPT_STEP2 ] ; then 
    CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
    [ $VERBOSE ] && echo "#Info:  Input Files:	"
    [ $VERBOSE ] && echo "#           HSAIL file:	   $INDIR/$FNAME.hsail"
-   [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
-   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
+#   [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
+#   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
    [ $VERBOSE ] && echo "#Info:  Output Files:"
    FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
    [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
@@ -374,7 +371,7 @@ else
       [ $VERBOSE ] && echo "#WARN:  ***** Step 1 of manual HSAIL optimization process detected. ***** "
       CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
       FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
-      [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
+#      [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
       [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
       [ $VERBOSE ] && echo "#           HSAIL:	   $OUTDIR/$FNAME.hsail"
    else
@@ -384,20 +381,20 @@ else
       else
          CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
          FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
-         [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
+#         [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
          [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
       fi
    fi
    if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
       [ $VERBOSE ] && echo "#           Object:	   $OUTDIR/$OUTFILE"
    fi
-   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
+#   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
 fi
 
 [ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
 [ $VERBOSE ] && echo "#Info:  LLVM path:	$HSA_LLVM_PATH"
 [ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  Runtime:	$HSA_RUNTIME_PATH"
-[ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  SNACK Runtime:	$SNACK_RUNTIME_PATH"
+[ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  ATMI Runtime:	$ATMI_RUNTIME_PATH"
 [ $KEEPTDIR ] && [ $VERBOSE ] && echo "#Info:  Temp dir:	$TMPDIR" 
 if [ $MAKESTR ] || [ $MAKEOBJ ] ; then  
    [ $VERBOSE ] && echo "#Info:  gcc loc:	$CMD_GCC" 
@@ -425,19 +422,22 @@ if [ $HSAIL_OPT_STEP2 ] ; then
 else
   
 #  Not step 2, do normal steps
-   [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
-   if [ $DRYRUN ] ; then
-      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH" 
-   else
-      echo "$SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH" 
-      $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH
-      rc=$?
-      if [ $rc != 0 ] ; then 
-         echo "ERROR:  The following command failed with return code $rc."
-         echo "        $SNACK_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $SNACK_RUNTIME_PATH"
-         do_err $rc
-      fi
-   fi
+#   [ $VERBOSE ] && echo cp $INDIR/$CLNAME $TMPDIR/updated.cl
+   cp $INDIR/$CLNAME $TMPDIR/updated.cl
+
+#   [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
+#   if [ $DRYRUN ] ; then
+#      echo "$ATMI_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_RUNTIME_PATH" 
+#   else
+#      echo "$ATMI_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_RUNTIME_PATH" 
+#      $ATMI_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_RUNTIME_PATH
+#      rc=$?
+#      if [ $rc != 0 ] ; then 
+#         echo "ERROR:  The following command failed with return code $rc."
+#         echo "        $ATMI_RUNTIME_PATH/bin/snk_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_RUNTIME_PATH"
+#         do_err $rc
+#      fi
+#   fi
 
 #  Call cloc to generate brig
    if [ $CLOCVERBOSE ] ; then 
@@ -445,16 +445,16 @@ else
    fi
    [ $VERBOSE ] && echo "#Step:  cloc.sh		cl --> brig ..."
    if [ $DRYRUN ] ; then
-      echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR -I$SNACK_RUNTIME_PATH/include"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR -I$ATMI_RUNTIME_PATH/include"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
    else 
       [ $CLOCVERBOSE ] && echo " " && echo "#------ Start cloc.sh output ------"
-      [ $CLOCVERBOSE ] && echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$SNACK_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
-      $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$SNACK_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl
+      [ $CLOCVERBOSE ] && echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl
       rc=$?
       [ $CLOCVERBOSE ] && echo "#------ End cloc.sh output ------" && echo " " 
       if [ $rc != 0 ] ; then 
          echo "ERROR:  cloc.sh failed with return code $rc.  Command was:"
-         echo "        $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$SNACK_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+         echo "        $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_RUNTIME_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
          do_err $rc
       fi
       if [ $GEN_IL ] ; then 
@@ -522,14 +522,14 @@ fi
 if [ $MAKEOBJ ] ; then 
    [ $VERBOSE ] && echo "#Step:  gcc		snackwrap.c + _brig.h --> $OUTFILE  ..."
    if [ $DRYRUN ] ; then
-      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
    else
-      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
-      $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
+      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+      $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$SNACK_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
+         echo "        $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_RUNTIME_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
         do_err $rc
       fi
    fi

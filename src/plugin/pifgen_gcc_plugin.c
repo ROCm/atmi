@@ -1,8 +1,11 @@
+
+#include "atmi.h"
 #include <gcc-plugin.h>
 #include <plugin-version.h>
 #include <plugin.h>
 #include <c-family/c-common.h>
 #include <tree.h>
+#include <tree-iterator.h>
 #include <intl.h>
 #include <diagnostic.h>
 #include <print-tree.h>
@@ -14,13 +17,20 @@
 #include <string.h>
 #include <stringpool.h>
 #include <langhooks.h>
+#include <cpplib.h>
+#include <c-tree.h>
+#include <c-family/c-pragma.h>
 
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
+#include <sstream>
+#include <iostream>
+#include <iterator>
+
 using namespace std;
-//#define DEBUG_ATMI_RT_PLUGIN
+#define DEBUG_ATMI_RT_PLUGIN
 #ifdef DEBUG_ATMI_RT_PLUGIN
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else
@@ -30,6 +40,18 @@ using namespace std;
 int plugin_is_GPL_compatible;
 
 static const char *plugin_name = "atmi_pifgen";
+
+typedef struct string_table_s {
+    const char *key;
+    const char *value;
+} string_table_t;
+
+string_table_t res_keywords_table[] = {
+{"__kernel",""},
+{"__global",""},
+};
+
+static std::vector<std::string> g_cl_modules;
 
 static std::map<std::string, int> pif_table;
 typedef struct pif_printers_s {
@@ -54,7 +76,11 @@ fprintf(fp, "#ifdef __cplusplus \n\
 #endif \n\
 #ifndef __cplusplus \n\
 #define _CPPSTRING_ \n\
-#endif \n\n");
+#endif \n\n\
+static hsa_executable_t g_executable;\n\
+static int gpu_initalized = 0;\n\
+static int cpu_initalized = 0;\n\n\
+");
 }
 
 void generate_task(char *text, const char *fn_name, const int num_params, char *fn_decl) {
@@ -213,7 +239,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         int flags, bool *no_add_attrs)
 {
     DEBUG_PRINT("Handling __attribute__ %s\n", IDENTIFIER_POINTER(name));
-
+    atmi_devtype_t devtype;
     tree decl = *node;
     // Print the arguments of the attribute
     DEBUG_PRINT("Task Attribute Params: ");
@@ -224,7 +250,15 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         if(attrib_id == 0) { 
             const char *devtype_str = TREE_STRING_POINTER(TREE_VALUE(itrArgument));
             if(strcmp(devtype_str, "CPU") == 0 || strcmp(devtype_str, "cpu") == 0) {
-                int devtype = 0;
+                devtype = ATMI_DEVTYPE_CPU;
+            }
+            else if(strcmp(devtype_str, "GPU") == 0 || strcmp(devtype_str, "gpu") == 0) {
+                devtype = ATMI_DEVTYPE_GPU;
+            }
+            else {
+                fprintf(stderr, "Unsupported device type: %s at %s:%d\n", devtype_str, 
+                            DECL_SOURCE_FILE(decl), DECL_SOURCE_LINE(decl));
+                return NULL_TREE;
             }
         //DEBUG_PRINT("DevType: %lu\n", TREE_INT_CST_LOW(TREE_VALUE(itrArgument)));
         //DEBUG_PRINT("DevType: %lu\n", TREE_INT_CST_HIGH(TREE_VALUE(itrArgument)));
@@ -287,41 +321,110 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     DEBUG_PRINT("Task Decl: %s\n", fn_decl);
    
     if(is_new_pif == 1) { //first time PIF is called 
-        pp_printf((pif_printers[pif_index].pifdefs), "\nint %s_FK;\n", pif_name);
+        pp_printf((pif_printers[pif_index].pifdefs), "\nstatic int %s_FK = 0;\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ %s { \n", pif_decl);
         pp_printf((pif_printers[pif_index].pifdefs), "    /* launcher code (PIF definition) */\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if (%s_FK == 0 ) { \n\
         snk_pif_init(%s_pif_fn_table, sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]));\n\
         %s_FK = 1; \n\
-    } \n\
-    snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n", 
+    }\n",
                 pif_name,
                 pif_name, pif_name, pif_name,
                 pif_name);
-        pp_printf((pif_printers[pif_index].pifdefs), "    cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(lparm->devtype == ATMI_DEVTYPE_CPU) {\n\
+        if(cpu_initalized == 0) { \n\
+            snk_init_cpu_context();\n\
+            cpu_initalized = 1;\n\
+        }\n");
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n\
+        cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
                 ");
         int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
-    cpu_kernel_arg_list->args[%d] = (uint64_t)var%d;", arg_idx, arg_idx);
+        cpu_kernel_arg_list->args[%d] = (uint64_t)var%d;", arg_idx, arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
-    return snk_cpu_kernel(lparm, \n\
+        return snk_cpu_kernel(lparm, \n\
                     \"%s\", \n\
-                    cpu_kernel_arg_list); \n\
-                ", 
-                pif_name);
+                    cpu_kernel_arg_list); \
+                ", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
+    } \n\
+    else if(lparm->devtype == ATMI_DEVTYPE_GPU) {\n\
+        if(gpu_initalized == 0) {\n\
+            snk_init_gpu_context();\n\
+            snk_gpu_create_program();\n");
+        
+        for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+                it != g_cl_modules.end(); it++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+            snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+            snk_gpu_build_executable(&g_executable);\n\
+            gpu_initalized = 1;\n\
+        }\n\
+        /* Allocate the kernel argument buffer from the correct region. */\n\
+        void* thisKernargAddress;\n\
+        snk_gpu_memory_allocate(lparm, g_executable, \"%s\", &thisKernargAddress);\n", pif_name);
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        struct gpu_args_struct {\n\
+            uint64_t arg0;\n\
+            uint64_t arg1;\n\
+            uint64_t arg2;\n\
+            uint64_t arg3;\n\
+            uint64_t arg4;\n\
+            uint64_t arg5;\n\
+            atmi_task_t* arg6;\n");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+            uint64_t arg%d;\n", arg_idx+6);
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        } __attribute__ ((aligned (16))); \n\
+        struct gpu_args_struct* gpu_args;\n\
+        /* Setup kernel args */\n\
+        gpu_args = (struct gpu_args_struct*) thisKernargAddress;\n\
+        gpu_args->arg0=0;\n\
+        gpu_args->arg1=0;\n\
+        gpu_args->arg2=0;\n\
+        gpu_args->arg3=0;\n\
+        gpu_args->arg4=0;\n\
+        gpu_args->arg5=0;\n\
+        gpu_args->arg6=(uint64_t)NULL;\n");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        gpu_args->arg%d=(uint64_t)var%d;\n", arg_idx+6, arg_idx);
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        return snk_gpu_kernel(lparm,\n\
+                            g_executable,\n\
+                            \"%s\",\n\
+                            thisKernargAddress);\n", pif_name);
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    }\n");
+        pp_printf((pif_printers[pif_index].pifdefs), "\
 }\n\n");
         
         /* add PIF function table definition */
         pp_printf((pif_printers[pif_index].fn_table), "\nsnk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
     }
-    pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
-    pp_printf((pif_printers[pif_index].fn_table), "\
+    if(devtype == ATMI_DEVTYPE_CPU) {
+        pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
+        pp_printf((pif_printers[pif_index].fn_table), "\
     {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
+    } 
+    else if(devtype == ATMI_DEVTYPE_GPU) {
+        pp_printf((pif_printers[pif_index].fn_table), "\
+    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
+            pif_name, num_params, fn_name);
+    }
     //int idx = 0;
     // TODO: Think about the below and verify the better approach for 
     // parameter parsing. Ignore below if above code works.
@@ -384,6 +487,10 @@ register_finish_unit (void *event_data, void *data) {
     write_headers(fp_pifdefs_genw);
     write_cpp_warning_header(fp_pifdefs_genw);
     /* 1) dump kernel impl declarations (fn pointers */
+    for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+                it != g_cl_modules.end(); it++) {
+        fprintf(fp_pifdefs_genw, "#include \"%s_brig.h\"\n", it->c_str());
+    }
     char *decl_text = (char *)pp_formatted_text(&g_kerneldecls);
     fputs (decl_text, fp_pifdefs_genw);
     pp_clear_output_area(&g_kerneldecls);
@@ -409,12 +516,167 @@ static void
 register_start_unit (void *event_data, void *data) {
     DEBUG_PRINT("Callback at start of compilation unit\n");
     pp_needs_newline (&g_kerneldecls) = true;
-    //tree kernel_type = get_identifier("__kernel");
-    //kernel_type = TYPE_STUB_DECL(kernel_type);
-    //print_generic_stmt(stdout, kernel_type, TDF_RAW);         
-    //tree tdecl = add_builtin_type ("__kernel", access_public_node);
-    //TYPE_NAME (access_public_node) = tdecl;
-    //print_generic_stmt(stdout, tdecl, TDF_RAW);         
+
+    /* Replace CL or other kernel-specific keywords with 
+     * regular C/C++ keywords. 
+     */
+    int i;
+    int num_elems = sizeof(res_keywords_table)/sizeof(res_keywords_table[0]);
+    for(i = 0; i < num_elems; i++) { 
+        string s(res_keywords_table[i].key);
+        s += "=";
+        s += res_keywords_table[i].value;
+        cpp_define(parse_in, s.c_str());
+    }
+    //cpp_define(parse_in, "cl_long_long=char*");
+}
+#if 0
+static void
+register_finish_type(void *event_data, void *data) {
+    tree type = (tree)event_data;
+    if(TREE_CODE(type) == FUNCTION_DECL || 
+       TREE_CODE(type) == VAR_DECL || 
+       TREE_CODE(type) == TYPE_DECL) {
+        DEBUG_PRINT("Callback at finish of type %p %p\n", event_data, data);
+        debug_tree_chain(type);
+    }
+}
+
+static void print_tree_node(tree t, int indent)
+{
+    // indentation..
+    int i;
+    for (i = 1; i <= indent; ++i)
+        printf("  ");
+
+    enum tree_code code = TREE_CODE(t);
+
+    // Declarations..
+    if (code == RESULT_DECL || 
+            code == PARM_DECL || 
+            code == LABEL_DECL || 
+            code == VAR_DECL ||
+            code == FUNCTION_DECL) {
+
+        // Get DECL_NAME for this declaration
+        tree id = DECL_NAME(t);
+
+        // print name of declaration..
+        const char *name = id ? IDENTIFIER_POINTER(id) : "<unnamed>";
+        printf("%s : %s\n", get_tree_code_name(code), name);
+    }
+
+    // Integer constant..
+    else if (code == INTEGER_CST) {
+        // value of integer constant is:
+        // (HIGH << HOST_BITS_PER_WIDE_INT) + LOW
+
+        if (TREE_INT_CST_HIGH(t)) {
+            printf("%s : high=0x%ld low=0x%ld\n", 
+                    get_tree_code_name(code),
+                    TREE_INT_CST_HIGH(t),
+                    TREE_INT_CST_LOW(t));
+        }
+        else
+        {
+            printf("%s:%ld\n", 
+                    get_tree_code_name(code),
+                    TREE_INT_CST_LOW(t));
+        }
+        return;
+    }
+
+    else
+    {
+        //        print            tree_code_name            for                this                    tree                    node..
+        printf("%s\n", get_tree_code_name(code));
+    }
+
+}
+
+static void parse_tree(tree t, void (*callback)(tree t, int indent), int indent)
+{
+    // null => return
+    if (t == 0)
+        return;
+
+    (*callback)(t, indent);
+
+    // Statement list..
+    if (TREE_CODE(t) == STATEMENT_LIST) {
+        tree_stmt_iterator it;
+        for (it = tsi_start(t); !tsi_end_p(it); tsi_next(&it)) {
+            parse_tree(tsi_stmt(it), callback, indent+1);
+        }
+        return;
+    }
+
+    // Don't parse into declarations/exceptions/constants..
+    if (DECL_P(t) || EXCEPTIONAL_CLASS_P(t) || CONSTANT_CLASS_P(t)) {
+        return;
+    }
+
+    // parse into first operand
+    parse_tree(TREE_OPERAND(t, 0), callback, indent+1);
+
+    if (UNARY_CLASS_P(t))
+        return;
+
+    // parse into second operand
+    enum tree_code code = TREE_CODE(t);
+    if (code != RETURN_EXPR && 
+            code != LABEL_EXPR &&
+            code != GOTO_EXPR &&
+            code != NOP_EXPR &&
+            code != DECL_EXPR &&
+            code            !=            ADDR_EXPR            && 
+            code            !=            INDIRECT_REF            &&
+            code            !=            COMPONENT_REF)
+        parse_tree(TREE_OPERAND(t,                    1),               callback,                indent+1);
+
+}
+
+static void handle_pre_generic(void *gcc_data, void *user_data)
+{
+    // Print AST
+    tree fndecl = (tree)gcc_data;
+
+    if(
+       //TREE_CODE(fndecl) == FUNCTION_DECL || 
+       TREE_CODE(fndecl) == VAR_DECL || 
+       TREE_CODE(fndecl) == TYPE_DECL) {
+        tree id = DECL_NAME(fndecl);
+        const char *fnname = id ? IDENTIFIER_POINTER(id) : "<unnamed>";
+        printf("%s %s\n", get_tree_code_name(FUNCTION_DECL), fnname);
+
+        // Print function body..
+        tree fnbody = DECL_SAVED_TREE(fndecl);
+        if (TREE_CODE(fnbody) == BIND_EXPR) {
+            // second operand of BIND_EXPR
+            tree t = TREE_OPERAND(fnbody, 1);
+
+            // use the utility function "parse_tree" to parse
+            // through the tree recursively  (../include/parse-tree.h)
+            parse_tree(t, print_tree_node, 1);
+        }
+    }                                                                                                                
+}
+#endif
+
+std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems;
+}
+
+
+std::vector<std::string> split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    split(s, delim, elems);
+    return elems;
 }
 
 int plugin_init(struct plugin_name_args *plugin_info,
@@ -422,6 +684,20 @@ int plugin_init(struct plugin_name_args *plugin_info,
     if (!plugin_default_version_check (version, &gcc_version))
         return 1;
 
+    int i;
+    g_cl_modules.clear();
+    for(i = 0; i < plugin_info->argc; i++) { 
+        if(strcmp(plugin_info->argv[i].key, "clfile") == 0) {
+            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
+            vector<string> tokens = split(plugin_info->argv[i].value, '.');
+            //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
+            for(std::vector<std::string>::iterator it = tokens.begin(); 
+                    it != tokens.end(); it++) {
+                DEBUG_PRINT("CL File token: %s\n", it->c_str());
+            }
+            g_cl_modules.push_back(tokens[0]);
+        }
+    }
     DEBUG_PRINT("In plugin init function\n");
     register_callback (plugin_name, PLUGIN_START_UNIT,
                     register_start_unit, NULL);
@@ -430,8 +706,10 @@ int plugin_init(struct plugin_name_args *plugin_info,
     register_callback (plugin_name, PLUGIN_ATTRIBUTES,
                   register_attributes, NULL);
 #if 0
-    //register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
-    //                      handle_pre_generic, NULL);
+    register_callback (plugin_name, PLUGIN_FINISH_TYPE,
+                  register_finish_type, NULL);
+    register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
+                          handle_pre_generic, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
                   register_headers, NULL);
 #endif

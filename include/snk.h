@@ -24,7 +24,7 @@ extern "C" {
 
 #define SNK_MAX_CPU_QUEUES 4
 #define SNK_MAX_GPU_QUEUES 4 
-#define SNK_MAX_CPU_FUNCTIONS   100
+#define SNK_MAX_FUNCTIONS   100
 
 #define SNK_MAX_TASKS 100000 // ((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
 
@@ -36,7 +36,7 @@ if (status != HSA_STATUS_SUCCESS) { \
     printf("%s failed.\n", #msg); \
     exit(1); \
 }
-//#define DEBUG_SNK
+#define DEBUG_SNK
 //#define VERBOSE_SNK
 #ifdef DEBUG_SNK
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
@@ -99,29 +99,33 @@ status_t snk_init_context(
                         hsa_region_t *_CN__CPU_KernargRegion
                         );
 status_t snk_init_cpu_context();
-status_t snk_init_gpu_context(
-                        char _CN__HSA_BrigMem[],
-                        hsa_region_t *_CN__KernargRegion
-                        );
+status_t snk_init_gpu_context();
+status_t snk_gpu_create_program();
+status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
+status_t snk_gpu_build_executable(hsa_executable_t *executable);
+status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
+                 hsa_executable_t executable,
+                 const char *pif_name,
+                 void **thisKernargAddress);
 
-status_t snk_init_cpu_kernel(
+status_t snk_init_kernel(
                              const char *pif_name, 
                              const int num_params, 
-                             const char *kernel_name, 
-                             snk_generic_fp fn_ptr);
+                             const char *cpu_kernel_name, 
+                             snk_generic_fp fn_ptr,
+                             const char *gpu_kernel_name);
 status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], int sz);
-status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
+status_t snk_get_gpu_kernel_info(
+                            hsa_executable_t executable,
                             const char *kernel_symbol_name,
                             uint64_t                         *_KN__Kernel_Object,
-                            uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
                             uint32_t                         *_KN__Group_Segment_Size,
                             uint32_t                         *_KN__Private_Segment_Size
                             );
 
-atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm, 
-                 uint64_t                         _KN__Kernel_Object,
-                 uint32_t                         _KN__Group_Segment_Size,
-                 uint32_t                         _KN__Private_Segment_Size,
+atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
+                 hsa_executable_t executable,
+                 const char *pif_name,
                  void *thisKernargAddress);
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 

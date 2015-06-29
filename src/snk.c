@@ -71,7 +71,8 @@ atmi_stream_table_t StreamTable[ATMI_MAX_STREAMS];
 /* Stream specific globals */
 hsa_agent_t snk_cpu_agent;
 hsa_ext_program_t snk_hsa_program;
-hsa_executable_t snk_executable;
+//hsa_executable_t snk_executable;
+hsa_region_t snk_gpu_KernargRegion;
 hsa_region_t snk_cpu_KernargRegion;
 int g_cpu_initialized = 0;
 int g_hsa_initialized = 0;
@@ -85,7 +86,7 @@ atmi_stream_t snk_default_stream_obj = {ATMI_ORDERED};
 int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
-extern snk_pif_kernel_table_t snk_CPU_kernels[SNK_MAX_CPU_FUNCTIONS];
+extern snk_pif_kernel_table_t snk_kernels[SNK_MAX_FUNCTIONS];
 extern int snk_kernel_counter;
 
 int g_tasks_initialized = 0;
@@ -584,9 +585,7 @@ status_t snk_init_context(
                         hsa_agent_t *_CN__CPU_Agent,
                         hsa_region_t *_CN__CPU_KernargRegion
                         ) {
-    snk_init_gpu_context( 
-                         _CN__HSA_BrigMem, 
-                         _CN__KernargRegion);
+    snk_init_gpu_context();
 
     snk_init_cpu_context();
 
@@ -634,42 +633,23 @@ status_t snk_init_cpu_context() {
     return STATUS_SUCCESS;
 }
 
-status_t snk_init_gpu_context(
-                        char _CN__HSA_BrigMem[],
-                        hsa_region_t *_CN__KernargRegion
-                        ) {
-
-    if(g_gpu_initialized != 0) return;
-    
-    hsa_status_t err;
-
-    init_hsa();
-    /* Iterate over the agents and pick the gpu agent */
-    err = hsa_iterate_agents(get_gpu_agent, &snk_gpu_agent);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    ErrorCheck(Getting a gpu agent, err);
-    
-    /* Query the name of the agent.  */
-    char name[64] = { 0 };
-    err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_NAME, name);
-    ErrorCheck(Querying the agent name, err);
-    /* printf("The agent name is %s.\n", name); */
-
-    /* Query the maximum size of the queue.  */
-    uint32_t queue_size = 0;
-    err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
-    ErrorCheck(Querying the agent maximum queue size, err);
-    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
-
+status_t snk_gpu_create_program() {
+    status_t err;
     /* Create hsa program.  */
     memset(&snk_hsa_program,0,sizeof(hsa_ext_program_t));
     err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &snk_hsa_program);
     ErrorCheck(Create the program, err);
+}
 
+status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]) {
+    status_t err;
     /* Add the BRIG module to hsa program.  */
     err = hsa_ext_program_add_module(snk_hsa_program, (hsa_ext_module_t)_CN__HSA_BrigMem);
     ErrorCheck(Adding the brig module to the program, err);
+}
 
+status_t snk_gpu_build_executable(hsa_executable_t *executable) {
+    status_t err;
     /* Determine the agents ISA.  */
     hsa_isa_t isa;
     err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_ISA, &isa);
@@ -687,22 +667,47 @@ status_t snk_init_gpu_context(
     ErrorCheck(Destroying the program, err);
 
     /* Create the empty executable.  */
-    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &snk_executable);
+    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
     ErrorCheck(Create the executable, err);
 
     /* Load the code object.  */
-    err = hsa_executable_load_code_object(snk_executable, snk_gpu_agent, code_object, "");
+    err = hsa_executable_load_code_object(*executable, snk_gpu_agent, code_object, "");
     ErrorCheck(Loading the code object, err);
 
     /* Freeze the executable; it can now be queried for symbols.  */
-    err = hsa_executable_freeze(snk_executable, "");
+    err = hsa_executable_freeze(*executable, "");
     ErrorCheck(Freeze the executable, err);
+}
+
+status_t snk_init_gpu_context() {
+
+    if(g_gpu_initialized != 0) return;
+    
+    hsa_status_t err;
+
+    init_hsa();
+    /* Iterate over the agents and pick the gpu agent */
+    err = hsa_iterate_agents(get_gpu_agent, &snk_gpu_agent);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
+    
+    /* Query the name of the agent.  */
+    char name[64] = { 0 };
+    err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_NAME, name);
+    ErrorCheck(Querying the agent name, err);
+    /* printf("The agent name is %s.\n", name); */
 
     /* Find a memory region that supports kernel arguments.  */
-    _CN__KernargRegion->handle=(uint64_t)-1;
-    hsa_agent_iterate_regions(snk_gpu_agent, get_kernarg_memory_region, _CN__KernargRegion);
-    err = (_CN__KernargRegion->handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    snk_gpu_KernargRegion.handle=(uint64_t)-1;
+    hsa_agent_iterate_regions(snk_gpu_agent, get_kernarg_memory_region, &snk_gpu_KernargRegion);
+    err = (snk_gpu_KernargRegion.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a kernarg memory region, err);
+    
+    /* Query the maximum size of the queue.  */
+    uint32_t queue_size = 0;
+    err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+    ErrorCheck(Querying the agent maximum queue size, err);
+    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
 
     /* Create queues and signals for each stream. */
     int stream_num;
@@ -728,22 +733,22 @@ status_t snk_init_gpu_context(
     return STATUS_SUCCESS;
 }
 
-status_t snk_init_cpu_kernel(
+status_t snk_init_kernel(
                              const char *pif_name, 
                              const int num_params, 
-                             const char *kernel_name, 
-                             snk_generic_fp fn_ptr) {
-    snk_init_cpu_context(); 
-
-    if(snk_kernel_counter < 0 || snk_kernel_counter >= SNK_MAX_CPU_FUNCTIONS) {
-        DEBUG_PRINT("Too many CPU functions. Increase SNK_MAX_CPU_FUNCTIONS value.\n");
+                             const char *cpu_kernel_name, 
+                             snk_generic_fp fn_ptr,
+                             const char *gpu_kernel_name) {
+    if(snk_kernel_counter < 0 || snk_kernel_counter >= SNK_MAX_FUNCTIONS) {
+        DEBUG_PRINT("Too many CPU functions. Increase SNK_MAX_FUNCTIONS value.\n");
         return STATUS_ERROR;
     }
-    DEBUG_PRINT("Kernel Name: %s, Num args: %d\n", kernel_name, num_params);
-    snk_CPU_kernels[snk_kernel_counter].pif_name = pif_name;
-    snk_CPU_kernels[snk_kernel_counter].num_params = num_params;
-    snk_CPU_kernels[snk_kernel_counter].cpu_kernel.kernel_name = kernel_name;
-    snk_CPU_kernels[snk_kernel_counter].cpu_kernel.function = fn_ptr; 
+    DEBUG_PRINT("PIF Name: %s, Num args: %d\n", pif_name, num_params);
+    snk_kernels[snk_kernel_counter].pif_name = pif_name;
+    snk_kernels[snk_kernel_counter].num_params = num_params;
+    snk_kernels[snk_kernel_counter].cpu_kernel.kernel_name = cpu_kernel_name;
+    snk_kernels[snk_kernel_counter].cpu_kernel.function = fn_ptr; 
+    snk_kernels[snk_kernel_counter].gpu_kernel.kernel_name = gpu_kernel_name;
     snk_kernel_counter++;
     return STATUS_SUCCESS;
 }
@@ -754,36 +759,38 @@ status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], const int sz) {
     // each PIF has a table of potential kernels!
     DEBUG_PRINT("Number of kernels for pif: %lu / %lu\n", sizeof(pif_fn_table), sizeof(pif_fn_table[0]));
     for (i = 0; i < sz; i++) {
-       snk_init_cpu_kernel(
+       snk_init_kernel(
                            pif_fn_table[i].pif_name, 
                            pif_fn_table[i].num_params,
                            pif_fn_table[i].cpu_kernel.kernel_name, 
-                           pif_fn_table[i].cpu_kernel.function);
+                           pif_fn_table[i].cpu_kernel.function,
+                           pif_fn_table[i].gpu_kernel.kernel_name
+                           );
     }
+    return STATUS_SUCCESS;
 }
 
-status_t snk_init_gpu_kernel(hsa_executable_symbol_t          *_KN__Symbol,
+status_t snk_get_gpu_kernel_info(
+                            hsa_executable_t executable,
                             const char *kernel_symbol_name,
                             uint64_t                         *_KN__Kernel_Object,
-                            uint32_t                         *_KN__Kernarg_Segment_Size, /* May not need to be global */
                             uint32_t                         *_KN__Group_Segment_Size,
                             uint32_t                         *_KN__Private_Segment_Size
                             ) {
 
     hsa_status_t err;
+    hsa_executable_symbol_t symbol;
     /* Extract the symbol from the executable.  */
     DEBUG_PRINT("Kernel name _KN__: Looking for symbol %s\n", kernel_symbol_name); 
-    err = hsa_executable_get_symbol(snk_executable, NULL, kernel_symbol_name, snk_gpu_agent, 0, _KN__Symbol);
+    err = hsa_executable_get_symbol(executable, NULL, kernel_symbol_name, snk_gpu_agent, 0, &symbol);
     ErrorCheck(Extract the symbol from the executable, err);
 
     /* Extract dispatch information from the symbol */
-    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, _KN__Kernel_Object);
+    err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, _KN__Kernel_Object);
     ErrorCheck(Extracting the symbol from the executable, err);
-    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, _KN__Kernarg_Segment_Size);
-    ErrorCheck(Extracting the kernarg segment size from the executable, err);
-    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE, _KN__Group_Segment_Size);
+    err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE, _KN__Group_Segment_Size);
     ErrorCheck(Extracting the group segment size from the executable, err);
-    err = hsa_executable_symbol_get_info(*_KN__Symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, _KN__Private_Segment_Size);
+    err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, _KN__Private_Segment_Size);
     ErrorCheck(Extracting the private segment from the executable, err);
 
 
@@ -833,10 +840,10 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     uint16_t i;
     atmi_task_t *ret = NULL;
     int this_kernel_iter = 0;
-    for(i = 0; i < SNK_MAX_CPU_FUNCTIONS; i++) {
-        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_CPU_kernels[i].pif_name, pif_name);
-        if(snk_CPU_kernels[i].pif_name && pif_name) {
-            if(strcmp(snk_CPU_kernels[i].pif_name, pif_name) == 0) {
+    for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
+        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
+        if(snk_kernels[i].pif_name && pif_name) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].cpu_kernel.kernel_name != NULL) {
                 if(this_kernel_iter != lparm->kernel_id) {
                     this_kernel_iter++;
                     continue;
@@ -846,7 +853,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                     printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
                     return ;
                 }
-                const uint32_t num_params = snk_CPU_kernels[i].num_params;
+                const uint32_t num_params = snk_kernels[i].num_params;
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                 
                 /* pass this task handle to the kernel as an argument */
@@ -921,10 +928,50 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
-atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm, 
-                 uint64_t                         _KN__Kernel_Object,
-                 uint32_t                         _KN__Group_Segment_Size,
-                 uint32_t                         _KN__Private_Segment_Size,
+status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
+                 hsa_executable_t executable,
+                 const char *pif_name,
+                 void **thisKernargAddress) {
+    uint16_t i;
+    int this_kernel_iter = 0;
+    for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
+        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
+        if(snk_kernels[i].pif_name && pif_name) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
+                if(this_kernel_iter != lparm->kernel_id) {
+                    this_kernel_iter++;
+                    continue;
+                }
+                const char *kernel_name = snk_kernels[i].gpu_kernel.kernel_name;
+                hsa_status_t err;
+                hsa_executable_symbol_t symbol;
+                /* Extract the symbol from the executable.  */
+                DEBUG_PRINT("Kernel GPU memory allocate: Looking for symbol %s\n", kernel_name); 
+                err = hsa_executable_get_symbol(executable, NULL, kernel_name, snk_gpu_agent, 0, &symbol);
+                ErrorCheck(Extract the symbol from the executable, err);
+
+                /* Extract dispatch information from the symbol */
+                uint32_t kernel_segment_size;
+                err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &kernel_segment_size);
+                ErrorCheck(Extracting the kernarg segment size from the executable, err);
+
+                *thisKernargAddress = malloc(kernel_segment_size);
+                /* FIXME: HSA 1.0F may have a bug that serializes all queue
+                 * operations when hsa_memory_allocate is used.
+                 * Investigate more and revert back to
+                 * hsa_memory_allocate once bug is fixed. */
+                //err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
+                //ErrorCheck(Allocating memory for the executable-kernel, err);
+
+                break;
+            }
+        }
+    }
+}
+
+atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
+                 hsa_executable_t executable,
+                 const char *pif_name,
                  void *thisKernargAddress) {
     atmi_stream_t *stream = NULL;
     if(lparm->stream == NULL) {
@@ -957,92 +1004,113 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
         snk_stream_sync(stream);
     }
 
-    /* FIXME: REUSE SIGNALS!! */
-    if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
-       printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
-       return ;
+    uint16_t i;
+    atmi_task_t *ret = NULL;
+    int this_kernel_iter = 0;
+    for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
+        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
+        if(snk_kernels[i].pif_name && pif_name) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
+                if(this_kernel_iter != lparm->kernel_id) {
+                    this_kernel_iter++;
+                    continue;
+                }
+
+                /* FIXME: REUSE SIGNALS!! */
+                if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
+                    printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
+                    return ;
+                }
+                ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
+
+                /* pass this task handle to the kernel as an argument */
+                struct kernel_args_struct {
+                    uint64_t arg0;
+                    uint64_t arg1;
+                    uint64_t arg2;
+                    uint64_t arg3;
+                    uint64_t arg4;
+                    uint64_t arg5;
+                    atmi_task_t* arg6;
+                    /* other fields no needed to set task handle? */
+                } __attribute__((aligned(16)));
+                struct kernel_args_struct *kargs = (struct kernel_args_struct *)thisKernargAddress;
+                kargs->arg6 = ret;
+
+                /* Get profiling object. Can be NULL? */
+                ret->profile = lparm->profile;
+
+                /*  Obtain the current queue write index. increases with each call to kernel  */
+                uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
+
+                /* Find the queue index address to write the packet info into.  */
+                const uint32_t queueMask = this_Q->size - 1;
+                hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
+
+                /*  FIXME: We need to check for queue overflow here. */
+
+                this_aql->completion_signal = *((hsa_signal_t*)(ret->handle));
+
+                /*  Process lparm values */
+                /*  this_aql.dimensions=(uint16_t) lparm->ndim; */
+                this_aql->setup  |= (uint16_t) lparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
+                this_aql->grid_size_x=lparm->gdims[0];
+                this_aql->workgroup_size_x=lparm->ldims[0];
+                if (lparm->ndim>1) {
+                    this_aql->grid_size_y=lparm->gdims[1];
+                    this_aql->workgroup_size_y=lparm->ldims[1];
+                } else {
+                    this_aql->grid_size_y=1;
+                    this_aql->workgroup_size_y=1;
+                }
+                if (lparm->ndim>2) {
+                    this_aql->grid_size_z=lparm->gdims[2];
+                    this_aql->workgroup_size_z=lparm->ldims[2];
+                } else {
+                    this_aql->grid_size_z=1;
+                    this_aql->workgroup_size_z=1;
+                }
+
+                uint64_t _KN__Kernel_Object;
+                uint32_t _KN__Group_Segment_Size;
+                uint32_t _KN__Private_Segment_Size;
+                snk_get_gpu_kernel_info(executable, snk_kernels[i].gpu_kernel.kernel_name, &_KN__Kernel_Object, 
+                        &_KN__Group_Segment_Size, &_KN__Private_Segment_Size);
+                /* thisKernargAddress has already been set up in the beginning of this routine */
+                /*  Bind kernel argument buffer to the aql packet.  */
+                this_aql->kernarg_address = (void*) thisKernargAddress;
+                this_aql->kernel_object = _KN__Kernel_Object;
+                this_aql->private_segment_size = _KN__Private_Segment_Size;
+                this_aql->group_segment_size = _KN__Group_Segment_Size;
+
+                /*  Prepare and set the packet header */ 
+                if(stream->ordered == ATMI_TRUE)
+                    this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, lparm->synchronous);
+                else
+                    /* If stream is unordered, sync ONLY this packet */
+                    this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE);
+
+                /* Increment write index and ring doorbell to dispatch the kernel.  */
+                hsa_queue_store_write_index_relaxed(this_Q, index+1);
+                hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
+                set_task_state(ret, ATMI_DISPATCHED);
+
+                if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
+                    /* For default synchrnous execution, wait til kernel is finished.  */
+                    snk_task_wait(ret);
+                    set_task_state(ret, ATMI_COMPLETED);
+                    set_task_metrics(ret, ATMI_DEVTYPE_GPU);
+                }
+                else {
+                    /* add task to the corresponding row in the stream table */
+                    register_task(stream, ret, ATMI_DEVTYPE_GPU);
+                }
+                //SNK_NextTaskId = (SNK_NextTaskId + 1) % SNK_MAX_TASKS;
+                SNK_NextTaskId++;
+                break;
+            }
+        }
     }
-    atmi_task_t *ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
-
-    /* pass this task handle to the kernel as an argument */
-    struct kernel_args_struct {
-        uint64_t arg0;
-        uint64_t arg1;
-        uint64_t arg2;
-        uint64_t arg3;
-        uint64_t arg4;
-        uint64_t arg5;
-        atmi_task_t* arg6;
-        /* other fields no needed to set task handle? */
-    } __attribute__((aligned(16)));
-    struct kernel_args_struct *kargs = (struct kernel_args_struct *)thisKernargAddress;
-    kargs->arg6 = ret;
-
-    /* Get profiling object. Can be NULL? */
-    ret->profile = lparm->profile;
-
-    /*  Obtain the current queue write index. increases with each call to kernel  */
-    uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
-
-    /* Find the queue index address to write the packet info into.  */
-    const uint32_t queueMask = this_Q->size - 1;
-    hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
-
-    /*  FIXME: We need to check for queue overflow here. */
-
-    this_aql->completion_signal = *((hsa_signal_t*)(ret->handle));
-
-    /*  Process lparm values */
-    /*  this_aql.dimensions=(uint16_t) lparm->ndim; */
-    this_aql->setup  |= (uint16_t) lparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
-    this_aql->grid_size_x=lparm->gdims[0];
-    this_aql->workgroup_size_x=lparm->ldims[0];
-    if (lparm->ndim>1) {
-       this_aql->grid_size_y=lparm->gdims[1];
-       this_aql->workgroup_size_y=lparm->ldims[1];
-    } else {
-       this_aql->grid_size_y=1;
-       this_aql->workgroup_size_y=1;
-    }
-    if (lparm->ndim>2) {
-       this_aql->grid_size_z=lparm->gdims[2];
-       this_aql->workgroup_size_z=lparm->ldims[2];
-    } else {
-       this_aql->grid_size_z=1;
-       this_aql->workgroup_size_z=1;
-    }
-
-	/* thisKernargAddress has already been set up in the beginning of this routine */
-    /*  Bind kernel argument buffer to the aql packet.  */
-    this_aql->kernarg_address = (void*) thisKernargAddress;
-    this_aql->kernel_object = _KN__Kernel_Object;
-    this_aql->private_segment_size = _KN__Private_Segment_Size;
-    this_aql->group_segment_size = _KN__Group_Segment_Size;
-
-    /*  Prepare and set the packet header */ 
-    if(stream->ordered == ATMI_TRUE)
-        this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, lparm->synchronous);
-    else
-        /* If stream is unordered, sync ONLY this packet */
-        this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE);
-
-    /* Increment write index and ring doorbell to dispatch the kernel.  */
-    hsa_queue_store_write_index_relaxed(this_Q, index+1);
-    hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-    set_task_state(ret, ATMI_DISPATCHED);
-
-    if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
-        /* For default synchrnous execution, wait til kernel is finished.  */
-        snk_task_wait(ret);
-        set_task_state(ret, ATMI_COMPLETED);
-        set_task_metrics(ret, ATMI_DEVTYPE_GPU);
-    }
-    else {
-       /* add task to the corresponding row in the stream table */
-       register_task(stream, ret, ATMI_DEVTYPE_GPU);
-    }
-    //SNK_NextTaskId = (SNK_NextTaskId + 1) % SNK_MAX_TASKS;
-    SNK_NextTaskId++;
 
     return ret;
 }

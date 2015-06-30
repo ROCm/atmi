@@ -3,9 +3,9 @@
 #include "atmi.h"
 using namespace std;
 
-extern "C" void sum_cpu_k1(atmi_task_t *t, int *a, int *b, int *c) __attribute__((atmi_task_impl("cpu", "sum")));
+extern "C" void sum_cpu(atmi_task_t *t, int *a, int *b, int *c) __attribute__((atmi_task_impl("cpu", "sum")));
 
-extern "C" void sum_cpu_k1(atmi_task_t *t, int *a, int *b, int *c) { 
+extern "C" void sum_cpu(atmi_task_t *t, int *a, int *b, int *c) { 
     *c = *a + *b;
     delete a;
     delete b;

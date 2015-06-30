@@ -82,6 +82,7 @@ function usage(){
     -k        Keep temporary files
     -fort     Generate fortran function names
     -noglobs  Do not generate global functions 
+    -kstats   Print out kernel statistics (post finalization)
     -str      Depricated, create .o file needed for okra
 
    Options with values:
@@ -94,6 +95,7 @@ function usage(){
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
     -atmi     <ATMI RT path> Default=$ATMI_RUNTIME_PATH or /opt/amd/atmi
     -o        <outfilename>  Default=<filename>.<ft> 
+    -hsaillib <hsail filename>  
 
    Examples:
     snack.sh my.cl              /* create my.snackwrap.c and my.h    */
@@ -159,6 +161,7 @@ while [ $# -gt 0 ] ; do
       -c) 		MAKEOBJ=true;;  
       -fort) 		FORTRAN=1;;  
       -noglobs)  	NOGLOBFUNS=1;;  
+      -kstats)  	KSTATS=1;;  
       -str) 		MAKESTR=true;; 
       -hsail) 		GEN_IL=true;; 
       -opt) 		LLVMOPT=$2; shift ;; 
@@ -166,6 +169,7 @@ while [ $# -gt 0 ] ; do
       -s) 		SYMBOLNAME=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
+      -hsaillib)        HSAILLIB=$2; shift ;; 
       -p)               HSA_LLVM_PATH=$2; shift ;;
       -rp)              HSA_RUNTIME_PATH=$2; shift ;;
       -atmi)             ATMI_RUNTIME_PATH=$2; shift ;;
@@ -214,6 +218,7 @@ CMD_BRI=${CMD_BRI:-hsailasm }
 
 FORTRAN=${FORTRAN:-0};
 NOGLOBFUNS=${NOGLOBFUNS:-0};
+KSTATS=${KSTATS:-0};
 
 RUNDATE=`date`
 
@@ -252,6 +257,12 @@ if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then
    echo "        snack.sh requires HSA includes"
    exit $DEADRC
 fi
+
+if [ "$HSAILLIB" != "" ] ; then 
+   if [ ! -f $HSAILLIB ] ; then 
+      echo "ERROR:  The HSAIL file $HSAILLIB does not exist."
+      exit $DEADRC
+   fi
 if [ $MAKEOBJ ] && [ ! -f $ATMI_RUNTIME_PATH/include/atmi.h ] ; then 
    echo "ERROR:  Missing $ATMI_RUNTIME_PATH/include/atmi.h"
    echo "        snack.sh requires HSA includes"
@@ -459,6 +470,9 @@ else
       fi
       if [ $GEN_IL ] ; then 
          cp $TMPDIR/updated.hsail $OUTDIR/$FNAME.hsail
+         if [ "$HSAILLIB" != "" ] ; then 
+            cat $HSAILLIB >> $OUTDIR/$FNAME.hsail
+         fi
       fi
    fi
    BRIGDIR=$TMPDIR
@@ -502,6 +516,38 @@ if [ $MAKESTR ] ; then
 
 else
 
+if [ "$HSAILLIB" != "" ] ; then 
+   # disassemble brig $BRIGDIR/$BRIGNAME to composite.hsail
+   [ $VERBOSE ] && echo "#Step:  Add HSAIL		brig --> hsail+hsaillib --> $BRIGHFILE ..."
+   if [ $DRYRUN ] ; then
+      echo $HSA_LLVM_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
+   else
+      $HSA_LLVM_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
+   fi
+ 
+   # Add $HSAILLIB to file 
+   if [ $DRYRUN ] ; then
+      echo cat $HSAILLIB >> $TMPDIR/composite.hsail
+   else
+      cat $HSAILLIB >> $TMPDIR/composite.hsail
+   fi
+
+   # assemble complete hsail file to brig $BRIGDIR/$BRIGNAME
+   if [ $DRYRUN ] ; then
+      echo $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail
+      rc=0
+   else
+      $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail
+      rc=$?
+   fi
+   if [ $rc != 0 ] ; then 
+      echo "ERROR:  HSAIL assembly of HSAILLIB failed with return code $rc. Command was:"
+      echo "        $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail"
+      do_err $rc
+   fi
+  
+fi
+
 #   Not depricated option -str 
 [ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
 if [ $DRYRUN ] ; then
@@ -533,6 +579,12 @@ if [ $MAKEOBJ ] ; then
         do_err $rc
       fi
    fi
+   if [ $KSTATS == 1 ] ; then 
+      export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
+      $CMD_GCC -o $TMPDIR/kstats -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include $OUTDIR/$OUTFILE $TMPDIR/kstats.c -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 
+      $TMPDIR/kstats
+   fi 
+
 fi
 
 # end of NOT -str

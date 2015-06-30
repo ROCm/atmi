@@ -258,7 +258,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             else {
                 fprintf(stderr, "Unsupported device type: %s at %s:%d\n", devtype_str, 
                             DECL_SOURCE_FILE(decl), DECL_SOURCE_LINE(decl));
-                return NULL_TREE;
+                exit(-1);
             }
         //DEBUG_PRINT("DevType: %lu\n", TREE_INT_CST_LOW(TREE_VALUE(itrArgument)));
         //DEBUG_PRINT("DevType: %lu\n", TREE_INT_CST_HIGH(TREE_VALUE(itrArgument)));
@@ -663,6 +663,46 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
 }
 #endif
 
+std::string exec(const char* cmd) {
+    /* borrowed from the SO solution: 
+     * http://stackoverflow.com/questions/478898/how-to-execute-a-command-and-get-output-of-command-within-c
+     */
+    FILE* pipe = popen(cmd, "r");
+    if (!pipe) return "ERROR";
+    char buffer[128];
+    std::string result = "";
+    while(!feof(pipe)) {
+        if(fgets(buffer, 128, pipe) != NULL)
+            result += buffer;
+    }
+    pclose(pipe);
+    return result;
+}
+
+void cl2brigh(const char *clfilename) {
+    std::string cmd;
+    cmd.clear();
+    cmd += exec("which cl2brigh.sh");
+    
+    if(cmd == "" || cmd == "ERROR") {
+        fprintf(stderr, "cl2brigh.sh script not found in the PATH.\n");
+        exit(-1);
+    }
+    char cmd_c[2048] = {0};
+    strcpy(cmd_c, cmd.c_str());
+    // popen returns a newline. remove it.
+    strtok(cmd_c, "\n");
+    strcat(cmd_c, " ");
+    strcat(cmd_c, clfilename);
+    
+    DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
+    int ret = system(cmd_c);
+    if(WIFEXITED(ret) == 0 || WEXITSTATUS(ret) != 0) {
+        fprintf(stderr, "\"%s\" returned with error %d\n", cmd_c, WEXITSTATUS(ret));
+        exit(-1);
+    }
+}
+
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
     std::stringstream ss(s);
     std::string item;
@@ -689,12 +729,21 @@ int plugin_init(struct plugin_name_args *plugin_info,
     for(i = 0; i < plugin_info->argc; i++) { 
         if(strcmp(plugin_info->argv[i].key, "clfile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
-            vector<string> tokens = split(plugin_info->argv[i].value, '.');
+            const char *clfilename = plugin_info->argv[i].value;
+            /* compile CL to BRIG header file with char array */
+            cl2brigh(clfilename);
+
+            /* remove .cl extension */
+            vector<string> tokens = split(clfilename, '.');
             //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
             for(std::vector<std::string>::iterator it = tokens.begin(); 
                     it != tokens.end(); it++) {
                 DEBUG_PRINT("CL File token: %s\n", it->c_str());
             }
+            /* saving just the first token to the left of a dot. 
+             * Ideal solution should be to concatenate all tokens 
+             * except the cl with _ as the glue insted of dot
+             */
             g_cl_modules.push_back(tokens[0]);
         }
     }

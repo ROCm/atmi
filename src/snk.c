@@ -606,6 +606,10 @@ status_t snk_init_cpu_context() {
     
     hsa_status_t err;
     init_hsa();
+    
+    // FIXME: For some reason, if CPU context is initialized before, the GPU queues dont get
+    // created. They exit with 0x1008 out of resources. HACK!!!
+    snk_init_gpu_context();
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
     err = hsa_iterate_agents(get_cpu_agent, &snk_cpu_agent);

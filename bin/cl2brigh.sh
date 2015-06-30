@@ -263,6 +263,7 @@ if [ "$HSAILLIB" != "" ] ; then
       echo "ERROR:  The HSAIL file $HSAILLIB does not exist."
       exit $DEADRC
    fi
+fi
 if [ $MAKEOBJ ] && [ ! -f $ATMI_RUNTIME_PATH/include/atmi.h ] ; then 
    echo "ERROR:  Missing $ATMI_RUNTIME_PATH/include/atmi.h"
    echo "        snack.sh requires HSA includes"

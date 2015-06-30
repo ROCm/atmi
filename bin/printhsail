@@ -1,0 +1,112 @@
+#!/bin/bash
+#
+#  printhsail: Extract HSAIL from ELF executeable or brig file and write to stdout
+#              Assumes 64-bit ELF is executable binary or .o and 32-bit ELF is a brig file
+#
+#  Written by Greg Rodgers.
+#
+
+function getdname(){
+   local __DIRN=`dirname "$1"`
+   if [ "$__DIRN" = "." ] ; then 
+      __DIRN=$PWD; 
+   else
+      if [ ${__DIRN:0:1} != "/" ] ; then 
+         if [ ${__DIRN:0:2} == ".." ] ; then 
+               __DIRN=`dirname $PWD`/${__DIRN:3}
+         else
+            if [ ${__DIRN:0:1} = "." ] ; then 
+               __DIRN=$PWD/${__DIRN:2}
+            else
+               __DIRN=$PWD/$__DIRN
+            fi
+         fi
+      fi
+   fi
+   echo $__DIRN
+}
+
+infile=$1
+tmpfile=/tmp/printhsail$$
+cloc_brigsym="HSA_BrigMem"
+cloc_brigszsym="HSA_BrigMemSz"
+kalmar_brigsym="_binary_kernel_brig_start"
+kalmar_brigszsym="_binary_kernel_brig_size"
+
+cdir=$(getdname $0)
+[ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-$cdir}
+
+HSAIL_DISASSEMBLE=${HSAIL_DISASSEMBLE:-$HSA_LLVM_PATH/hsailasm}
+
+if [ ! -f "$infile" ] ; then 
+   echo "ERROR:  Input file \"$1\" does not exist "
+   exit 1
+fi
+if [ ! -f "$HSAIL_DISASSEMBLE" ] ; then 
+   echo "ERROR:  Missing HSAIL disassembler. $HSAIL_DISASSEMBLE"
+   exit 1
+fi
+format=`file $infile | cut -d" " -f2-3`
+if [ "$format" == "ELF 64-bit" ] ; then 
+   readelf -S $infile | grep -q  "hsa_code" 
+   if [ $? != 0 ] ; then 
+      # no elf sections, so look for external data with brig from snack 
+      brigszloc=`nm $infile | grep $cloc_brigszsym | cut -d" " -f1 ` 
+      if [ "$brigszloc" == "" ] ; then 
+         # no cloc brig symbol , looking for kalmar
+         brigszhex=`nm $infile | grep $kalmar_brigszsym | cut -d" " -f1 ` 
+         if [ "$brigszhex" == "" ] ; then 
+            echo "ERROR:  No hsa_code section or HSAIL data in input elf file \"$1\" "
+            exit 1
+         else 
+            datastart=`readelf -S $infile | grep "\.data\.rel\.ro" | awk '{print $5}'`
+            relstart=`readelf -S $infile | grep "\.data\.rel\.ro" | awk '{print $4}'`
+            brigloc=`nm $infile | grep $kalmar_brigsym | grep -v $kalmar_brigszsym | cut -d" " -f1 ` 
+         fi
+      else
+         datastart=`readelf -S $infile | grep "\.data" | awk '{print $5}'`
+         relstart=`readelf -S $infile | grep "\.data" | awk '{print $4}'`
+         brigloc=`nm $infile | grep $cloc_brigsym | grep -v $cloc_brigszsym | cut -d" " -f1 ` 
+         brigszoff=$((0x$datastart + 0x$brigszloc - 0x$relstart))
+         brigszhex=`od -N2 -w2 -j $brigszoff -t x2 -An $infile | awk '{print $1}'` 
+      fi
+      brigoff=$((0x$datastart + 0x$brigloc - 0x$relstart))
+      brigsz=$((0x$brigszhex))
+      #  Create the brig file by extracting the binary out of the applicaton elf
+      dd if=$infile of=$tmpfile bs=1 count=$brigsz skip=$brigoff >/dev/null 2>/dev/null
+      brigfile=$tmpfile
+   else 
+      # extract sections and convert to 32bit elf, ignore empty section warning
+      #objcopy  -S -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile
+      objcopy --no-change-warnings -j hsa_data -j hsa_code -j hsa_operand -O elf32-little $infile $tmpfile 2>/dev/null
+      # Need to zero this byte to get hsailasm to thing this is a real brig file
+      printf '\x00\' | dd of=$tmpfile bs=1 seek=16 count=1 conv=notrunc >/dev/null 2>/dev/null
+      brigfile=$tmpfile
+   fi
+elif [ "$format" == "ELF 32-bit" ] ; then 
+#  Just assume a 32-bit ELF is a brig file so no need to extract or zap byte 16.
+   readelf -S $infile | grep -q  "hsa_code" 
+   if [ $? != 0 ] ; then 
+      echo "ERROR:  No hsa_code section in input elf file \"$1\" "
+      exit 1
+   fi
+   brigfile=$infile
+else
+   echo "ERROR:  Input file \"$1\" must be ELF 64-bit or brig file"
+   exit 1
+fi
+
+#  Disassemble the brig file
+$HSAIL_DISASSEMBLE -disassemble $brigfile -o $tmpfile.hsail
+rc=$?
+if [ $rc != 0 ] ; then 
+   exit $rc
+fi
+cat $tmpfile.hsail
+
+#  cleanup
+if [ -f $tmpfile ] ; then 
+   rm $tmpfile
+fi
+rm $tmpfile.hsail

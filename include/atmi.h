@@ -1,4 +1,5 @@
 #ifndef __ATMI_H__
+#include "hsa_kl.h"
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Asynchronous Task Management Interface ATMI file: atmi.h                   */
@@ -62,6 +63,16 @@ typedef struct atmi_stream_s {
    atmi_full_policy_t full_policy;  /* What to do if maxsize reached          */
 } atmi_stream_t;
 
+typedef struct atmi_klist_s atmi_klist_t;
+struct atmi_klist_s { 
+   int num_signal;
+   int num_queue;
+   int num_kernel;
+   hsa_kernel_dispatch_packet_t *plist;
+   uint64_t *qlist;
+   hsa_signal_t *slist;
+};
+
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* atmi_task_t  ATMI Task Handle Data Structure                               */
@@ -74,6 +85,7 @@ typedef struct atmi_task_s {
    atmi_state_t     state;    /* Eventually consistent state of task    */
    atmi_tprofile_t* profile;  /* Profile if reqeusted by lparm          */
 //   atmi_handle_t    continuation;   /*                                        */
+   atmi_klist_t *klist;
 } atmi_task_t;
 
 /*----------------------------------------------------------------------------*/
@@ -106,6 +118,21 @@ typedef struct atmi_lparm_s {
 //   boolean          nested;         /* This task may create more tasks        */
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
+
+
+typedef struct atmi_klparm_s atmi_klparm_t;
+struct atmi_klparm_s { 
+   int ndim;                  /* default = 1 */
+   unsigned long gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
+   unsigned long ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
+   int stream;                /* default = -1 , synchrnous */
+   int barrier;               /* default = SNK_UNORDERED */
+   int acquire_fence_scope;   /* default = 2 */
+   int release_fence_scope;   /* default = 2 */
+   hsa_kernel_dispatch_packet_t *plist;
+   uint64_t *qlist;
+   hsa_signal_t *slist;
+};
 
 /* String macros to initialize popular default launch parameters.             */ 
 #define ATMI_LPARM_CPU(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.ndim=0,.gdims={1},.ldims={1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.devtype=ATMI_DEVTYPE_CPU,.profile=NULL,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;

@@ -187,6 +187,7 @@ while [ $# -gt 0 ] ; do
    shift
 done
 
+
 # The above while loop is exited when last string with a "-" is processed
 LASTARG=$1
 shift
@@ -258,6 +259,7 @@ if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then
    exit $DEADRC
 fi
 
+[ -z $HSAILLIB  ] && HSAILLIB=$HSA_LLVM_PATH/builtins-hsail.hsail
 if [ "$HSAILLIB" != "" ] ; then 
    if [ ! -f $HSAILLIB ] ; then 
       echo "ERROR:  The HSAIL file $HSAILLIB does not exist."

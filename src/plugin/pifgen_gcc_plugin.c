@@ -78,8 +78,10 @@ fprintf(fp, "#ifdef __cplusplus \n\
 #define _CPPSTRING_ \n\
 #endif \n\n\
 static hsa_executable_t g_executable;\n\
+static int klist_initalized = 0;\n\
 static int gpu_initalized = 0;\n\
 static int cpu_initalized = 0;\n\n\
+atmi_klist_t *atmi_klist = NULL;\n\n\
 ");
 }
 

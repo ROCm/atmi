@@ -1,0 +1,51 @@
+
+prog function &hsa_queue_load_write_index_relaxed(arg_u64 %ret)(arg_u64 %arg_p0)
+{
+    @hsa_queue_load_write_index_relaxed_entry:
+    ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has the queue address
+    addqueuewriteindex_global_rlx_u64   $d1, [$d0], 1;      // d1 has the queue's write_index
+    st_arg_u64 $d1, [%ret];                                 // return write index
+    ret;
+};
+
+prog function &hsa_queue_store_write_index_relaxed()(
+	arg_u64 %arg_p0,
+	arg_u64 %arg_p1)
+{
+   @hsa_queue_store_write_index_relaxed_entry:
+   ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has the queue address
+   ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has write index 
+   stqueuewriteindex_global_rlx_u64 [$d0],  $d1;            // store write index d1 to queue d0
+   ret;
+};
+
+prog function &hsa_signal_store_relaxed()(
+	arg_u64 %arg_p0,
+	arg_u64 %arg_p1)
+{
+   @hsa_signal_store_relaxed_entry:
+   ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+   ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has value 
+   signalnoret_st_rlx_b64_sig64 $d0, $d1;                   // store value d1 to signal handle d0
+   ret;
+};
+
+prog function &hsa_signal_add_relaxed()(
+	arg_u64 %arg_p0,
+	arg_u64 %arg_p1)
+{
+   @hsa_signal_store_add_entry:
+   ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+   ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has value 
+   signalnoret_add_rlx_u64_sig64 $d0, $d1;                  // add value d1 to signal handle d0
+   ret;
+};
+
+prog function &hsa_signal_load_relaxed(arg_u64 %ret)(arg_u64 %arg_p0)
+{
+   @hsa_signal_load_relaxed_entry:
+   ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+   signal_ld_rlx_b64_sig64 $d1, $d0;                        // load value d1 from signal handle d0
+   st_arg_u64 $d1, [%ret];
+   ret;
+};

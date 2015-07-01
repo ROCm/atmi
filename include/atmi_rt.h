@@ -85,6 +85,7 @@ typedef struct snk_pif_kernel_table_s {
     snk_gpu_kernel_t gpu_kernel;
 } snk_pif_kernel_table_t;
 
+
 status_t snk_init_context(
                         char _CN__HSA_BrigMem[],
                         hsa_region_t *_CN__KernargRegion,

@@ -50,7 +50,6 @@ hsa_signal_t worker_sig[SNK_MAX_CPU_QUEUES];
 pthread_t agent_threads[SNK_MAX_CPU_QUEUES];
 
 snk_pif_kernel_table_t snk_kernels[SNK_MAX_FUNCTIONS];
-int snk_kernel_counter;
 
 size_t numWorkers;
 

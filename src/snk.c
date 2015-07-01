@@ -87,7 +87,6 @@ int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
 extern snk_pif_kernel_table_t snk_kernels[SNK_MAX_FUNCTIONS];
-extern int snk_kernel_counter;
 
 int g_tasks_initialized = 0;
 
@@ -594,7 +593,6 @@ status_t snk_init_context(
 
 void init_hsa() {
     if(g_hsa_initialized == 0) {
-        snk_kernel_counter = 0;
         status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
         g_hsa_initialized = 1;
@@ -743,11 +741,12 @@ status_t snk_init_kernel(
                              const char *cpu_kernel_name, 
                              snk_generic_fp fn_ptr,
                              const char *gpu_kernel_name) {
+    static int snk_kernel_counter = 0;
     if(snk_kernel_counter < 0 || snk_kernel_counter >= SNK_MAX_FUNCTIONS) {
-        DEBUG_PRINT("Too many CPU functions. Increase SNK_MAX_FUNCTIONS value.\n");
+        DEBUG_PRINT("Too many kernel functions. Increase SNK_MAX_FUNCTIONS value.\n");
         return STATUS_ERROR;
     }
-    DEBUG_PRINT("PIF Name: %s, Num args: %d\n", pif_name, num_params);
+    DEBUG_PRINT("PIF[%d] Entry Name: %s, Num args: %d CPU Kernel: %s, GPU Kernel: %s\n", snk_kernel_counter, pif_name, num_params, cpu_kernel_name, gpu_kernel_name);
     snk_kernels[snk_kernel_counter].pif_name = pif_name;
     snk_kernels[snk_kernel_counter].num_params = num_params;
     snk_kernels[snk_kernel_counter].cpu_kernel.kernel_name = cpu_kernel_name;

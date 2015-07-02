@@ -83,6 +83,63 @@ static int cpu_initalized = 0;\n\n\
 ");
 }
 
+std::string exec(const char* cmd) {
+    /* borrowed from the SO solution: 
+     * http://stackoverflow.com/questions/478898/how-to-execute-a-command-and-get-output-of-command-within-c
+     */
+    FILE* pipe = popen(cmd, "r");
+    if (!pipe) return "ERROR";
+    char buffer[128];
+    std::string result = "";
+    while(!feof(pipe)) {
+        if(fgets(buffer, 128, pipe) != NULL)
+            result += buffer;
+    }
+    pclose(pipe);
+    return result;
+}
+
+void cl2brigh(const char *clfilename) {
+    std::string cmd;
+    cmd.clear();
+    cmd += exec("which cl2brigh.sh");
+    
+    if(cmd == "" || cmd == "ERROR") {
+        fprintf(stderr, "cl2brigh.sh script not found in the PATH.\n");
+        exit(-1);
+    }
+    char cmd_c[2048] = {0};
+    strcpy(cmd_c, cmd.c_str());
+    // popen returns a newline. remove it.
+    strtok(cmd_c, "\n");
+    strcat(cmd_c, " ");
+    strcat(cmd_c, clfilename);
+    
+    DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
+    int ret = system(cmd_c);
+    if(WIFEXITED(ret) == 0 || WEXITSTATUS(ret) != 0) {
+        fprintf(stderr, "\"%s\" returned with error %d\n", cmd_c, WEXITSTATUS(ret));
+        exit(-1);
+    }
+}
+
+std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems;
+}
+
+
+std::vector<std::string> split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    split(s, delim, elems);
+    return elems;
+}
+
+
 void generate_task(char *text, const char *fn_name, const int num_params, char *fn_decl) {
     char *pch = strtok(text,"<");
     if(pch != NULL) strcpy(fn_decl, pch);
@@ -485,6 +542,13 @@ register_finish_unit (void *event_data, void *data) {
     strcat(pifdefs_filename, ".pifdefs.c");
     FILE *fp_pifdefs_genw = fopen(pifdefs_filename, "w");
     write_headers(fp_pifdefs_genw);
+    std::string header_str = "`which cat` " + std::string(main_input_filename) + " | `which grep` \\#include";
+    std::string headers = exec(header_str.c_str());
+    if(headers == "" || headers == "ERROR") {
+        fprintf(stderr, "cat or grep not found in the PATH.\n");
+        exit(-1);
+    }
+    fprintf(fp_pifdefs_genw, "/*Headers carried over from %s*/\n%s\n", main_input_filename, headers.c_str());
     write_cpp_warning_header(fp_pifdefs_genw);
     /* 1) dump kernel impl declarations (fn pointers */
     for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
@@ -663,62 +727,6 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
 }
 #endif
 
-std::string exec(const char* cmd) {
-    /* borrowed from the SO solution: 
-     * http://stackoverflow.com/questions/478898/how-to-execute-a-command-and-get-output-of-command-within-c
-     */
-    FILE* pipe = popen(cmd, "r");
-    if (!pipe) return "ERROR";
-    char buffer[128];
-    std::string result = "";
-    while(!feof(pipe)) {
-        if(fgets(buffer, 128, pipe) != NULL)
-            result += buffer;
-    }
-    pclose(pipe);
-    return result;
-}
-
-void cl2brigh(const char *clfilename) {
-    std::string cmd;
-    cmd.clear();
-    cmd += exec("which cl2brigh.sh");
-    
-    if(cmd == "" || cmd == "ERROR") {
-        fprintf(stderr, "cl2brigh.sh script not found in the PATH.\n");
-        exit(-1);
-    }
-    char cmd_c[2048] = {0};
-    strcpy(cmd_c, cmd.c_str());
-    // popen returns a newline. remove it.
-    strtok(cmd_c, "\n");
-    strcat(cmd_c, " ");
-    strcat(cmd_c, clfilename);
-    
-    DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
-    int ret = system(cmd_c);
-    if(WIFEXITED(ret) == 0 || WEXITSTATUS(ret) != 0) {
-        fprintf(stderr, "\"%s\" returned with error %d\n", cmd_c, WEXITSTATUS(ret));
-        exit(-1);
-    }
-}
-
-std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
-    std::stringstream ss(s);
-    std::string item;
-    while (std::getline(ss, item, delim)) {
-        elems.push_back(item);
-    }
-    return elems;
-}
-
-
-std::vector<std::string> split(const std::string &s, char delim) {
-    std::vector<std::string> elems;
-    split(s, delim, elems);
-    return elems;
-}
-
 int plugin_init(struct plugin_name_args *plugin_info,
         struct plugin_gcc_version *version) {
     if (!plugin_default_version_check (version, &gcc_version))
@@ -755,12 +763,12 @@ int plugin_init(struct plugin_name_args *plugin_info,
     register_callback (plugin_name, PLUGIN_ATTRIBUTES,
                   register_attributes, NULL);
 #if 0
+    register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
+                  register_headers, NULL);
     register_callback (plugin_name, PLUGIN_FINISH_TYPE,
                   register_finish_type, NULL);
     register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
                           handle_pre_generic, NULL);
-    register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
-                  register_headers, NULL);
 #endif
     return 0;
 }

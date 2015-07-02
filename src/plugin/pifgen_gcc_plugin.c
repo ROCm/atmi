@@ -477,6 +477,28 @@ register_headers (void *event_data, void *data)
     DEBUG_PRINT("Done registering header files: %s for input file: %s\n", (const char *)event_data, main_input_filename);
 }
 
+void kl_uint (FILE *fp_pifdefs_genw) {
+    FILE *fp_kl_genw = fopen("kernel_wrapper.c", "rb");
+
+    if(fp_pifdefs_genw == NULL || fp_kl_genw == NULL)
+    {
+        fprintf(stderr, "Err: cannot open file %s\n", main_input_filename);
+        exit(-1);
+    }
+
+    char buffer[4097];
+
+
+    int n;
+    while((n = fread(buffer, sizeof(char), 4096, fp_kl_genw)))
+    {
+        buffer[n] = '\0';
+        fprintf(fp_pifdefs_genw, "%s", buffer);
+    }
+
+    fclose(fp_kl_genw);
+}
+
 static void
 register_finish_unit (void *event_data, void *data) {
     /* Dump all the generated code into one .c file */
@@ -511,6 +533,8 @@ register_finish_unit (void *event_data, void *data) {
         fputs (pif_text, fp_pifdefs_genw);
         pp_clear_output_area((it->pifdefs));
     }
+
+    kl_uint(fp_pifdefs_genw);
     fclose(fp_pifdefs_genw);
 }
 
@@ -705,6 +729,9 @@ void cl2brigh(const char *clfilename) {
     }
 }
 
+
+
+
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
     std::stringstream ss(s);
     std::string item;
@@ -749,6 +776,7 @@ int plugin_init(struct plugin_name_args *plugin_info,
             g_cl_modules.push_back(tokens[0]);
         }
     }
+
     DEBUG_PRINT("In plugin init function\n");
     register_callback (plugin_name, PLUGIN_START_UNIT,
                     register_start_unit, NULL);

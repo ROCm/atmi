@@ -87,10 +87,7 @@ typedef struct snk_pif_kernel_table_s {
 
 
 status_t snk_init_context(
-                        char _CN__HSA_BrigMem[],
-                        hsa_region_t *_CN__KernargRegion,
-                        hsa_agent_t *_CN__CPU_Agent,
-                        hsa_region_t *_CN__CPU_KernargRegion
+                        atmi_klist_t *atmi_klist
                         );
 status_t snk_init_cpu_context();
 status_t snk_init_gpu_context();

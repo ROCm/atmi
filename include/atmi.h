@@ -123,8 +123,8 @@ typedef struct atmi_lparm_s {
 typedef struct atmi_klparm_s atmi_klparm_t;
 struct atmi_klparm_s { 
    int ndim;                  /* default = 1 */
-   unsigned long gdims[3];           /* NUMBER OF THREADS TO EXECUTE MUST BE SPECIFIED */ 
-   unsigned long ldims[3];           /* Default = {64} , e.g. 1 of 8 CU on Kaveri */
+   unsigned long           gdims[3];       /* # of global threads for each dimension */
+   unsigned long           ldims[3];       /* Thread group size for each dimension   */
    int stream;                /* default = -1 , synchrnous */
    int barrier;               /* default = SNK_UNORDERED */
    int acquire_fence_scope;   /* default = 2 */

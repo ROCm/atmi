@@ -579,15 +579,17 @@ void init_tasks() {
     g_tasks_initialized = 1;
 }
 
-status_t snk_init_context(
-                        char _CN__HSA_BrigMem[],
-                        hsa_region_t *_CN__KernargRegion,
-                        hsa_agent_t *_CN__CPU_Agent,
-                        hsa_region_t *_CN__CPU_KernargRegion
-                        ) {
+status_t snk_init_context(atmi_klist_t *atmi_klist) {
     snk_init_gpu_context();
 
     snk_init_cpu_context();
+
+    hsa_status_t err;
+    int task_num;
+    /* Initialize all preallocated tasks and signals */
+    for ( task_num = 0 ; task_num < SNK_MAX_TASKS; task_num++){
+       SNK_Tasks[task_num].klist = atmi_klist;
+    }
 
     return STATUS_SUCCESS;
 }

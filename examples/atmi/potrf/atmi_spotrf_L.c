@@ -32,7 +32,7 @@ extern _CPPSTRING_ void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int 
 void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA)
 {
     int info = 0;
-    printf("POTRF(%d)\n", k);
+//    printf("POTRF(%d)\n", k);
 #if !defined(DRY_RUN)
     CORE_spotrf(uplo, N, A, LDA, &info);
 #endif
@@ -40,7 +40,7 @@ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int 
 
 void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, int alpha, float *A, int LDA, float *B, int LDB)
 {
-    printf("TRSM(%d, %d)\n", m, k);
+//    printf("TRSM(%d, %d)\n", m, k);
 #if !defined(DRY_RUN)
     CORE_strsm(side, uplo, transA, diag, M, N, (float)alpha, A, LDA, B, LDB);
 #endif
@@ -48,7 +48,7 @@ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side
 
 void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, int alpha, const float *A, int LDA, int beta, float *C, int LDC)
 {
-    printf("SYRK(%d, %d)\n", k, m);
+//    printf("SYRK(%d, %d)\n", k, m);
 #if !defined(DRY_RUN)
     CORE_ssyrk(uplo, trans, N, K, (float)alpha, A, LDA, (float)beta, C, LDC);
 #endif
@@ -56,7 +56,7 @@ void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo
 
 void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, int alpha, const float *A, int LDA, const float *B, int LDB, int beta, float *C, int LDC)
 {
-    printf("GEMM(%d, %d, %d)\n", m, n, k);
+//    printf("GEMM(%d, %d, %d)\n", m, n, k);
 #if !defined(DRY_RUN)
     CORE_sgemm(transA, transB, M, N, K, (float)alpha, A, LDA, B, LDB, (float)beta, C, LDC);
 #endif
@@ -197,7 +197,7 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
     printf("Tasks are all enqueued\n");
 
     atmi_task_t* ret_task = spotrf_tasks[descA->mt-1];
-    SYNC_TASK(ret_task);
+  //  SYNC_TASK(ret_task);
     return ret_task;
 
 }

@@ -41,7 +41,7 @@
 */ 
 /* This file contains logic for CPU tasking in SNACK */
 #include "snk_internal.h"
-#include "atmi_bindthread.h"
+#include "bindthread.h"
 
 #include <assert.h>
 

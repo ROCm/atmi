@@ -82,7 +82,7 @@ hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
 hsa_signal_t  SNK_Signals[SNK_MAX_TASKS];
 int          SNK_NextTaskId = 0 ;
-atmi_stream_t snk_default_stream_obj = {ATMI_ORDERED};
+atmi_stream_t snk_default_stream_obj = {ATMI_FALSE};
 int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 

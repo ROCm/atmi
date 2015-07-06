@@ -1,8 +1,8 @@
 ATMI 0.1 Install Instructions
 =============================
 
-- [1. Install CLOC ](#InstallCLOC)
-- [2. Install ATMI e](#Install)
+- [1. Install CLOC](#InstallCLOC)
+- [2. Install ATMI](#Install)
 
 
 <A Name="InstallCLOC">

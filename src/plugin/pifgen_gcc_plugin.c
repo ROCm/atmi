@@ -340,12 +340,42 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_needs_newline (&tmp_buffer) = true;
         initialized = 1;
     }
-    tmp_buffer.buffer->stream = f_tmp;
+//    tmp_buffer.buffer->stream = f_tmp;
 
     const char* fn_name = IDENTIFIER_POINTER(DECL_NAME(decl));
     DEBUG_PRINT("Task Name: %s\n", fn_name); 
 
     tree fn_type = TREE_TYPE(decl);
+    int idx = 0;
+    // TODO: Think about the below and verify the better approach for 
+    // parameter parsing. Ignore below if above code works.
+    //for(; idx < 32; idx++) {
+    //   DEBUG_PRINT("%d ", idx);
+    //   print_generic_stmt(stdout, fn_type, (1 << idx));
+    //   print_generic_stmt(stdout, decl, (1 << idx));
+    //}
+    tree arg;
+    function_args_iterator args_iter;
+    std::vector<std::string> arg_list;
+    arg_list.clear();
+    FOREACH_FUNCTION_ARGS(fn_type, arg, args_iter)
+    {
+    //for(idx = 0; idx < 32; idx++) {
+     //DEBUG_PRINT("%s ", IDENTIFIER_POINTER(DECL_NAME(TYPE_IDENTIFIER(arg))));
+     //tree arg_type_name = DECL_ARG_TYPE(arg);
+     //if (TREE_CODE (arg_type_name) == TYPE_DECL) {
+     //arg_type_name = DECL_NAME(arg_type_name);
+        dump_generic_node (&tmp_buffer, arg, 0, TDF_RAW, true);
+        char *text = (char *) pp_formatted_text (&tmp_buffer);
+        arg_list.push_back(text);
+        DEBUG_PRINT("ArgType: %s\n", text);
+        pp_clear_output_area(&tmp_buffer);
+     //print_generic_stmt(stdout, arg, TDF_RAW);
+     //}
+    //}
+    //debug_tree_chain(arg);
+    }
+
     //print_generic_stmt(fp_pifdefs_genw, fn_type, TDF_RAW);
     dump_generic_node (&tmp_buffer, fn_type, 0, TDF_RAW, true);
     char *text = (char *) pp_formatted_text (&tmp_buffer);
@@ -395,6 +425,24 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             snk_init_cpu_context();\n\
             cpu_initalized = 1;\n\
         }\n");
+#if 0
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        typedef struct cpu_args_struct_s {\n");
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+            %s  arg%d;\n",
+            arg_list[arg_idx], arg_idx);
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        } cpu_args_struct_t; \n\
+        cpu_args_struct_t cpu_arg_list; \n\
+        cpu_arg_list.arg0 = NULL; \n\
+        ");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\n\
+        cpu_arg_list.arg%d = (uint64_t)var%d;", arg_idx, arg_idx);
+        }
+#endif
         pp_printf((pif_printers[pif_index].pifdefs), "\
         snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n\
         cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
@@ -529,7 +577,10 @@ static void
 register_headers (void *event_data, void *data)
 {
     //warning (0, G_("Callback to register header files"));
-    DEBUG_PRINT("Done registering header files: %s for input file: %s\n", (const char *)event_data, main_input_filename);
+    DEBUG_PRINT("Done registering header files: %s \n", (const char *)event_data);
+    if(cpp_included(parse_in, (const char *)event_data)) {
+        DEBUG_PRINT("Header file %s is included\n", (const char *)event_data);
+    }
 }
 
 static void
@@ -762,9 +813,9 @@ int plugin_init(struct plugin_name_args *plugin_info,
                   register_finish_unit, NULL);
     register_callback (plugin_name, PLUGIN_ATTRIBUTES,
                   register_attributes, NULL);
-#if 0
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
                   register_headers, NULL);
+#if 0
     register_callback (plugin_name, PLUGIN_FINISH_TYPE,
                   register_finish_type, NULL);
     register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,

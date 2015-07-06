@@ -356,6 +356,25 @@ int process_packet(hsa_queue_t *queue, int id)
                         ;
                         void (*function14) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT(uint64_t)) = 
                             (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        DEBUG_PRINT("Function Ptr: %p\n", function14);
+                        float arg_float = (float)kernel_args->args[1];
+                        DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " (float=%f) %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
+                                kernel_args->args[0]
+                                ,kernel_args->args[1]
+                                ,arg_float
+                                ,kernel_args->args[2]
+                                ,kernel_args->args[3]
+                                ,kernel_args->args[4]
+                                ,kernel_args->args[5]
+                                ,kernel_args->args[6]
+                                ,kernel_args->args[7]
+                                ,kernel_args->args[8]
+                                ,kernel_args->args[9]
+                                ,kernel_args->args[10]
+                                ,kernel_args->args[11]
+                                ,kernel_args->args[12]
+                                ,kernel_args->args[13]
+                                );
                         function14(
                                 kernel_args->args[0]
                                 ,kernel_args->args[1]

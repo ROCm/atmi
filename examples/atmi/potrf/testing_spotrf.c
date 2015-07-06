@@ -12,6 +12,7 @@
 #include "data_dist/matrix/sym_two_dim_rectangle_cyclic.h"
 #include "data_dist/matrix/two_dim_rectangle_cyclic.h"
 
+#include "atmi.h"
 #include "atmi_lapack.h"
 
 int main(int argc, char ** argv)
@@ -60,10 +61,26 @@ int main(int argc, char ** argv)
      SYNC_TIME_START();                                                  
      TIME_START();  
      //dplasma_spotrf(dague, uplo, (tiled_matrix_desc_t*)&ddescA);
-     atmi_task_spotrf_L(uplo, (tiled_matrix_desc_t*)&ddescA);
+     atmi_spotrf_L(uplo, (tiled_matrix_desc_t*)&ddescA);
      SYNC_TIME_PRINT(rank, ("\tPxQ= %3d %-3d NB= %4d N= %7d : %14f gflops\n",
                            P, Q, NB, N,                                 
                            gflops=(flops/1e9)/sync_time_elapsed));
+
+        /* matrix generation */
+    if(loud > 3) printf("+++ Generate matrices ... ");
+    dplasma_splgsy( dague, (float)(N), uplo,
+                    (tiled_matrix_desc_t *)&ddescA, random_seed);
+    if(loud > 3) printf("Done\n");
+//    cleanup_dague(dague, iparam);
+
+    atmi_task_t *spotrf_task = atmi_spotrf_L_create_task(uplo, (tiled_matrix_desc_t*)&ddescA);
+    SYNC_TIME_START();
+    TIME_START();
+    //atmi_spotrf_L_progress_task(spotrf_task);
+    SYNC_TIME_PRINT(rank, ("\tPxQ= %3d %-3d NB= %4d N= %7d : %14f gflops\n",
+                           P, Q, NB, N,
+                           gflops=(flops/1e9)/sync_time_elapsed));
+
 
     if( 0 == rank && info != 0 ) {
         printf("-- Factorization is suspicious (info = %d) ! \n", info);
@@ -117,6 +134,6 @@ int main(int argc, char ** argv)
     dague_data_free(ddescA.mat); ddescA.mat = NULL;
     tiled_matrix_desc_destroy( (tiled_matrix_desc_t*)&ddescA);
 
-    cleanup_dague(dague, iparam);
+//    cleanup_dague(dague, iparam);
     return ret;
 }

@@ -1,12 +1,18 @@
+#include "common.h"
+
 #include <stdio.h>
 
 #include <core_blas.h>
 
 #include <data_dist/matrix/sym_two_dim_rectangle_cyclic.h>
 
+#include "atmi.h"
+
 #include "atmi_lapack.h"
 
-#include "atmi.h"
+//#include "flops.h"
+
+//#define DRY_RUN 
 
 #ifdef __cplusplus
 #define _CPPSTRING_ "C"
@@ -27,25 +33,33 @@ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int 
 {
     int info = 0;
     printf("POTRF(%d)\n", k);
+#if !defined(DRY_RUN)
     CORE_spotrf(uplo, N, A, LDA, &info);
+#endif
 }
 
 void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, int alpha, float *A, int LDA, float *B, int LDB)
 {
     printf("TRSM(%d, %d)\n", m, k);
+#if !defined(DRY_RUN)
     CORE_strsm(side, uplo, transA, diag, M, N, (float)alpha, A, LDA, B, LDB);
+#endif
 }
 
 void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, int alpha, const float *A, int LDA, int beta, float *C, int LDC)
 {
     printf("SYRK(%d, %d)\n", k, m);
+#if !defined(DRY_RUN)
     CORE_ssyrk(uplo, trans, N, K, (float)alpha, A, LDA, (float)beta, C, LDC);
+#endif
 }	 
 
 void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, int alpha, const float *A, int LDA, const float *B, int LDB, int beta, float *C, int LDC)
 {
     printf("GEMM(%d, %d, %d)\n", m, n, k);
+#if !defined(DRY_RUN)
     CORE_sgemm(transA, transB, M, N, K, (float)alpha, A, LDA, B, LDB, (float)beta, C, LDC);
+#endif
 } 
 
 void* sym_two_dim_block_cyclic_lookup_matrix(tiled_matrix_desc_t *descA, int m, int n)
@@ -97,7 +111,7 @@ int atmi_spotrf_L(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
     return 0;
 }
 
-int atmi_task_spotrf_L(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
+atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
 {
     int k, m, n;
     int tempkm, tempmm;
@@ -105,7 +119,7 @@ int atmi_task_spotrf_L(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
     float *T, *C, *A, *B;
     
     ATMI_LPARM_CPU(cpu_lp);
-//    cpu_lp->synchronous = ATMI_TRUE;
+    //cpu_lp->synchronous = ATMI_TRUE;
 
     atmi_task_t *spotrf_tasks[descA->mt]; /* there are descA->mt -1 POTRF tasks */
 //    atmi_task_t *strsm_task[descA->mt*(descA->mt-1)/2];  /* descA->mt-1 + descA->mt-2 + ... + 1 */
@@ -120,6 +134,7 @@ int atmi_task_spotrf_L(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
         tempkm = (k == (descA->mt - 1)) ? descA->m - k * descA->mb : descA->mb;
         ldak = ATMI_BLKLDD(descA, k);
         float *T = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, k, k);
+        cpu_lp->num_required = 0;
         if (k > 0) { 
             /* set dependency for potrf except the first one */
             cpu_lp->num_required = 1;
@@ -172,6 +187,7 @@ int atmi_task_spotrf_L(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
                     cpu_lp->num_required = 3;
                     required_tasks[2] = sgemm_tasks[m][n][k-1];
                 }
+                cpu_lp->requires = required_tasks;
                 sgemm_tasks[m][n][k] = atmi_sgemm_kernel(cpu_lp, m, n, k, PlasmaNoTrans, PlasmaTrans, tempmm, descA->mb, descA->mb, -1.0F, A, ldam, B, ldan, 1.0F, C, ldam);
             }
         }
@@ -182,6 +198,12 @@ int atmi_task_spotrf_L(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
 
     atmi_task_t* ret_task = spotrf_tasks[descA->mt-1];
     SYNC_TASK(ret_task);
-    return 0;
+    return ret_task;
 
+}
+
+int atmi_spotrf_L_progress_task(atmi_task_t *task)
+{
+    SYNC_TASK(task);
+    return 0;
 }

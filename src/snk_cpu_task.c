@@ -41,6 +41,8 @@
 */ 
 /* This file contains logic for CPU tasking in SNACK */
 #include "snk_internal.h"
+#include "atmi_bindthread.h"
+
 #include <assert.h>
 
 agent_t agent[SNK_MAX_CPU_QUEUES];
@@ -591,6 +593,9 @@ void *agent_worker(void *agent_args) {
 #else
 void *agent_worker(void *agent_args) {
     agent_t *agent = (agent_t *) agent_args;
+
+    atmi_cpu_bindthread(agent->id);    
+
     hsa_signal_value_t sig_value = IDLE;
     while (sig_value == IDLE) {
         DEBUG_PRINT("Worker thread sleeping\n");

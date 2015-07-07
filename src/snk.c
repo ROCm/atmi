@@ -808,6 +808,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
+    
     if(lparm->stream == NULL) {
         stream = &snk_default_stream_obj;
     } else {
@@ -985,6 +986,14 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     /* Add row to stream table for purposes of future synchronizations */
     register_stream(stream);
     
+    int ndim = -1; 
+    if(lparm->gridDim[2] > 1) 
+        ndim = 3;
+    else if(lparm->gridDim[1] > 1) 
+        ndim = 2;
+    else
+        ndim = 1;
+    
     /* get this stream's HSA queue (could be dynamically mapped or round robin
      * if it is an unordered stream */
     hsa_queue_t* this_Q = acquire_and_set_next_gpu_queue(stream);
@@ -1055,20 +1064,20 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                 this_aql->completion_signal = *((hsa_signal_t*)(ret->handle));
 
                 /*  Process lparm values */
-                /*  this_aql.dimensions=(uint16_t) lparm->ndim; */
-                this_aql->setup  |= (uint16_t) lparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
-                this_aql->grid_size_x=lparm->gdims[0];
-                this_aql->workgroup_size_x=lparm->ldims[0];
-                if (lparm->ndim>1) {
-                    this_aql->grid_size_y=lparm->gdims[1];
-                    this_aql->workgroup_size_y=lparm->ldims[1];
+                /*  this_aql.dimensions=(uint16_t) ndim; */
+                this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
+                this_aql->grid_size_x=lparm->gridDim[0];
+                this_aql->workgroup_size_x=lparm->groupDim[0];
+                if (ndim>1) {
+                    this_aql->grid_size_y=lparm->gridDim[1];
+                    this_aql->workgroup_size_y=lparm->groupDim[1];
                 } else {
                     this_aql->grid_size_y=1;
                     this_aql->workgroup_size_y=1;
                 }
-                if (lparm->ndim>2) {
-                    this_aql->grid_size_z=lparm->gdims[2];
-                    this_aql->workgroup_size_z=lparm->ldims[2];
+                if (ndim>2) {
+                    this_aql->grid_size_z=lparm->gridDim[2];
+                    this_aql->workgroup_size_z=lparm->groupDim[2];
                 } else {
                     this_aql->grid_size_z=1;
                     this_aql->workgroup_size_z=1;

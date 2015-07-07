@@ -1,5 +1,6 @@
 #include "atmi_rt.h"
 #include "atmi.h"
+#include <assert.h>
 
 /* Null kernel */
 #ifdef __cplusplus
@@ -11,14 +12,17 @@
 extern _CPPSTRING_ void __sync_kernel(atmi_task_t *thisTask) {}
 static int cpu_initalized = 0;
 snk_pif_kernel_table_t __sync_kernel_pif_fn_table[] = {
-{.pif_name="__sync_kernel_pif",.num_params=1,.cpu_kernel={.kernel_name="__sync_kernel",.function=(snk_generic_fp)__sync_kernel},.gpu_kernel={.kernel_name=NULL}},
+{.pif_name="__sync_kernel_pif",.devtype=ATMI_DEVTYPE_CPU,.num_params=1,.cpu_kernel={.kernel_name="__sync_kernel",.function=(snk_generic_fp)__sync_kernel},.gpu_kernel={.kernel_name=NULL}},
 };
 
 static int                              __sync_kernel_CPU_FK = 0 ; 
 atmi_task_t* __sync_kernel_pif(atmi_lparm_t * lparm) {
-  if(lparm->devtype == ATMI_DEVTYPE_GPU) { 
+  int k_id = lparm->kernel_id;
+  assert(k_id == 0);
+  atmi_devtype_t devtype = __sync_kernel_pif_fn_table[k_id].devtype;
+  if(devtype == ATMI_DEVTYPE_GPU) { 
   } 
-  else if(lparm->devtype == ATMI_DEVTYPE_CPU) { 
+  else if(devtype == ATMI_DEVTYPE_CPU) { 
       if(cpu_initalized == 0) {
           snk_init_cpu_context();
           cpu_initalized = 1;

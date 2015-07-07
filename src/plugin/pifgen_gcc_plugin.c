@@ -425,11 +425,20 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 pif_name, pif_name, pif_name,
                 pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(lparm->devtype == ATMI_DEVTYPE_CPU) {\n\
+    int k_id = lparm->kernel_id; \n\
+    if(k_id < 0 || k_id >= sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0])) { \n\
+        fprintf(stderr, \"Kernel_id out of bounds for PIF %s.\\n\"); \n\
+        return NULL; \n\
+    } \n\
+    atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
+    if(devtype == ATMI_DEVTYPE_CPU) {\n\
         if(cpu_initalized == 0) { \n\
             snk_init_cpu_context();\n\
             cpu_initalized = 1;\n\
-        }\n");
+        }\n",
+        pif_name, pif_name,
+        pif_name,
+        pif_name);
 #if 0
         pp_printf((pif_printers[pif_index].pifdefs), "\
         typedef struct cpu_args_struct_s {\n");
@@ -464,7 +473,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 ", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
-    else if(lparm->devtype == ATMI_DEVTYPE_GPU) {\n\
+    else if(devtype == ATMI_DEVTYPE_GPU) {\n\
         if(gpu_initalized == 0) {\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
@@ -527,12 +536,12 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     if(devtype == ATMI_DEVTYPE_CPU) {
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
     } 
     else if(devtype == ATMI_DEVTYPE_GPU) {
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
             pif_name, num_params, fn_name);
     }
     //int idx = 0;

@@ -330,19 +330,20 @@ void set_task_state(atmi_task_t *t, const atmi_state_t state) {
     t->state = state;
 }
 
-void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype) {
+void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype, boolean profilable) {
     hsa_status_t err;
-    if(task->profile != NULL) {
+    //if(task->profile != NULL) {
+    if(profilable == ATMI_TRUE) {
         hsa_signal_t signal = *(hsa_signal_t *)(task->handle);
         hsa_amd_profiling_dispatch_time_t metrics;
         if(devtype == ATMI_DEVTYPE_GPU) {
             err = hsa_amd_profiling_get_dispatch_time(snk_gpu_agent, 
                     signal, &metrics); 
             ErrorCheck(Profiling GPU dispatch, err);
-            task->profile->start_time = metrics.start;
-            task->profile->end_time = metrics.end;
-            task->profile->dispatch_time = metrics.start;
-            task->profile->ready_time = metrics.start;
+            task->profile.start_time = metrics.start;
+            task->profile.end_time = metrics.end;
+            task->profile.dispatch_time = metrics.start;
+            task->profile.ready_time = metrics.start;
         }
         else {
             /* metrics for CPU tasks will be populated in the 
@@ -370,7 +371,7 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         while(task_head) {
             set_task_state(task_head->task, ATMI_COMPLETED);
-            set_task_metrics(task_head->task, task_head->devtype);
+            set_task_metrics(task_head->task, task_head->devtype, task_head->profilable);
             task_head = task_head->next;
         }
     }
@@ -381,7 +382,7 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         while(task_head) {
             snk_task_wait(task_head->task);
-            set_task_metrics(task_head->task, task_head->devtype);
+            set_task_metrics(task_head->task, task_head->devtype, task_head->profilable);
             task_head = task_head->next;
         }
         #else
@@ -508,7 +509,7 @@ status_t check_change_in_device_type(atmi_stream_t *stream, hsa_queue_t *queue, 
     }
 }
 
-status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype) {
+status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype, boolean profilable) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         DEBUG_PRINT("Stream unregistered\n");
@@ -517,6 +518,7 @@ status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t 
 
     snk_task_list_t *node = (snk_task_list_t *)malloc(sizeof(snk_task_list_t));
     node->task = task;
+    node->profilable = profilable;
     node->next = NULL;
     node->devtype = devtype;
     if(StreamTable[stream_num].tasks == NULL) {
@@ -527,9 +529,9 @@ status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t 
         node->next = cur;
     }
     StreamTable[stream_num].last_device_type = devtype;
-    DEBUG_PRINT("Registering %s task %p\n", 
+    DEBUG_PRINT("Registering %s task %p Profilable? %s\n", 
                 (devtype == ATMI_DEVTYPE_GPU) ? "GPU" : "CPU",
-                task);
+                task, (profilable == ATMI_TRUE) ? "Yes" : "No");
     return STATUS_SUCCESS;
 }
 
@@ -803,6 +805,7 @@ status_t snk_get_gpu_kernel_info(
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
+                 //void *kernel_args) {
                  snk_kernel_args_t *kernel_args) {
     
     atmi_stream_t *stream = NULL;
@@ -864,7 +867,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                 kernel_args->args[0] = (uint64_t) ret;
 
                 /* Get profiling object. Can be NULL? */
-                ret->profile = lparm->profile;
+                // ret->profile = lparm->profile;
                 /* ID i is the kernel. Enqueue the function to the soft queue */
                 //DEBUG_PRINT("CPU Function [%d]: %s has %" PRIu32 " args\n", i, pif_name, _KN__cpu_task_num_args);
                 /*  Obtain the current queue write index. increases with each call to kernel  */
@@ -906,7 +909,8 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                     this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE);
 
                 /* Store dispatched time */
-                if(ret->profile) ret->profile->dispatch_time = get_nanosecs(context_init_time, dispatch_time);
+                if(lparm->profilable == ATMI_TRUE) ret->profile.dispatch_time = get_nanosecs(context_init_time, dispatch_time);
+                //if(ret->profile) ret->profile->dispatch_time = get_nanosecs(context_init_time, dispatch_time);
                 set_task_state(ret, ATMI_DISPATCHED);
                 /* Increment write index and ring doorbell to dispatch the kernel.  */
                 hsa_queue_store_write_index_relaxed(this_Q, index+1);
@@ -916,11 +920,11 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                     /* For default synchrnous execution, wait til kernel is finished.  */
                     snk_task_wait(ret);
                     set_task_state(ret, ATMI_COMPLETED);
-                    set_task_metrics(ret, ATMI_DEVTYPE_CPU);
+                    set_task_metrics(ret, ATMI_DEVTYPE_CPU, lparm->profilable);
                 }
                 else {
                     /* add task to the corresponding row in the stream table */
-                    register_task(stream, ret, ATMI_DEVTYPE_CPU);
+                    register_task(stream, ret, ATMI_DEVTYPE_CPU, lparm->profilable);
                 }
 
                 //SNK_NextTaskId = (SNK_NextTaskId + 1) % SNK_MAX_TASKS;
@@ -1050,7 +1054,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                 kargs->arg6 = ret;
 
                 /* Get profiling object. Can be NULL? */
-                ret->profile = lparm->profile;
+                //ret->profile = lparm->profile;
 
                 /*  Obtain the current queue write index. increases with each call to kernel  */
                 uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
@@ -1111,11 +1115,11 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                     /* For default synchrnous execution, wait til kernel is finished.  */
                     snk_task_wait(ret);
                     set_task_state(ret, ATMI_COMPLETED);
-                    set_task_metrics(ret, ATMI_DEVTYPE_GPU);
+                    set_task_metrics(ret, ATMI_DEVTYPE_GPU, lparm->profilable);
                 }
                 else {
                     /* add task to the corresponding row in the stream table */
-                    register_task(stream, ret, ATMI_DEVTYPE_GPU);
+                    register_task(stream, ret, ATMI_DEVTYPE_GPU, lparm->profilable);
                 }
                 //SNK_NextTaskId = (SNK_NextTaskId + 1) % SNK_MAX_TASKS;
                 SNK_NextTaskId++;

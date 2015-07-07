@@ -41,6 +41,7 @@ int process_packet(hsa_queue_t *queue, int id);
 typedef struct snk_task_list_s {
     atmi_task_t *task;
     atmi_devtype_t devtype;
+    boolean profilable;
     struct snk_task_list_s *next;
 } snk_task_list_t;
 
@@ -65,10 +66,10 @@ int get_stream_id(atmi_stream_t *stream);
 hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_t *stream);
 hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_t *stream);
 status_t clear_saved_tasks(atmi_stream_t *stream);
-status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype);
+status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype, boolean profilable);
 status_t register_stream(atmi_stream_t *stream);
 void set_task_state(atmi_task_t *t, atmi_state_t state);
-void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype);
+void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype, boolean profilable);
 
 uint16_t create_header(hsa_packet_type_t type, int barrier);
 

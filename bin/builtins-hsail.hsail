@@ -49,3 +49,18 @@ prog function &hsa_signal_load_relaxed(arg_u64 %ret)(arg_u64 %arg_p0)
    st_arg_u64 $d1, [%ret];
    ret;
 };
+
+prog function &hsa_signal_wait_relaxed(arg_u64 %ret)(
+	arg_u64 %arg_p0,
+	arg_u32 %arg_p1,
+	arg_u64 %arg_p2,
+	arg_u64 %arg_p3,
+    arg_u32 %arg_p4){
+    @hsa_signal_wait_relaxed_entry:
+    ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+    ld_arg_align(8)_u64	$d1, [%arg_p2];                     // d2 has value 
+    signal_wait_eq_rlx_s64_sig64 $d2, $d0, $d1;
+    st_arg_u64 $d2, [%ret];
+};
+
+

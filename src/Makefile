@@ -14,19 +14,20 @@ OBJS=bindthread.o snk.o snk_cpu_task.o snk_sync_kernel.o
 LIB=libatmi_runtime.so
 LIBDIR=../lib
 
-all: $(LIB)
+all: $(LIBDIR)/$(LIB)
 
-$(LIB): $(OBJS)
-	$(CC) -g -shared $(LIB_FLAGS) -o $@ $^ 	
+$(LIBDIR)/$(LIB): $(OBJS) 
+	mkdir -p $(LIBDIR)
+	$(CC) -shared $(LIB_FLAGS) -o $@ $^ 	
 #	$(AR) $(ARFLAGS) $@ $^
 
 %.o: %.c ../include/*.h
 	$(CC) -o $@ $(INC_FLAGS) $(CFLAGS) $< $(LIB_FLAGS)
 
-install: $(LIB)
-	cp $^ $(LIBDIR)/
-
 .PHONY: clean
 
 clean:
-	rm -rf *.o *.a *.so
+	rm -rf *.o *.a $(LIBDIR)/*.so
+
+install:
+	rm -rf *.o 

@@ -28,6 +28,7 @@
 #include <sstream>
 #include <iostream>
 #include <iterator>
+#include <algorithm>
 
 using namespace std;
 //#define DEBUG_ATMI_RT_PLUGIN
@@ -63,6 +64,8 @@ static std::vector<pif_printers_t> pif_printers;
 static pretty_printer g_kerneldecls;
 
 static int initialized = 0;
+
+static std::string g_output_pifdefs_filename;
 
 void write_headers(FILE *fp) {
     fprintf(fp, "\
@@ -304,24 +307,26 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     int attrib_id = 0;
     for( tree itrArgument = args; itrArgument != NULL_TREE; itrArgument = TREE_CHAIN( itrArgument ) )
     {
-        if(attrib_id == 0) { 
-            const char *devtype_str = TREE_STRING_POINTER(TREE_VALUE(itrArgument));
-            if(strcmp(devtype_str, "CPU") == 0 || strcmp(devtype_str, "cpu") == 0) {
+        if(attrib_id == 0) {
+            strcpy(pif_name, TREE_STRING_POINTER (TREE_VALUE ( itrArgument )));
+        }
+        else if(attrib_id == 1) { 
+            std::string devtype_str(TREE_STRING_POINTER(TREE_VALUE(itrArgument)));
+            std::transform(devtype_str.begin(), devtype_str.end(), devtype_str.begin(), ::tolower);
+
+            if(strcmp(devtype_str.c_str(), "cpu") == 0) {
                 devtype = ATMI_DEVTYPE_CPU;
             }
-            else if(strcmp(devtype_str, "GPU") == 0 || strcmp(devtype_str, "gpu") == 0) {
+            else if(strcmp(devtype_str.c_str(), "gpu") == 0) {
                 devtype = ATMI_DEVTYPE_GPU;
             }
             else {
-                fprintf(stderr, "Unsupported device type: %s at %s:%d\n", devtype_str, 
+                fprintf(stderr, "Unsupported device type: %s at %s:%d\n", devtype_str.c_str(), 
                             DECL_SOURCE_FILE(decl), DECL_SOURCE_LINE(decl));
                 exit(-1);
             }
         //DEBUG_PRINT("DevType: %lu\n", TREE_INT_CST_LOW(TREE_VALUE(itrArgument)));
         //DEBUG_PRINT("DevType: %lu\n", TREE_INT_CST_HIGH(TREE_VALUE(itrArgument)));
-        }
-        else if(attrib_id == 1) {
-            strcpy(pif_name, TREE_STRING_POINTER (TREE_VALUE ( itrArgument )));
         }
         DEBUG_PRINT("%s ", TREE_STRING_POINTER( TREE_VALUE ( itrArgument )));
         attrib_id++;
@@ -384,7 +389,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     int text_sz = strlen(text); 
     char text_dup[2048]; 
     strcpy(text_dup, text);
-    pp_flush (&tmp_buffer);
+    pp_clear_output_area(&tmp_buffer);
     fclose(f_tmp);
     int ret_del = remove("tmp.pif.def.c");
     if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.pif.def.c\n");
@@ -557,7 +562,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
 /* Attribute definition */
 static struct attribute_spec atmi_task_impl_attr =
-{ "atmi_task_impl", 0, 2, false,  false, false, handle_task_impl_attribute, false };
+{ "atmi_kernel", 0, 2, false,  false, false, handle_task_impl_attribute, false };
 
 /* Plugin callback called during attribute registration.
  * Registered with register_callback (plugin_name, PLUGIN_ATTRIBUTES,
@@ -587,11 +592,17 @@ static void
 register_finish_unit (void *event_data, void *data) {
     /* Dump all the generated code into one .c file */
     DEBUG_PRINT("Callback at end of compilation unit\n");
-    char pifdefs_filename[1024];
-    memset(pifdefs_filename, 0, 1024);
-    strcpy(pifdefs_filename, main_input_filename);
-    strcat(pifdefs_filename, ".pifdefs.c");
-    FILE *fp_pifdefs_genw = fopen(pifdefs_filename, "w");
+    FILE *fp_pifdefs_genw = NULL;
+    if(g_output_pifdefs_filename.empty()) {
+        char pifdefs_filename[1024];
+        memset(pifdefs_filename, 0, 1024);
+        strcpy(pifdefs_filename, main_input_filename);
+        strcat(pifdefs_filename, ".pifdefs.c");
+        fp_pifdefs_genw = fopen(pifdefs_filename, "w");
+    }
+    else {
+        fp_pifdefs_genw = fopen(g_output_pifdefs_filename.c_str(), "w");
+    }
     write_headers(fp_pifdefs_genw);
     std::string header_str = "`which cat` " + std::string(main_input_filename) + " | `which grep` \\#include";
     std::string headers = exec(header_str.c_str());
@@ -784,6 +795,7 @@ int plugin_init(struct plugin_name_args *plugin_info,
         return 1;
 
     int i;
+    g_output_pifdefs_filename.clear();
     g_cl_modules.clear();
     for(i = 0; i < plugin_info->argc; i++) { 
         if(strcmp(plugin_info->argv[i].key, "clfile") == 0) {
@@ -804,6 +816,31 @@ int plugin_init(struct plugin_name_args *plugin_info,
              * except the cl with _ as the glue insted of dot
              */
             g_cl_modules.push_back(tokens[0]);
+        }
+        else if(strcmp(plugin_info->argv[i].key, "brighfile") == 0) {
+            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
+            const char *brighfilename = plugin_info->argv[i].value;
+
+            /* remove ._brig.h */
+            vector<string> tokens = split(brighfilename, '_');
+            //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
+            for(std::vector<std::string>::iterator it = tokens.begin(); 
+                    it != tokens.end(); it++) {
+                DEBUG_PRINT("Brig H File token: %s\n", it->c_str());
+            }
+            /* saving just the first token to the left of a dot. 
+             * Ideal solution should be to concatenate all tokens 
+             * except the cl with _ as the glue insted of dot
+             */
+            g_cl_modules.push_back(tokens[0]);
+        }   
+        else if(strcmp(plugin_info->argv[i].key, "pifgenfile") == 0) {
+            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
+            g_output_pifdefs_filename = std::string(plugin_info->argv[i].value);
+        }
+        else {
+            fprintf(stderr, "Unknown plugin argument pair (%s %s).\nAllowed plugin arguments are clfile, brighfile and pifgenfile.\n", plugin_info->argv[i].key, plugin_info->argv[i].value);
+            exit(-1);
         }
     }
     DEBUG_PRINT("In plugin init function\n");

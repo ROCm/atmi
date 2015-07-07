@@ -147,7 +147,11 @@ int process_packet(hsa_queue_t *queue, int id)
                 ;
                 const char *kernel_name = snk_kernels[packet->type].cpu_kernel.kernel_name;
                 uint64_t num_args = packet->arg[0];
+                //void *kernel_args = (void *)(packet->arg[1]);
                 snk_kernel_args_t *kernel_args = (snk_kernel_args_t *)(packet->arg[1]);
+                // pass task handle to kernel_args first param
+                // unpack kernel_args to num_params * (void *) args and invoke the
+                // function. May be uint64_t too?  
                 if(num_args > 0) assert(kernel_args != NULL);
                 this_task = (atmi_task_t *)(packet->arg[2]);
                 assert(this_task != NULL);
@@ -547,6 +551,8 @@ int process_packet(hsa_queue_t *queue, int id)
                 }
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
+                // FIXME: release the kernel args mem region
+                // free(packet->arg[1]);
                 break;
         }
         if (packet->completion_signal.handle != 0) {
@@ -555,10 +561,11 @@ int process_packet(hsa_queue_t *queue, int id)
         clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
         end_time_ns = get_nanosecs(context_init_time, end_time);
         if(this_task != NULL) {
-            if(this_task->profile != NULL) {
-                this_task->profile->end_time = end_time_ns;
-                this_task->profile->start_time = start_time_ns;
-                this_task->profile->ready_time = start_time_ns;
+            //if(this_task->profile != NULL) 
+            {
+                this_task->profile.end_time = end_time_ns;
+                this_task->profile.start_time = start_time_ns;
+                this_task->profile.ready_time = start_time_ns;
                 DEBUG_PRINT("Task %p timing info (%" PRIu64", %" PRIu64")\n", 
                         this_task, start_time_ns, end_time_ns);
             }

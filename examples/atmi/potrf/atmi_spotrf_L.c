@@ -23,10 +23,20 @@
 
 #define ATMI_BLKLDD( _desc_, _m_ ) ( (_desc_)->storage == matrix_Tile ? (_desc_)->mb : (_desc_)->llm )
 
-extern _CPPSTRING_ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA) __attribute__((atmi_task_impl("cpu", "atmi_spotrf_kernel")));
-extern _CPPSTRING_ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, int alpha, float *A, int LDA, float *B, int LDB) __attribute__((atmi_task_impl("cpu", "atmi_strsm_kernel")));
-extern _CPPSTRING_ void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, int alpha, const float *A, int LDA, int beta, float *C, int LDC) __attribute__((atmi_task_impl("cpu", "atmi_ssyrk_kernel")));
-extern _CPPSTRING_ void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, int alpha, const float *A, int LDA, const float *B, int LDB, int beta, float *C, int LDC) __attribute__((atmi_task_impl("cpu", "atmi_sgemm_kernel")));
+
+typedef struct spotrf_profile_s {
+    atmi_tprofile_t super;
+    char* kernel_name;
+    int tid;
+} spotrf_profile_t;
+
+extern _CPPSTRING_ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA) __attribute__((atmi_kernel("atmi_spotrf_kernel", "cpu")));
+
+extern _CPPSTRING_ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, int alpha, float *A, int LDA, float *B, int LDB) __attribute__((atmi_kernel("atmi_strsm_kernel", "cpu")));
+
+extern _CPPSTRING_ void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, int alpha, const float *A, int LDA, int beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_ssyrk_kernel", "cpu")));
+
+extern _CPPSTRING_ void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, int alpha, const float *A, int LDA, const float *B, int LDB, int beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_sgemm_kernel", "cpu")));
 
 
 void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA)

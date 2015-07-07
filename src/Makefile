@@ -18,7 +18,7 @@ all: $(LIBDIR)/$(LIB)
 
 $(LIBDIR)/$(LIB): $(OBJS) 
 	mkdir -p $(LIBDIR)
-	$(CC) -shared $(LIB_FLAGS) -o $@ $^ 	
+	$(CC) -g -shared $(LIB_FLAGS) -o $@ $^ 	
 #	$(AR) $(ARFLAGS) $@ $^
 
 %.o: %.c ../include/*.h

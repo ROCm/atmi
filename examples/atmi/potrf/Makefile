@@ -24,19 +24,19 @@ common.o: common.c
 	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
 atmi_spotrf_L.o: atmi_spotrf_L.c
-	$(CC) $(CFLAGS) -fplugin=$(PLUGIN_LIB) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
+	$(CC) $(CFLAGS) -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.c $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
 testing_spotrf.o: testing_spotrf.c
 	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
 testing_spotrf: common.o atmi_spotrf_L.o testing_spotrf.o
-	$(FC) $(FFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) $^ atmi_spotrf_L.c.pifdefs.c $(DPLASMA_LIB) $(EXT_LIB) $(HWLOC_LIB) $(BLAS_LIB) $(PLASMA_LIB) $(ATMI_LIB) -o $@
+	$(FC) $(FFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) $^ pifdefs.c $(DPLASMA_LIB) $(EXT_LIB) $(HWLOC_LIB) $(BLAS_LIB) $(PLASMA_LIB) $(ATMI_LIB) -o $@
 
 #%.o: %.c
 #	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
 clean:
 	rm -f *.o
-	rm -f *.pifdefs.c
+	rm -f *pifdefs.c
 	rm -f testing_spotrf
 

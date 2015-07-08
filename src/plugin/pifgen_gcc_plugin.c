@@ -102,6 +102,31 @@ std::string exec(const char* cmd) {
     return result;
 }
 
+void brig2brigh(const char *brigfilename, const char *cl_module_name) {
+    std::string cmd = exec("which hexdump");
+    
+    if(cmd == "" || cmd == "ERROR") {
+        fprintf(stderr, "hexdump command is needed for converting brig to a string array, and it is not found in the PATH.\n");
+        exit(-1);
+    }
+    std::string outfile(cl_module_name);
+    outfile += "_brig.h"; 
+    FILE *fp_brigh = fopen(outfile.c_str(), "w");
+    fprintf(fp_brigh, "char %s_HSA_BrigMem[] = {\n", cl_module_name); 
+
+    std::string hex_cmd("hexdump -v -e '\"0x\" 1/1 \"%02X\" \",\"' ");
+    hex_cmd += std::string(brigfilename);
+    std::string hex_str = exec(hex_cmd.c_str());
+    if(hex_str == "" || hex_str == "ERROR") {
+        fprintf(stderr, "hexdump on brig file %s failed.\n", brigfilename);
+        exit(-1);
+    }
+    
+    fprintf(fp_brigh, "%s};\n", hex_str.c_str());
+    fprintf(fp_brigh, "size_t %s_HSA_BrigMemSz = sizeof(%s_HSA_BrigMem);\n", cl_module_name, cl_module_name); 
+    fclose(fp_brigh);
+}
+
 void cl2brigh(const char *clfilename) {
     std::string cmd;
     cmd.clear();
@@ -826,6 +851,26 @@ int plugin_init(struct plugin_name_args *plugin_info,
              */
             g_cl_modules.push_back(tokens[0]);
         }
+        else if(strcmp(plugin_info->argv[i].key, "brigfile") == 0) {
+            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
+            const char *brigfilename = plugin_info->argv[i].value;
+
+            /* remove ._brig.h */
+            vector<string> tokens = split(brigfilename, '.');
+            //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
+            for(std::vector<std::string>::iterator it = tokens.begin(); 
+                    it != tokens.end(); it++) {
+                DEBUG_PRINT("Brig File token: %s\n", it->c_str());
+            }
+            /* saving just the first token to the left of a dot. 
+             * Ideal solution should be to concatenate all tokens 
+             * except the cl with _ as the glue insted of dot
+             */
+            g_cl_modules.push_back(tokens[0]);
+            
+            /* compile CL to BRIG header file with char array */
+            brig2brigh(brigfilename, tokens[0].c_str());
+        }        
         else if(strcmp(plugin_info->argv[i].key, "brighfile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             const char *brighfilename = plugin_info->argv[i].value;

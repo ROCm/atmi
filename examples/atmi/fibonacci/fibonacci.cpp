@@ -3,7 +3,7 @@
 #include "atmi.h"
 using namespace std;
 
-extern "C" void sum_cpu(atmi_task_t *t, int *a, int *b, int *c) __attribute__((atmi_task_impl("cpu", "sum")));
+extern "C" void sum_cpu(atmi_task_t *t, int *a, int *b, int *c) __attribute__((atmi_kernel("sum", "CPU")));
 
 extern "C" void sum_cpu(atmi_task_t *t, int *a, int *b, int *c) { 
     *c = *a + *b;
@@ -23,7 +23,7 @@ void fib(const int n , int *result , atmi_task_t **my_sum_task) {
         int *result2 = new int;
         fib(n-1,result1,&task_sum1);
         fib(n-2,result2,&task_sum2);
-        ATMI_LPARM_CPU(lparm_child); /* Remember ATMI default is asynchronous execution */
+        ATMI_LPARM(lparm_child); /* Remember ATMI default is asynchronous execution */
         lparm_child->num_required = 0;
         atmi_task_t *requires[2];
         if (task_sum1 != NULL) {

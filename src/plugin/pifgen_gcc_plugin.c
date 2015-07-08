@@ -102,6 +102,31 @@ std::string exec(const char* cmd) {
     return result;
 }
 
+void brig2brigh(const char *brigfilename, const char *cl_module_name) {
+    std::string cmd = exec("which hexdump");
+    
+    if(cmd == "" || cmd == "ERROR") {
+        fprintf(stderr, "hexdump command is needed for converting brig to a string array, and it is not found in the PATH.\n");
+        exit(-1);
+    }
+    std::string outfile(cl_module_name);
+    outfile += "_brig.h"; 
+    FILE *fp_brigh = fopen(outfile.c_str(), "w");
+    fprintf(fp_brigh, "char %s_HSA_BrigMem[] = {\n", cl_module_name); 
+
+    std::string hex_cmd("hexdump -v -e '\"0x\" 1/1 \"%02X\" \",\"' ");
+    hex_cmd += std::string(brigfilename);
+    std::string hex_str = exec(hex_cmd.c_str());
+    if(hex_str == "" || hex_str == "ERROR") {
+        fprintf(stderr, "hexdump on brig file %s failed.\n", brigfilename);
+        exit(-1);
+    }
+    
+    fprintf(fp_brigh, "%s};\n", hex_str.c_str());
+    fprintf(fp_brigh, "size_t %s_HSA_BrigMemSz = sizeof(%s_HSA_BrigMem);\n", cl_module_name, cl_module_name); 
+    fclose(fp_brigh);
+}
+
 void cl2brigh(const char *clfilename) {
     std::string cmd;
     cmd.clear();
@@ -150,7 +175,12 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_task_t *var0, ");
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_task_t *var0)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_task_t *var0, ");
+    }
     
     int var_idx = 0;
     pch = strtok (NULL, ",)");
@@ -178,8 +208,14 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_lparm_t *lparm, ");
-    
+   
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm, ");
+    }
+
     int var_idx = 0;
     pch = strtok (NULL, ",)");
     //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
@@ -425,11 +461,20 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 pif_name, pif_name, pif_name,
                 pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(lparm->devtype == ATMI_DEVTYPE_CPU) {\n\
+    int k_id = lparm->kernel_id; \n\
+    if(k_id < 0 || k_id >= sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0])) { \n\
+        fprintf(stderr, \"Kernel_id out of bounds for PIF %s.\\n\"); \n\
+        return NULL; \n\
+    } \n\
+    atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
+    if(devtype == ATMI_DEVTYPE_CPU) {\n\
         if(cpu_initalized == 0) { \n\
             snk_init_cpu_context();\n\
             cpu_initalized = 1;\n\
-        }\n");
+        }\n",
+        pif_name, pif_name,
+        pif_name,
+        pif_name);
 #if 0
         pp_printf((pif_printers[pif_index].pifdefs), "\
         typedef struct cpu_args_struct_s {\n");
@@ -464,7 +509,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 ", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
-    else if(lparm->devtype == ATMI_DEVTYPE_GPU) {\n\
+    else if(devtype == ATMI_DEVTYPE_GPU) {\n\
         if(gpu_initalized == 0) {\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
@@ -527,12 +572,12 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     if(devtype == ATMI_DEVTYPE_CPU) {
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
     } 
     else if(devtype == ATMI_DEVTYPE_GPU) {
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
             pif_name, num_params, fn_name);
     }
     //int idx = 0;
@@ -817,6 +862,26 @@ int plugin_init(struct plugin_name_args *plugin_info,
              */
             g_cl_modules.push_back(tokens[0]);
         }
+        else if(strcmp(plugin_info->argv[i].key, "brigfile") == 0) {
+            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
+            const char *brigfilename = plugin_info->argv[i].value;
+
+            /* remove ._brig.h */
+            vector<string> tokens = split(brigfilename, '.');
+            //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
+            for(std::vector<std::string>::iterator it = tokens.begin(); 
+                    it != tokens.end(); it++) {
+                DEBUG_PRINT("Brig File token: %s\n", it->c_str());
+            }
+            /* saving just the first token to the left of a dot. 
+             * Ideal solution should be to concatenate all tokens 
+             * except the cl with _ as the glue insted of dot
+             */
+            g_cl_modules.push_back(tokens[0]);
+            
+            /* compile CL to BRIG header file with char array */
+            brig2brigh(brigfilename, tokens[0].c_str());
+        }        
         else if(strcmp(plugin_info->argv[i].key, "brighfile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             const char *brighfilename = plugin_info->argv[i].value;

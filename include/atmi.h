@@ -149,7 +149,7 @@ extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
 #if 1
 #define SYNC_STREAM(s) \
 { \
-    ATMI_LPARM_CPU(__lparm_sync_kernel); \
+    ATMI_LPARM(__lparm_sync_kernel); \
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
     __lparm_sync_kernel->stream = s; \
     __sync_kernel_pif(__lparm_sync_kernel); \
@@ -157,7 +157,7 @@ extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
 
 #define SYNC_TASK(task) \
 { \
-    ATMI_LPARM_CPU(__lparm_sync_kernel); \
+    ATMI_LPARM(__lparm_sync_kernel); \
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
     __lparm_sync_kernel->num_required = 1; \
     __lparm_sync_kernel->requires = &task; \

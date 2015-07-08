@@ -44,6 +44,7 @@
  * from the snk_genw.sh script to a library
  */
 #include "snk_internal.h"
+#include "profiling.h"
 #include <time.h>
 #include <assert.h>
 
@@ -603,7 +604,7 @@ void init_hsa() {
 
 status_t snk_init_cpu_context() {
     if(g_cpu_initialized != 0) return;
-    
+  
     hsa_status_t err;
     init_hsa();
     
@@ -612,6 +613,9 @@ status_t snk_init_cpu_context() {
     snk_init_gpu_context();
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
+#if defined (ATMI_HAVE_PROFILE)
+    atmi_profiling_init();
+#endif /*ATMI_HAVE_PROFILE */
     err = hsa_iterate_agents(get_cpu_agent, &snk_cpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);

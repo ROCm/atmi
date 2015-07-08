@@ -12,7 +12,7 @@ int atmi_cpu_bindthread(int cpu_index)
     int err;
 
     CPU_ZERO(&cpuset);
-    CPU_SET(cpu_index, &cpuset);
+    CPU_SET(cpu_index+1, &cpuset);
     err = sched_setaffinity(0, sizeof(cpuset), &cpuset);
     if (err != 0) {
         return err;

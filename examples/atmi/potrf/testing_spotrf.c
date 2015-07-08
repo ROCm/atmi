@@ -80,7 +80,7 @@ int main(int argc, char ** argv)
     SYNC_TIME_PRINT(rank, ("\tPxQ= %3d %-3d NB= %4d N= %7d : %14f gflops\n",
                            P, Q, NB, N,
                            gflops=(flops/1e9)/sync_time_elapsed));
-
+    agent_fini();
 
     if( 0 == rank && info != 0 ) {
         printf("-- Factorization is suspicious (info = %d) ! \n", info);
@@ -134,6 +134,6 @@ int main(int argc, char ** argv)
     dague_data_free(ddescA.mat); ddescA.mat = NULL;
     tiled_matrix_desc_destroy( (tiled_matrix_desc_t*)&ddescA);
 
-//    cleanup_dague(dague, iparam);
+    cleanup_dague(dague, iparam);
     return ret;
 }

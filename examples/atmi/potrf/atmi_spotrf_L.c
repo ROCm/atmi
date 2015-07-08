@@ -23,13 +23,6 @@
 
 #define ATMI_BLKLDD( _desc_, _m_ ) ( (_desc_)->storage == matrix_Tile ? (_desc_)->mb : (_desc_)->llm )
 
-
-typedef struct spotrf_profile_s {
-    atmi_tprofile_t super;
-    char* kernel_name;
-    int tid;
-} spotrf_profile_t;
-
 extern _CPPSTRING_ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA) __attribute__((atmi_kernel("atmi_spotrf_kernel", "cpu")));
 
 extern _CPPSTRING_ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, int alpha, float *A, int LDA, float *B, int LDB) __attribute__((atmi_kernel("atmi_strsm_kernel", "cpu")));
@@ -45,6 +38,7 @@ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int 
 //    printf("POTRF(%d)\n", k);
 #if !defined(DRY_RUN)
     CORE_spotrf(uplo, N, A, LDA, &info);
+    if (info != 0) printf("potrf wrong %d\n", info);
 #endif
 }
 
@@ -68,7 +62,11 @@ void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_en
 {
 //    printf("GEMM(%d, %d, %d)\n", m, n, k);
 #if !defined(DRY_RUN)
+//    double start_t, end_t;
+//    start_t = get_cur_time();
     CORE_sgemm(transA, transB, M, N, K, (float)alpha, A, LDA, B, LDB, (float)beta, C, LDC);
+//    end_t = get_cur_time();
+//    printf("gemm %f\n", end_t-start_t);
 #endif
 } 
 
@@ -129,6 +127,7 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
     float *T, *C, *A, *B;
     
     ATMI_LPARM_CPU(cpu_lp);
+    cpu_lp->profilable = ATMI_TRUE;
     //cpu_lp->synchronous = ATMI_TRUE;
 
     atmi_task_t *spotrf_tasks[descA->mt]; /* there are descA->mt -1 POTRF tasks */

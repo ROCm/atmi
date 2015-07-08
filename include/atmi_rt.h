@@ -80,6 +80,7 @@ typedef struct snk_kernel_args_s {
 
 typedef struct snk_pif_kernel_table_s {
     const char *pif_name; 
+    atmi_devtype_t devtype;
     int num_params;
     snk_cpu_kernel_t cpu_kernel;
     snk_gpu_kernel_t gpu_kernel;
@@ -103,6 +104,7 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
 
 status_t snk_init_kernel(
                              const char *pif_name, 
+                             const atmi_devtype_t devtype,
                              const int num_params, 
                              const char *cpu_kernel_name, 
                              snk_generic_fp fn_ptr,

@@ -11,4 +11,4 @@ default: hello.c
 	$(CC) -o hello hello.o $^.pifdefs.c $(CC_FLAGS)
 
 clean:
-	rm *.o hello
+	rm *.o hello hello.c.pifdefs.c

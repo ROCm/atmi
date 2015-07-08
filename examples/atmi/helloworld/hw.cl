@@ -1,5 +1,6 @@
 #include "atmi.h"
-__kernel void decode_gpu(__global atmi_task_t *thisTask, __global const char* in, __global char* out) {
+__kernel void decode_gpu(__global atmi_task_t *thisTask, __global const char* in, __global char* out, const size_t strlength) {
 	int num = get_global_id(0);
-	out[num] = in[num] + 1;
+    if(num < strlength) 
+    	out[num] = in[num] + 1;
 }

@@ -4,35 +4,32 @@
 using namespace std;
 #include "atmi.h"
 
-size_t strlength;
+// Declare decode as the PIF for the GPU kernel implementation decode_gpu
+__kernel void decode_gpu(__global atmi_task_t *thisTask, __global const char* in, __global char *out, const size_t strlength) __attribute__((atmi_kernel("decode", "gpu")));
 
 // Declare decode as the PIF for the CPU kernel decode_cpu
-extern "C" void decode_cpu(atmi_task_t *thisTask, const char* in, char* out) __attribute__((atmi_task_impl("cpu", "decode")));
+extern "C" void decode_cpu(atmi_task_t *thisTask, const char* in, char* out, const size_t strlength) __attribute__((atmi_kernel("decode", "cpu")));
 
-extern "C" void decode_cpu(atmi_task_t *thisTask, const char* in, char* out) {
+extern "C" void decode_cpu(atmi_task_t *thisTask, const char* in, char* out, const size_t strlength) {
     int num;
     for (num = 0; num < strlength; num++) {
         out[num] = in[num] + 1;
     }
 }
 
-// Declare decode as the PIF for the GPU kernel implementation decode_gpu
-__kernel void decode_gpu(__global atmi_task_t *thisTask, __global const char* in, __global char *out) __attribute__((atmi_task_impl("gpu", "decode")));
-
 int main(int argc, char* argv[]) {
 	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
-	strlength = strlen(input);
-	char *output_cpu = (char*) malloc(strlength + 1);
+	size_t strlength = strlen(input);
+    char *output_cpu = (char*) malloc(strlength + 1);
 	char *output_gpu = (char*) malloc(strlength + 1);
 
-    ATMI_LPARM_1D(lparm_gpu, strlength);
-    lparm_gpu->synchronous = ATMI_TRUE;
-    decode(lparm_gpu, input, output_gpu);
+    ATMI_LPARM_1D(lparm, strlength);
+    lparm->synchronous = ATMI_TRUE;
+    decode(lparm, input, output_gpu, strlength);
     output_gpu[strlength] = '\0';
     
-    ATMI_LPARM_CPU(lparm_cpu);
-    lparm_cpu->synchronous = ATMI_TRUE;
-    decode(lparm_cpu, input, output_cpu);
+    lparm->kernel_id = 1;
+    decode(lparm, input, output_cpu, strlength);
     output_cpu[strlength] = '\0';
 
     cout << "Output from the CPU: " << output_cpu << endl;

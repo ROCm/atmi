@@ -3,7 +3,7 @@ prog function &hsa_queue_load_write_index_relaxed(arg_u64 %ret)(arg_u64 %arg_p0)
 {
     @hsa_queue_load_write_index_relaxed_entry:
     ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has the queue address
-    addqueuewriteindex_global_rlx_u64   $d1, [$d0], 1;      // d1 has the queue's write_index
+    ldqueuewriteindex_global_rlx_u64 $d1, [$d0];            // load write index of queue d0 to d1
     st_arg_u64 $d1, [%ret];                                 // return write index
     ret;
 };

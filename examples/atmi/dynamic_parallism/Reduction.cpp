@@ -22,7 +22,7 @@ extern "C" void reduction_kl_init(atmi_lparm_t *lparm);
 extern "C" void reduction_kl_sync();
 
 int main(int argc, char* argv[]) {
-    int length = 32;
+    int length = 1024;
 	int *input_gpu = (int*) malloc(sizeof(int)*(length));
 	int *input_cpu = (int*) malloc(sizeof(int)*(length));
 
@@ -39,11 +39,11 @@ int main(int argc, char* argv[]) {
     reduction(lparm_gpu, input_gpu, length >> 1);
 
     reduction_kl_sync();
-    for(int ii = 0; ii < length; ii++)
-    {
-        printf("%d ", input_gpu[ii]);
-    }
-    printf("\n");
+    //for(int ii = 0; ii < length; ii++)
+    //{
+    //printf("%d ", input_gpu[ii]);
+    //}
+    printf("sum: %d\n", input_gpu[0]);
 	free(input_cpu);
 	free(input_gpu);
 	return 0;

@@ -175,7 +175,12 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_task_t *var0, ");
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_task_t *var0)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_task_t *var0, ");
+    }
     
     int var_idx = 0;
     pch = strtok (NULL, ",)");
@@ -203,8 +208,14 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_lparm_t *lparm, ");
-    
+   
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm, ");
+    }
+
     int var_idx = 0;
     pch = strtok (NULL, ",)");
     //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);

@@ -33,12 +33,10 @@ int main(int argc, char* argv[]) {
 
     ATMI_LPARM_1D(lparm_gpu, length >> 1);
     lparm_gpu->synchronous = ATMI_TRUE;
-
     reduction_kl_init(lparm_gpu);
-
     reduction(lparm_gpu, input_gpu, length >> 1);
 
-    reduction_kl_sync();
+    //reduction_kl_sync();
     //for(int ii = 0; ii < length; ii++)
     //{
     //printf("%d ", input_gpu[ii]);

@@ -129,9 +129,7 @@ struct atmi_klparm_s {
    int barrier;               /* default = SNK_UNORDERED */
    int acquire_fence_scope;   /* default = 2 */
    int release_fence_scope;   /* default = 2 */
-   hsa_kernel_dispatch_packet_t *plist;
-   uint64_t *qlist;
-   hsa_signal_t *slist;
+   atmi_klist_t *klist;
 };
 
 /* String macros to initialize popular default launch parameters.             */ 

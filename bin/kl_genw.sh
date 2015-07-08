@@ -47,9 +47,12 @@ function write_kernel_init_template(){
     atmi_klist->qlist = (uint64_t *)realloc(atmi_klist->qlist, sizeof(uint64_t) * atmi_klist->num_queue);
     atmi_klist->qlist[atmi_klist->num_queue - 1] = (uint64_t)queue;
 
-    hsa_signal_t signal;
-    err = hsa_signal_create(0, 0, NULL, &signal);
-    ErrorCheck(Creating a HSA signal, err);
+    hsa_signal_t signal = 0;
+    if(lparm->synchronous == ATMI_FALSE)
+    {
+        err = hsa_signal_create(0, 0, NULL, &signal);
+        ErrorCheck(Creating a HSA signal, err);
+    }
 
     atmi_klist->num_signal++;
     atmi_klist->slist = (hsa_signal_t *)realloc(atmi_klist->slist, sizeof(hsa_signal_t) * atmi_klist->num_signal);
@@ -111,11 +114,11 @@ function write_kernel_dispatch_template(){
 #include "hsa_kl.h"
 #include "atmi.h"
 
-#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.qlist=thisTask->klist->qlist,.slist=thisTask->klist->slist,.plist=thisTask->klist->plist} ; X = &_ ## X ;
+#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist} ; X = &_ ## X ;
 
 void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) {
 
-    hsa_queue_t* this_Q = (hsa_queue_t *)lparm_d->qlist[k_id];
+    hsa_queue_t* this_Q = (hsa_queue_t *)lparm_d->klist->qlist[k_id];
 
     /* Find the queue index address to write the packet info into.  */
     const uint32_t queueMask = this_Q->size - 1;
@@ -146,13 +149,13 @@ void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) {
 
     /* thisKernargAddress has already been set up in the beginning of this routine */
     /*  Bind kernel argument buffer to the aql packet.  */
-    hsa_kernel_dispatch_packet_t *aql = lparm_d->plist + k_id;
+    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id;
     this_aql->kernarg_address = aql->kernarg_address;
     this_aql->kernel_object = aql->kernel_object;
     this_aql->private_segment_size = aql->private_segment_size;
     this_aql->group_segment_size = aql->group_segment_size;
 
-    this_aql->completion_signal = lparm_d->slist[k_id];
+    this_aql->completion_signal = lparm_d->klist->slist[k_id];
     hsa_signal_add_relaxed(this_aql->completion_signal, 1);
 
     /*  Prepare and set the packet header */ 
@@ -354,9 +357,9 @@ __SEDCMD=" "
       echo "void spawn_${__KN}(atmi_klparm_t *lparm_d, $__CFN_ARGL){" >> $__SPAWN_CL
       echo "   int k_id = $KERNEL_NUM;" >> $__SPAWN_CL
       KERNEL_NUM=$((KERNEL_NUM + 1))
-      echo "   hsa_kernel_dispatch_packet_t *aql = lparm_d->plist + k_id;" >> $__SPAWN_CL
+      echo "   hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id;" >> $__SPAWN_CL
       echo "   struct ${__KN}_args_struct * ${__KN}_args = aql->kernarg_address;" >> $__SPAWN_CL
-      
+      echo "   lparm_d->klist->slist[k_id] = lparm_d->klist->slist[k_id] == 0 ? *((hsa_signal_t *)(thisTask->handle)) : lparm_d->klist->slist[k_id];" >> $__SPAWN_CL
 
       #     Write statements to fill in the argument structure and 
       #     keep track of updated CL arg list and new call list 

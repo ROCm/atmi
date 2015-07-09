@@ -150,22 +150,11 @@ int process_packet(hsa_queue_t *queue, int id)
                 break;
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
                 ;
-<<<<<<< HEAD
-                kernel_name = (char*)snk_kernels[packet->type].cpu_kernel.kernel_name;
-                uint64_t num_args = packet->arg[0];
-                //void *kernel_args = (void *)(packet->arg[1]);
-                snk_kernel_args_t *kernel_args = (snk_kernel_args_t *)(packet->arg[1]);
-                // pass task handle to kernel_args first param
-                // unpack kernel_args to num_params * (void *) args and invoke the
-                // function. May be uint64_t too?  
-                if(num_args > 0) assert(kernel_args != NULL);
-=======
-                const char *kernel_name = snk_kernels[packet->type].cpu_kernel.kernel_name;
+                kernel_name = (char *)snk_kernels[packet->type].cpu_kernel.kernel_name;
                 uint64_t num_params = packet->arg[0];
                 // typecast to char * to be able to do ptr arithmetic
                 char *kernel_args_ptr = (char *)(packet->arg[1]);
                 if(num_params > 0) assert(kernel_args_ptr != NULL);
->>>>>>> 374257b67bccb2339cd65233404792f3e3d10ee7
                 this_task = (atmi_task_t *)(packet->arg[2]);
                 assert(this_task != NULL);
                 DEBUG_PRINT("Invoking function %s with %" PRIu64 " args, thisTask: %p\n", kernel_name, num_params, this_task);

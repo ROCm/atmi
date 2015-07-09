@@ -126,7 +126,7 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
     int ldak, ldam, ldan;
     float *T, *C, *A, *B;
     
-    ATMI_LPARM_CPU(cpu_lp);
+    ATMI_LPARM(cpu_lp);
     cpu_lp->profilable = ATMI_TRUE;
     //cpu_lp->synchronous = ATMI_TRUE;
 

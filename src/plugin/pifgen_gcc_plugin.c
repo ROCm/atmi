@@ -168,6 +168,38 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 
+void generate_task_wrapper(char *text, const char *fn_name, const int num_params, char *fn_decl) {
+    char *pch = strtok(text,"<");
+    if(pch != NULL) strcpy(fn_decl, pch);
+    pch = strtok (NULL, ">");
+    strcat(fn_decl, fn_name);
+    strcat(fn_decl, "_wrapper");
+    pch = strtok (NULL, "(");
+    if(pch != NULL) strcat(fn_decl, pch);
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_task_t **var0)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_task_t **var0, ");
+    }
+    
+    int var_idx = 0;
+    pch = strtok (NULL, ",)");
+    //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
+    for(var_idx = 1; var_idx < num_params; var_idx++) {
+        pch = strtok (NULL, ",)");
+    //    DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        strcat(fn_decl, pch);
+        char var_decl[64] = {0}; 
+        sprintf(var_decl, "* var%d", var_idx);
+        strcat(fn_decl, var_decl);
+        if(var_idx == num_params - 1) // last param must end with )
+            strcat(fn_decl, ")");
+        else
+            strcat(fn_decl, ",");
+    }
+}
+
 void generate_task(char *text, const char *fn_name, const int num_params, char *fn_decl) {
     char *pch = strtok(text,"<");
     if(pch != NULL) strcpy(fn_decl, pch);
@@ -425,6 +457,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     int text_sz = strlen(text); 
     char text_dup[2048]; 
     strcpy(text_dup, text);
+    char text_dup_2[2048]; 
+    strcpy(text_dup_2, text);
     pp_clear_output_area(&tmp_buffer);
     fclose(f_tmp);
     int ret_del = remove("tmp.pif.def.c");
@@ -441,6 +475,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
     char pif_decl[2048];
     char fn_decl[2048];
+    char fn_cpu_wrapper_decl[2048];
 
     generate_pif(text, pif_name, num_params, pif_decl); 
     DEBUG_PRINT("PIF Decl: %s\n", pif_decl);
@@ -448,6 +483,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     generate_task(text_dup, fn_name, num_params, fn_decl); 
     DEBUG_PRINT("Task Decl: %s\n", fn_decl);
    
+    generate_task_wrapper(text_dup_2, fn_name, num_params, fn_cpu_wrapper_decl); 
+    DEBUG_PRINT("Fn CPU Wrapper Decl: %s\n", fn_cpu_wrapper_decl);
+    
     if(is_new_pif == 1) { //first time PIF is called 
         pp_printf((pif_printers[pif_index].pifdefs), "\nstatic int %s_FK = 0;\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ %s { \n", pif_decl);
@@ -475,37 +513,51 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pif_name, pif_name,
         pif_name,
         pif_name);
-#if 0
+        int arg_idx;
+#if 1
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        typedef struct cpu_args_struct_s {\n");
-        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
+        typedef struct cpu_args_struct_s {\n\
+            size_t arg0_size;\n\
+            atmi_task_t **arg0;\n");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-            %s  arg%d;\n",
-            arg_list[arg_idx], arg_idx);
+            size_t arg%d_size;\n\
+            %s* arg%d;\n",
+            arg_idx,
+            arg_list[arg_idx].c_str(), arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } cpu_args_struct_t; \n\
-        cpu_args_struct_t cpu_arg_list; \n\
-        cpu_arg_list.arg0 = NULL; \n\
+        void *thisKernargAddress = malloc(sizeof(cpu_args_struct_t));\n\
+        cpu_args_struct_t *args = (cpu_args_struct_t *)thisKernargAddress; \n\
+        args->arg0_size = sizeof(atmi_task_t **);\n\
+        args->arg0 = NULL; \
         ");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
-        cpu_arg_list.arg%d = (uint64_t)var%d;", arg_idx, arg_idx);
+        args->arg%d_size = sizeof(%s*); \n\
+        args->arg%d = (%s*)malloc(sizeof(%s));\n\
+        memcpy(args->arg%d, &var%d, sizeof(%s));\
+        ",
+            arg_idx, arg_list[arg_idx].c_str(),
+            arg_idx, arg_list[arg_idx].c_str(), arg_list[arg_idx].c_str(),
+            arg_idx, arg_idx, arg_list[arg_idx].c_str()
+            );
         }
-#endif
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+#else
+        pp_printf((pif_printers[pif_index].pifdefs), "\n\n\
         snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n\
         cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
                 ");
-        int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
         cpu_kernel_arg_list->args[%d] = (uint64_t)var%d;", arg_idx, arg_idx);
         }
+#endif
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
         return snk_cpu_kernel(lparm, \n\
                     \"%s\", \n\
-                    cpu_kernel_arg_list); \
+                    thisKernargAddress); \
                 ", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
@@ -571,8 +623,17 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     }
     if(devtype == ATMI_DEVTYPE_CPU) {
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
+        pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s {\n", fn_cpu_wrapper_decl);
+        pp_printf(&g_kerneldecls, "\
+    %s(*var0",
+        fn_name);
+        int arg_idx;
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf(&g_kerneldecls, ", *var%d", arg_idx);
+        }
+        pp_printf(&g_kerneldecls, ");\n}\n");
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s_wrapper\",.function=(snk_generic_fp)%s_wrapper},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
     } 
     else if(devtype == ATMI_DEVTYPE_GPU) {

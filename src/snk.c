@@ -87,7 +87,6 @@ int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
 extern snk_pif_kernel_table_t snk_kernels[SNK_MAX_FUNCTIONS];
-extern int snk_kernel_counter;
 
 int g_tasks_initialized = 0;
 
@@ -331,19 +330,20 @@ void set_task_state(atmi_task_t *t, const atmi_state_t state) {
     t->state = state;
 }
 
-void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype) {
+void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype, boolean profilable) {
     hsa_status_t err;
-    if(task->profile != NULL) {
+    //if(task->profile != NULL) {
+    if(profilable == ATMI_TRUE) {
         hsa_signal_t signal = *(hsa_signal_t *)(task->handle);
         hsa_amd_profiling_dispatch_time_t metrics;
         if(devtype == ATMI_DEVTYPE_GPU) {
             err = hsa_amd_profiling_get_dispatch_time(snk_gpu_agent, 
                     signal, &metrics); 
             ErrorCheck(Profiling GPU dispatch, err);
-            task->profile->start_time = metrics.start;
-            task->profile->end_time = metrics.end;
-            task->profile->dispatch_time = metrics.start;
-            task->profile->ready_time = metrics.start;
+            task->profile.start_time = metrics.start;
+            task->profile.end_time = metrics.end;
+            task->profile.dispatch_time = metrics.start;
+            task->profile.ready_time = metrics.start;
         }
         else {
             /* metrics for CPU tasks will be populated in the 
@@ -371,7 +371,7 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         while(task_head) {
             set_task_state(task_head->task, ATMI_COMPLETED);
-            set_task_metrics(task_head->task, task_head->devtype);
+            set_task_metrics(task_head->task, task_head->devtype, task_head->profilable);
             task_head = task_head->next;
         }
     }
@@ -382,7 +382,7 @@ extern void snk_stream_sync(atmi_stream_t *stream) {
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         while(task_head) {
             snk_task_wait(task_head->task);
-            set_task_metrics(task_head->task, task_head->devtype);
+            set_task_metrics(task_head->task, task_head->devtype, task_head->profilable);
             task_head = task_head->next;
         }
         #else
@@ -509,7 +509,7 @@ status_t check_change_in_device_type(atmi_stream_t *stream, hsa_queue_t *queue, 
     }
 }
 
-status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype) {
+status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t devtype, boolean profilable) {
     int stream_num = get_stream_id(stream); 
     if(stream_num == -1) {
         DEBUG_PRINT("Stream unregistered\n");
@@ -518,6 +518,7 @@ status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t 
 
     snk_task_list_t *node = (snk_task_list_t *)malloc(sizeof(snk_task_list_t));
     node->task = task;
+    node->profilable = profilable;
     node->next = NULL;
     node->devtype = devtype;
     if(StreamTable[stream_num].tasks == NULL) {
@@ -528,9 +529,9 @@ status_t register_task(atmi_stream_t *stream, atmi_task_t *task, atmi_devtype_t 
         node->next = cur;
     }
     StreamTable[stream_num].last_device_type = devtype;
-    DEBUG_PRINT("Registering %s task %p\n", 
+    DEBUG_PRINT("Registering %s task %p Profilable? %s\n", 
                 (devtype == ATMI_DEVTYPE_GPU) ? "GPU" : "CPU",
-                task);
+                task, (profilable == ATMI_TRUE) ? "Yes" : "No");
     return STATUS_SUCCESS;
 }
 
@@ -596,7 +597,6 @@ status_t snk_init_context(atmi_klist_t *atmi_klist) {
 
 void init_hsa() {
     if(g_hsa_initialized == 0) {
-        snk_kernel_counter = 0;
         status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
         g_hsa_initialized = 1;
@@ -741,16 +741,19 @@ status_t snk_init_gpu_context() {
 
 status_t snk_init_kernel(
                              const char *pif_name, 
+                             const atmi_devtype_t devtype,
                              const int num_params, 
                              const char *cpu_kernel_name, 
                              snk_generic_fp fn_ptr,
                              const char *gpu_kernel_name) {
+    static int snk_kernel_counter = 0;
     if(snk_kernel_counter < 0 || snk_kernel_counter >= SNK_MAX_FUNCTIONS) {
-        DEBUG_PRINT("Too many CPU functions. Increase SNK_MAX_FUNCTIONS value.\n");
+        DEBUG_PRINT("Too many kernel functions. Increase SNK_MAX_FUNCTIONS value.\n");
         return STATUS_ERROR;
     }
-    DEBUG_PRINT("PIF Name: %s, Num args: %d\n", pif_name, num_params);
+    DEBUG_PRINT("PIF[%d] Entry Name: %s, Num args: %d CPU Kernel: %s, GPU Kernel: %s\n", snk_kernel_counter, pif_name, num_params, cpu_kernel_name, gpu_kernel_name);
     snk_kernels[snk_kernel_counter].pif_name = pif_name;
+    snk_kernels[snk_kernel_counter].devtype = devtype;
     snk_kernels[snk_kernel_counter].num_params = num_params;
     snk_kernels[snk_kernel_counter].cpu_kernel.kernel_name = cpu_kernel_name;
     snk_kernels[snk_kernel_counter].cpu_kernel.function = fn_ptr; 
@@ -767,6 +770,7 @@ status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], const int sz) {
     for (i = 0; i < sz; i++) {
        snk_init_kernel(
                            pif_fn_table[i].pif_name, 
+                           pif_fn_table[i].devtype, 
                            pif_fn_table[i].num_params,
                            pif_fn_table[i].cpu_kernel.kernel_name, 
                            pif_fn_table[i].cpu_kernel.function,
@@ -806,11 +810,12 @@ status_t snk_get_gpu_kernel_info(
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
+    
     if(lparm->stream == NULL) {
         stream = &snk_default_stream_obj;
     } else {
@@ -849,24 +854,29 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
         //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
         if(snk_kernels[i].pif_name && pif_name) {
-            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].cpu_kernel.kernel_name != NULL) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) {
+                //    && snk_kernels[i].cpu_kernel.kernel_name != NULL) {
                 if(this_kernel_iter != lparm->kernel_id) {
                     this_kernel_iter++;
                     continue;
                 }
+                if(snk_kernels[i].devtype != ATMI_DEVTYPE_CPU) {
+                    fprintf(stderr, "ERROR:  Bad CPU kernel_id %d for PIF %s\n", this_kernel_iter, pif_name);
+                    return NULL;
+                }
                 /* FIXME: REUSE SIGNALS!! */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
-                    printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
-                    return ;
+                    fprintf(stderr, "ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
+                    return NULL;
                 }
                 const uint32_t num_params = snk_kernels[i].num_params;
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                 
-                /* pass this task handle to the kernel as an argument */
-                kernel_args->args[0] = (uint64_t) ret;
+                /* task handle is passed to the kernel as an argument
+                 * by the CPU agent, and not at launch time*/
 
                 /* Get profiling object. Can be NULL? */
-                ret->profile = lparm->profile;
+                // ret->profile = lparm->profile;
                 /* ID i is the kernel. Enqueue the function to the soft queue */
                 //DEBUG_PRINT("CPU Function [%d]: %s has %" PRIu32 " args\n", i, pif_name, _KN__cpu_task_num_args);
                 /*  Obtain the current queue write index. increases with each call to kernel  */
@@ -908,7 +918,8 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                     this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE);
 
                 /* Store dispatched time */
-                if(ret->profile) ret->profile->dispatch_time = get_nanosecs(context_init_time, dispatch_time);
+                if(lparm->profilable == ATMI_TRUE) ret->profile.dispatch_time = get_nanosecs(context_init_time, dispatch_time);
+                //if(ret->profile) ret->profile->dispatch_time = get_nanosecs(context_init_time, dispatch_time);
                 set_task_state(ret, ATMI_DISPATCHED);
                 /* Increment write index and ring doorbell to dispatch the kernel.  */
                 hsa_queue_store_write_index_relaxed(this_Q, index+1);
@@ -918,11 +929,11 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                     /* For default synchrnous execution, wait til kernel is finished.  */
                     snk_task_wait(ret);
                     set_task_state(ret, ATMI_COMPLETED);
-                    set_task_metrics(ret, ATMI_DEVTYPE_CPU);
+                    set_task_metrics(ret, ATMI_DEVTYPE_CPU, lparm->profilable);
                 }
                 else {
                     /* add task to the corresponding row in the stream table */
-                    register_task(stream, ret, ATMI_DEVTYPE_CPU);
+                    register_task(stream, ret, ATMI_DEVTYPE_CPU, lparm->profilable);
                 }
 
                 //SNK_NextTaskId = (SNK_NextTaskId + 1) % SNK_MAX_TASKS;
@@ -943,10 +954,14 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
         //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
         if(snk_kernels[i].pif_name && pif_name) {
-            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) {// && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
                 if(this_kernel_iter != lparm->kernel_id) {
                     this_kernel_iter++;
                     continue;
+                }
+                if(snk_kernels[i].devtype != ATMI_DEVTYPE_GPU) {
+                    fprintf(stderr, "ERROR:  Bad GPU kernel_id %d for PIF %s\n", this_kernel_iter, pif_name);
+                    return STATUS_ERROR;
                 }
                 const char *kernel_name = snk_kernels[i].gpu_kernel.kernel_name;
                 hsa_status_t err;
@@ -988,6 +1003,14 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     /* Add row to stream table for purposes of future synchronizations */
     register_stream(stream);
     
+    int ndim = -1; 
+    if(lparm->gridDim[2] > 1) 
+        ndim = 3;
+    else if(lparm->gridDim[1] > 1) 
+        ndim = 2;
+    else
+        ndim = 1;
+    
     /* get this stream's HSA queue (could be dynamically mapped or round robin
      * if it is an unordered stream */
     hsa_queue_t* this_Q = acquire_and_set_next_gpu_queue(stream);
@@ -1016,16 +1039,19 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
         //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
         if(snk_kernels[i].pif_name && pif_name) {
-            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) { // && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
                 if(this_kernel_iter != lparm->kernel_id) {
                     this_kernel_iter++;
                     continue;
                 }
-
+                if(snk_kernels[i].devtype != ATMI_DEVTYPE_GPU) {
+                    fprintf(stderr, "ERROR: Bad GPU kernel_id %d at fn_table index %d for PIF %s\n", this_kernel_iter, i, pif_name);
+                    return NULL;
+                }
                 /* FIXME: REUSE SIGNALS!! */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
-                    printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
-                    return ;
+                    fprintf(stderr, "ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
+                    return NULL;
                 }
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
 
@@ -1044,7 +1070,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                 kargs->arg6 = ret;
 
                 /* Get profiling object. Can be NULL? */
-                ret->profile = lparm->profile;
+                //ret->profile = lparm->profile;
 
                 /*  Obtain the current queue write index. increases with each call to kernel  */
                 uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
@@ -1058,20 +1084,20 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                 this_aql->completion_signal = *((hsa_signal_t*)(ret->handle));
 
                 /*  Process lparm values */
-                /*  this_aql.dimensions=(uint16_t) lparm->ndim; */
-                this_aql->setup  |= (uint16_t) lparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
-                this_aql->grid_size_x=lparm->gdims[0];
-                this_aql->workgroup_size_x=lparm->ldims[0];
-                if (lparm->ndim>1) {
-                    this_aql->grid_size_y=lparm->gdims[1];
-                    this_aql->workgroup_size_y=lparm->ldims[1];
+                /*  this_aql.dimensions=(uint16_t) ndim; */
+                this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
+                this_aql->grid_size_x=lparm->gridDim[0];
+                this_aql->workgroup_size_x=lparm->groupDim[0];
+                if (ndim>1) {
+                    this_aql->grid_size_y=lparm->gridDim[1];
+                    this_aql->workgroup_size_y=lparm->groupDim[1];
                 } else {
                     this_aql->grid_size_y=1;
                     this_aql->workgroup_size_y=1;
                 }
-                if (lparm->ndim>2) {
-                    this_aql->grid_size_z=lparm->gdims[2];
-                    this_aql->workgroup_size_z=lparm->ldims[2];
+                if (ndim>2) {
+                    this_aql->grid_size_z=lparm->gridDim[2];
+                    this_aql->workgroup_size_z=lparm->groupDim[2];
                 } else {
                     this_aql->grid_size_z=1;
                     this_aql->workgroup_size_z=1;
@@ -1105,11 +1131,11 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                     /* For default synchrnous execution, wait til kernel is finished.  */
                     snk_task_wait(ret);
                     set_task_state(ret, ATMI_COMPLETED);
-                    set_task_metrics(ret, ATMI_DEVTYPE_GPU);
+                    set_task_metrics(ret, ATMI_DEVTYPE_GPU, lparm->profilable);
                 }
                 else {
                     /* add task to the corresponding row in the stream table */
-                    register_task(stream, ret, ATMI_DEVTYPE_GPU);
+                    register_task(stream, ret, ATMI_DEVTYPE_GPU, lparm->profilable);
                 }
                 //SNK_NextTaskId = (SNK_NextTaskId + 1) % SNK_MAX_TASKS;
                 SNK_NextTaskId++;
@@ -1124,7 +1150,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 // below exploration for nested tasks
 atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *kernel_name,
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     atmi_task_t *ret = NULL;
     /*if(lparm->nested == ATMI_TRUE) {
         ret = snk_create_cpu_kernel(lparm, kernel_name,

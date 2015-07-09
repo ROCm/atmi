@@ -74,12 +74,9 @@ typedef struct snk_gpu_kernel_s {
      */
 } snk_gpu_kernel_t;
 
-typedef struct snk_kernel_args_s {
-    uint64_t args[20];
-} snk_kernel_args_t;
-
 typedef struct snk_pif_kernel_table_s {
     const char *pif_name; 
+    atmi_devtype_t devtype;
     int num_params;
     snk_cpu_kernel_t cpu_kernel;
     snk_gpu_kernel_t gpu_kernel;
@@ -101,6 +98,7 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
 
 status_t snk_init_kernel(
                              const char *pif_name, 
+                             const atmi_devtype_t devtype,
                              const int num_params, 
                              const char *cpu_kernel_name, 
                              snk_generic_fp fn_ptr,
@@ -121,7 +119,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
-                 snk_kernel_args_t *kernel_args);
+                 void *kernel_args);
 
 #ifdef __cplusplus
 }

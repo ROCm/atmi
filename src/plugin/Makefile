@@ -12,8 +12,6 @@ PLUGIN_SOURCE_FILES= pifgen_gcc_plugin.c
 GCCPLUGINS_DIR:= $(shell $(CC) -print-file-name=plugin)
 	CXXFLAGS+= -I$(GCCPLUGINS_DIR)/include -fPIC -O2 -I${ATMILIB_INC}
 
-$(LIB): $(PLUGIN_SOURCE_FILES)
+$(LIBDIR)/$(LIB): $(PLUGIN_SOURCE_FILES)
+	mkdir -p $(LIBDIR)
 	$(CPLUSPLUS) -shared $(CXXFLAGS) $^ -o $@
-
-install: $(LIB)
-	cp $^ $(LIBDIR)/

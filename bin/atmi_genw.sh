@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  snk_genw.sh: Part of snack that generates the user callable wrapper functions.
+#  atmi_genw.sh: Part of snack that generates the user callable wrapper functions.
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
@@ -108,21 +108,21 @@ function write_context_template(){
 /bin/cat  <<"EOF"
 
 /* Context(cl file) specific globals */
-hsa_agent_t                      _CN__CPU_Agent;
-hsa_region_t                     _CN__KernargRegion;
-hsa_region_t                     _CN__CPU_KernargRegion;
-int                              _CN__FC = 0; 
+hsa_agent_t                      __CN__CPU_Agent;
+hsa_region_t                     __CN__KernargRegion;
+hsa_region_t                     __CN__CPU_KernargRegion;
+int                              __CN__FC = 0; 
 
-#include "_CN__brig.h" 
+#include "__CN__brig.h" 
 
-status_t _CN__InitContext(){
+status_t __CN__InitContext(){
     return snk_init_context(
-                            _CN__HSA_BrigMem,
-                            &_CN__KernargRegion,
-                            &_CN__CPU_Agent,
-                            &_CN__CPU_KernargRegion
+                            __CN__HSA_BrigMem,
+                            &__CN__KernargRegion,
+                            &__CN__CPU_Agent,
+                            &__CN__CPU_KernargRegion
                             );
-} /* end of __CN__InitContext */
+} /* end of ___CN__InitContext */
 
 EOF
 }
@@ -148,10 +148,10 @@ function write_InitKernel_template(){
 /bin/cat <<"EOF"
 extern status_t _KN__init(){
 
-    if (_CN__FC == 0 ) {
-       status_t status = _CN__InitContext();
+    if (__CN__FC == 0 ) {
+       status_t status = __CN__InitContext();
        if ( status  != STATUS_SUCCESS ) return; 
-       _CN__FC = 1;
+       __CN__FC = 1;
     }
     //snk_init_cpu_kernel();
     return snk_init_gpu_kernel(&_KN__Symbol, 
@@ -166,10 +166,10 @@ extern status_t _KN__init(){
 
 extern status_t _KN__gpu_init(){
 
-    if (_CN__FC == 0 ) {
-       status_t status = _CN__InitContext();
+    if (__CN__FC == 0 ) {
+       status_t status = __CN__InitContext();
        if ( status  != STATUS_SUCCESS ) return; 
-       _CN__FC = 1;
+       __CN__FC = 1;
     }
     return snk_init_gpu_kernel(&_KN__Symbol, 
                       "&__OpenCL__KN__kernel",
@@ -183,11 +183,11 @@ extern status_t _KN__gpu_init(){
 
 extern status_t _KN__stop(){
     status_t err;
-    if (_CN__FC == 0 ) {
+    if (__CN__FC == 0 ) {
        /* weird, but we cannot stop unless we initialized the context */
-       err = _CN__InitContext();
+       err = __CN__InitContext();
        if ( err != STATUS_SUCCESS ) return err; 
-       _CN__FC = 1;
+       __CN__FC = 1;
     }
     if ( _KN__GPU_FK == 1 ) {
         /*  Currently nothing kernel specific must be recovered */
@@ -205,7 +205,7 @@ function write_kernel_template(){
 /bin/cat <<"EOF"
     return snk_gpu_kernel(lparm, 
                 _KN__Kernel_Object, 
-                _KN__Group_Segment_Size,
+                group_base,
                 _KN__Private_Segment_Size, 
                 thisKernargAddress
                 );
@@ -301,7 +301,7 @@ function parse_arg() {
 #   echo "arg_name:$arg_name arg_type:$arg_type  simple_arg_type:$simple_arg_type last_char:$last_char"
 }
 
-#  snk_genw starts here
+#  atmi_genw starts here
    
 #  Inputs 
 __SN=$1
@@ -315,7 +315,7 @@ __CWRAP=$5
 __HDRF=$6
 __UPDATED_CL=$7
 
-# If snack call snk_genw with -fort option
+# If snack call atmi_genw with -fort option
 __IS_FORTRAN=$8
 
 # If snack was called with -noglobs
@@ -398,6 +398,12 @@ __SEDCMD=" "
       for _val in $__ARGL ; do 
          if ((NEXTI > 0)) ; then 
          parse_arg $_val
+         if [ $is_local == 1 ] ; then 
+            arg_type="size_t"
+            simple_arg_type="size_t"
+            arg_name="${arg_name}_size"
+            last_char=" " 
+         fi
          __CFN_ARGL="${__CFN_ARGL}${sepchar}${simple_arg_type}${last_char} ${arg_name}"
          __PROTO_ARGL="${__PROTO_ARGL}${sepchar}${arg_type} ${arg_name}"
          sepchar=","
@@ -436,7 +442,9 @@ __SEDCMD=" "
       #echo "   int ret = posix_memalign(&thisKernargAddress, 4096, ${__KN}_Kernarg_Segment_Size); " >> $__CWRAP
 	  #echo "   hsa_memory_allocate(${__SN}_KernargRegion, ${__KN}_Kernarg_Segment_Size, &thisKernargAddress); " >> $__CWRAP
 #     How to map a structure into an malloced memory area?
-      echo "    struct ${__KN}_args_struct {" >> $__CWRAP
+      echo "   size_t group_base ; " >>$__CWRAP 
+      echo "   group_base  = (size_t) ${__KN}_Group_Segment_Size;" >>$__CWRAP 
+      echo "   struct ${__KN}_args_struct {" >> $__CWRAP
       NEXTI=0
       if [ $GENW_ADD_DUMMY ] ; then 
          echo "       uint64_t arg0;"  >> $__CWRAP
@@ -453,7 +461,11 @@ __SEDCMD=" "
          if ((NEXTI != 6)) ; then 
          parse_arg $_val
          if [ "$last_char" == "*" ] ; then 
-            echo "       ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
+            if [ $is_local == 1 ] ; then 
+               echo "       uint64_t arg${NEXTI};" >> $__CWRAP
+            else
+               echo "       ${simple_arg_type}* arg${NEXTI};"  >> $__CWRAP
+            fi
          else
             is_scalar $simple_arg_type
             if [ $? == 1 ] ; then 
@@ -500,7 +512,12 @@ __SEDCMD=" "
          if [ "$last_char" == "*" ] ; then 
             arglistw="${arglistw}${sepchar}${arg_type} ${arg_name}"
             calllist="${calllist}${sepchar}${arg_name}"
-            echo "    ${__KN}_args->arg${NEXTI} = $arg_name ; "  >> $__CWRAP
+            if [ $is_local == 1 ] ; then 
+               echo "    ${__KN}_args->arg${NEXTI} = (unit64_t) group_base ; "  >> $__CWRAP
+               echo "    group_base += ( sizeof($simple_arg_type) * ${arg_name}_size ) ; " >> $__CWRAP
+            else
+               echo "    ${__KN}_args->arg${NEXTI} = $arg_name ; "  >> $__CWRAP
+            fi
          else
             is_scalar $simple_arg_type
             if [ $? == 1 ] ; then 

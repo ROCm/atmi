@@ -5,6 +5,7 @@
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
  * --------------------------------------------------------------------------------- */
+typedef void* ARG_TYPE;
 #define COMMA ,
 #define REPEAT(name)   COMMA name
 #define REPEAT2(name)  REPEAT(name)   REPEAT(name) 

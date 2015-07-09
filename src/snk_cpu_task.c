@@ -45,7 +45,6 @@
 #include "profiling.h"
 
 #include <assert.h>
-
 agent_t agent[SNK_MAX_CPU_QUEUES];
 
 hsa_signal_t worker_sig[SNK_MAX_CPU_QUEUES];
@@ -151,6 +150,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 break;
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
                 ;
+<<<<<<< HEAD
                 kernel_name = (char*)snk_kernels[packet->type].cpu_kernel.kernel_name;
                 uint64_t num_args = packet->arg[0];
                 //void *kernel_args = (void *)(packet->arg[1]);
@@ -159,10 +159,29 @@ int process_packet(hsa_queue_t *queue, int id)
                 // unpack kernel_args to num_params * (void *) args and invoke the
                 // function. May be uint64_t too?  
                 if(num_args > 0) assert(kernel_args != NULL);
+=======
+                const char *kernel_name = snk_kernels[packet->type].cpu_kernel.kernel_name;
+                uint64_t num_params = packet->arg[0];
+                // typecast to char * to be able to do ptr arithmetic
+                char *kernel_args_ptr = (char *)(packet->arg[1]);
+                if(num_params > 0) assert(kernel_args_ptr != NULL);
+>>>>>>> 374257b67bccb2339cd65233404792f3e3d10ee7
                 this_task = (atmi_task_t *)(packet->arg[2]);
                 assert(this_task != NULL);
-                DEBUG_PRINT("Invoking function %s with %" PRIu64 " args\n", kernel_name, num_args);
-                switch(num_args) {
+                DEBUG_PRINT("Invoking function %s with %" PRIu64 " args, thisTask: %p\n", kernel_name, num_params, this_task);
+                char **kernel_args = (char **)malloc(sizeof(char *) * num_params);
+                int kernarg_id = 0;
+                size_t kernarg_offset = 0;
+                // unpack kernel_args to num_params * (void *) args and invoke function
+                for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
+                    size_t kernarg_size = *(size_t *)(kernel_args_ptr + kernarg_offset);
+                    kernarg_offset += sizeof(size_t); 
+                    kernel_args[kernarg_id] = *(char **)(kernel_args_ptr + kernarg_offset);
+                    kernarg_offset += kernarg_size; 
+                }
+                // pass task handle to kernel_args first param
+                kernel_args[0] = (char *)&this_task;
+                switch(num_params) {
                     case 0: 
                         ;
                         void (*function0) (void) =
@@ -175,390 +194,375 @@ int process_packet(hsa_queue_t *queue, int id)
                         break;
                     case 1: 
                         ;
-                        void (*function1) (uint64_t) =
-                            (void (*)(uint64_t)) snk_kernels[packet->type].cpu_kernel.function;
-                        DEBUG_PRINT("Args: %" PRIu64 "\n", 
-                                kernel_args->args[0]
+                        void (*function1) (ARG_TYPE) =
+                            (void (*)(ARG_TYPE)) snk_kernels[packet->type].cpu_kernel.function;
+                        DEBUG_PRINT("Args: %p\n", 
+                                kernel_args[0]
                                 );
                         function1(
-                                kernel_args->args[0]
+                                kernel_args[0]
                                 );
                         break;
                     case 2: 
                         ;
-                        void (*function2) (uint64_t, uint64_t) =
-                            (void (*)(uint64_t, uint64_t)) snk_kernels[packet->type].cpu_kernel.function;
-                        DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 "\n", 
-                                kernel_args->args[0],
-                                kernel_args->args[1]
+                        void (*function2) (ARG_TYPE, ARG_TYPE) =
+                            (void (*)(ARG_TYPE, ARG_TYPE)) snk_kernels[packet->type].cpu_kernel.function;
+                        DEBUG_PRINT("Args: %p %p\n", 
+                                kernel_args[0],
+                                kernel_args[1]
                                 );
                         function2(
-                                kernel_args->args[0],
-                                kernel_args->args[1]
+                                kernel_args[0],
+                                kernel_args[1]
                                 );
                         break;
                     case 3: 
                         ;
-                        void (*function3) (uint64_t REPEAT2(uint64_t)) =
-                            (void (*)(uint64_t REPEAT2(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function3) (ARG_TYPE REPEAT2(ARG_TYPE)) =
+                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function3(
-                                kernel_args->args[0],
-                                kernel_args->args[1],
-                                kernel_args->args[2]
+                                kernel_args[0],
+                                kernel_args[1],
+                                kernel_args[2]
                                 );
                         break;
                     case 4: 
                         ;
-                        void (*function4) (uint64_t REPEAT2(uint64_t) REPEAT(uint64_t)) =
-                            (void (*)(uint64_t REPEAT2(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function4) (ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) =
+                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function4(
-                                kernel_args->args[0],
-                                kernel_args->args[1],
-                                kernel_args->args[2],
-                                kernel_args->args[3]
+                                kernel_args[0],
+                                kernel_args[1],
+                                kernel_args[2],
+                                kernel_args[3]
                                 );
                         break;
                     case 5: 
                         ;
-                        void (*function5) (uint64_t REPEAT4(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function5) (ARG_TYPE REPEAT4(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function5(
-                                kernel_args->args[0],
-                                kernel_args->args[1],
-                                kernel_args->args[2],
-                                kernel_args->args[3],
-                                kernel_args->args[4]
+                                kernel_args[0],
+                                kernel_args[1],
+                                kernel_args[2],
+                                kernel_args[3],
+                                kernel_args[4]
                                 );
                         break;
                     case 6: 
                         ;
-                        void (*function6) (uint64_t REPEAT4(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function6) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function6(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
                                 );
                         break;
                     case 7: 
                         ;
-                        void (*function7) (uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function7) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function7(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
                                 );
                         break;
                     case 8: 
                         ;
-                        void (*function8) (uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function8) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function8(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
                                 );
                         break;
                     case 9: 
                         ;
-                        void (*function9) (uint64_t REPEAT8(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function9) (ARG_TYPE REPEAT8(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function9(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
                                 );
                         break;
                     case 10: 
                         ;
-                        void (*function10) (uint64_t REPEAT8(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function10) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function10(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
                                 );
                         break;
                     case 11: 
                         ;
-                        void (*function11) (uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function11) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function11(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
                                 );
                         break;
                     case 12: 
                         ;
-                        void (*function12) (uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function12) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function12(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
                                 );
                         break;
                     case 13: 
                         ;
-                        void (*function13) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function13) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function13(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
                                 );
                         break;
                     case 14: 
                         ;
-                        void (*function14) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
-                        DEBUG_PRINT("Function Ptr: %p\n", function14);
-                        float arg_float = (float)kernel_args->args[1];
-                        DEBUG_PRINT("Args: %" PRIu64 " %" PRIu64 " (float=%f) %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n", 
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,arg_float
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
-                                );
+                        void (*function14) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function14(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
                                 );
                         break;
                     case 15: 
                         ;
-                        void (*function15) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function15) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function15(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
-                                ,kernel_args->args[14]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
                                 );
                         break;
                     case 16: 
                         ;
-                        void (*function16) (uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT8(uint64_t) REPEAT4(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function16) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function16(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
-                                ,kernel_args->args[14]
-                                ,kernel_args->args[15]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
+                                ,kernel_args[15]
                                 );
                         break;
                     case 17: 
                         ;
-                        void (*function17) (uint64_t REPEAT16(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function17) (ARG_TYPE REPEAT16(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function17(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
-                                ,kernel_args->args[14]
-                                ,kernel_args->args[15]
-                                ,kernel_args->args[16]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
+                                ,kernel_args[15]
+                                ,kernel_args[16]
                                 );
                         break;
                     case 18: 
                         ;
-                        void (*function18) (uint64_t REPEAT16(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function18) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function18(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
-                                ,kernel_args->args[14]
-                                ,kernel_args->args[15]
-                                ,kernel_args->args[16]
-                                ,kernel_args->args[17]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
+                                ,kernel_args[15]
+                                ,kernel_args[16]
+                                ,kernel_args[17]
                                 );
                         break;
                     case 19: 
                         ;
-                        void (*function19) (uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function19) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function19(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
-                                ,kernel_args->args[14]
-                                ,kernel_args->args[15]
-                                ,kernel_args->args[16]
-                                ,kernel_args->args[17]
-                                ,kernel_args->args[18]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
+                                ,kernel_args[15]
+                                ,kernel_args[16]
+                                ,kernel_args[17]
+                                ,kernel_args[18]
                                 );
                         break;
                     case 20: 
                         ;
-                        void (*function20) (uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t)) = 
-                            (void (*)(uint64_t REPEAT16(uint64_t) REPEAT2(uint64_t) REPEAT(uint64_t))) snk_kernels[packet->type].cpu_kernel.function;
+                        void (*function20) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
                         function20(
-                                kernel_args->args[0]
-                                ,kernel_args->args[1]
-                                ,kernel_args->args[2]
-                                ,kernel_args->args[3]
-                                ,kernel_args->args[4]
-                                ,kernel_args->args[5]
-                                ,kernel_args->args[6]
-                                ,kernel_args->args[7]
-                                ,kernel_args->args[8]
-                                ,kernel_args->args[9]
-                                ,kernel_args->args[10]
-                                ,kernel_args->args[11]
-                                ,kernel_args->args[12]
-                                ,kernel_args->args[13]
-                                ,kernel_args->args[14]
-                                ,kernel_args->args[15]
-                                ,kernel_args->args[16]
-                                ,kernel_args->args[17]
-                                ,kernel_args->args[18]
-                                ,kernel_args->args[19]
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
+                                ,kernel_args[15]
+                                ,kernel_args[16]
+                                ,kernel_args[17]
+                                ,kernel_args[18]
+                                ,kernel_args[19]
                                 );
                         break;
                     default: 
 
-                        DEBUG_PRINT("Too many function arguments: %"  PRIu64 "\n", num_args);
+                        DEBUG_PRINT("Too many function arguments: %"  PRIu64 "\n", num_params);
                              check(Too many function arguments, HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS);
                              break;
                 }
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
-                // FIXME: release the kernel args mem region
-                // free(packet->arg[1]);
+                for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
+                    if(kernarg_id == 0) continue; // task handle should be managed elsewhere in the runtime
+                    free(kernel_args[kernarg_id]);
+                }
+                free(kernel_args);
+                free(kernel_args_ptr);
                 break;
         }
         if (packet->completion_signal.handle != 0) {

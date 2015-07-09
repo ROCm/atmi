@@ -812,8 +812,7 @@ status_t snk_get_gpu_kernel_info(
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
-                 //void *kernel_args) {
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
@@ -875,8 +874,8 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                 const uint32_t num_params = snk_kernels[i].num_params;
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                 
-                /* pass this task handle to the kernel as an argument */
-                kernel_args->args[0] = (uint64_t) ret;
+                /* task handle is passed to the kernel as an argument
+                 * by the CPU agent, and not at launch time*/
 
                 /* Get profiling object. Can be NULL? */
                 // ret->profile = lparm->profile;
@@ -1153,7 +1152,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 // below exploration for nested tasks
 atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *kernel_name,
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     atmi_task_t *ret = NULL;
     /*if(lparm->nested == ATMI_TRUE) {
         ret = snk_create_cpu_kernel(lparm, kernel_name,

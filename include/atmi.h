@@ -1,4 +1,5 @@
 #ifndef __ATMI_H__
+#include "hsa_kl.h"
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Asynchronous Task Management Interface ATMI file: atmi.h                   */

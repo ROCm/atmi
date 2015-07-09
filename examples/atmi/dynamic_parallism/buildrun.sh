@@ -20,7 +20,7 @@ export PATH=$HSA_LLVM_PATH:$PATH
 echo 
 if [ -f hello ] ; then rm hello ; fi
 echo g++ -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=hw.cl -O3 -I$ATMI_INC
-g++-4.9 -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=hw.cl -O3 -I$ATMI_INC
+g++-4.9 -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=hw.cl -fplugin-arg-atmi_pifgen-pifgenfile=Reduction.cpp.pifdefs.c -O3 -I$ATMI_INC
 
 #cat kernel_wrapper.c >> Reduction.cpp.pifdefs.c
 
@@ -31,3 +31,4 @@ g++-4.9 -o reduction Reduction.o Reduction.cpp.pifdefs.c -g -O3 -lelf -L$ATMI_RU
 echo
 echo ./reduction 
 ./reduction 
+#gdb reduction

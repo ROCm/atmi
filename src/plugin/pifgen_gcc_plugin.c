@@ -696,7 +696,7 @@ register_headers (void *event_data, void *data)
     }
 }
 
-void kl_uint (FILE *fp_pifdefs_genw) {
+void kl_unit (FILE *fp_pifdefs_genw) {
     FILE *fp_kl_genw = fopen("kernel_wrapper.c", "rb");
 
     if(fp_pifdefs_genw == NULL || fp_kl_genw == NULL)
@@ -766,7 +766,7 @@ register_finish_unit (void *event_data, void *data) {
         pp_clear_output_area((it->pifdefs));
     }
 
-    kl_uint(fp_pifdefs_genw);
+    kl_unit(fp_pifdefs_genw);
     fclose(fp_pifdefs_genw);
 }
 

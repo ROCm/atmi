@@ -102,6 +102,31 @@ std::string exec(const char* cmd) {
     return result;
 }
 
+void brig2brigh(const char *brigfilename, const char *cl_module_name) {
+    std::string cmd = exec("which hexdump");
+    
+    if(cmd == "" || cmd == "ERROR") {
+        fprintf(stderr, "hexdump command is needed for converting brig to a string array, and it is not found in the PATH.\n");
+        exit(-1);
+    }
+    std::string outfile(cl_module_name);
+    outfile += "_brig.h"; 
+    FILE *fp_brigh = fopen(outfile.c_str(), "w");
+    fprintf(fp_brigh, "char %s_HSA_BrigMem[] = {\n", cl_module_name); 
+
+    std::string hex_cmd("hexdump -v -e '\"0x\" 1/1 \"%02X\" \",\"' ");
+    hex_cmd += std::string(brigfilename);
+    std::string hex_str = exec(hex_cmd.c_str());
+    if(hex_str == "" || hex_str == "ERROR") {
+        fprintf(stderr, "hexdump on brig file %s failed.\n", brigfilename);
+        exit(-1);
+    }
+    
+    fprintf(fp_brigh, "%s};\n", hex_str.c_str());
+    fprintf(fp_brigh, "size_t %s_HSA_BrigMemSz = sizeof(%s_HSA_BrigMem);\n", cl_module_name, cl_module_name); 
+    fclose(fp_brigh);
+}
+
 void cl2brigh(const char *clfilename) {
     std::string cmd;
     cmd.clear();
@@ -143,6 +168,38 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 
+void generate_task_wrapper(char *text, const char *fn_name, const int num_params, char *fn_decl) {
+    char *pch = strtok(text,"<");
+    if(pch != NULL) strcpy(fn_decl, pch);
+    pch = strtok (NULL, ">");
+    strcat(fn_decl, fn_name);
+    strcat(fn_decl, "_wrapper");
+    pch = strtok (NULL, "(");
+    if(pch != NULL) strcat(fn_decl, pch);
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_task_t **var0)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_task_t **var0, ");
+    }
+    
+    int var_idx = 0;
+    pch = strtok (NULL, ",)");
+    //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
+    for(var_idx = 1; var_idx < num_params; var_idx++) {
+        pch = strtok (NULL, ",)");
+    //    DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        strcat(fn_decl, pch);
+        char var_decl[64] = {0}; 
+        sprintf(var_decl, "* var%d", var_idx);
+        strcat(fn_decl, var_decl);
+        if(var_idx == num_params - 1) // last param must end with )
+            strcat(fn_decl, ")");
+        else
+            strcat(fn_decl, ",");
+    }
+}
+
 void generate_task(char *text, const char *fn_name, const int num_params, char *fn_decl) {
     char *pch = strtok(text,"<");
     if(pch != NULL) strcpy(fn_decl, pch);
@@ -150,7 +207,12 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_task_t *var0, ");
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_task_t *var0)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_task_t *var0, ");
+    }
     
     int var_idx = 0;
     pch = strtok (NULL, ",)");
@@ -178,8 +240,14 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_lparm_t *lparm, ");
-    
+   
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm, ");
+    }
+
     int var_idx = 0;
     pch = strtok (NULL, ",)");
     //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
@@ -389,6 +457,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     int text_sz = strlen(text); 
     char text_dup[2048]; 
     strcpy(text_dup, text);
+    char text_dup_2[2048]; 
+    strcpy(text_dup_2, text);
     pp_clear_output_area(&tmp_buffer);
     fclose(f_tmp);
     int ret_del = remove("tmp.pif.def.c");
@@ -405,6 +475,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
     char pif_decl[2048];
     char fn_decl[2048];
+    char fn_cpu_wrapper_decl[2048];
 
     generate_pif(text, pif_name, num_params, pif_decl); 
     DEBUG_PRINT("PIF Decl: %s\n", pif_decl);
@@ -412,6 +483,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     generate_task(text_dup, fn_name, num_params, fn_decl); 
     DEBUG_PRINT("Task Decl: %s\n", fn_decl);
    
+    generate_task_wrapper(text_dup_2, fn_name, num_params, fn_cpu_wrapper_decl); 
+    DEBUG_PRINT("Fn CPU Wrapper Decl: %s\n", fn_cpu_wrapper_decl);
+    
     if(is_new_pif == 1) { //first time PIF is called 
         pp_printf((pif_printers[pif_index].pifdefs), "\nstatic int %s_FK = 0;\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ %s { \n", pif_decl);
@@ -425,46 +499,69 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 pif_name, pif_name, pif_name,
                 pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(lparm->devtype == ATMI_DEVTYPE_CPU) {\n\
+    int k_id = lparm->kernel_id; \n\
+    if(k_id < 0 || k_id >= sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0])) { \n\
+        fprintf(stderr, \"Kernel_id out of bounds for PIF %s.\\n\"); \n\
+        return NULL; \n\
+    } \n\
+    atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
+    if(devtype == ATMI_DEVTYPE_CPU) {\n\
         if(cpu_initalized == 0) { \n\
             snk_init_cpu_context();\n\
             cpu_initalized = 1;\n\
-        }\n");
-#if 0
+        }\n",
+        pif_name, pif_name,
+        pif_name,
+        pif_name);
+        int arg_idx;
+#if 1
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        typedef struct cpu_args_struct_s {\n");
-        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
+        typedef struct cpu_args_struct_s {\n\
+            size_t arg0_size;\n\
+            atmi_task_t **arg0;\n");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-            %s  arg%d;\n",
-            arg_list[arg_idx], arg_idx);
+            size_t arg%d_size;\n\
+            %s* arg%d;\n",
+            arg_idx,
+            arg_list[arg_idx].c_str(), arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } cpu_args_struct_t; \n\
-        cpu_args_struct_t cpu_arg_list; \n\
-        cpu_arg_list.arg0 = NULL; \n\
+        void *thisKernargAddress = malloc(sizeof(cpu_args_struct_t));\n\
+        cpu_args_struct_t *args = (cpu_args_struct_t *)thisKernargAddress; \n\
+        args->arg0_size = sizeof(atmi_task_t **);\n\
+        args->arg0 = NULL; \
         ");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
-        cpu_arg_list.arg%d = (uint64_t)var%d;", arg_idx, arg_idx);
+        args->arg%d_size = sizeof(%s*); \n\
+        args->arg%d = (%s*)malloc(sizeof(%s));\n\
+        memcpy(args->arg%d, &var%d, sizeof(%s));\
+        ",
+            arg_idx, arg_list[arg_idx].c_str(),
+            arg_idx, arg_list[arg_idx].c_str(), arg_list[arg_idx].c_str(),
+            arg_idx, arg_idx, arg_list[arg_idx].c_str()
+            );
         }
-#endif
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+#else
+        pp_printf((pif_printers[pif_index].pifdefs), "\n\n\
         snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n\
         cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
                 ");
-        int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
         cpu_kernel_arg_list->args[%d] = (uint64_t)var%d;", arg_idx, arg_idx);
         }
+#endif
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
         return snk_cpu_kernel(lparm, \n\
                     \"%s\", \n\
-                    cpu_kernel_arg_list); \
+                    thisKernargAddress); \
                 ", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
-    else if(lparm->devtype == ATMI_DEVTYPE_GPU) {\n\
+    else if(devtype == ATMI_DEVTYPE_GPU) {\n\
         if(gpu_initalized == 0) {\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
@@ -526,13 +623,22 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     }
     if(devtype == ATMI_DEVTYPE_CPU) {
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
+        pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s {\n", fn_cpu_wrapper_decl);
+        pp_printf(&g_kerneldecls, "\
+    %s(*var0",
+        fn_name);
+        int arg_idx;
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf(&g_kerneldecls, ", *var%d", arg_idx);
+        }
+        pp_printf(&g_kerneldecls, ");\n}\n");
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s_wrapper\",.function=(snk_generic_fp)%s_wrapper},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
     } 
     else if(devtype == ATMI_DEVTYPE_GPU) {
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
             pif_name, num_params, fn_name);
     }
     //int idx = 0;
@@ -817,6 +923,26 @@ int plugin_init(struct plugin_name_args *plugin_info,
              */
             g_cl_modules.push_back(tokens[0]);
         }
+        else if(strcmp(plugin_info->argv[i].key, "brigfile") == 0) {
+            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
+            const char *brigfilename = plugin_info->argv[i].value;
+
+            /* remove ._brig.h */
+            vector<string> tokens = split(brigfilename, '.');
+            //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
+            for(std::vector<std::string>::iterator it = tokens.begin(); 
+                    it != tokens.end(); it++) {
+                DEBUG_PRINT("Brig File token: %s\n", it->c_str());
+            }
+            /* saving just the first token to the left of a dot. 
+             * Ideal solution should be to concatenate all tokens 
+             * except the cl with _ as the glue insted of dot
+             */
+            g_cl_modules.push_back(tokens[0]);
+            
+            /* compile CL to BRIG header file with char array */
+            brig2brigh(brigfilename, tokens[0].c_str());
+        }        
         else if(strcmp(plugin_info->argv[i].key, "brighfile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             const char *brighfilename = plugin_info->argv[i].value;

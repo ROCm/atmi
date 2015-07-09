@@ -739,6 +739,7 @@ status_t snk_init_gpu_context() {
 
 status_t snk_init_kernel(
                              const char *pif_name, 
+                             const atmi_devtype_t devtype,
                              const int num_params, 
                              const char *cpu_kernel_name, 
                              snk_generic_fp fn_ptr,
@@ -750,6 +751,7 @@ status_t snk_init_kernel(
     }
     DEBUG_PRINT("PIF[%d] Entry Name: %s, Num args: %d CPU Kernel: %s, GPU Kernel: %s\n", snk_kernel_counter, pif_name, num_params, cpu_kernel_name, gpu_kernel_name);
     snk_kernels[snk_kernel_counter].pif_name = pif_name;
+    snk_kernels[snk_kernel_counter].devtype = devtype;
     snk_kernels[snk_kernel_counter].num_params = num_params;
     snk_kernels[snk_kernel_counter].cpu_kernel.kernel_name = cpu_kernel_name;
     snk_kernels[snk_kernel_counter].cpu_kernel.function = fn_ptr; 
@@ -766,6 +768,7 @@ status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], const int sz) {
     for (i = 0; i < sz; i++) {
        snk_init_kernel(
                            pif_fn_table[i].pif_name, 
+                           pif_fn_table[i].devtype, 
                            pif_fn_table[i].num_params,
                            pif_fn_table[i].cpu_kernel.kernel_name, 
                            pif_fn_table[i].cpu_kernel.function,
@@ -805,8 +808,7 @@ status_t snk_get_gpu_kernel_info(
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
-                 //void *kernel_args) {
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
@@ -850,21 +852,26 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
         //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
         if(snk_kernels[i].pif_name && pif_name) {
-            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].cpu_kernel.kernel_name != NULL) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) {
+                //    && snk_kernels[i].cpu_kernel.kernel_name != NULL) {
                 if(this_kernel_iter != lparm->kernel_id) {
                     this_kernel_iter++;
                     continue;
                 }
+                if(snk_kernels[i].devtype != ATMI_DEVTYPE_CPU) {
+                    fprintf(stderr, "ERROR:  Bad CPU kernel_id %d for PIF %s\n", this_kernel_iter, pif_name);
+                    return NULL;
+                }
                 /* FIXME: REUSE SIGNALS!! */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
-                    printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
-                    return ;
+                    fprintf(stderr, "ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
+                    return NULL;
                 }
                 const uint32_t num_params = snk_kernels[i].num_params;
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                 
-                /* pass this task handle to the kernel as an argument */
-                kernel_args->args[0] = (uint64_t) ret;
+                /* task handle is passed to the kernel as an argument
+                 * by the CPU agent, and not at launch time*/
 
                 /* Get profiling object. Can be NULL? */
                 // ret->profile = lparm->profile;
@@ -945,10 +952,14 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
         //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
         if(snk_kernels[i].pif_name && pif_name) {
-            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) {// && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
                 if(this_kernel_iter != lparm->kernel_id) {
                     this_kernel_iter++;
                     continue;
+                }
+                if(snk_kernels[i].devtype != ATMI_DEVTYPE_GPU) {
+                    fprintf(stderr, "ERROR:  Bad GPU kernel_id %d for PIF %s\n", this_kernel_iter, pif_name);
+                    return STATUS_ERROR;
                 }
                 const char *kernel_name = snk_kernels[i].gpu_kernel.kernel_name;
                 hsa_status_t err;
@@ -1026,16 +1037,19 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
         //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
         if(snk_kernels[i].pif_name && pif_name) {
-            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0 && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) { // && snk_kernels[i].gpu_kernel.kernel_name != NULL) {
                 if(this_kernel_iter != lparm->kernel_id) {
                     this_kernel_iter++;
                     continue;
                 }
-
+                if(snk_kernels[i].devtype != ATMI_DEVTYPE_GPU) {
+                    fprintf(stderr, "ERROR: Bad GPU kernel_id %d at fn_table index %d for PIF %s\n", this_kernel_iter, i, pif_name);
+                    return NULL;
+                }
                 /* FIXME: REUSE SIGNALS!! */
                 if ( SNK_NextTaskId == SNK_MAX_TASKS ) {
-                    printf("ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
-                    return ;
+                    fprintf(stderr, "ERROR:  Too many parent tasks, increase SNK_MAX_TASKS =%d\n",SNK_MAX_TASKS);
+                    return NULL;
                 }
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
 
@@ -1134,7 +1148,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 // below exploration for nested tasks
 atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *kernel_name,
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     atmi_task_t *ret = NULL;
     /*if(lparm->nested == ATMI_TRUE) {
         ret = snk_create_cpu_kernel(lparm, kernel_name,

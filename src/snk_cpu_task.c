@@ -717,6 +717,7 @@ agent_fini()
     uint32_t i;
     for (i = 0; i < numWorkers; i++) {
         hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
+        hsa_signal_store_release(worker_sig[i], FINISH);
         pthread_join(agent_threads[i], NULL);
         hsa_queue_destroy(agent[i].queue);
     }

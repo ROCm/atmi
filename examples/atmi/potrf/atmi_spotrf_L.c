@@ -25,11 +25,11 @@
 
 extern _CPPSTRING_ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA) __attribute__((atmi_kernel("atmi_spotrf_kernel", "cpu")));
 
-extern _CPPSTRING_ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, int alpha, float *A, int LDA, float *B, int LDB) __attribute__((atmi_kernel("atmi_strsm_kernel", "cpu")));
+extern _CPPSTRING_ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, float alpha, float *A, int LDA, float *B, int LDB) __attribute__((atmi_kernel("atmi_strsm_kernel", "cpu")));
 
-extern _CPPSTRING_ void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, int alpha, const float *A, int LDA, int beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_ssyrk_kernel", "cpu")));
+extern _CPPSTRING_ void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, float alpha, const float *A, int LDA, float beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_ssyrk_kernel", "cpu")));
 
-extern _CPPSTRING_ void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, int alpha, const float *A, int LDA, const float *B, int LDB, int beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_sgemm_kernel", "cpu")));
+extern _CPPSTRING_ void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, float alpha, const float *A, int LDA, const float *B, int LDB, float beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_sgemm_kernel", "cpu")));
 
 
 void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA)
@@ -42,29 +42,29 @@ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int 
 #endif
 }
 
-void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, int alpha, float *A, int LDA, float *B, int LDB)
+void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, float alpha, float *A, int LDA, float *B, int LDB)
 {
 //    printf("TRSM(%d, %d)\n", m, k);
 #if !defined(DRY_RUN)
-    CORE_strsm(side, uplo, transA, diag, M, N, (float)alpha, A, LDA, B, LDB);
+    CORE_strsm(side, uplo, transA, diag, M, N, alpha, A, LDA, B, LDB);
 #endif
 }
 
-void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, int alpha, const float *A, int LDA, int beta, float *C, int LDC)
+void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, float alpha, const float *A, int LDA, float beta, float *C, int LDC)
 {
 //    printf("SYRK(%d, %d)\n", k, m);
 #if !defined(DRY_RUN)
-    CORE_ssyrk(uplo, trans, N, K, (float)alpha, A, LDA, (float)beta, C, LDC);
+    CORE_ssyrk(uplo, trans, N, K, alpha, A, LDA, beta, C, LDC);
 #endif
 }	 
 
-void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, int alpha, const float *A, int LDA, const float *B, int LDB, int beta, float *C, int LDC)
+void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, int m, int n, int k, PLASMA_enum transA, int transB, int M, int N, int K, float alpha, const float *A, int LDA, const float *B, int LDB, float beta, float *C, int LDC)
 {
 //    printf("GEMM(%d, %d, %d)\n", m, n, k);
 #if !defined(DRY_RUN)
 //    double start_t, end_t;
 //    start_t = get_cur_time();
-    CORE_sgemm(transA, transB, M, N, K, (float)alpha, A, LDA, B, LDB, (float)beta, C, LDC);
+    CORE_sgemm(transA, transB, M, N, K, alpha, A, LDA, B, LDB, beta, C, LDC);
 //    end_t = get_cur_time();
 //    printf("gemm %f\n", end_t-start_t);
 #endif

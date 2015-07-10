@@ -379,14 +379,12 @@ void push_global_int_decl(const char *var_name, const int value) {
     /* Inspired from SO solution
      * http://stackoverflow.com/questions/25998225/insert-global-variable-declaration-whit-a-gcc-plugin?rq=1
      */
-    tree global_var = build_decl(UNKNOWN_LOCATION, //DECL_SOURCE_LOCATION(current_function_decl),
-                        VAR_DECL, create_tmp_var_name(var_name), integer_type_node);
-    tree g_name = get_identifier(var_name);
-    DECL_NAME(global_var) = g_name;
+    tree global_var = build_decl(input_location, 
+                        VAR_DECL, get_identifier(var_name), integer_type_node);
     DECL_INITIAL(global_var) = build_int_cst (integer_type_node, value);
     TREE_READONLY(global_var) = 1;
     TREE_STATIC (global_var) = 1;
-    //DECL_CONTEXT (global_var) = decl;
+    //DECL_CONTEXT (global_var) = ???;
     varpool_add_new_variable(global_var);
     /*AND if you have thought to use in another subsequent compilation, you 
       will need to give it an assembler name like this*/
@@ -621,7 +619,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-            uint64_t arg%d;\n", arg_idx+6);
+            %s arg%d;\n", 
+            arg_list[arg_idx].c_str(), arg_idx + 6);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } __attribute__ ((aligned (16))); \n\
@@ -634,10 +633,10 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg3=0;\n\
         gpu_args->arg4=0;\n\
         gpu_args->arg5=0;\n\
-        gpu_args->arg6=(uint64_t)NULL;\n");
+        gpu_args->arg6=NULL;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-        gpu_args->arg%d=(uint64_t)var%d;\n", arg_idx+6, arg_idx);
+        gpu_args->arg%d=var%d;\n", arg_idx+6, arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         return snk_gpu_kernel(lparm,\n\

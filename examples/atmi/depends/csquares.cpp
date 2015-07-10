@@ -101,11 +101,10 @@ int main(int argc, char *argv[]) {
 
    // Dispatch 2 even_squares kernels and build dependency list for odd_squares.
    even_tasks[0] = even_squares_kernel(even_lp, inArray, outArray); // Half of even kernels go to CPU 
-   even_lp->kernel_id = 0;
+   even_lp->kernel_id = 1;
    even_tasks[1] = even_squares_kernel(even_lp, &inArray[N/2], &outArray[N/2]); // Other half goes to the GPU
    odd_lp->num_required = 2;
    odd_lp->requires = even_tasks;
-   odd_lp->kernel_id = 1;
    
    // Now dispatch odd_squares kernel dependent on BOTH even_squares  
    atmi_task_t* ret_task = odd_squares_kernel(odd_lp, outArray);

@@ -19,7 +19,9 @@
 #include <langhooks.h>
 #include <cpplib.h>
 #include <c-tree.h>
+#include <cgraph.h>
 #include <c-family/c-pragma.h>
+#include <gimple-expr.h>
 
 #include <map>
 #include <set>
@@ -54,7 +56,9 @@ string_table_t res_keywords_table[] = {
 
 static std::vector<std::string> g_cl_modules;
 
-static std::map<std::string, int> pif_table;
+// format of the pif_table
+// "PIF name", (pif_index_in_table, kernels_for_this_pif_count)
+static std::map<std::string, std::pair<int,int> > pif_table;
 typedef struct pif_printers_s {
    pretty_printer *pifdefs; 
    pretty_printer *fn_table; 
@@ -337,21 +341,27 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
 
 int get_pif_index(const char *pif_name) {
     /*DEBUG_PRINT("Looking up PIF %s\n", pif_name);
-    for(std::map<std::string, int>::iterator it = pif_table.begin();
-        it != pif_table.end(); it++) {
-        DEBUG_PRINT("%s, %d\n", it->first.c_str(), it->second);
-    }
     */
     if(pif_table.find(std::string(pif_name)) != pif_table.end()) {
-        return pif_table[pif_name];
+        return pif_table[pif_name].first;
     }
     return -1;
 }
 
+int get_pif_count(const char *pif_name) {
+    /*DEBUG_PRINT("Looking up PIF %s\n", pif_name);
+    */
+    if(pif_table.find(std::string(pif_name)) != pif_table.end()) {
+        return pif_table[pif_name].second;
+    }
+    return -1;
+}
+
+
 void register_pif(const char *pif_name) {
     std::string pif_name_str(pif_name);
     if(pif_table.find(pif_name_str) == pif_table.end()) {
-        pif_table[pif_name_str] = pif_printers.size();
+        pif_table[pif_name_str] = std::make_pair(pif_printers.size(), 1);
         //pif_table.insert(std::pair<std::string,int>(pif_name_str, pif_printers.size()));
         pif_printers_t pp;
         pp.pifdefs = new pretty_printer;
@@ -360,6 +370,26 @@ void register_pif(const char *pif_name) {
         pp_needs_newline ((pp.fn_table)) = true;
         pif_printers.push_back(pp);
     }
+    else {
+        pif_table[pif_name_str].second++;
+    }
+}
+
+void push_global_int_decl(const char *var_name, const int value) {
+    /* Inspired from SO solution
+     * http://stackoverflow.com/questions/25998225/insert-global-variable-declaration-whit-a-gcc-plugin?rq=1
+     */
+    tree global_var = build_decl(input_location, 
+                        VAR_DECL, get_identifier(var_name), integer_type_node);
+    DECL_INITIAL(global_var) = build_int_cst (integer_type_node, value);
+    TREE_READONLY(global_var) = 1;
+    TREE_STATIC (global_var) = 1;
+    //DECL_CONTEXT (global_var) = ???;
+    varpool_add_new_variable(global_var);
+    /*AND if you have thought to use in another subsequent compilation, you 
+      will need to give it an assembler name like this*/
+    //change_decl_assembler_name(global_var, g_name);
+    pushdecl(global_var);
 }
 
 static tree
@@ -589,7 +619,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-            uint64_t arg%d;\n", arg_idx+6);
+            %s arg%d;\n", 
+            arg_list[arg_idx].c_str(), arg_idx + 6);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } __attribute__ ((aligned (16))); \n\
@@ -602,10 +633,10 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg3=0;\n\
         gpu_args->arg4=0;\n\
         gpu_args->arg5=0;\n\
-        gpu_args->arg6=(uint64_t)NULL;\n");
+        gpu_args->arg6=NULL;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-        gpu_args->arg%d=(uint64_t)var%d;\n", arg_idx+6, arg_idx);
+        gpu_args->arg%d=var%d;\n", arg_idx+6, arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         return snk_gpu_kernel(lparm,\n\
@@ -641,6 +672,12 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
             pif_name, num_params, fn_name);
     }
+    // Push helper IDs for programmers to index into their kernels
+    // Helper IDs have prefix K_ID_
+    std::string fn_index_enum = std::string("K_ID_") + fn_name;
+    push_global_int_decl(fn_index_enum.c_str(), get_pif_count(pif_name) - 1);
+   
+    //
     //int idx = 0;
     // TODO: Think about the below and verify the better approach for 
     // parameter parsing. Ignore below if above code works.

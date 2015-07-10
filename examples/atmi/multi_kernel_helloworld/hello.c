@@ -21,11 +21,11 @@ int main(int argc, char *argv[]) {
     ATMI_LPARM(lparm);
     lparm->synchronous = ATMI_TRUE;
     
-    lparm->kernel_id = 0; // helloWorld_cpu_1
+    lparm->kernel_id = K_ID_helloWorld_cpu_1; // helloWorld_cpu_1
     atmi_task_t *t = helloWorld(lparm, "Hello HSA World");
     if(!t) printf("Task 1 not executed!\n");
 
-    lparm->kernel_id = 1; // helloWorld_cpu_2
+    lparm->kernel_id = K_ID_helloWorld_cpu_2; // helloWorld_cpu_2
     t = helloWorld(lparm, "Hello HSA World");
     if(!t) printf("Task 2 not executed!\n");
 

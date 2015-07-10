@@ -978,12 +978,12 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                 err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &kernel_segment_size);
                 ErrorCheck(Extracting the kernarg segment size from the executable, err);
 
-                *thisKernargAddress = malloc(kernel_segment_size);
+                //*thisKernargAddress = malloc(kernel_segment_size);
                 /* FIXME: HSA 1.0F may have a bug that serializes all queue
                  * operations when hsa_memory_allocate is used.
                  * Investigate more and revert back to
                  * hsa_memory_allocate once bug is fixed. */
-                //err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
+                err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
                 //ErrorCheck(Allocating memory for the executable-kernel, err);
 
                 break;

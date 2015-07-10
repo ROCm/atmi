@@ -18,19 +18,22 @@ ATMI_LIB = -L${ATMILIB_RUNTIME_PATH}/lib -latmi_runtime -L${HSA_RUNTIME_PATH}/li
 
 .PHONY: all clean 
 
-all: common.o atmi_spotrf_L.o testing_spotrf.o testing_spotrf
+all: common.o atmi_spotrf_L.o testing_spotrf.o pifdefs.o testing_spotrf
 
 common.o: common.c
 	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
 atmi_spotrf_L.o: atmi_spotrf_L.c
-	$(CC) $(CFLAGS) -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.c $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
+	$(CC) $(CFLAGS) -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.c -fplugin-arg-atmi_pifgen-clfile=gpuKernels.cl $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
+
+pifdefs.o: pifdefs.c
+	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
 testing_spotrf.o: testing_spotrf.c
 	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
-testing_spotrf: common.o atmi_spotrf_L.o testing_spotrf.o
-	$(FC) $(FFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) $^ pifdefs.c $(DPLASMA_LIB) $(EXT_LIB) $(HWLOC_LIB) $(BLAS_LIB) $(PLASMA_LIB) $(ATMI_LIB) -o $@
+testing_spotrf: common.o atmi_spotrf_L.o testing_spotrf.o pifdefs.o
+	$(FC) $(FFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) $^ $(DPLASMA_LIB) $(EXT_LIB) $(HWLOC_LIB) $(BLAS_LIB) $(PLASMA_LIB) $(ATMI_LIB) -o $@
 
 #%.o: %.c
 #	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@

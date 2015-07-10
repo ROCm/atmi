@@ -980,26 +980,17 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                 ErrorCheck(Extracting the kernarg segment size from the executable, err);
                 DEBUG_PRINT("Kernel GPU memalloc. Kernel %s needs %" PRIu32" bytes for kernargs\n", kernel_name, kernel_segment_size); 
 
-<<<<<<< HEAD
-                //*thisKernargAddress = malloc(kernel_segment_size);
-=======
 #if 1                
                 *thisKernargAddress = malloc(kernel_segment_size);
                 //posix_memalign(thisKernargAddress, 16, kernel_segment_size);
 #else
->>>>>>> cac204e41b242acd086ca53866f0a43d92e05140
                 /* FIXME: HSA 1.0F may have a bug that serializes all queue
                  * operations when hsa_memory_allocate is used.
                  * Investigate more and revert back to
                  * hsa_memory_allocate once bug is fixed. */
                 err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
-<<<<<<< HEAD
-                //ErrorCheck(Allocating memory for the executable-kernel, err);
-
-=======
                 ErrorCheck(Allocating memory for the executable-kernel, err);
 #endif
->>>>>>> cac204e41b242acd086ca53866f0a43d92e05140
                 break;
             }
         }

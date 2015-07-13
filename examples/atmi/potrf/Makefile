@@ -23,8 +23,8 @@ all: common.o atmi_spotrf_L.o testing_spotrf.o pifdefs.o testing_spotrf
 common.o: common.c
 	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
 
-atmi_spotrf_L.o: atmi_spotrf_L.c
-	$(CC) $(CFLAGS) -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.c -fplugin-arg-atmi_pifgen-clfile=gpuKernels.cl $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@
+atmi_spotrf_L.o: atmi_spotrf_L.c gpuKernels.cl
+	$(CC) $(CFLAGS) -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.c -fplugin-arg-atmi_pifgen-clfile=gpuKernels.cl $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c atmi_spotrf_L.c -o $@
 
 pifdefs.o: pifdefs.c
 	$(CC) $(CFLAGS) $(DPLASMA_INC) $(BLAS_INC) $(PLASMA_INC) $(ATMI_INC) -c $^ -o $@

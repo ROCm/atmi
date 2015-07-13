@@ -16,7 +16,9 @@
 
 //#define DRY_RUN 
 
-//#define GEMM_CPU
+//#define SGEMM_CPU
+//#define STRSM_CPU
+#define SSYRK_CPU
 
 #ifdef __cplusplus
 #define _CPPSTRING_ "C"
@@ -34,7 +36,7 @@ struct gemm_debug_s debug_info_2;
 /* CPU kernel */
 extern _CPPSTRING_ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA) __attribute__((atmi_kernel("atmi_spotrf_kernel", "cpu")));
 
-extern _CPPSTRING_ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, float alpha, float *A, int LDA, float *B, int LDB) __attribute__((atmi_kernel("atmi_strsm_kernel", "cpu")));
+extern _CPPSTRING_ void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, uint *debug_info1, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, float alpha, float *A, int LDA, float *B, int LDB, struct gemm_debug_s *debug_info2) __attribute__((atmi_kernel("atmi_strsm_kernel", "cpu")));
 
 extern _CPPSTRING_ void atmi_ssyrk_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, float alpha, const float *A, int LDA, float beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_ssyrk_kernel", "cpu")));
 
@@ -43,6 +45,12 @@ extern _CPPSTRING_ void atmi_sgemm_kernel_cpu(atmi_task_t *thisTask, uint *debug
 
 /*  GPU kernel */
 __kernel void atmi_sgemm_kernel_gpu( __global atmi_task_t *thisTask, uint *debug_info1, int m, int n, int k, PLASMA_enum transA, PLASMA_enum transB, uint M, uint N, uint K, float alpha, const __global float *A_tmp, uint lda, const __global float *B_tmp, uint ldb, float beta, __global float *C_tmp, uint ldc, struct gemm_debug_s *debug_info2) __attribute__((atmi_kernel("atmi_sgemm_kernel", "gpu")));
+
+
+__kernel void atmi_strsm_kernel_gpu(atmi_task_t *thisTask, uint *debug_info1, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, float alpha, float *A, int LDA, float *B, int LDB, struct gemm_debug_s *debug_info2) __attribute__((atmi_kernel("atmi_strsm_kernel", "gpu")));
+
+
+__kernel void atmi_ssyrk_kernel_gpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum uplo, PLASMA_enum trans, int N, int K, float alpha, const float *A, int LDA, float beta, float *C, int LDC) __attribute__((atmi_kernel("atmi_ssyrk_kernel", "gpu")));
 
 
 void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int N, float *A, int LDA)
@@ -55,7 +63,7 @@ void atmi_spotrf_kernel_cpu(atmi_task_t *thisTask, int k, PLASMA_enum uplo, int 
 #endif
 }
 
-void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, float alpha, float *A, int LDA, float *B, int LDB)
+void atmi_strsm_kernel_cpu(atmi_task_t *thisTask, uint *debug_info1, int m, int k, PLASMA_enum side, PLASMA_enum uplo, PLASMA_enum transA, PLASMA_enum diag, int M, int N, float alpha, float *A, int LDA, float *B, int LDB, struct gemm_debug_s *debug_info2)
 {
     ATMI_DEBUG( atmi_debug_output(1, "TRSM(%d, %d)\n", m, k); );
 #if !defined(DRY_RUN)
@@ -108,7 +116,7 @@ int atmi_spotrf_L(PLASMA_enum uplo, tiled_matrix_desc_t *descA)
             ldam = ATMI_BLKLDD(descA, m);
             T = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, k, k);
             C = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, m, k);
-            atmi_strsm_kernel_cpu(null_task, m, k, PlasmaRight, PlasmaLower, PlasmaTrans, PlasmaNonUnit, tempmm, descA->nb, 1.0F, T, ldak, C, ldam);
+            atmi_strsm_kernel_cpu(null_task, &debug_info_1, m, k, PlasmaRight, PlasmaLower, PlasmaTrans, PlasmaNonUnit, tempmm, descA->nb, 1.0F, T, ldak, C, ldam, &debug_info_2);
         }
         
         for(m = k+1; m <= descA->mt-1; m++) {
@@ -138,13 +146,24 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
     int tempkm, tempmm;
     int ldak, ldam, ldan;
     float *T, *C, *A, *B;
+    atmi_lparm_t *spotrf_lp, *strsm_lp, *ssyrk_lp, *sgemm_lp;
     
     ATMI_LPARM(cpu_lp);
     cpu_lp->profilable = ATMI_TRUE;
     
-    ATMI_LPARM_2D(gpu_lp, descA->mb/8, descA->mb/8);
-    gpu_lp->groupDim[0] = 8;
-    gpu_lp->groupDim[1] = 8;
+    ATMI_LPARM_2D(gpu_sgemm_lp, descA->mb/8, descA->mb/8);
+    gpu_sgemm_lp->groupDim[0] = 8;
+    gpu_sgemm_lp->groupDim[1] = 8;
+    gpu_sgemm_lp->kernel_id = 1;
+
+    ATMI_LPARM_1D(gpu_strsm_lp, descA->mb*2);
+    gpu_strsm_lp->kernel_id = 1;
+
+    int constFactor = descA->mb/128;
+    int gridsize = (2 * constFactor * constFactor + constFactor) * 64;
+    ATMI_LPARM_1D(gpu_ssyrk_lp, gridsize);
+    gpu_ssyrk_lp->kernel_id = 1;
+
     
 //    cpu_lp->synchronous = ATMI_TRUE;
 //    gpu_lp->synchronous = ATMI_TRUE;
@@ -178,14 +197,19 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
             T = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, k, k);
             C = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, m, k);
             required_tasks[0] = spotrf_tasks[k];
+#if defined (STRSM_CPU)
+            strsm_lp = cpu_lp;
+#else
+            strsm_lp = gpu_strsm_lp;
+#endif
             if (k == 0) {
-                cpu_lp->num_required = 1;
+                strsm_lp->num_required = 1;
             } else {
-                cpu_lp->num_required = 2;
+                strsm_lp->num_required = 2;
                 required_tasks[1] = sgemm_tasks[m][k][k-1];
             }
-            cpu_lp->requires = required_tasks;
-            strsm_tasks[m][k] = atmi_strsm_kernel(cpu_lp, m, k, PlasmaRight, PlasmaLower, PlasmaTrans, PlasmaNonUnit, tempmm, descA->nb, 1.0F, T, ldak, C, ldam);
+            strsm_lp->requires = required_tasks;
+            strsm_tasks[m][k] = atmi_strsm_kernel(strsm_lp, &debug_info_1, m, k, PlasmaRight, PlasmaLower, PlasmaTrans, PlasmaNonUnit, tempmm, descA->nb, 1.0F, T, ldak, C, ldam, &debug_info_2);
         }
         
         for(m = k+1; m <= descA->mt-1; m++) {
@@ -194,14 +218,19 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
             T = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, m, m);
             A = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, m, k);
             required_tasks[0] = strsm_tasks[m][k];
+#if defined (SSYRK_CPU)
+            ssyrk_lp = cpu_lp;
+#else
+            ssyrk_lp = gpu_ssyrk_lp;
+#endif
             if (k == 0) {
-                cpu_lp->num_required = 1;
+                ssyrk_lp->num_required = 1;
             } else {
-                cpu_lp->num_required = 2;
+                ssyrk_lp->num_required = 2;
                 required_tasks[1] = ssyrk_tasks[k-1][m];
             }
-            cpu_lp->requires = required_tasks;
-            ssyrk_tasks[k][m] = atmi_ssyrk_kernel(cpu_lp, m, k, PlasmaLower, PlasmaNoTrans, tempmm, descA->mb, -1.0F, A, ldam, 1.0F, T, ldam);
+            ssyrk_lp->requires = required_tasks;
+            ssyrk_tasks[k][m] = atmi_ssyrk_kernel(ssyrk_lp, m, k, PlasmaLower, PlasmaNoTrans, tempmm, descA->mb, -1.0F, A, ldam, 1.0F, T, ldam);
             
             for(n = k+1; n < m; n++) {
                 ldan = ATMI_BLKLDD(descA, n);
@@ -210,26 +239,19 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
                 C = (float *)sym_two_dim_block_cyclic_lookup_matrix(descA, m, n);
                 required_tasks[0] = strsm_tasks[m][k];
                 required_tasks[1] = strsm_tasks[n][k];
-#if defined (GEMM_CPU)
-                if (k == 0) {
-                    cpu_lp->num_required = 2;
-                } else {
-                    cpu_lp->num_required = 3;
-                    required_tasks[2] = sgemm_tasks[m][n][k-1];
-                }
-                cpu_lp->requires = required_tasks;
-                sgemm_tasks[m][n][k] = atmi_sgemm_kernel(cpu_lp, &debug_info_1, m, n, k, PlasmaNoTrans, PlasmaTrans, tempmm, descA->mb, descA->mb, -1.0F, A, ldam, B, ldan, 1.0F, C, ldam, &debug_info_2);
+#if defined (SGEMM_CPU)
+                sgemm_lp = cpu_lp;
 #else
-               if (k == 0) {
-                    gpu_lp->num_required = 2;
+                sgemm_lp = gpu_sgemm_lp;
+#endif
+                if (k == 0) {
+                    sgemm_lp->num_required = 2;
                 } else {
-                    gpu_lp->num_required = 3;
+                    sgemm_lp->num_required = 3;
                     required_tasks[2] = sgemm_tasks[m][n][k-1];
                 }
-                gpu_lp->requires = required_tasks;
-                gpu_lp->kernel_id = 1;
-                sgemm_tasks[m][n][k] = atmi_sgemm_kernel(gpu_lp, &debug_info_1, m, n, k, PlasmaNoTrans, PlasmaTrans, tempmm, descA->mb, descA->mb, -1.0F, A, ldam, B, ldan, 1.0F, C, ldam, &debug_info_2);
-#endif
+                sgemm_lp->requires = required_tasks;
+                sgemm_tasks[m][n][k] = atmi_sgemm_kernel(sgemm_lp, &debug_info_1, m, n, k, PlasmaNoTrans, PlasmaTrans, tempmm, descA->mb, descA->mb, -1.0F, A, ldam, B, ldan, 1.0F, C, ldam, &debug_info_2);
             }
         }
         

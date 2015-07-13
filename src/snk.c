@@ -126,9 +126,11 @@ hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_
     /* Keep adding barrier packets in multiples of 5 because that is the maximum signals that 
        the HSA barrier packet can support today
      */
+    status_t err;
     hsa_signal_t last_signal;
     if(queue == NULL || dep_task_list == NULL || dep_task_count <= 0) return last_signal;
-    hsa_signal_create(0, 0, NULL, &last_signal);
+    err = hsa_signal_create(0, 0, NULL, &last_signal);
+    ErrorCheck(HSA Signal Creaion, err);
     atmi_task_t **tasks = dep_task_list;
     int tasks_remaining = dep_task_count;
     const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
@@ -967,7 +969,6 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                 hsa_status_t err;
                 hsa_executable_symbol_t symbol;
                 /* Extract the symbol from the executable.  */
-                DEBUG_PRINT("Kernel GPU memory allocate: Looking for symbol %s\n", kernel_name); 
                 err = hsa_executable_get_symbol(executable, NULL, kernel_name, snk_gpu_agent, 0, &symbol);
                 ErrorCheck(Extract the symbol from the executable, err);
 
@@ -975,15 +976,19 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                 uint32_t kernel_segment_size;
                 err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &kernel_segment_size);
                 ErrorCheck(Extracting the kernarg segment size from the executable, err);
+                DEBUG_PRINT("Kernel GPU memalloc. Kernel %s needs %" PRIu32" bytes for kernargs\n", kernel_name, kernel_segment_size); 
 
+#if 1                
                 *thisKernargAddress = malloc(kernel_segment_size);
+                //posix_memalign(thisKernargAddress, 16, kernel_segment_size);
+#else
                 /* FIXME: HSA 1.0F may have a bug that serializes all queue
                  * operations when hsa_memory_allocate is used.
                  * Investigate more and revert back to
                  * hsa_memory_allocate once bug is fixed. */
-                //err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
-                //ErrorCheck(Allocating memory for the executable-kernel, err);
-
+                err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
+                ErrorCheck(Allocating memory for the executable-kernel, err);
+#endif
                 break;
             }
         }
@@ -1021,6 +1026,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     check_change_in_device_type(stream, this_Q, ATMI_DEVTYPE_GPU);
 
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
+    DEBUG_PRINT("Pif %s requires %d task\n", pif_name, lparm->num_required);
     if ( lparm->num_required > 0) {
         enqueue_barrier_gpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
     }

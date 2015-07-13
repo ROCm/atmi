@@ -4,11 +4,11 @@
 using namespace std;
 #include "atmi.h"
 
-// Declare decode as the PIF for the GPU kernel implementation decode_gpu
-__kernel void decode_gpu(__global atmi_task_t *thisTask, __global const char* in, __global char *out, const size_t strlength) __attribute__((atmi_kernel("decode", "gpu")));
-
 // Declare decode as the PIF for the CPU kernel decode_cpu
 extern "C" void decode_cpu(atmi_task_t *thisTask, const char* in, char* out, const size_t strlength) __attribute__((atmi_kernel("decode", "cpu")));
+
+// Declare decode as the PIF for the GPU kernel implementation decode_gpu
+__kernel void decode_gpu(__global atmi_task_t *thisTask, __global const char* in, __global char *out, const size_t strlength) __attribute__((atmi_kernel("decode", "gpu")));
 
 extern "C" void decode_cpu(atmi_task_t *thisTask, const char* in, char* out, const size_t strlength) {
     int num;
@@ -25,10 +25,12 @@ int main(int argc, char* argv[]) {
 
     ATMI_LPARM_1D(lparm, strlength);
     lparm->synchronous = ATMI_TRUE;
+
+    lparm->kernel_id = K_ID_decode_gpu;
     decode(lparm, input, output_gpu, strlength);
     output_gpu[strlength] = '\0';
     
-    lparm->kernel_id = 1;
+    lparm->kernel_id = K_ID_decode_cpu;
     decode(lparm, input, output_cpu, strlength);
     output_cpu[strlength] = '\0';
 

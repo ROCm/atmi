@@ -241,24 +241,16 @@ function parse_arg() {
 #  snk_genw starts here
    
 #  Inputs 
-__SN=$1
-__CLF=$2
-ATMI_RUNTIME_PATH=$3
+__CLF=$1
+ATMI_RUNTIME_PATH=$2
 
 #  Work space
-__TMPD=$4
-__UPDATED_CL=$5
+__TMPD=$3
+__UPDATED_CL=$4
 
 #  Outputs: cwrapper, header file, and updated CL 
 __STRUCT_CL=${__TMPD}/kernel_struct.cl
 __SPAWN_CL=${__TMPD}/kernel_spawn.cl
-__CWRAP=kernel_wrapper.c
-
-# If snack call snk_genw with -fort option
-__IS_FORTRAN=0
-
-# If snack was called with -noglobs
-__NO_GLOB_FUNS=0
 
 # Intermediate files.
 __EXTRACL=extra.cl
@@ -288,7 +280,6 @@ __SEDCMD=" "
 
    echo "/* SPAWN KERNELS */" > $__SPAWN_CL
 
-   write_utils_template > $__CWRAP
 
    sed_sepchar=""
    KERNEL_NUM=0
@@ -305,9 +296,6 @@ __SEDCMD=" "
       fi
          
 
-#     Add the kernel initialization routine to the c wrapper
-      #write_KernelStatics_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g" >>$__CWRAP
-
 #     Build a corrected argument list , change CL types to c types as necessary, see parse_arg
       __CFN_ARGL=""
       __PROTO_ARGL=""
@@ -320,21 +308,6 @@ __SEDCMD=" "
          sepchar=","
       done
 
-
- #     Write start of the SNACK function
-      echo "/* ------  Start of dynamic dispatch function of ${__KN} ------ */ " >> $__CWRAP 
-      echo "extern _CPPSTRING_ void ${__KN}_kl_init(atmi_lparm_t *lparm) {" >> $__CWRAP 
-      write_hw_init_template | sed -e "s/_CN_/${__SN}/g" | sed -e "s/_KN_/${__KN}/g" >> $__CWRAP
-      echo " " >> $__CWRAP
-      echo "    /* Allocate the kernel argument buffer from the correct region. */ " >> $__CWRAP
-      echo "    void* thisKernargAddress; " >> $__CWRAP
-      echo "    snk_gpu_memory_allocate(lparm, g_executable, \"${__KN}\", &thisKernargAddress);" >> $__CWRAP
-      echo " " >> $__CWRAP 
-      echo "    const char kernel_name[] = \"&__OpenCL_${__KN}_kernel\";" >> $__CWRAP
-
-     
-      write_kernel_init_template >> $__CWRAP
-
      
 #     Write the extra CL if we found call-by-value structs and write the extra CL needed
       if [ "$KERN_NEEDS_CL_WRAPPER" == "TRUE" ] ; then 
@@ -346,17 +319,6 @@ __SEDCMD=" "
       else
          __FN="\&__OpenCL_${__KN}_kernel"
       fi
-
-#     Now add the kernel template to wrapper and change all three strings
-#     1) Context Name _CN_ 2) Kerneel name _KN_ and 3) Funtion name _FN_
-      #write_kernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP
-
-      echo "    return;" >> $__CWRAP 
-      echo "} " >> $__CWRAP 
-      echo "/* ------  End of SNACK function ${__KN} ------ */ " >> $__CWRAP 
-
-#     Add the kernel initialization routine to the c wrapper
-      #write_InitKernel_template | sed -e "s/_CN_/${__SN}/g;s/_KN_/${__KN}/g;s/_FN_/${__FN}/g" >>$__CWRAP
 
       echo "void spawn_${__KN}(atmi_klparm_t *lparm_d, $__CFN_ARGL){" >> $__SPAWN_CL
       echo "   int k_id = $KERNEL_NUM;" >> $__SPAWN_CL
@@ -447,19 +409,7 @@ __SEDCMD=" "
 #  END OF WHILE LOOP TO PROCESS EACH KERNEL IN THE CL FILE
    done < $__KARGLIST
 
-   KERNEL_NUM=0
-   while read line ; do 
-       #     parse the kernel name __KN and the native argument list __ARGL
-       TYPE_NAME=`echo ${line%(*}`
-       __KN=`echo $TYPE_NAME | awk '{print $2}'`
-       echo "extern _CPPSTRING_ void ${__KN}_kl_sync(){" >> $__CWRAP
-       echo "    hsa_signal_wait_acquire(atmi_klist->slist[$KERNEL_NUM], HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);" >> $__CWRAP
-       KERNEL_NUM=$((KERNEL_NUM + 1))
-       echo "}" >> $__CWRAP
-       #echo "extern _CPPSTRING_ void ${__KN}_kl_sync();" >> $__HDRF
-   done < $__KARGLIST
-
-
+   
    #  Write the updated CL
    if [ "$__SEDCMD" != " " ] ; then 
        #     Remove extra spaces, then change "__kernel void" to "void" if they have call-by-value structs
@@ -475,10 +425,6 @@ __SEDCMD=" "
        cat $__STRUCT_CL >> $__UPDATED_CL
        cat $__SPAWN_CL >> $__UPDATED_CL
        cat $__CLF | sed -e "s/ snk_task_t/ void/g" >> $__UPDATED_CL
-   fi
-
-   if [ "$__IS_FORTRAN" == "1" ] ; then 
-      write_fortran_lparm_t
    fi
 
    rm $__STRUCT_CL

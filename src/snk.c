@@ -667,7 +667,7 @@ status_t snk_gpu_build_executable(hsa_executable_t *executable) {
     hsa_ext_control_directives_t control_directives;
     memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
     hsa_code_object_t code_object;
-    err = hsa_ext_program_finalize(snk_hsa_program, isa, 0, control_directives, "", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
+    err = hsa_ext_program_finalize(snk_hsa_program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
     ErrorCheck(Finalizing the program, err);
 
     /* Destroy the program, it is no longer needed.  */

@@ -89,8 +89,29 @@ static int klist_initalized = 0;\n\
 static int gpu_initalized = 0;\n\
 static int cpu_initalized = 0;\n\n\
 atmi_klist_t *atmi_klist = NULL;\n\n\
+#define ErrorCheck(msg, status) \\\n\
+if (status != HSA_STATUS_SUCCESS) { \\\n\
+   printf(\"%%s failed.\\n\", #msg); \\\n\
+} \n\n\
 ");
 }
+
+void write_cpp_get_gpu_agent(FILE *fp) {
+fprintf(fp, "\
+static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {\n\
+    hsa_status_t status;\n\
+    hsa_device_type_t device_type;\n\
+    status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);\n\
+    if (HSA_STATUS_SUCCESS == status && HSA_DEVICE_TYPE_GPU == device_type) {\n\
+        hsa_agent_t* ret = (hsa_agent_t*)data;\n\
+        *ret = agent;\n\
+        return HSA_STATUS_INFO_BREAK;\n\
+    }\n\
+    return HSA_STATUS_SUCCESS;\n\
+}\n\n\
+");
+}
+
 
 std::string exec(const char* cmd) {
     /* borrowed from the SO solution: 
@@ -650,7 +671,88 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     }\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
 }\n\n");
+
+        /* add dynamic dispatch init function */
+        pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n", pif_name);
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if (%s_FK == 0 ) { \n\
+        snk_pif_init(%s_pif_fn_table, sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]));\n\
+        %s_FK = 1; \n\
+    }\n\n",
+                pif_name,
+                pif_name, pif_name, pif_name,
+                pif_name);
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if (klist_initalized == 0) { \n\
+        atmi_klist = (atmi_klist_t * )malloc(sizeof(atmi_klist_t)); \n\
+        atmi_klist->qlist = NULL; \n\
+        atmi_klist->slist = NULL; \n\
+        atmi_klist->plist = NULL; \n\
+        atmi_klist->num_signal = 0; \n\
+        atmi_klist->num_queue = 0; \n\
+        atmi_klist->num_kernel = 0; \n\
+        klist_initalized = 1; \n\
+    }\n\n");
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(gpu_initalized == 0) { \n\
+        snk_init_context(atmi_klist); \n\
+        snk_init_gpu_context(); \n\
+        snk_gpu_create_program(); \n");
+for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+                it != g_cl_modules.end(); it++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_gpu_build_executable(&g_executable);\n\
+        gpu_initalized = 1;\n\
+    }\n\n\
+    /* Allocate the kernel argument buffer from the correct region. */\n\
+    void* thisKernargAddress;\n\
+    snk_gpu_memory_allocate(lparm, g_executable, \"%s\", &thisKernargAddress);\n\n", pif_name);
         
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    hsa_status_t err;\n\n\
+    err = hsa_init();\n\
+    ErrorCheck(Initializing the hsa device, err)\n\n\
+    hsa_agent_t kernel_dispatch_Agent;\n\
+    err = hsa_iterate_agents(get_gpu_agent, &kernel_dispatch_Agent);\n\
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }\n\
+    ErrorCheck(Getting a gpu agent, err);\n\n\
+    uint32_t queue_size = 0;\n\
+    err = hsa_agent_get_info(kernel_dispatch_Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);\n\
+    ErrorCheck(Querying the agent maximum queue size, err);\n\n\
+    hsa_queue_t *queue;\n\
+    err = hsa_queue_create(kernel_dispatch_Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &queue);\n\
+    ErrorCheck(Creating the queue, err);\n\n\
+    atmi_klist->num_queue++;\n\
+    atmi_klist->qlist = (uint64_t *)realloc(atmi_klist->qlist, sizeof(uint64_t) * atmi_klist->num_queue);\n\
+    atmi_klist->qlist[atmi_klist->num_queue - 1] = (uint64_t)queue;\n\n\
+    hsa_signal_t signal = 0;\n\
+    if(lparm->synchronous == ATMI_FALSE)\n\
+    {\n\
+        err = hsa_signal_create(0, 0, NULL, &signal);\n\
+        ErrorCheck(Creating a HSA signal, err);\n\
+    }\n\n\
+    atmi_klist->num_signal++;\n\
+    atmi_klist->slist = (hsa_signal_t *)realloc(atmi_klist->slist, sizeof(hsa_signal_t) * atmi_klist->num_signal);\n\
+    atmi_klist->slist[atmi_klist->num_signal - 1] = signal;\n\n\
+    atmi_klist->num_kernel++;\n\
+    atmi_klist->plist = (hsa_kernel_dispatch_packet_t *)realloc(atmi_klist->plist, sizeof(hsa_kernel_dispatch_packet_t) * atmi_klist->num_kernel);\n\
+    hsa_kernel_dispatch_packet_t *this_aql = &atmi_klist->plist[atmi_klist->num_kernel - 1];\n\n\
+    uint64_t _KN__Kernel_Object;\n\
+    uint32_t _KN__Group_Segment_Size;\n\
+    uint32_t _KN__Private_Segment_Size;\n\
+    snk_get_gpu_kernel_info(g_executable, %s_pif_fn_table[lparm->kernel_id].gpu_kernel.kernel_name, &_KN__Kernel_Object, \n\
+    &_KN__Group_Segment_Size, &_KN__Private_Segment_Size);\n\n\
+    /* thisKernargAddress has already been set up in the beginning of this routine */\n\
+    /*  Bind kernel argument buffer to the aql packet.  */\n\
+    this_aql->kernarg_address = (void*) thisKernargAddress;\n\
+    this_aql->kernel_object = _KN__Kernel_Object;\n\
+    this_aql->private_segment_size = _KN__Private_Segment_Size;\n\
+    this_aql->group_segment_size = _KN__Group_Segment_Size;\n\
+}", pif_name);
+
         /* add PIF function table definition */
         pp_printf((pif_printers[pif_index].fn_table), "\nsnk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
     }
@@ -779,6 +881,7 @@ register_finish_unit (void *event_data, void *data) {
     }
     fprintf(fp_pifdefs_genw, "/*Headers carried over from %s*/\n%s\n", main_input_filename, headers.c_str());
     write_cpp_warning_header(fp_pifdefs_genw);
+    write_cpp_get_gpu_agent(fp_pifdefs_genw);
     /* 1) dump kernel impl declarations (fn pointers */
     for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
@@ -803,7 +906,7 @@ register_finish_unit (void *event_data, void *data) {
         pp_clear_output_area((it->pifdefs));
     }
 
-    kl_unit(fp_pifdefs_genw);
+    //kl_unit(fp_pifdefs_genw);
     fclose(fp_pifdefs_genw);
 }
 

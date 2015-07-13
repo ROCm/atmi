@@ -3,11 +3,12 @@ set -e
 #  Set HSA Environment variables
 [ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
 [ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib
-[ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/cloc/bin
-[ -z $ATMI_PATH ] && ATMI_PATH=${HOME}/git/ATMI
-export PATH=$ATMI_PATH/bin:$PATH
+[ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=${HOME}/git/ATMI/bin
+ATMI_PATH=${HOME}/git/ATMI/
 ATMI_INC=$ATMI_PATH/include
+
 export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$ATMI_PATH/lib:$LD_LIBRARY_PATH
+export PATH=$HSA_LLVM_PATH:$PATH
 
 echo 
 if [ -f kps ] ; then rm kps ; fi

@@ -23,7 +23,6 @@ extern "C" void reduction_cpu(atmi_task_t *thisTask, int* in, int length) {
 __kernel void reduction_gpu(__global atmi_task_t *thisTask, __global int* in, int length) __attribute__((atmi_kernel("reduction", "gpu")));
 
 extern "C" void reduction_kl_init(atmi_lparm_t *lparm);
-extern "C" void reduction_kl_sync();
 
 int main(int argc, char* argv[]) {
     int length = 1024;
@@ -41,7 +40,6 @@ int main(int argc, char* argv[]) {
     reduction_kl_init(lparm_gpu);
     reduction(lparm_gpu, input_gpu, length >> 1);
 
-    //reduction_kl_sync();
     //for(int ii = 0; ii < length; ii++)
     //{
         //printf("%d ", input_gpu[ii]);

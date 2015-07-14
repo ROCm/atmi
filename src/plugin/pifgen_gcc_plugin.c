@@ -672,7 +672,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "\
 }\n\n");
 
-        /* add dynamic dispatch init function */
+        /* add init function for dynamic kernel */
         pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if (%s_FK == 0 ) { \n\
@@ -751,8 +751,14 @@ for(std::vector<std::string>::iterator it = g_cl_modules.begin();
     this_aql->kernel_object = _KN__Kernel_Object;\n\
     this_aql->private_segment_size = _KN__Private_Segment_Size;\n\
     this_aql->group_segment_size = _KN__Group_Segment_Size;\n\
-}", pif_name);
+}\n\n", pif_name);
 
+        /* add sync function for dynamic kernel */
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+extern _CPPSTRING_ void %s_kl_sync(){ \n\
+    hsa_signal_wait_acquire(atmi_klist->slist[%d], HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED); \n\
+}\n\n", pif_name, pif_index);
+        
         /* add PIF function table definition */
         pp_printf((pif_printers[pif_index].fn_table), "\nsnk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
     }

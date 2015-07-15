@@ -259,7 +259,7 @@ if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then
    exit $DEADRC
 fi
 
-[ -z $HSAILLIB  ] && HSAILLIB=$HSA_LLVM_PATH/builtins-hsail.hsail
+[ -z $HSAILLIB  ] && HSAILLIB=$ATMI_PATH/bin/builtins-hsail.hsail
 if [ "$HSAILLIB" != "" ] ; then 
    if [ ! -f $HSAILLIB ] ; then 
       echo "ERROR:  The HSAIL file $HSAILLIB does not exist."
@@ -440,7 +440,7 @@ else
 #cp $INDIR/$CLNAME $TMPDIR/updated.cl
 
 #echo $HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
-$HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
+$ATMI_PATH/bin/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
 
 #   [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
 #   if [ $DRYRUN ] ; then

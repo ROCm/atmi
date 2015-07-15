@@ -116,6 +116,8 @@ typedef struct atmi_lparm_s {
     int              atmi_id;        /* Constant that PIFs can check for       */
     int              kernel_id;
     //   boolean          nested;         /* This task may create more tasks        */
+    //   atmi_klist_t klist
+    atmi_klist_t *klist;
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
 #define WORKITEMS gridDim[0] 

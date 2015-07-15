@@ -55,7 +55,8 @@ string_table_t res_keywords_table[] = {
 };
 
 static std::vector<std::string> g_cl_modules;
-
+static std::vector<std::string> g_all_pifdecls;
+static std::vector<std::string> g_cl_files;
 // format of the pif_table
 // "PIF name", (pif_index_in_table, kernels_for_this_pif_count)
 static std::map<std::string, std::pair<int,int> > pif_table;
@@ -75,6 +76,7 @@ static std::string g_output_pifdefs_filename;
 
 void write_kl_init(const char *pif_name, int pif_index);
 void write_kernel_dispatch_routine(FILE *fp);
+void write_pif_kl(FILE *clFile);
 void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
 
 void write_headers(FILE *fp) {
@@ -89,7 +91,11 @@ fprintf(fp, "#ifdef __cplusplus \n\
 #endif \n\
 #ifndef __cplusplus \n\
 #define _CPPSTRING_ \n\
-#endif \n\n\
+#endif \n\n");
+}
+
+void write_globals(FILE *fp) {
+fprintf(fp, "\
 static hsa_executable_t g_executable;\n\
 static int klist_initalized = 0;\n\
 static int gpu_initalized = 0;\n\
@@ -161,7 +167,7 @@ void brig2brigh(const char *brigfilename, const char *cl_module_name) {
     fclose(fp_brigh);
 }
 
-void cl2brigh(const char *clfilename) {
+void cl2brigh(const char *clfilename, const char *symbolname) {
     std::string cmd;
     cmd.clear();
     cmd += exec("which cl2brigh.sh");
@@ -175,6 +181,11 @@ void cl2brigh(const char *clfilename) {
     // popen returns a newline. remove it.
     strtok(cmd_c, "\n");
     strcat(cmd_c, " ");
+    if(symbolname != NULL && symbolname != "") {
+        strcat(cmd_c, "-s ");
+        strcat(cmd_c, symbolname);
+        strcat(cmd_c, " ");
+    }
     strcat(cmd_c, clfilename);
     
     DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
@@ -736,6 +747,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
     if(is_new_pif == 1) {
         push_declaration(pif_name, fn_type, num_params);
+        g_all_pifdecls.push_back(std::string(pif_decl));
     }
     return NULL_TREE;
 }
@@ -769,23 +781,6 @@ register_headers (void *event_data, void *data)
 }
 
 static void
-register_spawn_unit (void *event_data, void *data) {
-
-    char clfilename[] = "spawns.h";
-
-    FILE *clFile = fopen(clfilename, "w"); 
-    //FILE *clFile = stdout;
-
-    write_kernel_dispatch_routine(clFile);
-    char *cl_text = (char *)pp_formatted_text(&pif_spawn);
-    fprintf(clFile, "%s", cl_text);
-    pp_clear_output_area(&pif_spawn);
-
-    fclose(clFile);
-}
-
-
-static void
 register_finish_unit (void *event_data, void *data) {
     /* Dump all the generated code into one .c file */
     DEBUG_PRINT("Callback at end of compilation unit\n");
@@ -810,6 +805,7 @@ register_finish_unit (void *event_data, void *data) {
     fprintf(fp_pifdefs_genw, "/*Headers carried over from %s*/\n%s\n", main_input_filename, headers.c_str());
     write_cpp_warning_header(fp_pifdefs_genw);
     write_cpp_get_gpu_agent(fp_pifdefs_genw);
+    write_globals(fp_pifdefs_genw);
     /* 1) dump kernel impl declarations (fn pointers */
     for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
@@ -835,11 +831,39 @@ register_finish_unit (void *event_data, void *data) {
     }
 
     fclose(fp_pifdefs_genw);
+
+    /* Inject all the PIF declarations into the CL file and compile (cloc) */
+    for(std::vector<std::string>::iterator it = g_cl_files.begin(); 
+            it != g_cl_files.end(); it++) {
+        FILE *tmp_cl = fopen("tmp.cl", "w");
+        fprintf(tmp_cl, "#include \"atmi.h\"\n");
+        write_cpp_warning_header(tmp_cl);
+        //for(std::vector<std::string>::iterator it_pif = g_all_pifdecls.begin(); 
+                //it_pif != g_all_pifdecls.end(); it_pif++) {
+            //fprintf(tmp_cl, "extern _CPPSTRING_ %s;\n", it_pif->c_str());
+        //}
+        write_pif_kl(tmp_cl);
+        fclose(tmp_cl);
+        char cmd_c[2048] = {0};
+        sprintf(cmd_c, "cat %s >> tmp.cl", it->c_str());
+
+        DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
+        int ret = system(cmd_c);
+        if(WIFEXITED(ret) == 0 || WEXITSTATUS(ret) != 0) {
+            fprintf(stderr, "\"%s\" returned with error %d\n", cmd_c, WEXITSTATUS(ret));
+            exit(-1);
+        }
+        vector<string> tokens = split(it->c_str(), '.');
+        cl2brigh("tmp.cl", tokens[0].c_str());
+        //int ret_del = remove("tmp.cl");
+        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+    }
 }
 
 static void
 register_start_unit (void *event_data, void *data) {
     DEBUG_PRINT("Callback at start of compilation unit\n");
+    g_all_pifdecls.clear();
     pp_needs_newline (&g_kerneldecls) = true;
     pp_needs_newline (&pif_spawn) = true;
 
@@ -1005,7 +1029,11 @@ int plugin_init(struct plugin_name_args *plugin_info,
             const char *clfilename = plugin_info->argv[i].value;
 
             /* compile CL to BRIG header file with char array */
-            cl2brigh(clfilename);
+            // Compile to brig at end of current compilation so that the PIF declarations can be 
+            // embedded into the CL code. This is useful if GPU kernels need to invoke PIFs
+            // in the same way as CPU code invokes PIFs
+            // cl2brigh(clfilename);
+            g_cl_files.push_back(std::string(clfilename));
 
             /* remove .cl extension */
             vector<string> tokens = split(clfilename, '.');
@@ -1072,8 +1100,6 @@ int plugin_init(struct plugin_name_args *plugin_info,
             register_start_unit, NULL);
     register_callback (plugin_name, PLUGIN_FINISH_UNIT,
             register_finish_unit, NULL);
-    register_callback (plugin_name, PLUGIN_FINISH_UNIT,
-            register_spawn_unit, NULL);
     register_callback (plugin_name, PLUGIN_ATTRIBUTES,
             register_attributes, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
@@ -1171,30 +1197,32 @@ fprintf(fp, "\
  \n\
 #define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist} ; X = &_ ## X ; \n\
  \n\
-void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) { \n\
+void kernel_dispatch(const atmi_klparm_t *lparm, const int k_id) { \n\
  \n\
-    hsa_queue_t* this_Q = (hsa_queue_t *)lparm_d->klist->qlist[k_id]; \n\
+    atmi_kernel_dispatch_packet_t *kernel_packet = lparm->klist->kernel_packets + k_id; \n\
+ \n\
+    hsa_queue_t* this_Q = (hsa_queue_t *)lparm->klist->queues[k_id]; \n\
  \n\
     /* Find the queue index address to write the packet info into.  */ \n\
     const uint32_t queueMask = this_Q->size - 1; \n\
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q); \n\
-    hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]); \n\
+    hsa_kernel_dispatch_packet_t *this_aql = &(((hsa_kernel_dispatch_packet_t *)(this_Q->base_address))[index&queueMask]); \n\
  \n\
     /*  Process lparm values */ \n\
-    this_aql->setup  |= (uint16_t) lparm_d->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS; \n\
-    this_aql->grid_size_x=lparm_d->gdims[0]; \n\
-    this_aql->workgroup_size_x=lparm_d->ldims[0]; \n\
-    if (lparm_d->ndim>1) { \n\
-        this_aql->grid_size_y=lparm_d->gdims[1]; \n\
-        this_aql->workgroup_size_y=lparm_d->ldims[1]; \n\
+    this_aql->setup  |= (uint16_t) lparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS; \n\
+    this_aql->grid_size_x=lparm->gdims[0]; \n\
+    this_aql->workgroup_size_x=lparm->ldims[0]; \n\
+    if (lparm->ndim>1) { \n\
+        this_aql->grid_size_y=lparm->gdims[1]; \n\
+        this_aql->workgroup_size_y=lparm->ldims[1]; \n\
     } else { \n\
         this_aql->grid_size_y=1; \n\
         this_aql->workgroup_size_y=1; \n\
     } \n\
  \n\
-    if (lparm_d->ndim>2) { \n\
-        this_aql->grid_size_z=lparm_d->gdims[2]; \n\
-        this_aql->workgroup_size_z=lparm_d->ldims[2]; \n\
+    if (lparm->ndim>2) { \n\
+        this_aql->grid_size_z=lparm->gdims[2]; \n\
+        this_aql->workgroup_size_z=lparm->ldims[2]; \n\
     } \n\
     else \n\
     { \n\
@@ -1204,22 +1232,20 @@ void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) { \n\
  \n\
     /* thisKernargAddress has already been set up in the beginning of this routine */ \n\
     /*  Bind kernel argument buffer to the aql packet.  */ \n\
-    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id; \n\
-    this_aql->kernarg_address = aql->kernarg_address; \n\
-    this_aql->kernel_object = aql->kernel_object; \n\
-    this_aql->private_segment_size = aql->private_segment_size; \n\
-    this_aql->group_segment_size = aql->group_segment_size; \n\
- \n\
-    this_aql->completion_signal = lparm_d->klist->slist[k_id]; \n\
+    this_aql->kernarg_address = kernel_packet->kernarg_address; \n\
+    this_aql->kernel_object = kernel_packet->kernel_object; \n\
+    this_aql->private_segment_size = kernel_packet->private_segment_size; \n\
+    this_aql->group_segment_size = kernel_packet->group_segment_size; \n\
+    this_aql->completion_signal = kernel_packet->completion_signal; \n\n\
     hsa_signal_add_relaxed(this_aql->completion_signal, 1); \n\
  \n\
     /*  Prepare and set the packet header */  \n\
     /* Only set barrier bit if asynchrnous execution */ \n\
-    int stream_num = lparm_d->stream; \n\
+    int stream_num = lparm->stream; \n\
     if ( stream_num >= 0 )   \n\
-        this_aql->header |= lparm_d->barrier << HSA_PACKET_HEADER_BARRIER;  \n\
-    this_aql->header |= lparm_d->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE; \n\
-    this_aql->header |= lparm_d->release_fence_scope << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE; \n\
+        this_aql->header |= lparm->barrier << HSA_PACKET_HEADER_BARRIER;  \n\
+    this_aql->header |= lparm->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE; \n\
+    this_aql->header |= lparm->release_fence_scope << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE; \n\
  \n\
     ((uint8_t*)(&this_aql->header))[0] = (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH; \n\
  \n\
@@ -1256,7 +1282,7 @@ struct %s_args_struct {\n\
 
         /* add spawn function of pif for dynamic dispatch */
     pp_printf(&pif_spawn, "\
-void spawn_%s(atmi_klparm_t *lparm_d, atmi_task_t *thisTask", pif_name);
+atmi_task_t * %s(atmi_klparm_t *lparm, atmi_task_t *thisTask", pif_name);
     
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf(&pif_spawn, ", %s var%d", arg_list[arg_idx].c_str(), arg_idx);
@@ -1267,20 +1293,36 @@ void spawn_%s(atmi_klparm_t *lparm_d, atmi_task_t *thisTask", pif_name);
     int k_id = %d;\n", pif_index); 
 
     pp_printf(&pif_spawn, "\
-    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id; \n\
-    struct %s_args_struct * gpu_args = aql->kernarg_address; \n\
-    lparm_d->klist->slist[k_id] = lparm_d->klist->slist[k_id] == 0 ? *((hsa_signal_t *)(thisTask->handle)) : lparm_d->klist->slist[k_id]; \n\n", pif_name);
+    atmi_kernel_dispatch_packet_t * kernel_packet = lparm->klist->kernel_packets + k_id; \n\
+    struct %s_args_struct * gpu_args = kernel_packet->kernarg_address; \n\
+    kernel_packet->completion_signal = *((hsa_signal_t *)(thisTask->handle)); \n\n\
+    ", pif_name);
+
+    pp_printf(&pif_spawn, "gpu_args->arg6 = thisTask; \n");
 
     pp_printf(&pif_spawn, "\
-    gpu_args->arg6 = thisTask; \n");
-
+    gpu_args->arg0=0;\n\
+    gpu_args->arg1=0;\n\
+    gpu_args->arg2=0;\n\
+    gpu_args->arg3=0;\n\
+    gpu_args->arg4=0;\n\
+    gpu_args->arg5=0;\n");
+       
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         pp_printf((&pif_spawn), "\
     gpu_args->arg%d = var%d;\n", arg_idx + 6, arg_idx);
-        }
+    }
 
     pp_printf(&pif_spawn, "\
-    kernel_dispatch(lparm_d, k_id); \n\
+    kernel_dispatch(lparm, k_id); \n\
+    return NULL; \n\
 }\n\n");
         
+}
+
+void write_pif_kl(FILE *clFile) {
+    write_kernel_dispatch_routine(clFile);
+    char *cl_text = (char *)pp_formatted_text(&pif_spawn);
+    fprintf(clFile, "%s", cl_text);
+    pp_clear_output_area(&pif_spawn);
 }

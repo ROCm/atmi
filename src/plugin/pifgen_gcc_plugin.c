@@ -73,6 +73,10 @@ static int initialized = 0;
 
 static std::string g_output_pifdefs_filename;
 
+void write_kl_init(const char *pif_name, int pif_index);
+void write_kernel_dispatch_routine(FILE *fp);
+void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
+
 void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
@@ -114,72 +118,6 @@ static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {\n\
 ");
 }
 
-void write_kernel_dispatch_routine(FILE *fp) {
-fprintf(fp, "\
-#include \"hsa_kl.h\" \n\
-#include \"atmi.h\" \n\
- \n\
-#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist} ; X = &_ ## X ; \n\
- \n\
-void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) { \n\
- \n\
-    hsa_queue_t* this_Q = (hsa_queue_t *)lparm_d->klist->qlist[k_id]; \n\
- \n\
-    /* Find the queue index address to write the packet info into.  */ \n\
-    const uint32_t queueMask = this_Q->size - 1; \n\
-    uint64_t index = hsa_queue_load_write_index_relaxed(this_Q); \n\
-    hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]); \n\
- \n\
-    /*  Process lparm values */ \n\
-    this_aql->setup  |= (uint16_t) lparm_d->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS; \n\
-    this_aql->grid_size_x=lparm_d->gdims[0]; \n\
-    this_aql->workgroup_size_x=lparm_d->ldims[0]; \n\
-    if (lparm_d->ndim>1) { \n\
-        this_aql->grid_size_y=lparm_d->gdims[1]; \n\
-        this_aql->workgroup_size_y=lparm_d->ldims[1]; \n\
-    } else { \n\
-        this_aql->grid_size_y=1; \n\
-        this_aql->workgroup_size_y=1; \n\
-    } \n\
- \n\
-    if (lparm_d->ndim>2) { \n\
-        this_aql->grid_size_z=lparm_d->gdims[2]; \n\
-        this_aql->workgroup_size_z=lparm_d->ldims[2]; \n\
-    } \n\
-    else \n\
-    { \n\
-        this_aql->grid_size_z=1; \n\
-        this_aql->workgroup_size_z=1; \n\
-    } \n\
- \n\
-    /* thisKernargAddress has already been set up in the beginning of this routine */ \n\
-    /*  Bind kernel argument buffer to the aql packet.  */ \n\
-    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id; \n\
-    this_aql->kernarg_address = aql->kernarg_address; \n\
-    this_aql->kernel_object = aql->kernel_object; \n\
-    this_aql->private_segment_size = aql->private_segment_size; \n\
-    this_aql->group_segment_size = aql->group_segment_size; \n\
- \n\
-    this_aql->completion_signal = lparm_d->klist->slist[k_id]; \n\
-    hsa_signal_add_relaxed(this_aql->completion_signal, 1); \n\
- \n\
-    /*  Prepare and set the packet header */  \n\
-    /* Only set barrier bit if asynchrnous execution */ \n\
-    int stream_num = lparm_d->stream; \n\
-    if ( stream_num >= 0 )   \n\
-        this_aql->header |= lparm_d->barrier << HSA_PACKET_HEADER_BARRIER;  \n\
-    this_aql->header |= lparm_d->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE; \n\
-    this_aql->header |= lparm_d->release_fence_scope << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE; \n\
- \n\
-    ((uint8_t*)(&this_aql->header))[0] = (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH; \n\
- \n\
-    /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
-    hsa_queue_store_write_index_relaxed(this_Q, index + 1); \n\
- \n\
-    //FIXME ring doorbell not work on GPU \n\
-    hsa_signal_store_relaxed(this_Q->doorbell_signal, index); \n\
-}\n\n");
-}
 
 
 std::string exec(const char* cmd) {
@@ -742,123 +680,12 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 }\n\n");
 
         /* add init function for dynamic kernel */
-        pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n", pif_name);
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    if (%s_FK == 0 ) { \n\
-        snk_pif_init(%s_pif_fn_table, sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]));\n\
-        %s_FK = 1; \n\
-    }\n\n",
-                pif_name,
-                pif_name, pif_name, pif_name,
-                pif_name);
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    if (klist_initalized == 0) { \n\
-        atmi_klist = (atmi_klist_t * )malloc(sizeof(atmi_klist_t)); \n\
-        atmi_klist->kernel_packets = NULL; \n\
-        atmi_klist->queues = NULL; \n\
-        atmi_klist->num_kernel_packets = 0; \n\
-        atmi_klist->num_queues = 0; \n\
-        klist_initalized = 1; \n\
-    }\n\n");
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(gpu_initalized == 0) { \n\
-        snk_init_context(atmi_klist); \n\
-        snk_init_gpu_context(); \n\
-        snk_gpu_create_program(); \n");
-for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
-                it != g_cl_modules.end(); it++) {
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-        snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
-        }
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-        snk_gpu_build_executable(&g_executable);\n\
-        gpu_initalized = 1;\n\
-    }\n\n\
-    /* Allocate the kernel argument buffer from the correct region. */\n\
-    void* thisKernargAddress;\n\
-    snk_gpu_memory_allocate(lparm, g_executable, \"%s\", &thisKernargAddress);\n\n", pif_name);
-        
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    hsa_status_t err;\n\n\
-    err = hsa_init();\n\
-    ErrorCheck(Initializing the hsa device, err)\n\n\
-    hsa_agent_t kernel_dispatch_Agent;\n\
-    err = hsa_iterate_agents(get_gpu_agent, &kernel_dispatch_Agent);\n\
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }\n\
-    ErrorCheck(Getting a gpu agent, err);\n\n\
-    uint32_t queue_size = 0;\n\
-    err = hsa_agent_get_info(kernel_dispatch_Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);\n\
-    ErrorCheck(Querying the agent maximum queue size, err);\n\n\
-    hsa_queue_t *queue;\n\
-    err = hsa_queue_create(kernel_dispatch_Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &queue);\n\
-    ErrorCheck(Creating the queue, err);\n\n\
-    atmi_klist->num_queues++;\n\
-    atmi_klist->queues = (uint64_t *)realloc(atmi_klist->queues, sizeof(uint64_t) * atmi_klist->num_queues);\n\
-    atmi_klist->queues[atmi_klist->num_queues - 1] = (uint64_t)queue;\n\n\
-    atmi_klist->num_kernel_packets++;\n\
-    atmi_klist->kernel_packets = (atmi_kernel_dispatch_packet_t *)realloc(atmi_klist->kernel_packets, sizeof(atmi_kernel_dispatch_packet_t) * atmi_klist->num_kernel_packets);\n\
-    atmi_kernel_dispatch_packet_t *this_aql = &atmi_klist->kernel_packets[atmi_klist->num_kernel_packets - 1];\n\n\
-    uint64_t _KN__Kernel_Object;\n\
-    uint32_t _KN__Group_Segment_Size;\n\
-    uint32_t _KN__Private_Segment_Size;\n\
-    snk_get_gpu_kernel_info(g_executable, %s_pif_fn_table[lparm->kernel_id].gpu_kernel.kernel_name, &_KN__Kernel_Object, \n\
-    &_KN__Group_Segment_Size, &_KN__Private_Segment_Size);\n\n\
-    /* thisKernargAddress has already been set up in the beginning of this routine */\n\
-    /*  Bind kernel argument buffer to the aql packet.  */\n\
-    this_aql->kernarg_address = (void*) thisKernargAddress;\n\
-    this_aql->kernel_object = _KN__Kernel_Object;\n\
-    this_aql->private_segment_size = _KN__Private_Segment_Size;\n\
-    this_aql->group_segment_size = _KN__Group_Segment_Size;\n\
-}\n\n", pif_name);
+        write_kl_init(pif_name, pif_index);
 
-/* add args struct of pif for dynamic dispatch */
-        pp_printf(&pif_spawn, "\
-struct %s_args_struct {\n\
-    uint64_t arg0; \n\
-    uint64_t arg1; \n\
-    uint64_t arg2; \n\
-    uint64_t arg3; \n\
-    uint64_t arg4; \n\
-    uint64_t arg5; \n\
-    atmi_task_t* arg6;\n", pif_name);
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf(&pif_spawn, "\
-    %s arg%d;\n", 
-            arg_list[arg_idx].c_str(), arg_idx + 6);
-        }
-            
-        pp_printf(&pif_spawn, "\
-} __attribute__ ((aligned (16))) ;\n\n");
+        /* add args struct of pif for dynamic dispatch */
+        write_spawn_function(pif_name, pif_index, arg_list, num_params);
 
-        /* add spawn function of pif for dynamic dispatch */
-        pp_printf(&pif_spawn, "\
-void spawn_%s(atmi_klparm_t *lparm_d, atmi_task_t *thisTask", pif_name);
-    
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf(&pif_spawn, ", %s var%d", arg_list[arg_idx].c_str(), arg_idx);
-        }
-        pp_printf(&pif_spawn, ") {\n\n");
-
-        pp_printf(&pif_spawn, "\
-    int k_id = %d;\n", pif_index); 
-
-        pp_printf(&pif_spawn, "\
-    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id; \n\
-    struct %s_args_struct * gpu_args = aql->kernarg_address; \n\
-    lparm_d->klist->slist[k_id] = lparm_d->klist->slist[k_id] == 0 ? *((hsa_signal_t *)(thisTask->handle)) : lparm_d->klist->slist[k_id]; \n\n", pif_name);
-
-        pp_printf(&pif_spawn, "\
-    gpu_args->arg6 = thisTask; \n");
-
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf((&pif_spawn), "\
-    gpu_args->arg%d = var%d;\n", arg_idx + 6, arg_idx);
-        }
-
-        pp_printf(&pif_spawn, "\
-    kernel_dispatch(lparm_d, k_id); \n\
-}\n\n");
-        
+       
         /* add PIF function table definition */
         pp_printf((pif_printers[pif_index].fn_table), "\nsnk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
     }
@@ -1261,3 +1088,199 @@ int plugin_init(struct plugin_name_args *plugin_info,
     return 0;
 }
 
+
+void write_kl_init(const char *pif_name, int pif_index)
+{
+        /* add init function for dynamic kernel */
+        pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n", pif_name);
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if (%s_FK == 0 ) { \n\
+        snk_pif_init(%s_pif_fn_table, sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]));\n\
+        %s_FK = 1; \n\
+    }\n\n",
+                pif_name,
+                pif_name, pif_name, pif_name,
+                pif_name);
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if (klist_initalized == 0) { \n\
+        atmi_klist = (atmi_klist_t * )malloc(sizeof(atmi_klist_t)); \n\
+        atmi_klist->kernel_packets = NULL; \n\
+        atmi_klist->queues = NULL; \n\
+        atmi_klist->num_kernel_packets = 0; \n\
+        atmi_klist->num_queues = 0; \n\
+        klist_initalized = 1; \n\
+    }\n\n");
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(gpu_initalized == 0) { \n\
+        snk_init_context(atmi_klist); \n\
+        snk_init_gpu_context(); \n\
+        snk_gpu_create_program(); \n");
+for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+                it != g_cl_modules.end(); it++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_gpu_build_executable(&g_executable);\n\
+        gpu_initalized = 1;\n\
+    }\n\n\
+    /* Allocate the kernel argument buffer from the correct region. */\n\
+    void* thisKernargAddress;\n\
+    snk_gpu_memory_allocate(lparm, g_executable, \"%s\", &thisKernargAddress);\n\n", pif_name);
+        
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    hsa_status_t err;\n\n\
+    err = hsa_init();\n\
+    ErrorCheck(Initializing the hsa device, err)\n\n\
+    hsa_agent_t kernel_dispatch_Agent;\n\
+    err = hsa_iterate_agents(get_gpu_agent, &kernel_dispatch_Agent);\n\
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }\n\
+    ErrorCheck(Getting a gpu agent, err);\n\n\
+    uint32_t queue_size = 0;\n\
+    err = hsa_agent_get_info(kernel_dispatch_Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);\n\
+    ErrorCheck(Querying the agent maximum queue size, err);\n\n\
+    hsa_queue_t *queue;\n\
+    err = hsa_queue_create(kernel_dispatch_Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &queue);\n\
+    ErrorCheck(Creating the queue, err);\n\n\
+    atmi_klist->num_queues++;\n\
+    atmi_klist->queues = (uint64_t *)realloc(atmi_klist->queues, sizeof(uint64_t) * atmi_klist->num_queues);\n\
+    atmi_klist->queues[atmi_klist->num_queues - 1] = (uint64_t)queue;\n\n\
+    atmi_klist->num_kernel_packets++;\n\
+    atmi_klist->kernel_packets = (atmi_kernel_dispatch_packet_t *)realloc(atmi_klist->kernel_packets, sizeof(atmi_kernel_dispatch_packet_t) * atmi_klist->num_kernel_packets);\n\
+    atmi_kernel_dispatch_packet_t *this_aql = &atmi_klist->kernel_packets[atmi_klist->num_kernel_packets - 1];\n\n\
+    uint64_t _KN__Kernel_Object;\n\
+    uint32_t _KN__Group_Segment_Size;\n\
+    uint32_t _KN__Private_Segment_Size;\n\
+    snk_get_gpu_kernel_info(g_executable, %s_pif_fn_table[lparm->kernel_id].gpu_kernel.kernel_name, &_KN__Kernel_Object, \n\
+    &_KN__Group_Segment_Size, &_KN__Private_Segment_Size);\n\n\
+    /* thisKernargAddress has already been set up in the beginning of this routine */\n\
+    /*  Bind kernel argument buffer to the aql packet.  */\n\
+    this_aql->kernarg_address = (void*) thisKernargAddress;\n\
+    this_aql->kernel_object = _KN__Kernel_Object;\n\
+    this_aql->private_segment_size = _KN__Private_Segment_Size;\n\
+    this_aql->group_segment_size = _KN__Group_Segment_Size;\n\
+}\n\n", pif_name);
+
+}
+
+
+void write_kernel_dispatch_routine(FILE *fp) {
+fprintf(fp, "\
+#include \"hsa_kl.h\" \n\
+#include \"atmi.h\" \n\
+ \n\
+#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist} ; X = &_ ## X ; \n\
+ \n\
+void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) { \n\
+ \n\
+    hsa_queue_t* this_Q = (hsa_queue_t *)lparm_d->klist->qlist[k_id]; \n\
+ \n\
+    /* Find the queue index address to write the packet info into.  */ \n\
+    const uint32_t queueMask = this_Q->size - 1; \n\
+    uint64_t index = hsa_queue_load_write_index_relaxed(this_Q); \n\
+    hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]); \n\
+ \n\
+    /*  Process lparm values */ \n\
+    this_aql->setup  |= (uint16_t) lparm_d->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS; \n\
+    this_aql->grid_size_x=lparm_d->gdims[0]; \n\
+    this_aql->workgroup_size_x=lparm_d->ldims[0]; \n\
+    if (lparm_d->ndim>1) { \n\
+        this_aql->grid_size_y=lparm_d->gdims[1]; \n\
+        this_aql->workgroup_size_y=lparm_d->ldims[1]; \n\
+    } else { \n\
+        this_aql->grid_size_y=1; \n\
+        this_aql->workgroup_size_y=1; \n\
+    } \n\
+ \n\
+    if (lparm_d->ndim>2) { \n\
+        this_aql->grid_size_z=lparm_d->gdims[2]; \n\
+        this_aql->workgroup_size_z=lparm_d->ldims[2]; \n\
+    } \n\
+    else \n\
+    { \n\
+        this_aql->grid_size_z=1; \n\
+        this_aql->workgroup_size_z=1; \n\
+    } \n\
+ \n\
+    /* thisKernargAddress has already been set up in the beginning of this routine */ \n\
+    /*  Bind kernel argument buffer to the aql packet.  */ \n\
+    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id; \n\
+    this_aql->kernarg_address = aql->kernarg_address; \n\
+    this_aql->kernel_object = aql->kernel_object; \n\
+    this_aql->private_segment_size = aql->private_segment_size; \n\
+    this_aql->group_segment_size = aql->group_segment_size; \n\
+ \n\
+    this_aql->completion_signal = lparm_d->klist->slist[k_id]; \n\
+    hsa_signal_add_relaxed(this_aql->completion_signal, 1); \n\
+ \n\
+    /*  Prepare and set the packet header */  \n\
+    /* Only set barrier bit if asynchrnous execution */ \n\
+    int stream_num = lparm_d->stream; \n\
+    if ( stream_num >= 0 )   \n\
+        this_aql->header |= lparm_d->barrier << HSA_PACKET_HEADER_BARRIER;  \n\
+    this_aql->header |= lparm_d->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE; \n\
+    this_aql->header |= lparm_d->release_fence_scope << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE; \n\
+ \n\
+    ((uint8_t*)(&this_aql->header))[0] = (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH; \n\
+ \n\
+    /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
+    hsa_queue_store_write_index_relaxed(this_Q, index + 1); \n\
+ \n\
+    //FIXME ring doorbell not work on GPU \n\
+    hsa_signal_store_relaxed(this_Q->doorbell_signal, index); \n\
+}\n\n");
+}
+
+void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
+{
+    int arg_idx; 
+
+    /* add args struct of pif for dynamic dispatch */
+    pp_printf(&pif_spawn, "\
+struct %s_args_struct {\n\
+    uint64_t arg0; \n\
+    uint64_t arg1; \n\
+    uint64_t arg2; \n\
+    uint64_t arg3; \n\
+    uint64_t arg4; \n\
+    uint64_t arg5; \n\
+    atmi_task_t* arg6;\n", pif_name);
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf(&pif_spawn, "\
+    %s arg%d;\n", 
+            arg_list[arg_idx].c_str(), arg_idx + 6);
+        }
+            
+    pp_printf(&pif_spawn, "\
+} __attribute__ ((aligned (16))) ;\n\n");
+
+        /* add spawn function of pif for dynamic dispatch */
+    pp_printf(&pif_spawn, "\
+void spawn_%s(atmi_klparm_t *lparm_d, atmi_task_t *thisTask", pif_name);
+    
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf(&pif_spawn, ", %s var%d", arg_list[arg_idx].c_str(), arg_idx);
+        }
+    pp_printf(&pif_spawn, ") {\n\n");
+
+    pp_printf(&pif_spawn, "\
+    int k_id = %d;\n", pif_index); 
+
+    pp_printf(&pif_spawn, "\
+    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id; \n\
+    struct %s_args_struct * gpu_args = aql->kernarg_address; \n\
+    lparm_d->klist->slist[k_id] = lparm_d->klist->slist[k_id] == 0 ? *((hsa_signal_t *)(thisTask->handle)) : lparm_d->klist->slist[k_id]; \n\n", pif_name);
+
+    pp_printf(&pif_spawn, "\
+    gpu_args->arg6 = thisTask; \n");
+
+    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+        pp_printf((&pif_spawn), "\
+    gpu_args->arg%d = var%d;\n", arg_idx + 6, arg_idx);
+        }
+
+    pp_printf(&pif_spawn, "\
+    kernel_dispatch(lparm_d, k_id); \n\
+}\n\n");
+        
+}

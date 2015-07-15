@@ -1,5 +1,5 @@
 #ifndef __ATMI_H__
-#include "hsa_kl.h"
+#include "atmi_kl.h"
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* Asynchronous Task Management Interface ATMI file: atmi.h                   */
@@ -63,15 +63,6 @@ typedef struct atmi_stream_s {
    atmi_full_policy_t full_policy;  /* What to do if maxsize reached          */
 } atmi_stream_t;
 
-typedef struct atmi_klist_s atmi_klist_t;
-struct atmi_klist_s { 
-   int num_signal;
-   int num_queue;
-   int num_kernel;
-   hsa_kernel_dispatch_packet_t *plist;
-   uint64_t *qlist;
-   hsa_signal_t *slist;
-};
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* atmi_task_t  ATMI Task Handle Data Structure                               */
@@ -127,18 +118,6 @@ typedef struct atmi_lparm_s {
     //   boolean          nested;         /* This task may create more tasks        */
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
-
-typedef struct atmi_klparm_s atmi_klparm_t;
-struct atmi_klparm_s { 
-   int ndim;                  /* default = 1 */
-   unsigned long           gdims[3];       /* # of global threads for each dimension */
-   unsigned long           ldims[3];       /* Thread group size for each dimension   */
-   int stream;                /* default = -1 , synchrnous */
-   int barrier;               /* default = SNK_UNORDERED */
-   int acquire_fence_scope;   /* default = 2 */
-   int release_fence_scope;   /* default = 2 */
-   atmi_klist_t *klist;
-};
 #define WORKITEMS gridDim[0] 
 #define WORKITEMS2D gridDim[0] 
 #define WORKITEMS3D gridDim[0] 

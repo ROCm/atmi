@@ -1,119 +1,3 @@
-function write_hw_init_template(){
-/bin/cat << "EOF"
-    if (_KN__FK == 0 ){
-        snk_pif_init(_KN__pif_fn_table, sizeof(_KN__pif_fn_table)/sizeof($_KN__pif_fn_table[0]));
-        _KN__FK = 1;
-    }
-
-    if (klist_initalized == 0) {
-        atmi_klist = (atmi_klist_t *)malloc(sizeof(atmi_klist_t));
-        atmi_klist->qlist = NULL;
-        atmi_klist->slist = NULL;
-        atmi_klist->plist = NULL;
-        atmi_klist->num_signal = 0;
-        atmi_klist->num_queue = 0;
-        atmi_klist->num_kernel = 0;
-        klist_initalized = 1;
-    }
-
-    if(gpu_initalized == 0) {
-        snk_init_context(atmi_klist);
-        snk_init_gpu_context();
-        snk_gpu_create_program();
-        snk_gpu_add_brig_module(_CN__HSA_BrigMem); 
-        snk_gpu_build_executable(&g_executable);
-        gpu_initalized = 1;
-    }
-
-EOF
-}
-
-function write_kernel_init_template(){
-/bin/cat <<"EOF"
-
-    hsa_status_t err;
-
-    err = hsa_init();
-    ErrorCheck(Initializing the hsa device, err);
-
-    hsa_agent_t kernel_dispatch_Agent;
-    err = hsa_iterate_agents(get_gpu_agent, &kernel_dispatch_Agent);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    ErrorCheck(Getting a gpu agent, err);
-
-    uint32_t queue_size = 0;
-    err = hsa_agent_get_info(kernel_dispatch_Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
-    ErrorCheck(Querying the agent maximum queue size, err);
-
-    hsa_queue_t *queue;
-    err = hsa_queue_create(kernel_dispatch_Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &queue);
-    ErrorCheck(Creating the queue, err);
-
-    atmi_klist->num_queue++;
-    atmi_klist->qlist = (uint64_t *)realloc(atmi_klist->qlist, sizeof(uint64_t) * atmi_klist->num_queue);
-    atmi_klist->qlist[atmi_klist->num_queue - 1] = (uint64_t)queue;
-
-    hsa_signal_t signal = 0;
-    if(lparm->synchronous == ATMI_FALSE)
-    {
-        err = hsa_signal_create(0, 0, NULL, &signal);
-        ErrorCheck(Creating a HSA signal, err);
-    }
-
-    atmi_klist->num_signal++;
-    atmi_klist->slist = (hsa_signal_t *)realloc(atmi_klist->slist, sizeof(hsa_signal_t) * atmi_klist->num_signal);
-    atmi_klist->slist[atmi_klist->num_signal - 1] = signal;
-
-    atmi_klist->num_kernel++;
-    atmi_klist->plist = (hsa_kernel_dispatch_packet_t *)realloc(atmi_klist->plist, sizeof(hsa_kernel_dispatch_packet_t) * atmi_klist->num_kernel);
-    hsa_kernel_dispatch_packet_t *this_aql = &atmi_klist->plist[atmi_klist->num_kernel - 1];
-
-    uint64_t _KN__Kernel_Object;
-    uint32_t _KN__Group_Segment_Size;
-    uint32_t _KN__Private_Segment_Size;
-    snk_get_gpu_kernel_info(g_executable, kernel_name, &_KN__Kernel_Object, 
-    &_KN__Group_Segment_Size, &_KN__Private_Segment_Size);
-
-    /* thisKernargAddress has already been set up in the beginning of this routine */
-    /*  Bind kernel argument buffer to the aql packet.  */
-    this_aql->kernarg_address = (void*) thisKernargAddress;
-    this_aql->kernel_object = _KN__Kernel_Object;
-    this_aql->private_segment_size = _KN__Private_Segment_Size;
-    this_aql->group_segment_size = _KN__Group_Segment_Size;
-
-    //printf("queue: %d signal: %d aql:%d %d %d %d\n", queue, signal, thisKernargAddress, _KN__Kernel_Object, _KN__Private_Segment_Size, _KN__Group_Segment_Size);
-
-EOF
-}
-
-function write_utils_template(){
-/bin/cat <<"EOF"
-
-#define ErrorCheck(msg, status) \
-if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed.\n", #msg); \
-    exit(1); \
-} else { \
- /*  printf("%s succeeded.\n", #msg);*/ \
-}
-
-/* Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
-   and sets the value of data to the agent handle if it is.
-*/
-static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {
-    hsa_status_t status;
-    hsa_device_type_t device_type;
-    status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
-    if (HSA_STATUS_SUCCESS == status && HSA_DEVICE_TYPE_GPU == device_type) {
-        hsa_agent_t* ret = (hsa_agent_t*)data;
-        *ret = agent;
-        return HSA_STATUS_INFO_BREAK;
-    }
-    return HSA_STATUS_SUCCESS;
-}
-
-EOF
-}
 function write_kernel_dispatch_template(){
 /bin/cat <<"EOF"
 
@@ -122,9 +6,11 @@ function write_kernel_dispatch_template(){
 
 #define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist} ; X = &_ ## X ;
 
-void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) {
+void kernel_dispatch(const atmi_klparm_t *klparm, const int k_id) {
 
-    hsa_queue_t* this_Q = (hsa_queue_t *)lparm_d->klist->qlist[k_id];
+    atmi_kernel_dispatch_packet_t *kernel_packet = klparm->klist->kernel_packets + k_id;
+
+    hsa_queue_t* this_Q = (hsa_queue_t *)klparm->klist->queues[k_id];
 
     /* Find the queue index address to write the packet info into.  */
     const uint32_t queueMask = this_Q->size - 1;
@@ -132,20 +18,20 @@ void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) {
     hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
 
     /*  Process lparm values */
-    this_aql->setup  |= (uint16_t) lparm_d->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
-    this_aql->grid_size_x=lparm_d->gdims[0];
-    this_aql->workgroup_size_x=lparm_d->ldims[0];
-    if (lparm_d->ndim>1) {
-        this_aql->grid_size_y=lparm_d->gdims[1];
-        this_aql->workgroup_size_y=lparm_d->ldims[1];
+    this_aql->setup  |= (uint16_t) klparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
+    this_aql->grid_size_x=klparm->gdims[0];
+    this_aql->workgroup_size_x=klparm->ldims[0];
+    if (klparm->ndim>1) {
+        this_aql->grid_size_y=klparm->gdims[1];
+        this_aql->workgroup_size_y=klparm->ldims[1];
     } else {
         this_aql->grid_size_y=1;
         this_aql->workgroup_size_y=1;
     }
 
-    if (lparm_d->ndim>2) {
-        this_aql->grid_size_z=lparm_d->gdims[2];
-        this_aql->workgroup_size_z=lparm_d->ldims[2];
+    if (klparm->ndim>2) {
+        this_aql->grid_size_z=klparm->gdims[2];
+        this_aql->workgroup_size_z=klparm->ldims[2];
     }
     else
     {
@@ -155,22 +41,21 @@ void kernel_dispatch(const atmi_klparm_t *lparm_d, const int k_id) {
 
     /* thisKernargAddress has already been set up in the beginning of this routine */
     /*  Bind kernel argument buffer to the aql packet.  */
-    hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id;
-    this_aql->kernarg_address = aql->kernarg_address;
-    this_aql->kernel_object = aql->kernel_object;
-    this_aql->private_segment_size = aql->private_segment_size;
-    this_aql->group_segment_size = aql->group_segment_size;
+    this_aql->kernarg_address = kernel_packet->kernarg_address;
+    this_aql->kernel_object = kernel_packet->kernel_object;
+    this_aql->private_segment_size = kernel_packet->private_segment_size;
+    this_aql->group_segment_size = kernel_packet->group_segment_size;
+    this_aql->completion_signal = kernel_packet->completion_signal;
 
-    this_aql->completion_signal = lparm_d->klist->slist[k_id];
     hsa_signal_add_relaxed(this_aql->completion_signal, 1);
 
     /*  Prepare and set the packet header */ 
     /* Only set barrier bit if asynchrnous execution */
-    int stream_num = lparm_d->stream;
+    int stream_num = klparm->stream;
     if ( stream_num >= 0 )  
-        this_aql->header |= lparm_d->barrier << HSA_PACKET_HEADER_BARRIER; 
-    this_aql->header |= lparm_d->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
-    this_aql->header |= lparm_d->release_fence_scope << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+        this_aql->header |= klparm->barrier << HSA_PACKET_HEADER_BARRIER; 
+    this_aql->header |= klparm->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+    this_aql->header |= klparm->release_fence_scope << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
 
     ((uint8_t*)(&this_aql->header))[0] = (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH;
 
@@ -320,12 +205,12 @@ __SEDCMD=" "
          __FN="\&__OpenCL_${__KN}_kernel"
       fi
 
-      echo "void spawn_${__KN}(atmi_klparm_t *lparm_d, $__CFN_ARGL){" >> $__SPAWN_CL
+      echo "void spawn_${__KN}(atmi_klparm_t *klparm, $__CFN_ARGL){" >> $__SPAWN_CL
       echo "   int k_id = $KERNEL_NUM;" >> $__SPAWN_CL
       KERNEL_NUM=$((KERNEL_NUM + 1))
-      echo "   hsa_kernel_dispatch_packet_t *aql = lparm_d->klist->plist + k_id;" >> $__SPAWN_CL
-      echo "   struct ${__KN}_args_struct * ${__KN}_args = aql->kernarg_address;" >> $__SPAWN_CL
-      echo "   lparm_d->klist->slist[k_id] = lparm_d->klist->slist[k_id] == 0 ? *((hsa_signal_t *)(thisTask->handle)) : lparm_d->klist->slist[k_id];" >> $__SPAWN_CL
+      echo "   atmi_kernel_dispatch_packet_t *packet = klparm->klist->kernel_packets + k_id;" >> $__SPAWN_CL
+      echo "   struct ${__KN}_args_struct * ${__KN}_args = packet->kernarg_address;" >> $__SPAWN_CL
+      echo "   packet->completion_signal = *((hsa_signal_t *)(thisTask->handle));" >> $__SPAWN_CL
 
       #     Write statements to fill in the argument structure and 
       #     keep track of updated CL arg list and new call list 
@@ -371,10 +256,10 @@ __SEDCMD=" "
           sepchar=","
           NEXTI=$(( NEXTI + 1 ))
       done 
-      #echo "   lparm_d->slist = thisTask->klist->slist;" >> $__SPAWN_CL
-      #echo "   lparm_d->qlist = thisTask->klist->qlist;" >> $__SPAWN_CL
-      #echo "   lparm_d->plist = thisTask->klist->plist;" >> $__SPAWN_CL
-      echo "   kernel_dispatch(lparm_d, k_id);" >> $__SPAWN_CL 
+      #echo "   klparm->slist = thisTask->klist->slist;" >> $__SPAWN_CL
+      #echo "   klparm->qlist = thisTask->klist->qlist;" >> $__SPAWN_CL
+      #echo "   klparm->plist = thisTask->klist->plist;" >> $__SPAWN_CL
+      echo "   kernel_dispatch(klparm, k_id);" >> $__SPAWN_CL 
       echo "}" >> $__SPAWN_CL
 
       echo "struct ${__KN}_args_struct {" >> $__STRUCT_CL

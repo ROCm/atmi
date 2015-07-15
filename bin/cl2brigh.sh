@@ -438,7 +438,8 @@ else
 #  Not step 2, do normal steps
 #   [ $VERBOSE ] && echo cp $INDIR/$CLNAME $TMPDIR/updated.cl
 #cp $INDIR/$CLNAME $TMPDIR/updated.cl
-echo $HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
+
+#echo $HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
 $HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
 
 #   [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."

@@ -44,8 +44,9 @@ int main(int argc, char* argv[]) {
     //{
         //printf("%d ", input_gpu[ii]);
     //}
+    //printf("\n");
     printf("sum: %d\n", input_gpu[0]);
-	free(input_cpu);
+    free(input_cpu);
 	free(input_gpu);
 	return 0;
 }

@@ -1,4 +1,5 @@
 #include "atmi.h"
+#include "spawns.cl"
 __kernel void decode_gpu(__global atmi_task_t *thisTask, __global const char* in, __global char* out, const size_t strlength) {
 	int num = get_global_id(0);
     if(num < strlength) 

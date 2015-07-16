@@ -55,7 +55,8 @@ string_table_t res_keywords_table[] = {
 };
 
 static std::vector<std::string> g_cl_modules;
-
+static std::vector<std::string> g_all_pifdecls;
+static std::vector<std::string> g_cl_files;
 // format of the pif_table
 // "PIF name", (pif_index_in_table, kernels_for_this_pif_count)
 static std::map<std::string, std::pair<int,int> > pif_table;
@@ -83,7 +84,11 @@ fprintf(fp, "#ifdef __cplusplus \n\
 #endif \n\
 #ifndef __cplusplus \n\
 #define _CPPSTRING_ \n\
-#endif \n\n\
+#endif \n\n");
+}
+
+void write_globals(FILE *fp) {
+fprintf(fp, "\
 static hsa_executable_t g_executable;\n\
 static int gpu_initalized = 0;\n\
 static int cpu_initalized = 0;\n\n\
@@ -131,7 +136,7 @@ void brig2brigh(const char *brigfilename, const char *cl_module_name) {
     fclose(fp_brigh);
 }
 
-void cl2brigh(const char *clfilename) {
+void cl2brigh(const char *clfilename, const char *symbolname) {
     std::string cmd;
     cmd.clear();
     cmd += exec("which cl2brigh.sh");
@@ -145,6 +150,11 @@ void cl2brigh(const char *clfilename) {
     // popen returns a newline. remove it.
     strtok(cmd_c, "\n");
     strcat(cmd_c, " ");
+    if(symbolname != NULL && symbolname != "") {
+        strcat(cmd_c, "-s ");
+        strcat(cmd_c, symbolname);
+        strcat(cmd_c, " ");
+    }
     strcat(cmd_c, clfilename);
     
     DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
@@ -699,6 +709,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
     if(is_new_pif == 1) {
         push_declaration(pif_name, fn_type, num_params);
+        g_all_pifdecls.push_back(std::string(pif_decl));
     }
     return NULL_TREE;
 }
@@ -755,6 +766,7 @@ register_finish_unit (void *event_data, void *data) {
     }
     fprintf(fp_pifdefs_genw, "/*Headers carried over from %s*/\n%s\n", main_input_filename, headers.c_str());
     write_cpp_warning_header(fp_pifdefs_genw);
+    write_globals(fp_pifdefs_genw);
     /* 1) dump kernel impl declarations (fn pointers */
     for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
@@ -779,11 +791,38 @@ register_finish_unit (void *event_data, void *data) {
         pp_clear_output_area((it->pifdefs));
     }
     fclose(fp_pifdefs_genw);
+
+    /* Inject all the PIF declarations into the CL file and compile (cloc) */
+    for(std::vector<std::string>::iterator it = g_cl_files.begin(); 
+            it != g_cl_files.end(); it++) {
+        FILE *tmp_cl = fopen("tmp.cl", "w");
+        fprintf(tmp_cl, "#include \"atmi.h\"\n");
+        write_cpp_warning_header(tmp_cl);
+        for(std::vector<std::string>::iterator it_pif = g_all_pifdecls.begin(); 
+                it_pif != g_all_pifdecls.end(); it_pif++) {
+            fprintf(tmp_cl, "extern _CPPSTRING_ %s;\n", it_pif->c_str());
+        }
+        fclose(tmp_cl);
+        char cmd_c[2048] = {0};
+        sprintf(cmd_c, "cat %s >> tmp.cl", it->c_str());
+
+        DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
+        int ret = system(cmd_c);
+        if(WIFEXITED(ret) == 0 || WEXITSTATUS(ret) != 0) {
+            fprintf(stderr, "\"%s\" returned with error %d\n", cmd_c, WEXITSTATUS(ret));
+            exit(-1);
+        }
+        vector<string> tokens = split(it->c_str(), '.');
+        cl2brigh("tmp.cl", tokens[0].c_str());
+        int ret_del = remove("tmp.cl");
+        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+    }
 }
 
 static void
 register_start_unit (void *event_data, void *data) {
     DEBUG_PRINT("Callback at start of compilation unit\n");
+    g_all_pifdecls.clear();
     pp_needs_newline (&g_kerneldecls) = true;
 
     /* Replace CL or other kernel-specific keywords with 
@@ -945,7 +984,11 @@ int plugin_init(struct plugin_name_args *plugin_info,
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             const char *clfilename = plugin_info->argv[i].value;
             /* compile CL to BRIG header file with char array */
-            cl2brigh(clfilename);
+            // Compile to brig at end of current compilation so that the PIF declarations can be 
+            // embedded into the CL code. This is useful if GPU kernels need to invoke PIFs
+            // in the same way as CPU code invokes PIFs
+            // cl2brigh(clfilename);
+            g_cl_files.push_back(std::string(clfilename));
 
             /* remove .cl extension */
             vector<string> tokens = split(clfilename, '.');

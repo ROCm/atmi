@@ -22,7 +22,7 @@ extern "C" {
 #define ATMI_MAX_STREAMS            8 
 #define ATMI_MAX_TASKS_PER_STREAM   125
 
-#define SNK_MAX_CPU_QUEUES 4
+#define SNK_MAX_CPU_QUEUES 3
 #define SNK_MAX_GPU_QUEUES 4 
 #define SNK_MAX_FUNCTIONS   100
 
@@ -74,10 +74,6 @@ typedef struct snk_gpu_kernel_s {
      */
 } snk_gpu_kernel_t;
 
-typedef struct snk_kernel_args_s {
-    uint64_t args[20];
-} snk_kernel_args_t;
-
 typedef struct snk_pif_kernel_table_s {
     const char *pif_name; 
     atmi_devtype_t devtype;
@@ -125,7 +121,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
-                 snk_kernel_args_t *kernel_args);
+                 void *kernel_args);
 
 #ifdef __cplusplus
 }

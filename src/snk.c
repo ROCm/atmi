@@ -44,6 +44,7 @@
  * from the snk_genw.sh script to a library
  */
 #include "snk_internal.h"
+#include "profiling.h"
 #include <time.h>
 #include <assert.h>
 
@@ -82,7 +83,7 @@ hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
 hsa_signal_t  SNK_Signals[SNK_MAX_TASKS];
 int          SNK_NextTaskId = 0 ;
-atmi_stream_t snk_default_stream_obj = {ATMI_ORDERED};
+atmi_stream_t snk_default_stream_obj = {ATMI_FALSE};
 int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
@@ -126,9 +127,11 @@ hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_
     /* Keep adding barrier packets in multiples of 5 because that is the maximum signals that 
        the HSA barrier packet can support today
      */
+    status_t err;
     hsa_signal_t last_signal;
     if(queue == NULL || dep_task_list == NULL || dep_task_count <= 0) return last_signal;
-    hsa_signal_create(0, 0, NULL, &last_signal);
+    err = hsa_signal_create(0, 0, NULL, &last_signal);
+    ErrorCheck(HSA Signal Creaion, err);
     atmi_task_t **tasks = dep_task_list;
     int tasks_remaining = dep_task_count;
     const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
@@ -603,7 +606,7 @@ void init_hsa() {
 
 status_t snk_init_cpu_context() {
     if(g_cpu_initialized != 0) return;
-    
+  
     hsa_status_t err;
     init_hsa();
     
@@ -612,6 +615,9 @@ status_t snk_init_cpu_context() {
     snk_init_gpu_context();
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
+#if defined (ATMI_HAVE_PROFILE)
+    atmi_profiling_init();
+#endif /*ATMI_HAVE_PROFILE */
     err = hsa_iterate_agents(get_cpu_agent, &snk_cpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
@@ -808,8 +814,7 @@ status_t snk_get_gpu_kernel_info(
 
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
-                 //void *kernel_args) {
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
@@ -871,8 +876,8 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                 const uint32_t num_params = snk_kernels[i].num_params;
                 ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                 
-                /* pass this task handle to the kernel as an argument */
-                kernel_args->args[0] = (uint64_t) ret;
+                /* task handle is passed to the kernel as an argument
+                 * by the CPU agent, and not at launch time*/
 
                 /* Get profiling object. Can be NULL? */
                 // ret->profile = lparm->profile;
@@ -966,7 +971,6 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                 hsa_status_t err;
                 hsa_executable_symbol_t symbol;
                 /* Extract the symbol from the executable.  */
-                DEBUG_PRINT("Kernel GPU memory allocate: Looking for symbol %s\n", kernel_name); 
                 err = hsa_executable_get_symbol(executable, NULL, kernel_name, snk_gpu_agent, 0, &symbol);
                 ErrorCheck(Extract the symbol from the executable, err);
 
@@ -974,15 +978,19 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                 uint32_t kernel_segment_size;
                 err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &kernel_segment_size);
                 ErrorCheck(Extracting the kernarg segment size from the executable, err);
+                DEBUG_PRINT("Kernel GPU memalloc. Kernel %s needs %" PRIu32" bytes for kernargs\n", kernel_name, kernel_segment_size); 
 
+#if 1                
                 *thisKernargAddress = malloc(kernel_segment_size);
+                //posix_memalign(thisKernargAddress, 16, kernel_segment_size);
+#else
                 /* FIXME: HSA 1.0F may have a bug that serializes all queue
                  * operations when hsa_memory_allocate is used.
                  * Investigate more and revert back to
                  * hsa_memory_allocate once bug is fixed. */
-                //err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
-                //ErrorCheck(Allocating memory for the executable-kernel, err);
-
+                err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, thisKernargAddress);
+                ErrorCheck(Allocating memory for the executable-kernel, err);
+#endif
                 break;
             }
         }
@@ -1020,6 +1028,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     check_change_in_device_type(stream, this_Q, ATMI_DEVTYPE_GPU);
 
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
+    DEBUG_PRINT("Pif %s requires %d task\n", pif_name, lparm->num_required);
     if ( lparm->num_required > 0) {
         enqueue_barrier_gpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
     }
@@ -1149,7 +1158,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 // below exploration for nested tasks
 atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *kernel_name,
-                 snk_kernel_args_t *kernel_args) {
+                 void *kernel_args) {
     atmi_task_t *ret = NULL;
     /*if(lparm->nested == ATMI_TRUE) {
         ret = snk_create_cpu_kernel(lparm, kernel_name,

@@ -19,7 +19,9 @@
 #include <langhooks.h>
 #include <cpplib.h>
 #include <c-tree.h>
+#include <cgraph.h>
 #include <c-family/c-pragma.h>
+#include <gimple-expr.h>
 
 #include <map>
 #include <set>
@@ -53,8 +55,11 @@ string_table_t res_keywords_table[] = {
 };
 
 static std::vector<std::string> g_cl_modules;
-
-static std::map<std::string, int> pif_table;
+static std::vector<std::string> g_all_pifdecls;
+static std::vector<std::string> g_cl_files;
+// format of the pif_table
+// "PIF name", (pif_index_in_table, kernels_for_this_pif_count)
+static std::map<std::string, std::pair<int,int> > pif_table;
 typedef struct pif_printers_s {
    pretty_printer *pifdefs; 
    pretty_printer *fn_table; 
@@ -79,7 +84,11 @@ fprintf(fp, "#ifdef __cplusplus \n\
 #endif \n\
 #ifndef __cplusplus \n\
 #define _CPPSTRING_ \n\
-#endif \n\n\
+#endif \n\n");
+}
+
+void write_globals(FILE *fp) {
+fprintf(fp, "\
 static hsa_executable_t g_executable;\n\
 static int gpu_initalized = 0;\n\
 static int cpu_initalized = 0;\n\n\
@@ -127,7 +136,7 @@ void brig2brigh(const char *brigfilename, const char *cl_module_name) {
     fclose(fp_brigh);
 }
 
-void cl2brigh(const char *clfilename) {
+void cl2brigh(const char *clfilename, const char *symbolname) {
     std::string cmd;
     cmd.clear();
     cmd += exec("which cl2brigh.sh");
@@ -141,6 +150,11 @@ void cl2brigh(const char *clfilename) {
     // popen returns a newline. remove it.
     strtok(cmd_c, "\n");
     strcat(cmd_c, " ");
+    if(symbolname != NULL && symbolname != "") {
+        strcat(cmd_c, "-s ");
+        strcat(cmd_c, symbolname);
+        strcat(cmd_c, " ");
+    }
     strcat(cmd_c, clfilename);
     
     DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
@@ -168,6 +182,38 @@ std::vector<std::string> split(const std::string &s, char delim) {
 }
 
 
+void generate_task_wrapper(char *text, const char *fn_name, const int num_params, char *fn_decl) {
+    char *pch = strtok(text,"<");
+    if(pch != NULL) strcpy(fn_decl, pch);
+    pch = strtok (NULL, ">");
+    strcat(fn_decl, fn_name);
+    strcat(fn_decl, "_wrapper");
+    pch = strtok (NULL, "(");
+    if(pch != NULL) strcat(fn_decl, pch);
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_task_t **var0)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_task_t **var0, ");
+    }
+    
+    int var_idx = 0;
+    pch = strtok (NULL, ",)");
+    //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
+    for(var_idx = 1; var_idx < num_params; var_idx++) {
+        pch = strtok (NULL, ",)");
+    //    DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        strcat(fn_decl, pch);
+        char var_decl[64] = {0}; 
+        sprintf(var_decl, "* var%d", var_idx);
+        strcat(fn_decl, var_decl);
+        if(var_idx == num_params - 1) // last param must end with )
+            strcat(fn_decl, ")");
+        else
+            strcat(fn_decl, ",");
+    }
+}
+
 void generate_task(char *text, const char *fn_name, const int num_params, char *fn_decl) {
     char *pch = strtok(text,"<");
     if(pch != NULL) strcpy(fn_decl, pch);
@@ -175,7 +221,12 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_task_t *var0, ");
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_task_t *var0)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_task_t *var0, ");
+    }
     
     int var_idx = 0;
     pch = strtok (NULL, ",)");
@@ -203,8 +254,14 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    strcat(fn_decl, "(atmi_lparm_t *lparm, ");
-    
+   
+    if(num_params == 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm)");
+    }
+    else if(num_params > 1) {
+        strcat(fn_decl, "(atmi_lparm_t *lparm, ");
+    }
+
     int var_idx = 0;
     pch = strtok (NULL, ",)");
     //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
@@ -294,21 +351,27 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
 
 int get_pif_index(const char *pif_name) {
     /*DEBUG_PRINT("Looking up PIF %s\n", pif_name);
-    for(std::map<std::string, int>::iterator it = pif_table.begin();
-        it != pif_table.end(); it++) {
-        DEBUG_PRINT("%s, %d\n", it->first.c_str(), it->second);
-    }
     */
     if(pif_table.find(std::string(pif_name)) != pif_table.end()) {
-        return pif_table[pif_name];
+        return pif_table[pif_name].first;
     }
     return -1;
 }
 
+int get_pif_count(const char *pif_name) {
+    /*DEBUG_PRINT("Looking up PIF %s\n", pif_name);
+    */
+    if(pif_table.find(std::string(pif_name)) != pif_table.end()) {
+        return pif_table[pif_name].second;
+    }
+    return -1;
+}
+
+
 void register_pif(const char *pif_name) {
     std::string pif_name_str(pif_name);
     if(pif_table.find(pif_name_str) == pif_table.end()) {
-        pif_table[pif_name_str] = pif_printers.size();
+        pif_table[pif_name_str] = std::make_pair(pif_printers.size(), 1);
         //pif_table.insert(std::pair<std::string,int>(pif_name_str, pif_printers.size()));
         pif_printers_t pp;
         pp.pifdefs = new pretty_printer;
@@ -317,6 +380,26 @@ void register_pif(const char *pif_name) {
         pp_needs_newline ((pp.fn_table)) = true;
         pif_printers.push_back(pp);
     }
+    else {
+        pif_table[pif_name_str].second++;
+    }
+}
+
+void push_global_int_decl(const char *var_name, const int value) {
+    /* Inspired from SO solution
+     * http://stackoverflow.com/questions/25998225/insert-global-variable-declaration-whit-a-gcc-plugin?rq=1
+     */
+    tree global_var = build_decl(input_location, 
+                        VAR_DECL, get_identifier(var_name), integer_type_node);
+    DECL_INITIAL(global_var) = build_int_cst (integer_type_node, value);
+    TREE_READONLY(global_var) = 1;
+    TREE_STATIC (global_var) = 1;
+    //DECL_CONTEXT (global_var) = ???;
+    varpool_add_new_variable(global_var);
+    /*AND if you have thought to use in another subsequent compilation, you 
+      will need to give it an assembler name like this*/
+    //change_decl_assembler_name(global_var, g_name);
+    pushdecl(global_var);
 }
 
 static tree
@@ -414,6 +497,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     int text_sz = strlen(text); 
     char text_dup[2048]; 
     strcpy(text_dup, text);
+    char text_dup_2[2048]; 
+    strcpy(text_dup_2, text);
     pp_clear_output_area(&tmp_buffer);
     fclose(f_tmp);
     int ret_del = remove("tmp.pif.def.c");
@@ -430,6 +515,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
     char pif_decl[2048];
     char fn_decl[2048];
+    char fn_cpu_wrapper_decl[2048];
 
     generate_pif(text, pif_name, num_params, pif_decl); 
     DEBUG_PRINT("PIF Decl: %s\n", pif_decl);
@@ -437,6 +523,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     generate_task(text_dup, fn_name, num_params, fn_decl); 
     DEBUG_PRINT("Task Decl: %s\n", fn_decl);
    
+    generate_task_wrapper(text_dup_2, fn_name, num_params, fn_cpu_wrapper_decl); 
+    DEBUG_PRINT("Fn CPU Wrapper Decl: %s\n", fn_cpu_wrapper_decl);
+    
     if(is_new_pif == 1) { //first time PIF is called 
         pp_printf((pif_printers[pif_index].pifdefs), "\nstatic int %s_FK = 0;\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ %s { \n", pif_decl);
@@ -464,37 +553,51 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pif_name, pif_name,
         pif_name,
         pif_name);
-#if 0
+        int arg_idx;
+#if 1
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        typedef struct cpu_args_struct_s {\n");
-        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
+        typedef struct cpu_args_struct_s {\n\
+            size_t arg0_size;\n\
+            atmi_task_t **arg0;\n");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-            %s  arg%d;\n",
-            arg_list[arg_idx], arg_idx);
+            size_t arg%d_size;\n\
+            %s* arg%d;\n",
+            arg_idx,
+            arg_list[arg_idx].c_str(), arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } cpu_args_struct_t; \n\
-        cpu_args_struct_t cpu_arg_list; \n\
-        cpu_arg_list.arg0 = NULL; \n\
+        void *thisKernargAddress = malloc(sizeof(cpu_args_struct_t));\n\
+        cpu_args_struct_t *args = (cpu_args_struct_t *)thisKernargAddress; \n\
+        args->arg0_size = sizeof(atmi_task_t **);\n\
+        args->arg0 = NULL; \
         ");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
-        cpu_arg_list.arg%d = (uint64_t)var%d;", arg_idx, arg_idx);
+        args->arg%d_size = sizeof(%s*); \n\
+        args->arg%d = (%s*)malloc(sizeof(%s));\n\
+        memcpy(args->arg%d, &var%d, sizeof(%s));\
+        ",
+            arg_idx, arg_list[arg_idx].c_str(),
+            arg_idx, arg_list[arg_idx].c_str(), arg_list[arg_idx].c_str(),
+            arg_idx, arg_idx, arg_list[arg_idx].c_str()
+            );
         }
-#endif
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+#else
+        pp_printf((pif_printers[pif_index].pifdefs), "\n\n\
         snk_kernel_args_t *cpu_kernel_arg_list = (snk_kernel_args_t *)malloc(sizeof(snk_kernel_args_t)); \n\
         cpu_kernel_arg_list->args[0] = (uint64_t)NULL; \
                 ");
-        int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
         cpu_kernel_arg_list->args[%d] = (uint64_t)var%d;", arg_idx, arg_idx);
         }
+#endif
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
         return snk_cpu_kernel(lparm, \n\
                     \"%s\", \n\
-                    cpu_kernel_arg_list); \
+                    thisKernargAddress); \
                 ", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
@@ -526,7 +629,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-            uint64_t arg%d;\n", arg_idx+6);
+            %s arg%d;\n", 
+            arg_list[arg_idx].c_str(), arg_idx + 6);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } __attribute__ ((aligned (16))); \n\
@@ -539,10 +643,10 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg3=0;\n\
         gpu_args->arg4=0;\n\
         gpu_args->arg5=0;\n\
-        gpu_args->arg6=(uint64_t)NULL;\n");
+        gpu_args->arg6=NULL;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-        gpu_args->arg%d=(uint64_t)var%d;\n", arg_idx+6, arg_idx);
+        gpu_args->arg%d=var%d;\n", arg_idx+6, arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         return snk_gpu_kernel(lparm,\n\
@@ -560,8 +664,17 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     }
     if(devtype == ATMI_DEVTYPE_CPU) {
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
+        pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s {\n", fn_cpu_wrapper_decl);
+        pp_printf(&g_kerneldecls, "\
+    %s(*var0",
+        fn_name);
+        int arg_idx;
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf(&g_kerneldecls, ", *var%d", arg_idx);
+        }
+        pp_printf(&g_kerneldecls, ");\n}\n");
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s\",.function=(snk_generic_fp)%s},.gpu_kernel={.kernel_name=NULL}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s_wrapper\",.function=(snk_generic_fp)%s_wrapper},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
     } 
     else if(devtype == ATMI_DEVTYPE_GPU) {
@@ -569,6 +682,12 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
             pif_name, num_params, fn_name);
     }
+    // Push helper IDs for programmers to index into their kernels
+    // Helper IDs have prefix K_ID_
+    std::string fn_index_enum = std::string("K_ID_") + fn_name;
+    push_global_int_decl(fn_index_enum.c_str(), get_pif_count(pif_name) - 1);
+   
+    //
     //int idx = 0;
     // TODO: Think about the below and verify the better approach for 
     // parameter parsing. Ignore below if above code works.
@@ -590,6 +709,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
     if(is_new_pif == 1) {
         push_declaration(pif_name, fn_type, num_params);
+        g_all_pifdecls.push_back(std::string(pif_decl));
     }
     return NULL_TREE;
 }
@@ -646,6 +766,7 @@ register_finish_unit (void *event_data, void *data) {
     }
     fprintf(fp_pifdefs_genw, "/*Headers carried over from %s*/\n%s\n", main_input_filename, headers.c_str());
     write_cpp_warning_header(fp_pifdefs_genw);
+    write_globals(fp_pifdefs_genw);
     /* 1) dump kernel impl declarations (fn pointers */
     for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
@@ -670,11 +791,38 @@ register_finish_unit (void *event_data, void *data) {
         pp_clear_output_area((it->pifdefs));
     }
     fclose(fp_pifdefs_genw);
+
+    /* Inject all the PIF declarations into the CL file and compile (cloc) */
+    for(std::vector<std::string>::iterator it = g_cl_files.begin(); 
+            it != g_cl_files.end(); it++) {
+        FILE *tmp_cl = fopen("tmp.cl", "w");
+        fprintf(tmp_cl, "#include \"atmi.h\"\n");
+        write_cpp_warning_header(tmp_cl);
+        for(std::vector<std::string>::iterator it_pif = g_all_pifdecls.begin(); 
+                it_pif != g_all_pifdecls.end(); it_pif++) {
+            fprintf(tmp_cl, "extern _CPPSTRING_ %s;\n", it_pif->c_str());
+        }
+        fclose(tmp_cl);
+        char cmd_c[2048] = {0};
+        sprintf(cmd_c, "cat %s >> tmp.cl", it->c_str());
+
+        DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
+        int ret = system(cmd_c);
+        if(WIFEXITED(ret) == 0 || WEXITSTATUS(ret) != 0) {
+            fprintf(stderr, "\"%s\" returned with error %d\n", cmd_c, WEXITSTATUS(ret));
+            exit(-1);
+        }
+        vector<string> tokens = split(it->c_str(), '.');
+        cl2brigh("tmp.cl", tokens[0].c_str());
+        int ret_del = remove("tmp.cl");
+        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+    }
 }
 
 static void
 register_start_unit (void *event_data, void *data) {
     DEBUG_PRINT("Callback at start of compilation unit\n");
+    g_all_pifdecls.clear();
     pp_needs_newline (&g_kerneldecls) = true;
 
     /* Replace CL or other kernel-specific keywords with 
@@ -836,7 +984,11 @@ int plugin_init(struct plugin_name_args *plugin_info,
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             const char *clfilename = plugin_info->argv[i].value;
             /* compile CL to BRIG header file with char array */
-            cl2brigh(clfilename);
+            // Compile to brig at end of current compilation so that the PIF declarations can be 
+            // embedded into the CL code. This is useful if GPU kernels need to invoke PIFs
+            // in the same way as CPU code invokes PIFs
+            // cl2brigh(clfilename);
+            g_cl_files.push_back(std::string(clfilename));
 
             /* remove .cl extension */
             vector<string> tokens = split(clfilename, '.');

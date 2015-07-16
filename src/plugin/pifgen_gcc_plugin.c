@@ -1282,7 +1282,7 @@ struct %s_args_struct {\n\
 
         /* add spawn function of pif for dynamic dispatch */
     pp_printf(&pif_spawn, "\
-atmi_task_t * %s(atmi_klparm_t *lparm, atmi_task_t *thisTask", pif_name);
+atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf(&pif_spawn, ", %s var%d", arg_list[arg_idx].c_str(), arg_idx);
@@ -1295,7 +1295,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm, atmi_task_t *thisTask", pif_name);
     pp_printf(&pif_spawn, "\
     atmi_kernel_dispatch_packet_t * kernel_packet = lparm->klist->kernel_packets + k_id; \n\
     struct %s_args_struct * gpu_args = kernel_packet->kernarg_address; \n\
-    kernel_packet->completion_signal = *((hsa_signal_t *)(thisTask->handle)); \n\n\
+    kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n\
     ", pif_name);
 
 

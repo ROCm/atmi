@@ -25,7 +25,7 @@ __kernel void reduction_gpu(__global atmi_task_t *thisTask, __global int* in, in
 extern "C" void reduction_kl_init(atmi_lparm_t *lparm);
 
 int main(int argc, char* argv[]) {
-    int length = 16;
+    int length = 1024;
 	int *input_gpu = (int*) malloc(sizeof(int)*(length));
 	int *input_cpu = (int*) malloc(sizeof(int)*(length));
 
@@ -37,15 +37,22 @@ int main(int argc, char* argv[]) {
     ATMI_LPARM_1D(lparm_gpu, length >> 1);
     lparm_gpu->synchronous = ATMI_TRUE;
     lparm_gpu->kernel_id = 1;
+
     reduction_kl_init(lparm_gpu);
     reduction(lparm_gpu, input_gpu, length >> 1);
 
-    for(int ii = 0; ii < length; ii++)
-    {
-        printf("%d ", input_gpu[ii]);
-    }
-    printf("\n");
-    printf("sum: %d\n", input_gpu[0]);
+    ATMI_LPARM_1D(lparm_cpu, length >> 1);
+    lparm_cpu->synchronous = ATMI_TRUE;
+    lparm_cpu->kernel_id = 0;
+    reduction(lparm_cpu, input_cpu, length >> 1);
+
+    //for(int ii = 0; ii < length; ii++)
+    //{
+        //printf("%d ", input_gpu[ii]);
+    //}
+    //printf("\n");
+    printf("gpu sum: %d\n", input_gpu[0]);
+    printf("cpu sum: %d\n", input_cpu[0]);
     free(input_cpu);
 	free(input_gpu);
 	return 0;

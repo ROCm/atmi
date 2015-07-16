@@ -65,6 +65,7 @@ struct atmi_klparm_s {
     int acquire_fence_scope;   /* default = 2 */
     int release_fence_scope;   /* default = 2 */
     atmi_klist_t *klist;
+    void *prevTask;
 };
 
 #endif

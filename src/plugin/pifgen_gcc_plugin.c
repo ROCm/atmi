@@ -855,8 +855,8 @@ register_finish_unit (void *event_data, void *data) {
         }
         vector<string> tokens = split(it->c_str(), '.');
         cl2brigh("tmp.cl", tokens[0].c_str());
-        //int ret_del = remove("tmp.cl");
-        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+        int ret_del = remove("tmp.cl");
+        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
 }
 
@@ -1195,7 +1195,7 @@ fprintf(fp, "\
 #include \"hsa_kl.h\" \n\
 #include \"atmi.h\" \n\
  \n\
-#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist} ; X = &_ ## X ; \n\
+#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist, .prevTask = thisTask} ; X = &_ ## X ; \n\
  \n\
 void kernel_dispatch(const atmi_klparm_t *lparm, const int k_id) { \n\
  \n\
@@ -1298,7 +1298,6 @@ atmi_task_t * %s(atmi_klparm_t *lparm, atmi_task_t *thisTask", pif_name);
     kernel_packet->completion_signal = *((hsa_signal_t *)(thisTask->handle)); \n\n\
     ", pif_name);
 
-    pp_printf(&pif_spawn, "gpu_args->arg6 = thisTask; \n");
 
     pp_printf(&pif_spawn, "\
     gpu_args->arg0=0;\n\
@@ -1307,6 +1306,8 @@ atmi_task_t * %s(atmi_klparm_t *lparm, atmi_task_t *thisTask", pif_name);
     gpu_args->arg3=0;\n\
     gpu_args->arg4=0;\n\
     gpu_args->arg5=0;\n");
+
+    pp_printf(&pif_spawn, "gpu_args->arg6 = lparm->prevTask; \n");
        
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         pp_printf((&pif_spawn), "\

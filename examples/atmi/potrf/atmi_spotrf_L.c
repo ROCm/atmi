@@ -11,6 +11,7 @@
 #include "atmi_lapack.h"
 
 #include "debug_output.h"
+#include "bindthread.h"
 
 //#include "flops.h"
 
@@ -18,7 +19,7 @@
 
 //#define SGEMM_CPU
 //#define STRSM_CPU
-#define SSYRK_CPU
+//#define SSYRK_CPU
 
 #ifdef __cplusplus
 #define _CPPSTRING_ "C"
@@ -148,6 +149,8 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
     float *T, *C, *A, *B;
     atmi_lparm_t *spotrf_lp, *strsm_lp, *ssyrk_lp, *sgemm_lp;
     
+    //atmi_cpu_bindthread(-1);
+
     ATMI_LPARM(cpu_lp);
     cpu_lp->profilable = ATMI_TRUE;
     
@@ -166,7 +169,10 @@ atmi_task_t* atmi_spotrf_L_create_task(PLASMA_enum uplo, tiled_matrix_desc_t *de
 
     
 //    cpu_lp->synchronous = ATMI_TRUE;
-//    gpu_lp->synchronous = ATMI_TRUE;
+//    gpu_sgemm_lp->synchronous = ATMI_TRUE;
+//    gpu_strsm_lp->synchronous = ATMI_TRUE;
+//    gpu_ssyrk_lp->synchronous = ATMI_TRUE;
+
 
 
     atmi_task_t *spotrf_tasks[descA->mt]; /* there are descA->mt -1 POTRF tasks */

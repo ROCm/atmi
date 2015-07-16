@@ -4,7 +4,7 @@
 #include "atmi.h"
 #include "atmi_rt.h"
 
-//#define ATMI_HAVE_PROFILE
+#define ATMI_HAVE_PROFILE
 
 #define ATMI_PROFILING_BUFFER_SIZE	4096
 

@@ -73,9 +73,13 @@ int main(int argc, char ** argv)
     if(loud > 3) printf("Done\n");
 //    cleanup_dague(dague, iparam);
 
-    atmi_task_t *spotrf_task = atmi_spotrf_L_create_task(uplo, (tiled_matrix_desc_t*)&ddescA);
+
+    snk_init_cpu_context();
     SYNC_TIME_START();
     TIME_START();
+    atmi_task_t *spotrf_task = atmi_spotrf_L_create_task(uplo, (tiled_matrix_desc_t*)&ddescA);
+   // SYNC_TIME_START();
+   // TIME_START();
     atmi_spotrf_L_progress_task(spotrf_task);
     SYNC_TIME_PRINT(rank, ("\tPxQ= %3d %-3d NB= %4d N= %7d : %14f gflops\n",
                            P, Q, NB, N,

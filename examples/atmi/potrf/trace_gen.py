@@ -2,7 +2,7 @@ import sys
 
 svg_head = "<?xml version=\"1.0\" standalone=\"no\"?>\n<svg version=\"1.1\" "
 
-kernel_color = {"atmi_spotrf_kernel_cpu":"#000000", "atmi_strsm_kernel_cpu":"#cc0000", "atmi_ssyrk_kernel_cpu":"#0000cc", "atmi_sgemm_kernel_cpu":"#cccc00"}
+kernel_color = {"atmi_spotrf_kernel_cpu_wrapper":"#000000", "atmi_strsm_kernel_cpu_wrapper":"#cc0000", "atmi_ssyrk_kernel_cpu_wrapper":"#0000cc", "atmi_sgemm_kernel_cpu_wrapper":"#cccc00"}
 
 if __name__ == '__main__':
     trace_fname = "spotrf.svg"
@@ -36,7 +36,7 @@ if __name__ == '__main__':
                 tid = int(line_str[0])
                 nb_agents = int(line_str[1])
                 continue
-            if (line_str[0] == "__sync_kernel"):
+            if (line_str[0] == "__sync_kernel_wrapper"):
                 continue
             if (time_start == 0):
                 time_start = int(line_str[1])

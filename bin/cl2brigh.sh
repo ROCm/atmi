@@ -530,6 +530,23 @@ if [ "$HSAILLIB" != "" ] ; then
    else
       $HSA_LLVM_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
    fi
+
+   # Inject ATMI_CONTEXT
+   sed -i -e "5i\
+alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
+       " $TMPDIR/composite.hsail
+
+   entry_lines=$(grep -n "@__OpenCL_" $TMPDIR/composite.hsail | grep -Eo '^[^:]+')
+
+   for entry_line in "${entry_lines[@]}"
+   do
+       entry_line=$(($entry_line + 2))
+       sed -i -e "${entry_line}i\
+    //init ATMI_CONTEXT\n\
+    ld_kernarg_align(8)_width(all)_u64  \$d0, [%__printf_buffer];\n\
+    st_global_align(8)_u64 \$d0, [&ATMI_CONTEXT];\n\
+           " $TMPDIR/composite.hsail 
+   done
  
    # Add $HSAILLIB to file 
    if [ $DRYRUN ] ; then
@@ -551,7 +568,6 @@ if [ "$HSAILLIB" != "" ] ; then
       echo "        $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail"
       do_err $rc
    fi
-  
 fi
 
 #   Not depricated option -str 

@@ -75,7 +75,6 @@ typedef struct atmi_task_s {
    atmi_state_t     state;    /* Eventually consistent state of task    */
    atmi_tprofile_t  profile;  /* Profile if reqeusted by lparm          */
 //   atmi_handle_t    continuation;   /*                                        */
-   atmi_klist_t *klist;
 } atmi_task_t;
 
 /*----------------------------------------------------------------------------*/

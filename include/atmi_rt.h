@@ -83,9 +83,7 @@ typedef struct snk_pif_kernel_table_s {
 } snk_pif_kernel_table_t;
 
 
-status_t snk_init_context(
-                        atmi_klist_t *atmi_klist
-                        );
+status_t snk_init_context();
 status_t snk_init_cpu_context();
 status_t snk_init_gpu_context();
 status_t snk_gpu_create_program();

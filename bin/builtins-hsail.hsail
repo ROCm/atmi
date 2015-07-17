@@ -63,4 +63,10 @@ prog function &hsa_signal_wait_relaxed(arg_u64 %ret)(
     st_arg_u64 $d2, [%ret];
 };
 
-
+prog function &get_atmi_context(arg_u64 %ret)()
+{
+    @get_atmi_context_entry:
+    ld_global_align(8)_const_width(all)_u64 $d0, [&ATMI_CONTEXT];
+    st_arg_u64 $d0, [%ret];
+    ret;
+};

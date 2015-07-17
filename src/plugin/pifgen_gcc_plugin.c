@@ -671,7 +671,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg0=0;\n\
         gpu_args->arg1=0;\n\
         gpu_args->arg2=0;\n\
-        gpu_args->arg3=0;\n\
+        gpu_args->arg3= (uint64_t)atmi_klist;\n\
         gpu_args->arg4=0;\n\
         gpu_args->arg5=0;\n\
         gpu_args->arg6=NULL;\n");
@@ -1138,7 +1138,7 @@ void write_kl_init(const char *pif_name, int pif_index)
     }\n\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if(gpu_initalized == 0) { \n\
-        snk_init_context(atmi_klist); \n\
+        snk_init_context(); \n\
         snk_init_gpu_context(); \n\
         snk_gpu_create_program(); \n");
 for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
@@ -1194,8 +1194,9 @@ void write_kernel_dispatch_routine(FILE *fp) {
 fprintf(fp, "\
 #include \"hsa_kl.h\" \n\
 #include \"atmi.h\" \n\
+uint64_t get_atmi_context();\n\n\
  \n\
-#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=thisTask->klist, .prevTask = thisTask} ; X = &_ ## X ; \n\
+#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=(atmi_klist_t *)get_atmi_context(), .prevTask = thisTask} ; X = &_ ## X ; \n\
  \n\
 void kernel_dispatch(const atmi_klparm_t *lparm, const int k_id) { \n\
  \n\
@@ -1303,7 +1304,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     gpu_args->arg0=0;\n\
     gpu_args->arg1=0;\n\
     gpu_args->arg2=0;\n\
-    gpu_args->arg3=0;\n\
+    gpu_args->arg3=(uint64_t)lparm->klist;\n\
     gpu_args->arg4=0;\n\
     gpu_args->arg5=0;\n");
 

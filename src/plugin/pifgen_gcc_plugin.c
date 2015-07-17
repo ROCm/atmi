@@ -82,6 +82,7 @@ void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::
 void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
+#include \"atmi_kl.h\"\n\
 #include \"atmi_rt.h\"\n\n");
 }
 
@@ -836,7 +837,7 @@ register_finish_unit (void *event_data, void *data) {
     for(std::vector<std::string>::iterator it = g_cl_files.begin(); 
             it != g_cl_files.end(); it++) {
         FILE *tmp_cl = fopen("tmp.cl", "w");
-        fprintf(tmp_cl, "#include \"atmi.h\"\n");
+        //fprintf(tmp_cl, "#include \"atmi.h\"\n");
         write_cpp_warning_header(tmp_cl);
         //for(std::vector<std::string>::iterator it_pif = g_all_pifdecls.begin(); 
                 //it_pif != g_all_pifdecls.end(); it_pif++) {
@@ -1194,6 +1195,7 @@ void write_kernel_dispatch_routine(FILE *fp) {
 fprintf(fp, "\
 #include \"hsa_kl.h\" \n\
 #include \"atmi.h\" \n\
+#include \"atmi_kl.h\" \n\
 uint64_t get_atmi_context();\n\n\
  \n\
 #define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=(atmi_klist_t *)get_atmi_context(), .prevTask = thisTask} ; X = &_ ## X ; \n\

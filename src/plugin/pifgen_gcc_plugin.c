@@ -856,8 +856,8 @@ register_finish_unit (void *event_data, void *data) {
         }
         vector<string> tokens = split(it->c_str(), '.');
         cl2brigh("tmp.cl", tokens[0].c_str());
-        int ret_del = remove("tmp.cl");
-        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+        //int ret_del = remove("tmp.cl");
+        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
 }
 
@@ -1121,20 +1121,26 @@ void write_kl_init(const char *pif_name, int pif_index)
         /* add init function for dynamic kernel */
         pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
+    \n\
+    int num_pif = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]); \n\n\
     if (%s_FK == 0 ) { \n\
-        snk_pif_init(%s_pif_fn_table, sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]));\n\
+        snk_pif_init(%s_pif_fn_table, num_pif);\n\
         %s_FK = 1; \n\
     }\n\n",
                 pif_name,
                 pif_name, pif_name, pif_name,
                 pif_name);
+
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if (klist_initalized == 0) { \n\
-        atmi_klist = (atmi_klist_t * )malloc(sizeof(atmi_klist_t)); \n\
-        atmi_klist->kernel_packets = NULL; \n\
-        atmi_klist->queues = NULL; \n\
-        atmi_klist->num_kernel_packets = 0; \n\
-        atmi_klist->num_queues = 0; \n\
+        atmi_klist = (atmi_klist_t * )malloc(sizeof(atmi_klist_t) * num_pif); \n\
+        int i; \n\
+        for(i = 0; i < num_pif; i++) { \n\
+            atmi_klist[i].kernel_packets = NULL; \n\
+            atmi_klist[i].queues = NULL; \n\
+            atmi_klist[i].num_kernel_packets = 0; \n\
+            atmi_klist[i].num_queues = 0; \n\
+        }\n\
         klist_initalized = 1; \n\
     }\n\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1169,12 +1175,13 @@ for(std::vector<std::string>::iterator it = g_cl_modules.begin();
     hsa_queue_t *queue;\n\
     err = hsa_queue_create(kernel_dispatch_Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &queue);\n\
     ErrorCheck(Creating the queue, err);\n\n\
-    atmi_klist->num_queues++;\n\
-    atmi_klist->queues = (uint64_t *)realloc(atmi_klist->queues, sizeof(uint64_t) * atmi_klist->num_queues);\n\
-    atmi_klist->queues[atmi_klist->num_queues - 1] = (uint64_t)queue;\n\n\
-    atmi_klist->num_kernel_packets++;\n\
-    atmi_klist->kernel_packets = (atmi_kernel_dispatch_packet_t *)realloc(atmi_klist->kernel_packets, sizeof(atmi_kernel_dispatch_packet_t) * atmi_klist->num_kernel_packets);\n\
-    atmi_kernel_dispatch_packet_t *this_aql = &atmi_klist->kernel_packets[atmi_klist->num_kernel_packets - 1];\n\n\
+    atmi_klist_t *atmi_klist_curr = atmi_klist + %d; \n\n\
+    atmi_klist_curr->num_queues++;\n\
+    atmi_klist_curr->queues = (uint64_t *)realloc(atmi_klist_curr->queues, sizeof(uint64_t) * atmi_klist_curr->num_queues);\n\
+    atmi_klist_curr->queues[atmi_klist_curr->num_queues - 1] = (uint64_t)queue;\n\n\
+    atmi_klist_curr->num_kernel_packets++;\n\
+    atmi_klist_curr->kernel_packets = (atmi_kernel_dispatch_packet_t *)realloc(atmi_klist_curr->kernel_packets, sizeof(atmi_kernel_dispatch_packet_t) * atmi_klist_curr->num_kernel_packets);\n\
+    atmi_kernel_dispatch_packet_t *this_aql = &atmi_klist_curr->kernel_packets[atmi_klist_curr->num_kernel_packets - 1];\n\n\
     uint64_t _KN__Kernel_Object;\n\
     uint32_t _KN__Group_Segment_Size;\n\
     uint32_t _KN__Private_Segment_Size;\n\
@@ -1186,7 +1193,7 @@ for(std::vector<std::string>::iterator it = g_cl_modules.begin();
     this_aql->kernel_object = _KN__Kernel_Object;\n\
     this_aql->private_segment_size = _KN__Private_Segment_Size;\n\
     this_aql->group_segment_size = _KN__Group_Segment_Size;\n\
-}\n\n", pif_name);
+}\n\n", pif_index, pif_name);
 
 }
 
@@ -1198,13 +1205,13 @@ fprintf(fp, "\
 #include \"atmi_kl.h\" \n\
 uint64_t get_atmi_context();\n\n\
  \n\
-#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.klist=(atmi_klist_t *)get_atmi_context(), .prevTask = thisTask} ; X = &_ ## X ; \n\
+#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.kernel_id=0,.klist=(atmi_klist_t *)get_atmi_context(), .prevTask = thisTask} ; X = &_ ## X ; \n\
  \n\
-void kernel_dispatch(const atmi_klparm_t *lparm, const int k_id) { \n\
+void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id) { \n\
  \n\
-    atmi_kernel_dispatch_packet_t *kernel_packet = lparm->klist->kernel_packets + k_id; \n\
+    atmi_kernel_dispatch_packet_t *kernel_packet = lparm->klist[pif_id].kernel_packets + k_id; \n\
  \n\
-    hsa_queue_t* this_Q = (hsa_queue_t *)lparm->klist->queues[k_id]; \n\
+    hsa_queue_t* this_Q = (hsa_queue_t *)lparm->klist[pif_id].queues[k_id]; \n\
  \n\
     /* Find the queue index address to write the packet info into.  */ \n\
     const uint32_t queueMask = this_Q->size - 1; \n\
@@ -1293,13 +1300,12 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     pp_printf(&pif_spawn, ") {\n\n");
 
     pp_printf(&pif_spawn, "\
-    int k_id = %d;\n", pif_index); 
+    int pif_id = %d;\n", pif_index); 
 
     pp_printf(&pif_spawn, "\
-    atmi_kernel_dispatch_packet_t * kernel_packet = lparm->klist->kernel_packets + k_id; \n\
+    atmi_kernel_dispatch_packet_t * kernel_packet = lparm->klist[pif_id].kernel_packets + lparm->kernel_id; \n\
     struct %s_args_struct * gpu_args = kernel_packet->kernarg_address; \n\
-    kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n\
-    ", pif_name);
+    kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n", pif_name);
 
 
     pp_printf(&pif_spawn, "\
@@ -1310,7 +1316,8 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     gpu_args->arg4=0;\n\
     gpu_args->arg5=0;\n");
 
-    pp_printf(&pif_spawn, "gpu_args->arg6 = lparm->prevTask; \n");
+    pp_printf(&pif_spawn, "\
+    gpu_args->arg6 = lparm->prevTask; \n");
        
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         pp_printf((&pif_spawn), "\
@@ -1318,7 +1325,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     }
 
     pp_printf(&pif_spawn, "\
-    kernel_dispatch(lparm, k_id); \n\
+    kernel_dispatch(lparm, pif_id, lparm->kernel_id); \n\
     return NULL; \n\
 }\n\n");
         

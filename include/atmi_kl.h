@@ -64,6 +64,7 @@ struct atmi_klparm_s {
     int barrier;               /* default = SNK_UNORDERED */
     int acquire_fence_scope;   /* default = 2 */
     int release_fence_scope;   /* default = 2 */
+    int kernel_id;
     atmi_klist_t *klist;
     void *prevTask;
 };

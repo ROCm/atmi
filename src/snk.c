@@ -1171,33 +1171,30 @@ void snk_kl_gpu(const atmi_lparm_t *lparm,
                  hsa_executable_t g_executable,
                  const char *pif_name, const int pif_id) {
 
+    atmi_stream_t *stream = NULL;
+    if(lparm->stream == NULL) {
+        stream = &snk_default_stream_obj;
+    } else {
+        stream = lparm->stream;
+    }
+
+    /* Add row to stream table for purposes of future synchronizations */
+    register_stream(stream);
+    
+    /* get this stream's HSA queue (could be dynamically mapped or round robin
+     * if it is an unordered stream */
+    hsa_queue_t* this_Q = acquire_and_set_next_gpu_queue(stream);
+    if(!this_Q) return;
+
     /* Allocate the kernel argument buffer from the correct region. */
     void* thisKernargAddress;
     snk_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
-
-    hsa_status_t err;
-
-    err = hsa_init();
-    ErrorCheck(Initializing the hsa device, err);
-
-    hsa_agent_t kernel_dispatch_Agent;
-    err = hsa_iterate_agents(get_gpu_agent, &kernel_dispatch_Agent);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    ErrorCheck(Getting a gpu agent, err);
-
-    uint32_t queue_size = 0;
-    err = hsa_agent_get_info(kernel_dispatch_Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
-    ErrorCheck(Querying the agent maximum queue size, err);
-
-    hsa_queue_t *queue;
-    err = hsa_queue_create(kernel_dispatch_Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &queue);
-    ErrorCheck(Creating the queue, err);
 
     atmi_klist_t *atmi_klist_curr = atmi_klist + pif_id; 
 
     atmi_klist_curr->num_queues++;
     atmi_klist_curr->queues = (uint64_t *)realloc(atmi_klist_curr->queues, sizeof(uint64_t) * atmi_klist_curr->num_queues);
-    atmi_klist_curr->queues[atmi_klist_curr->num_queues - 1] = (uint64_t)queue;
+    atmi_klist_curr->queues[atmi_klist_curr->num_queues - 1] = (uint64_t)this_Q;
 
     uint64_t _KN__Kernel_Object;
     uint32_t _KN__Group_Segment_Size;

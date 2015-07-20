@@ -74,4 +74,6 @@ typedef struct atmi_klparm_s {
     void             *prevTask;
 } atmi_klparm_t ;
 
+#define ATMI_KLPARM_1D(X,Y) atmi_klparm_t * X ; atmi_klparm_t  _ ## X ={.gridDim={Y},.groupDim={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.prevTask=thisTask} ; X = &_ ## X ;
+
 #endif

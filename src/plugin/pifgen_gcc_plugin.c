@@ -1171,7 +1171,6 @@ fprintf(fp, "\
 #include \"atmi.h\" \n\
 #include \"atmi_kl.h\" \n\
  \n\
-#define ATMI_KLPARM_1D(X,Y) atmi_klparm_t * X ; atmi_klparm_t  _ ## X ={.gridDim={Y},.groupDim={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.prevTask=thisTask} ; X = &_ ## X ;\n\n\
 uint64_t get_atmi_context();\n\n\
 uint16_t create_header(hsa_packet_type_t type, int barrier) {\n\
    uint16_t header = type << HSA_PACKET_HEADER_TYPE;\n\
@@ -1186,7 +1185,7 @@ void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_i
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
     atmi_kernel_dispatch_packet_t *kernel_packet = atmi_klist[pif_id].kernel_packets + k_id; \n\
  \n\
-    hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[k_id]; \n\
+    hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[0]; \n\
  \n\
     /* Find the queue index address to write the packet info into.  */ \n\
     const uint32_t queueMask = this_Q->size - 1; \n\

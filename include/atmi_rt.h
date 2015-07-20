@@ -14,6 +14,7 @@
 */
 
 #include "atmi.h"
+#include "atmi_kl.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -118,6 +119,15 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
                  void *kernel_args);
+
+void snk_kl_gpu(const atmi_lparm_t *lparm,
+                 atmi_klist_t *atmi_klist,
+                 hsa_executable_t g_executable,
+                 const char *pif_name, const int pif_id);
+
+
+void snk_klist_init();
+
 
 #ifdef __cplusplus
 }

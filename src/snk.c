@@ -1166,3 +1166,76 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
+void snk_kl_gpu(const atmi_lparm_t *lparm,
+                 atmi_klist_t *atmi_klist,
+                 hsa_executable_t g_executable,
+                 const char *pif_name, const int pif_id) {
+
+    /* Allocate the kernel argument buffer from the correct region. */
+    void* thisKernargAddress;
+    snk_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
+
+    hsa_status_t err;
+
+    err = hsa_init();
+    ErrorCheck(Initializing the hsa device, err);
+
+    hsa_agent_t kernel_dispatch_Agent;
+    err = hsa_iterate_agents(get_gpu_agent, &kernel_dispatch_Agent);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
+
+    uint32_t queue_size = 0;
+    err = hsa_agent_get_info(kernel_dispatch_Agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+    ErrorCheck(Querying the agent maximum queue size, err);
+
+    hsa_queue_t *queue;
+    err = hsa_queue_create(kernel_dispatch_Agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &queue);
+    ErrorCheck(Creating the queue, err);
+
+    atmi_klist_t *atmi_klist_curr = atmi_klist + pif_id; 
+
+    atmi_klist_curr->num_queues++;
+    atmi_klist_curr->queues = (uint64_t *)realloc(atmi_klist_curr->queues, sizeof(uint64_t) * atmi_klist_curr->num_queues);
+    atmi_klist_curr->queues[atmi_klist_curr->num_queues - 1] = (uint64_t)queue;
+
+    uint64_t _KN__Kernel_Object;
+    uint32_t _KN__Group_Segment_Size;
+    uint32_t _KN__Private_Segment_Size;
+
+    uint16_t i;
+    atmi_task_t *ret = NULL;
+    for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
+        if(snk_kernels[i].pif_name && pif_name) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) { 
+                if(snk_kernels[i].devtype != ATMI_DEVTYPE_GPU) {
+                    continue;
+                }
+
+                snk_get_gpu_kernel_info(g_executable, 
+                        snk_kernels[i].gpu_kernel.kernel_name,
+                        &_KN__Kernel_Object, 
+                        &_KN__Group_Segment_Size, 
+                        &_KN__Private_Segment_Size);
+
+                atmi_klist_curr->num_kernel_packets++;
+                atmi_klist_curr->kernel_packets = 
+                    (atmi_kernel_dispatch_packet_t *)realloc(
+                            atmi_klist_curr->kernel_packets, 
+                            sizeof(atmi_kernel_dispatch_packet_t) * 
+                            atmi_klist_curr->num_kernel_packets);
+
+                atmi_kernel_dispatch_packet_t *this_aql = 
+                    &atmi_klist_curr->kernel_packets[atmi_klist_curr->num_kernel_packets - 1];
+
+
+                /* thisKernargAddress has already been set up in the beginning of this routine */
+                /*  Bind kernel argument buffer to the aql packet.  */
+                this_aql->kernarg_address = (void*) thisKernargAddress;
+                this_aql->kernel_object = _KN__Kernel_Object;
+                this_aql->private_segment_size = _KN__Private_Segment_Size;
+                this_aql->group_segment_size = _KN__Group_Segment_Size;
+            }
+        }
+    }
+}

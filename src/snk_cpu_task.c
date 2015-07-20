@@ -41,6 +41,9 @@
 */ 
 /* This file contains logic for CPU tasking in SNACK */
 #include "snk_internal.h"
+#include "bindthread.h"
+#include "profiling.h"
+
 #include <assert.h>
 agent_t agent[SNK_MAX_CPU_QUEUES];
 
@@ -99,12 +102,17 @@ int process_packet(hsa_queue_t *queue, int id)
     /* FIXME: Handle queue overflows */
     while (read_index < queue->size) {
         DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index, queue->size);
-        while (hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
-                    HSA_WAIT_STATE_BLOCKED) < (hsa_signal_value_t) read_index);
+        hsa_signal_value_t doorbell_value = SNK_MAX_TASKS;
+        while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
+                    HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
+        if (doorbell_value == SNK_MAX_TASKS) break;
         atmi_task_t *this_task = NULL; // will be assigned to collect metrics
+        char *kernel_name = NULL;
+#if defined (ATMI_HAVE_PROFILE)
         struct timespec start_time, end_time;
         clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
         start_time_ns = get_nanosecs(context_init_time, start_time);
+#endif /* ATMI_HAVE_PROFILE */
         hsa_agent_dispatch_packet_t* packets = (hsa_agent_dispatch_packet_t*) queue->base_address;
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
         int i;
@@ -142,7 +150,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 break;
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
                 ;
-                const char *kernel_name = snk_kernels[packet->type].cpu_kernel.kernel_name;
+                kernel_name = (char *)snk_kernels[packet->type].cpu_kernel.kernel_name;
                 uint64_t num_params = packet->arg[0];
                 // typecast to char * to be able to do ptr arithmetic
                 char *kernel_args_ptr = (char *)(packet->arg[1]);
@@ -549,18 +557,22 @@ int process_packet(hsa_queue_t *queue, int id)
         if (packet->completion_signal.handle != 0) {
             hsa_signal_subtract_release(packet->completion_signal, 1);
         }
+#if defined (ATMI_HAVE_PROFILE)
         clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
         end_time_ns = get_nanosecs(context_init_time, end_time);
         if(this_task != NULL) {
             //if(this_task->profile != NULL) 
+            if (kernel_name != NULL)
             {
                 this_task->profile.end_time = end_time_ns;
                 this_task->profile.start_time = start_time_ns;
                 this_task->profile.ready_time = start_time_ns;
                 DEBUG_PRINT("Task %p timing info (%" PRIu64", %" PRIu64")\n", 
                         this_task, start_time_ns, end_time_ns);
+                atmi_profiling_record(id, &(this_task->profile), kernel_name);
             }
         }
+#endif /* ATMI_HAVE_PROFILE */
         read_index++;
         hsa_queue_store_read_index_release(queue, read_index);
     }
@@ -610,6 +622,12 @@ void *agent_worker(void *agent_args) {
 #else
 void *agent_worker(void *agent_args) {
     agent_t *agent = (agent_t *) agent_args;
+
+    atmi_cpu_bindthread(agent->id); 
+#if defined (ATMI_HAVE_PROFILE)
+    atmi_profiling_agent_init(agent->id);
+#endif /* ATMI_HAVE_PROFILE */ 
+
     hsa_signal_value_t sig_value = IDLE;
     while (sig_value == IDLE) {
         DEBUG_PRINT("Worker thread sleeping\n");
@@ -629,6 +647,11 @@ void *agent_worker(void *agent_args) {
         }
         sig_value = IDLE;
     }
+
+#if defined (ATMI_HAVE_PROFILE)
+    atmi_profiling_output(agent->id);
+    atmi_profiling_agent_fini(agent->id);
+#endif /*ATMI_HAVE_PROFILE */
     return NULL;
 }
 #endif
@@ -693,6 +716,7 @@ agent_fini()
     /* wait for the other threads */
     uint32_t i;
     for (i = 0; i < numWorkers; i++) {
+        hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
         hsa_signal_store_release(worker_sig[i], FINISH);
         pthread_join(agent_threads[i], NULL);
         hsa_queue_destroy(agent[i].queue);

@@ -21,9 +21,8 @@
 #         snack github repository.  
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
-#  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.1.0
+PROGVERSION=0.1.1
 #
 # Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  Patent pending.
 # 
@@ -96,6 +95,7 @@ function usage(){
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
     -o        <outfilename>  Default=<filename>.<ft> 
     -hsaillib <hsail filename>  
+    -clopts   <compiler opts>  Default="-cl-std=CL2.0"
 
    Examples:
     cl2brigh.sh my.cl              /* create my.snackwrap.c and my.h    */
@@ -170,6 +170,7 @@ while [ $# -gt 0 ] ; do
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
       -hsaillib)        HSAILLIB=$2; shift ;; 
+      -clopts) 		CLOPTS=$2; shift ;; 
       -p)               ATMI_PATH=$2; shift ;;
       -cp)              HSA_LLVM_PATH=$2; shift ;;
       -rp)              HSA_RUNTIME_PATH=$2; shift ;;
@@ -215,7 +216,7 @@ HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
 GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
-CMD_BRI=${CMD_BRI:-hsailasm }
+CMD_BRI=${CMD_BRI:-HSAILasm }
 
 FORTRAN=${FORTRAN:-0};
 NOGLOBFUNS=${NOGLOBFUNS:-0};
@@ -274,6 +275,7 @@ fi
 
 # Parse LASTARG for directory, filename, and symbolname
 INDIR=$(getdname $LASTARG)
+CLOPTS=${CLOPTS:-cl-std=CL2.0 -I$INDIR -I$ATMI_PATH/include}
 CLNAME=${LASTARG##*/}
 # FNAME has the .cl extension removed, used for symbolname and intermediate filenames
 FNAME=`echo "$CLNAME" | cut -d'.' -f1`
@@ -341,8 +343,8 @@ if [ ! -d $TMPDIR ] && [ ! $DRYRUN ] ; then
    echo "ERROR:  Directory $TMPDIR does not exist or could not be created"
    exit $DEADRC
 fi 
-if [ ! -e $HSA_LLVM_PATH/hsailasm ] ; then 
-   echo "ERROR:  Missing hsailasm in $HSA_LLVM_PATH"
+if [ ! -e $HSA_LLVM_PATH/HSAILasm ] ; then 
+   echo "ERROR:  Missing HSAILasm in $HSA_LLVM_PATH"
    echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi 

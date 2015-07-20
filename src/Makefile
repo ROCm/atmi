@@ -10,7 +10,7 @@ CFLAGS=-O2 -c -fpic -g
 INC_FLAGS=-I../include -I${HSA_RUNTIME_PATH}/include 
 LIB_FLAGS=-L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -Wl,--no-as-needed -Wl,-rpath=${HSA_RUNTIME_PATH}/lib
 
-OBJS=snk.o snk_cpu_task.o snk_sync_kernel.o
+OBJS=bindthread.o profiling.o snk.o snk_cpu_task.o snk_sync_kernel.o
 LIB=libatmi_runtime.so
 LIBDIR=../lib
 
@@ -18,7 +18,7 @@ all: $(LIBDIR)/$(LIB)
 
 $(LIBDIR)/$(LIB): $(OBJS) 
 	mkdir -p $(LIBDIR)
-	$(CC) -shared $(LIB_FLAGS) -o $@ $^ 	
+	$(CC) -g -shared $(LIB_FLAGS) -o $@ $^ 	
 #	$(AR) $(ARFLAGS) $@ $^
 
 %.o: %.c ../include/*.h

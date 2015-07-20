@@ -44,6 +44,7 @@
  * from the snk_genw.sh script to a library
  */
 #include "snk_internal.h"
+#include "profiling.h"
 #include <time.h>
 #include <assert.h>
 
@@ -82,7 +83,7 @@ hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
 hsa_signal_t  SNK_Signals[SNK_MAX_TASKS];
 int          SNK_NextTaskId = 0 ;
-atmi_stream_t snk_default_stream_obj = {ATMI_ORDERED};
+atmi_stream_t snk_default_stream_obj = {ATMI_FALSE};
 int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
 int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
@@ -600,7 +601,7 @@ void init_hsa() {
 
 status_t snk_init_cpu_context() {
     if(g_cpu_initialized != 0) return;
-    
+  
     hsa_status_t err;
     init_hsa();
     
@@ -609,6 +610,9 @@ status_t snk_init_cpu_context() {
     snk_init_gpu_context();
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
+#if defined (ATMI_HAVE_PROFILE)
+    atmi_profiling_init();
+#endif /*ATMI_HAVE_PROFILE */
     err = hsa_iterate_agents(get_cpu_agent, &snk_cpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);

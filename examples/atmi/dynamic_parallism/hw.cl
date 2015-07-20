@@ -11,7 +11,7 @@ __kernel void reduction_gpu(__global atmi_task_t *thisTask, __global int* in, in
         length = length >> 1;
         if(length > 0)
         {
-            INIT_KLPARM_1D(klparm, length);
+            ATMI_KLPARM_1D(klparm, length);
             reduction(klparm, in, length);
         }
     }

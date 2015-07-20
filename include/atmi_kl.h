@@ -55,17 +55,23 @@ struct atmi_klist_s {
     atmi_kernel_dispatch_packet_t *kernel_packets;
 };
 
-typedef struct atmi_klparm_s atmi_klparm_t;
-struct atmi_klparm_s { 
-    int ndim;                  /* default = 1 */
-    unsigned long           gdims[3];       /* # of global threads for each dimension */
-    unsigned long           ldims[3];       /* Thread group size for each dimension   */
-    int stream;                /* default = -1 , synchrnous */
-    int barrier;               /* default = SNK_UNORDERED */
-    int acquire_fence_scope;   /* default = 2 */
-    int release_fence_scope;   /* default = 2 */
-    int kernel_id;
-    void *prevTask;
-};
+/*----------------------------------------------------------------------------*/
+typedef struct atmi_klparm_s {
+    unsigned long    gridDim[3];     /* # of global threads for each dimension */
+    unsigned long    groupDim[3];    /* Thread group size for each dimension   */
+    atmi_stream_t*   stream;         /* Group for this task, Default= NULL     */
+    boolean          waitable;       /* Create signal for task, default = F    */
+    boolean          synchronous;    /* Async or Sync,  default = F (async)    */
+    int              acquire_scope;  /* Memory model, default = 2              */
+    int              release_scope;  /* Memory model, default = 2              */
+    int              num_required;   /* # of required parent tasks, default 0  */
+    atmi_task_t**    requires;       /* Array of required parent tasks         */
+    int              num_needs_any;  /* # needed parents, only 1 must complete */
+    atmi_task_t**    needs_any;      /* Array of needed parent tasks           */
+    boolean          profilable;     /* Points to tprofile if metrics desired  */ 
+    int              atmi_id;        /* Constant that PIFs can check for       */
+    int              kernel_id;
+    void             *prevTask;
+} atmi_klparm_t ;
 
 #endif

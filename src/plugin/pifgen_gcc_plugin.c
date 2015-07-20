@@ -1170,9 +1170,16 @@ fprintf(fp, "\
 #include \"hsa_kl.h\" \n\
 #include \"atmi.h\" \n\
 #include \"atmi_kl.h\" \n\
-uint64_t get_atmi_context();\n\n\
  \n\
-#define INIT_KLPARM_1D(X,Y) atmi_klparm_t *X ; atmi_klparm_t  _ ## X ={.ndim=1,.gdims={Y},.ldims={Y > 64 ? 64 : Y},.stream=-1,.barrier=0,.acquire_fence_scope=2,.release_fence_scope=2,.kernel_id=0,.prevTask = thisTask} ; X = &_ ## X ; \n\
+#define ATMI_KLPARM_1D(X,Y) atmi_klparm_t * X ; atmi_klparm_t  _ ## X ={.gridDim={Y},.groupDim={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.prevTask=thisTask} ; X = &_ ## X ;\n\n\
+uint64_t get_atmi_context();\n\n\
+uint16_t create_header(hsa_packet_type_t type, int barrier) {\n\
+   uint16_t header = type << HSA_PACKET_HEADER_TYPE;\n\
+   header |= barrier << HSA_PACKET_HEADER_BARRIER;\n\
+   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;\n\
+   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;\n\
+   return header;\n\
+}\n\
  \n\
 void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id) { \n\
  \n\
@@ -1185,22 +1192,30 @@ void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_i
     const uint32_t queueMask = this_Q->size - 1; \n\
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q); \n\
     hsa_kernel_dispatch_packet_t *this_aql = &(((hsa_kernel_dispatch_packet_t *)(this_Q->base_address))[index&queueMask]); \n\
- \n\
+ \n\n\
+    int ndim = -1;\n\
+    if(lparm->gridDim[2] > 1)\n\
+        ndim = 3;\n\
+    else if(lparm->gridDim[1] > 1)\n\
+        ndim = 2;\n\
+    else\n\
+        ndim = 1;\n\
+\n\
     /*  Process lparm values */ \n\
-    this_aql->setup  |= (uint16_t) lparm->ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS; \n\
-    this_aql->grid_size_x=lparm->gdims[0]; \n\
-    this_aql->workgroup_size_x=lparm->ldims[0]; \n\
-    if (lparm->ndim>1) { \n\
-        this_aql->grid_size_y=lparm->gdims[1]; \n\
-        this_aql->workgroup_size_y=lparm->ldims[1]; \n\
+    this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS; \n\
+    this_aql->grid_size_x=lparm->gridDim[0]; \n\
+    this_aql->workgroup_size_x=lparm->groupDim[0]; \n\
+    if (ndim>1) { \n\
+        this_aql->grid_size_y=lparm->gridDim[1]; \n\
+        this_aql->workgroup_size_y=lparm->groupDim[1]; \n\
     } else { \n\
         this_aql->grid_size_y=1; \n\
         this_aql->workgroup_size_y=1; \n\
     } \n\
  \n\
-    if (lparm->ndim>2) { \n\
-        this_aql->grid_size_z=lparm->gdims[2]; \n\
-        this_aql->workgroup_size_z=lparm->ldims[2]; \n\
+    if (ndim>2) { \n\
+        this_aql->grid_size_z=lparm->gridDim[2]; \n\
+        this_aql->workgroup_size_z=lparm->groupDim[2]; \n\
     } \n\
     else \n\
     { \n\
@@ -1219,11 +1234,7 @@ void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_i
  \n\
     /*  Prepare and set the packet header */  \n\
     /* Only set barrier bit if asynchrnous execution */ \n\
-    int stream_num = lparm->stream; \n\
-    if ( stream_num >= 0 )   \n\
-        this_aql->header |= lparm->barrier << HSA_PACKET_HEADER_BARRIER;  \n\
-    this_aql->header |= lparm->acquire_fence_scope << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE; \n\
-    this_aql->header |= lparm->release_fence_scope << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE; \n\
+    this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE); \n\
  \n\
     ((uint8_t*)(&this_aql->header))[0] = (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH; \n\
  \n\

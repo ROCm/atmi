@@ -1,58 +1,16 @@
 #ifndef __ATMI_KL_H__
 #define __ATMI_KL_H__
-
-/* Unsigned.  */
-typedef unsigned int atmi_uint32_t;
-typedef unsigned long int atmi_uint64_t;
-
-typedef struct atmi_kernel_dispatch_packet_s {
-    /**
-     * Size in bytes of private memory allocation request (per work-item).
-     */
-    atmi_uint32_t private_segment_size;
-
-    /**
-     * Size in bytes of group memory allocation request (per work-group). Must not
-     * be less than the sum of the group memory used by the kernel (and the
-     * functions it calls directly or indirectly) and the dynamically allocated
-     * group segment variables.
-     */
-    atmi_uint32_t group_segment_size;
-
-    /**
-     * Opaque handle to a code object that includes an implementation-defined
-     * executable code for the kernel.
-     */
-    atmi_uint64_t kernel_object;
-
-    /**
-     * Pointer to a buffer containing the kernel arguments. May be NULL.
-     *
-     * The buffer must be allocated using ::hsa_memory_allocate, and must not be
-     * modified once the kernel dispatch packet is enqueued until the dispatch has
-     * completed execution.
-     */
-    void *kernarg_address;
-
-    /**
-     * Reserved. Must be 0.
-     */
-    atmi_uint64_t reserved2;
-
-    /**
-     * Signal used to indicate completion of the job. The application can use the
-     * special signal handle 0 to indicate that no signal is used.
-     */
-    atmi_uint64_t completion_signal;
-} atmi_kernel_dispatch_packet_t;
-
+typedef struct atmi_kernel_packet_s atmi_kernel_packet_t;
+struct atmi_kernel_packet_s {
+    unsigned long int resevered[8];
+};
 
 typedef struct atmi_klist_s atmi_klist_t;
 struct atmi_klist_s { 
     int num_kernel_packets;
     int num_queues;
-    atmi_uint64_t *queues;
-    atmi_kernel_dispatch_packet_t *kernel_packets;
+    unsigned long int *queues;
+    atmi_kernel_packet_t *kernel_packets;
 };
 
 /*----------------------------------------------------------------------------*/
@@ -74,6 +32,6 @@ typedef struct atmi_klparm_s {
     void             *prevTask;
 } atmi_klparm_t ;
 
-#define ATMI_KLPARM_1D(X,Y) atmi_klparm_t * X ; atmi_klparm_t  _ ## X ={.gridDim={Y},.groupDim={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.prevTask=thisTask} ; X = &_ ## X ;
+#define ATMI_KLPARM_1D(X,Y) atmi_klparm_t * X ; atmi_klparm_t  _ ## X ={.gridDim={Y},.groupDim={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=1,.prevTask=thisTask} ; X = &_ ## X ;
 
 #endif

@@ -18,7 +18,7 @@ export PATH=$HSA_LLVM_PATH:$PATH
 # Compile Main and generate the PIF definitions for host and accelerated functions
 # in Reduction.cpp.pifdefs.c
 #echo 
-if [ -f hello ] ; then rm hello ; fi
+#if [ -f hello ] ; then rm hello ; fi
 echo g++ -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=hw.cl -O3 -I$ATMI_INC
 g++-4.9 -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=hw.cl -fplugin-arg-atmi_pifgen-pifgenfile=Reduction.cpp.pifdefs.c -O3 -I$ATMI_INC
 

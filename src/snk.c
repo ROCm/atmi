@@ -816,6 +816,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  const char *pif_name,
                  void *kernel_args) {
     
+    DEBUG_PRINT("CPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpus, lparm->place.gpus);
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
@@ -1001,6 +1002,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
                  void *thisKernargAddress) {
+    DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpus, lparm->place.gpus);
     atmi_stream_t *stream = NULL;
     if(lparm->stream == NULL) {
         stream = &snk_default_stream_obj;

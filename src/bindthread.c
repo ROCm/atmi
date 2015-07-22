@@ -17,7 +17,7 @@ int atmi_cpu_bindthread(int cpu_index)
     if (err != 0) {
         return err;
     } else {
-        printf("cpu %d bind correctly\n", cpu_index);
+        DEBUG_PRINT("cpu %d bind correctly\n", cpu_index);
         return 0;
     }   
 #endif

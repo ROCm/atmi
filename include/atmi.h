@@ -78,6 +78,15 @@ typedef struct atmi_place_s {
 
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
+/* atmi_context_t  ATMI Context Data Structure for system information         */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+typedef struct atmi_context_s {
+   int                atmi_id;        /* ATMI version information             */
+} atmi_context_t;
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
 /* atmi_task_t  ATMI Task Handle Data Structure                               */
 /*              All PIF functions return a pointer to atmi_task_t             */ 
 /*                                                                            */
@@ -87,7 +96,8 @@ typedef struct atmi_task_s {
    atmi_handle_t    handle;
    atmi_state_t     state;    /* Eventually consistent state of task    */
    atmi_tprofile_t  profile;  /* Profile if reqeusted by lparm          */
-//   atmi_handle_t    continuation;   /*                                        */
+   atmi_context_t*  context;  /* always points to the system context    */
+//   atmi_handle_t    continuation;   /*                                      */
 } atmi_task_t;
 
 /*----------------------------------------------------------------------------*/

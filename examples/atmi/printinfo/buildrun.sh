@@ -3,9 +3,9 @@ set -e
 #  Set HSA Environment variables
 [ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
 [ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/cloc/bin
-[ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=$HOME/git/atmi
+[ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=/opt/amd/atmi
 ATMI_INC=$ATMI_RUNTIME_PATH/include
-echo export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$ATMI_RUNTIME_PATH/lib:$LD_LIBRARY_PATH
+#echo export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$ATMI_RUNTIME_PATH/lib:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$ATMI_RUNTIME_PATH/lib:$LD_LIBRARY_PATH
 
 # Compile Main and generate the PIF definitions for host and accelerated functions

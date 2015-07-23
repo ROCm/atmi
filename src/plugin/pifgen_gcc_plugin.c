@@ -78,6 +78,7 @@ void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string>
 void write_kernel_dispatch_routine(FILE *fp);
 void write_pif_kl(FILE *clFile);
 void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
+void write_arg_str(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
 
 void write_headers(FILE *fp) {
     fprintf(fp, "\
@@ -694,6 +695,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         /* add init function for dynamic kernel */
         write_kl_init(pif_name, pif_index, arg_list, num_params);
 
+        /* add args struct of pif */
+        write_arg_str(pif_name, pif_index, arg_list, num_params);
+
         /* add args struct of pif for dynamic dispatch */
         write_spawn_function(pif_name, pif_index, arg_list, num_params);
 
@@ -1119,9 +1123,10 @@ int plugin_init(struct plugin_name_args *plugin_info,
 void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
 {
         /* add init function for dynamic kernel */
-        pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    \n\
+extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n\n", pif_name);
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
     int num_pif = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]); \n\n\
     if (%s_FK == 0 ) { \n\
         snk_pif_init(%s_pif_fn_table, num_pif);\n\
@@ -1157,6 +1162,13 @@ for(std::vector<std::string>::iterator it = g_cl_modules.begin();
         snk_gpu_build_executable(&g_executable);\n\
         gpu_initalized = 1;\n\
     }\n\n");
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(cpu_initalized == 0) {\n\
+        snk_init_cpu_context();\n\
+        cpu_initalized = 1;\n\
+    }\n\n");
+
         pp_printf((pif_printers[pif_index].pifdefs), "\
     typedef struct cpu_args_struct_s {\n\
         size_t arg0_size;\n\
@@ -1186,10 +1198,12 @@ for(std::vector<std::string>::iterator it = g_cl_modules.begin();
             );
         }
 
-        pp_printf((pif_printers[pif_index].pifdefs), "\n\n");
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    printf(\"%%d %%d\\n\", args->arg1, args->arg2);\n");
+
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    snk_kl_gpu(lparm, atmi_klist, g_executable, \"%s\", %d, cpuKernargAddress);\n\n", pif_name, pif_index);
+    snk_kl_init(lparm, atmi_klist, g_executable, \"%s\", %d, cpuKernargAddress);\n\n", pif_name, pif_index);
 
         pp_printf((pif_printers[pif_index].pifdefs), "}\n\n");
         
@@ -1212,10 +1226,20 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {\n\
 }\n\n");
 
 fprintf(fp, "\
+void memcpy(void *dest, void *source, unsigned long num) \n\
+{\n\
+    int i; \n\
+    for(i = 0; i < num; i++) \n\
+    { \n\
+        ((unsigned char *)dest)[i] = ((unsigned char *)source)[i]; \n\
+    } \n\
+}\n\n");
+
+fprintf(fp, "\
 void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id) { \n\
  \n\
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
-    hsa_kernel_dispatch_packet_t *kernel_packet = (hsa_kernel_dispatch_packet_t *)atmi_klist[pif_id].kernel_packets + k_id; \n\
+    hsa_kernel_dispatch_packet_t *kernel_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
  \n\
     hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[0]; \n\
  \n\
@@ -1267,8 +1291,6 @@ void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_i
     /* Only set barrier bit if asynchrnous execution */ \n\
     this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE); \n\
  \n\
-    ((uint8_t*)(&this_aql->header))[0] = (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH; \n\
- \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
     hsa_queue_store_write_index_relaxed(this_Q, index + 1); \n\
  \n\
@@ -1280,9 +1302,10 @@ fprintf(fp,"\
 void agent_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id) { \n\
  \n\
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
-    hsa_agent_dispatch_packet_t *kernel_packet = (hsa_agent_dispatch_packet_t *)atmi_klist[pif_id].kernel_packets + k_id; \n\
+    hsa_agent_dispatch_packet_t *kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
  \n\
     hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[1]; \n\
+    hsa_signal_t worker_sig = *((hsa_signal_t *)atmi_klist[pif_id].worker_sig); \n\
  \n\
     /* Find the queue index address to write the packet info into.  */ \n\
     const uint32_t queueMask = this_Q->size - 1; \n\
@@ -1295,28 +1318,26 @@ void agent_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id
     this_aql->arg[2] = kernel_packet->arg[2]; \n\
     this_aql->arg[3] = kernel_packet->arg[3]; \n\
     this_aql->completion_signal = kernel_packet->completion_signal; \n\n\
-    hsa_signal_add_relaxed(this_aql->completion_signal, 1); \n\
  \n\
     /*  Prepare and set the packet header */  \n\
     /* Only set barrier bit if asynchrnous execution */ \n\
     this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE); \n\
- \n\
-    ((uint8_t*)(&this_aql->header))[0] = (uint8_t)HSA_PACKET_TYPE_KERNEL_DISPATCH; \n\
  \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
     hsa_queue_store_write_index_relaxed(this_Q, index + 1); \n\
  \n\
     //FIXME ring doorbell not work on GPU \n\
     hsa_signal_store_relaxed(this_Q->doorbell_signal, index); \n\
+    hsa_signal_store_relaxed(worker_sig, 0); \n\
 }\n\n");
 
 }
 
-void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
+/* add args struct of pif */
+void write_arg_str(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
 {
-    int arg_idx; 
+    int arg_idx;
 
-    /* add args struct of pif for dynamic dispatch */
     pp_printf(&pif_spawn, "\
 struct %s_gpu_args_struct {\n\
     uint64_t arg0; \n\
@@ -1337,7 +1358,7 @@ struct %s_gpu_args_struct {\n\
 
     pp_printf(&pif_spawn, "\
 struct %s_cpu_args_struct {\n\
-    size_t arg0_size;\n\
+    int arg0_size;\n\
     atmi_task_t **arg0;\n", pif_name);
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         pp_printf(&pif_spawn, "\
@@ -1349,14 +1370,20 @@ struct %s_cpu_args_struct {\n\
         pp_printf(&pif_spawn, "\
 }; \n\n");
 
+}
 
-        /* add spawn function of pif for dynamic dispatch */
+/* add spawn function of pif for dynamic dispatch */
+void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
+{
+    int arg_idx; 
+
     pp_printf(&pif_spawn, "\
 atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf(&pif_spawn, ", %s var%d", arg_list[arg_idx].c_str(), arg_idx);
-        }
+    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+        pp_printf(&pif_spawn, ", %s var%d", arg_list[arg_idx].c_str(), arg_idx);
+    }
+
     pp_printf(&pif_spawn, ") {\n\n");
 
     pp_printf(&pif_spawn, "\
@@ -1364,9 +1391,9 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
     pp_printf(&pif_spawn, "\
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
-    uint16_t *atmi_packet_header = (uint16_t *)((hsa_kernel_dispatch_packet_t *)atmi_klist[pif_id].kernel_packets + lparm->kernel_id);\n\
+    uint16_t *atmi_packet_header = (uint16_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id);\n\
     if(atmi_packet_header[0] == 0){\n\
-        hsa_kernel_dispatch_packet_t * kernel_packet = (hsa_kernel_dispatch_packet_t *)atmi_klist[pif_id].kernel_packets + lparm->kernel_id; \n\
+        hsa_kernel_dispatch_packet_t * kernel_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id); \n\
         struct %s_gpu_args_struct * gpu_args = kernel_packet->kernarg_address; \n\
         kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n", pif_name);
 
@@ -1394,18 +1421,24 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     pp_printf(&pif_spawn, "\
     else{\n");
     pp_printf(&pif_spawn, "\
-        hsa_agent_dispatch_packet_t * kernel_packet = (hsa_agent_dispatch_packet_t *)atmi_klist[pif_id].kernel_packets + lparm->kernel_id; \n\
+        hsa_agent_dispatch_packet_t * kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id); \n\
         struct %s_cpu_args_struct * cpu_args = (struct %s_cpu_args_struct *)kernel_packet->arg[1];\n", pif_name, pif_name); 
-
-    pp_printf(&pif_spawn, "\
-        *(cpu_args->arg0) = lparm->prevTask;\n");
 
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         pp_printf((&pif_spawn), "\
-        *(cpu_args->arg%d) = var%d;\n", arg_idx, arg_idx);
+        *(cpu_args->arg%d) = var%d;\n", 
+        arg_idx, arg_idx);
     }
+    
+    //pp_printf(&pif_spawn, "\
+        //*(cpu_args->arg1) = (__global int *)var1;\n\
+        //*(cpu_args->arg2) = var2;\n");
 
     pp_printf(&pif_spawn, "\
+        kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle));\n");
+
+    pp_printf(&pif_spawn, "\
+        agent_dispatch(lparm, pif_id, lparm->kernel_id);\n\
     }\n");
 
     pp_printf(&pif_spawn, "\

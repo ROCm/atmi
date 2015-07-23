@@ -84,5 +84,8 @@ hsa_status_t HSA_API hsa_amd_profiling_get_dispatch_time(
     hsa_agent_t agent, hsa_signal_t signal,
     hsa_amd_profiling_dispatch_time_t* time);
 
+
+hsa_signal_t* get_worker_sig(hsa_queue_t *queue);
+
 #endif 
 #endif //__SNK_INTERNAL

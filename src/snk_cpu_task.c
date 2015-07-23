@@ -724,3 +724,14 @@ agent_fini()
 
     DEBUG_PRINT("agent_fini completed\n");
 }
+
+hsa_signal_t *get_worker_sig(hsa_queue_t *queue) {
+    DEBUG_PRINT("Signaling work %d\n", signal);
+    int id;
+    for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
+        if(agent[id].queue == queue) break;
+
+    }
+    return &(worker_sig[id]);
+
+}

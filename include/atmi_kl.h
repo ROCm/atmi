@@ -2,7 +2,7 @@
 #define __ATMI_KL_H__
 typedef struct atmi_kernel_packet_s atmi_kernel_packet_t;
 struct atmi_kernel_packet_s {
-    unsigned long int resevered[8];
+    unsigned char resevered[64];
 };
 
 typedef struct atmi_klist_s atmi_klist_t;
@@ -10,6 +10,7 @@ struct atmi_klist_s {
     int num_kernel_packets;
     int num_queues;
     unsigned long int *queues;
+    unsigned long int worker_sig;
     atmi_kernel_packet_t *kernel_packets;
 };
 

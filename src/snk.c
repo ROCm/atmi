@@ -1166,7 +1166,7 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
-void snk_kl_gpu(const atmi_lparm_t *lparm,
+void snk_kl_init(const atmi_lparm_t *lparm,
                  atmi_klist_t *atmi_klist,
                  hsa_executable_t g_executable,
                  const char *pif_name, const int pif_id, void *cpu_kernel_args) {
@@ -1196,6 +1196,7 @@ void snk_kl_gpu(const atmi_lparm_t *lparm,
 
     atmi_klist_curr->queues[0] = (uint64_t)this_devQ; 
     atmi_klist_curr->queues[1] = (uint64_t)this_softQ; 
+    atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ); 
 
     uint64_t _KN__Kernel_Object;
     uint32_t _KN__Group_Segment_Size;

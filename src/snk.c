@@ -1227,9 +1227,9 @@ void snk_kl_init(const atmi_lparm_t *lparm,
                                 atmi_klist_curr->num_kernel_packets);
 
                     hsa_kernel_dispatch_packet_t *this_aql = 
-                        (hsa_kernel_dispatch_packet_t *)&atmi_klist_curr
-                        ->kernel_packets[
-                        atmi_klist_curr->num_kernel_packets - 1];
+                        (hsa_kernel_dispatch_packet_t *)(atmi_klist_curr
+                        ->kernel_packets +
+                        atmi_klist_curr->num_kernel_packets - 1);
 
 
                     /* thisKernargAddress has already been set up in the beginning of this routine */
@@ -1250,7 +1250,9 @@ void snk_kl_init(const atmi_lparm_t *lparm,
                                 atmi_klist_curr->num_kernel_packets);
 
                     hsa_agent_dispatch_packet_t *this_aql = 
-                        (hsa_agent_dispatch_packet_t *)&atmi_klist_curr->kernel_packets[atmi_klist_curr->num_kernel_packets - 1];
+                        (hsa_agent_dispatch_packet_t *)(atmi_klist_curr
+                        ->kernel_packets +
+                        atmi_klist_curr->num_kernel_packets - 1);
                     this_aql->header = 1;
                     this_aql->type = (uint16_t)i;
                     const uint32_t num_params = snk_kernels[i].num_params;

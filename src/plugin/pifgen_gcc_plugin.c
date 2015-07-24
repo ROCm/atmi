@@ -1289,7 +1289,7 @@ void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_i
  \n\
     /*  Prepare and set the packet header */  \n\
     /* Only set barrier bit if asynchrnous execution */ \n\
-    this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE); \n\
+    this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE); \n\
  \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
     hsa_queue_store_write_index_relaxed(this_Q, index + 1); \n\

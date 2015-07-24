@@ -1,4 +1,3 @@
-
 #include "atmi.h"
 #include <gcc-plugin.h>
 #include <plugin-version.h>
@@ -22,6 +21,9 @@
 #include <cgraph.h>
 #include <c-family/c-pragma.h>
 #include <gimple-expr.h>
+#include <coretypes.h>
+
+#include "pifgen_incl.h"
 
 #include <map>
 #include <set>
@@ -733,6 +735,13 @@ register_attributes (void *event_data, void *data)
  */
 
 static void
+register_start_parse_function (void *event_data, void *data)
+{
+    //warning (0, G_("Callback to register header files"));
+    DEBUG_PRINT("Starting to parse function: %s \n", (const char *)event_data);
+}
+
+static void
 register_headers (void *event_data, void *data)
 {
     //warning (0, G_("Callback to register header files"));
@@ -797,6 +806,7 @@ register_finish_unit (void *event_data, void *data) {
             it != g_cl_files.end(); it++) {
         FILE *tmp_cl = fopen("tmp.cl", "w");
         fprintf(tmp_cl, "#include \"atmi.h\"\n");
+        //fprintf(tmp_cl, "/*Headers carried over from %s*/\n%s\n", main_input_filename, headers.c_str());
         write_cpp_warning_header(tmp_cl);
         for(std::vector<std::string>::iterator it_pif = g_all_pifdecls.begin(); 
                 it_pif != g_all_pifdecls.end(); it_pif++) {
@@ -838,18 +848,31 @@ register_start_unit (void *event_data, void *data) {
     }
     //cpp_define(parse_in, "cl_long_long=char*");
 }
-#if 0
+#if 1
 static void
 register_finish_type(void *event_data, void *data) {
     tree type = (tree)event_data;
-    if(TREE_CODE(type) == FUNCTION_DECL || 
-       TREE_CODE(type) == VAR_DECL || 
-       TREE_CODE(type) == TYPE_DECL) {
+    if(TREE_CODE(type) == FUNCTION_DECL  
+       //|| TREE_CODE(type) == VAR_DECL  
+       //|| TREE_CODE(type) == TYPE_DECL
+       ) {
         DEBUG_PRINT("Callback at finish of type %p %p\n", event_data, data);
-        debug_tree_chain(type);
+        //debug_tree_chain(type);
     }
 }
 
+static void
+register_finish_decl(void *event_data, void *data) {
+    tree type = (tree)event_data;
+    if(TREE_CODE(type) == FUNCTION_DECL 
+       // || TREE_CODE(type) == VAR_DECL 
+       // || TREE_CODE(type) == TYPE_DECL
+       ) {
+        DEBUG_PRINT("Callback at finish of decl %p %p\n", event_data, data);
+        //debug_tree_chain(type);
+    }
+}
+#endif
 static void print_tree_node(tree t, int indent)
 {
     // indentation..
@@ -905,7 +928,7 @@ static void print_tree_node(tree t, int indent)
 static void parse_tree(tree t, void (*callback)(tree t, int indent), int indent)
 {
     // null => return
-    if (t == 0)
+    if (t == 0 || indent > 3)
         return;
 
     (*callback)(t, indent);
@@ -937,11 +960,10 @@ static void parse_tree(tree t, void (*callback)(tree t, int indent), int indent)
             code != GOTO_EXPR &&
             code != NOP_EXPR &&
             code != DECL_EXPR &&
-            code            !=            ADDR_EXPR            && 
-            code            !=            INDIRECT_REF            &&
-            code            !=            COMPONENT_REF)
-        parse_tree(TREE_OPERAND(t,                    1),               callback,                indent+1);
-
+            code != ADDR_EXPR && 
+            code != INDIRECT_REF &&
+            code != COMPONENT_REF)
+        parse_tree(TREE_OPERAND(t, 1), callback, indent+1);
 }
 
 static void handle_pre_generic(void *gcc_data, void *user_data)
@@ -950,15 +972,19 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
     tree fndecl = (tree)gcc_data;
 
     if(
-       //TREE_CODE(fndecl) == FUNCTION_DECL || 
+       TREE_CODE(fndecl) == FUNCTION_DECL || 
        TREE_CODE(fndecl) == VAR_DECL || 
        TREE_CODE(fndecl) == TYPE_DECL) {
         tree id = DECL_NAME(fndecl);
         const char *fnname = id ? IDENTIFIER_POINTER(id) : "<unnamed>";
-        printf("%s %s\n", get_tree_code_name(FUNCTION_DECL), fnname);
+        printf("[Pregenericize] %s %s\n", get_tree_code_name(FUNCTION_DECL), fnname);
 
+        if(strcmp(fnname, "main") == 0) {
+        DEBUG_PRINT("In main function\n");
         // Print function body..
         tree fnbody = DECL_SAVED_TREE(fndecl);
+        //debug_tree_chain(fnbody);
+        print_generic_stmt(stdout, fnbody, 1);
         if (TREE_CODE(fnbody) == BIND_EXPR) {
             // second operand of BIND_EXPR
             tree t = TREE_OPERAND(fnbody, 1);
@@ -967,9 +993,9 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
             // through the tree recursively  (../include/parse-tree.h)
             parse_tree(t, print_tree_node, 1);
         }
+        }
     }                                                                                                                
 }
-#endif
 
 int plugin_init(struct plugin_name_args *plugin_info,
         struct plugin_gcc_version *version) {
@@ -977,6 +1003,11 @@ int plugin_init(struct plugin_name_args *plugin_info,
         return 1;
 
     int i;
+
+    for(i = 0; i < save_decoded_options_count; i++) {
+        DEBUG_PRINT("Cmd line option[%d]: %s\n", i, save_decoded_options[i].orig_option_with_args_text);
+    }
+
     g_output_pifdefs_filename.clear();
     g_cl_modules.clear();
     for(i = 0; i < plugin_info->argc; i++) { 
@@ -1058,11 +1089,15 @@ int plugin_init(struct plugin_name_args *plugin_info,
                   register_attributes, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
                   register_headers, NULL);
-#if 0
     register_callback (plugin_name, PLUGIN_FINISH_TYPE,
                   register_finish_type, NULL);
+    register_callback (plugin_name, PLUGIN_FINISH_DECL,
+                  register_finish_decl, NULL);
+#if 0
     register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
                           handle_pre_generic, NULL);
+    register_callback (plugin_name, PLUGIN_START_PARSE_FUNCTION,
+                  register_start_parse_function, NULL);
 #endif
     return 0;
 }

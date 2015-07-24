@@ -78,7 +78,6 @@ void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string>
 void write_kernel_dispatch_routine(FILE *fp);
 void write_pif_kl(FILE *clFile);
 void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
-void write_arg_str(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
 
 void write_headers(FILE *fp) {
     fprintf(fp, "\
@@ -695,8 +694,6 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         /* add init function for dynamic kernel */
         write_kl_init(pif_name, pif_index, arg_list, num_params);
 
-        /* add args struct of pif */
-        write_arg_str(pif_name, pif_index, arg_list, num_params);
 
         /* add args struct of pif for dynamic dispatch */
         write_spawn_function(pif_name, pif_index, arg_list, num_params);
@@ -1334,62 +1331,11 @@ void agent_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id
 
 }
 
-/* add args struct of pif */
-void write_arg_str(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
-{
-    int arg_idx;
-
-    pp_printf(&pif_spawn, "\
-struct %s_gpu_args_struct {\n\
-    uint64_t arg0; \n\
-    uint64_t arg1; \n\
-    uint64_t arg2; \n\
-    uint64_t arg3; \n\
-    uint64_t arg4; \n\
-    uint64_t arg5; \n\
-    atmi_task_t* arg6;\n", pif_name);
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf(&pif_spawn, "\
-    %s arg%d;\n", 
-            arg_list[arg_idx].c_str(), arg_idx + 6);
-        }
-            
-    pp_printf(&pif_spawn, "\
-} __attribute__ ((aligned (16))) ;\n\n");
-
-    pp_printf(&pif_spawn, "\
-struct %s_cpu_args_struct {\n\
-    int arg0_size;\n\
-    atmi_task_t **arg0;\n", pif_name);
-    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-        if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
-        {
-            pp_printf(&pif_spawn, "\
-    size_t arg%d_size;\n\
-    uint64_t * arg%d;\n",
-            arg_idx,
-            arg_idx);
-
-        }
-        else
-        {
-            pp_printf(&pif_spawn, "\
-    size_t arg%d_size;\n\
-    %s* arg%d;\n",
-            arg_idx,
-            arg_list[arg_idx].c_str(), arg_idx);
-        }
-
-    }
-        pp_printf(&pif_spawn, "\
-}; \n\n");
-
-}
-
 /* add spawn function of pif for dynamic dispatch */
 void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
 {
     int arg_idx; 
+
 
     pp_printf(&pif_spawn, "\
 atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
@@ -1407,9 +1353,29 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
     uint16_t *atmi_packet_header = (uint16_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id);\n\
     if(atmi_packet_header[0] == 0){\n\
-        hsa_kernel_dispatch_packet_t * kernel_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id); \n\
-        struct %s_gpu_args_struct * gpu_args = kernel_packet->kernarg_address; \n\
-        kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n", pif_name);
+        hsa_kernel_dispatch_packet_t * kernel_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id); \n\n");
+
+    pp_printf(&pif_spawn, "\
+        struct gpu_args_struct {\n\
+            uint64_t arg0; \n\
+            uint64_t arg1; \n\
+            uint64_t arg2; \n\
+            uint64_t arg3; \n\
+            uint64_t arg4; \n\
+            uint64_t arg5; \n\
+            atmi_task_t* arg6;\n");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf(&pif_spawn, "\
+            %s arg%d;\n", 
+            arg_list[arg_idx].c_str(), arg_idx + 6);
+        }
+            
+    pp_printf(&pif_spawn, "\
+        } __attribute__ ((aligned (16))) ;\n\n");
+
+    pp_printf(&pif_spawn, "\
+        struct gpu_args_struct * gpu_args = (struct gpu_args_struct *)kernel_packet->kernarg_address; \n\
+        kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n");
 
 
     pp_printf(&pif_spawn, "\
@@ -1435,8 +1401,38 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     pp_printf(&pif_spawn, "\
     else{\n");
     pp_printf(&pif_spawn, "\
-        hsa_agent_dispatch_packet_t * kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id); \n\
-        struct %s_cpu_args_struct * cpu_args = (struct %s_cpu_args_struct *)kernel_packet->arg[1];\n", pif_name, pif_name); 
+        hsa_agent_dispatch_packet_t * kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id); \n\n");
+
+    pp_printf(&pif_spawn, "\
+        struct cpu_args_struct {\n\
+            int arg0_size;\n\
+            atmi_task_t **arg0;\n");
+    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+        if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
+        {
+            pp_printf(&pif_spawn, "\
+            size_t arg%d_size;\n\
+            uint64_t * arg%d;\n",
+            arg_idx,
+            arg_idx);
+
+        }
+        else
+        {
+            pp_printf(&pif_spawn, "\
+            size_t arg%d_size;\n\
+            %s* arg%d;\n",
+            arg_idx,
+            arg_list[arg_idx].c_str(), arg_idx);
+        }
+
+    }
+    pp_printf(&pif_spawn, "\
+        }; \n\n");
+
+
+    pp_printf(&pif_spawn, "\
+        struct cpu_args_struct * cpu_args = (struct cpu_args_struct *)kernel_packet->arg[1];\n"); 
 
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')

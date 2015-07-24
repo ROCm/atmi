@@ -2,7 +2,7 @@
 #include <sched.h>
 #include <stdio.h>
 
-#include "bindthread.h"
+#include "atl_bindthread.h"
 
 int atmi_cpu_bindthread(int cpu_index)
 {

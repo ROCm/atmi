@@ -2,7 +2,7 @@
 #define ATMI_PROFILING_H
 
 #include "atmi.h"
-#include "atmi_rt.h"
+#include "atl_rt.h"
 
 #define ATMI_HAVE_PROFILE
 

@@ -77,7 +77,7 @@ static std::string g_output_pifdefs_filename;
 void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
-#include \"atmi_rt.h\"\n\n");
+#include \"atl_rt.h\"\n\n");
 }
 
 void write_cpp_warning_header(FILE *fp) {
@@ -92,8 +92,8 @@ fprintf(fp, "#ifdef __cplusplus \n\
 void write_globals(FILE *fp) {
 fprintf(fp, "\
 static hsa_executable_t g_executable;\n\
-static int gpu_initalized = 0;\n\
-static int cpu_initalized = 0;\n\n\
+static atl_context_t atlc; \n\
+static atmi_context_t * atmi_context;\n\n\
 ");
 }
 
@@ -548,9 +548,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     } \n\
     atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
     if(devtype == ATMI_DEVTYPE_CPU) {\n\
-        if(cpu_initalized == 0) { \n\
+        if(atlc.g_cpu_initialized == 0) { \n\
             snk_init_cpu_context();\n\
-            cpu_initalized = 1;\n\
+            atlc.g_cpu_initialized = 1;\n\
         }\n",
         pif_name, pif_name,
         pif_name,
@@ -604,7 +604,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
     else if(devtype == ATMI_DEVTYPE_GPU) {\n\
-        if(gpu_initalized == 0) {\n\
+        if(atlc.g_gpu_initialized == 0) {\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
         
@@ -615,7 +615,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
             snk_gpu_build_executable(&g_executable);\n\
-            gpu_initalized = 1;\n\
+            atlc.g_gpu_initialized = 1;\n\
         }\n\
         /* Allocate the kernel argument buffer from the correct region. */\n\
         void* thisKernargAddress;\n\

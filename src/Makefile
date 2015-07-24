@@ -26,7 +26,7 @@ GENLIB=atmi_pifgen.so
 
 PLUGIN_SOURCE_FILES= atl_pifgen_plugin.c
 GCCPLUGINS_DIR:= $(shell $(CC) -print-file-name=plugin)
-	CXXFLAGS+= -I$(GCCPLUGINS_DIR)/include -fPIC -O2 -I${ATMILIB_INC}
+	CXXFLAGS+= -I$(GCCPLUGINS_DIR)/include -fPIC -O2 -I${ATMILIB_INC} ${INC_FLAGS}
 
 all: $(LIBDIR)/$(GENLIB) $(LIBDIR)/$(LIB)
 

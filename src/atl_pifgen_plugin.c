@@ -23,7 +23,7 @@
 #include <gimple-expr.h>
 #include <coretypes.h>
 
-#include "pifgen_incl.h"
+#include "atl_pifgen.h"
 
 #include <map>
 #include <set>

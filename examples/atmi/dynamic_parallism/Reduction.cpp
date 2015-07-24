@@ -8,17 +8,15 @@ using namespace std;
 
 // Declare reduction as the PIF for the CPU kernel reduction_cpu
 extern "C" void reduction_cpu(atmi_task_t *thisTask, int* in, int length) __attribute__((atmi_kernel("reduction", "cpu")));
-
 extern "C" void reduction_cpu(atmi_task_t *thisTask, int* in, int length) {
     int num;
-    printf("reduction_cpu(%lu, %lu, %d)\n", (uint64_t)thisTask, (uint64_t)in, length);
-    //for (num = length; num > 0; num >>= 1) {
-        //int j;
-        //for(j = 0; j < num; j++)
-        //{
-            //in[j] += in[j + num];
-        //}
-    //}
+    for (num = length; num > 0; num >>= 1) {
+        int j;
+        for(j = 0; j < num; j++)
+        {
+            in[j] += in[j + num];
+        }
+    }
 }
 
 // Declare reduction as the PIF for the GPU kernel implementation reduction_gpu
@@ -43,11 +41,10 @@ int main(int argc, char* argv[]) {
     reduction_kl_init(lparm_gpu);
     reduction(lparm_gpu, input_gpu, length >> 1);
 
-
-    //ATMI_LPARM_1D(lparm_cpu, length >> 1);
-    //lparm_cpu->synchronous = ATMI_TRUE;
-    //lparm_cpu->kernel_id = 0;
-    //reduction(lparm_cpu, input_cpu, length >> 1);
+    ATMI_LPARM_1D(lparm_cpu, length >> 1);
+    lparm_cpu->synchronous = ATMI_TRUE;
+    lparm_cpu->kernel_id = 0;
+    reduction(lparm_cpu, input_cpu, length >> 1);
 
     //for(int ii = 0; ii < length; ii++)
     //{

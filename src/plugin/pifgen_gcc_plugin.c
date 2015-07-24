@@ -1198,8 +1198,8 @@ for(std::vector<std::string>::iterator it = g_cl_modules.begin();
             );
         }
 
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    printf(\"%%d %%d\\n\", args->arg1, args->arg2);\n");
+        //pp_printf((pif_printers[pif_index].pifdefs), "\
+        //printf(\"%%d %%d\\n\", args->arg1, args->arg2);\n");
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1225,15 +1225,15 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {\n\
    return header;\n\
 }\n\n");
 
-fprintf(fp, "\
-void memcpy(void *dest, void *source, unsigned long num) \n\
-{\n\
-    int i; \n\
-    for(i = 0; i < num; i++) \n\
-    { \n\
-        ((unsigned char *)dest)[i] = ((unsigned char *)source)[i]; \n\
-    } \n\
-}\n\n");
+//fprintf(fp, "\
+//void memcpy(void *dest, void *source, unsigned long num) \n\
+//{\n\
+    //int i; \n\
+    //for(i = 0; i < num; i++) \n\
+    //{ \n\
+        //((unsigned char *)dest)[i] = ((unsigned char *)source)[i]; \n\
+    //} \n\
+//}\n\n");
 
 fprintf(fp, "\
 void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id) { \n\
@@ -1318,6 +1318,7 @@ void agent_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id
     this_aql->arg[2] = kernel_packet->arg[2]; \n\
     this_aql->arg[3] = kernel_packet->arg[3]; \n\
     this_aql->completion_signal = kernel_packet->completion_signal; \n\n\
+    hsa_signal_add_relaxed(this_aql->completion_signal, 1); \n\
  \n\
     /*  Prepare and set the packet header */  \n\
     /* Only set barrier bit if asynchrnous execution */ \n\
@@ -1361,11 +1362,24 @@ struct %s_cpu_args_struct {\n\
     int arg0_size;\n\
     atmi_task_t **arg0;\n", pif_name);
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-        pp_printf(&pif_spawn, "\
+        if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
+        {
+            pp_printf(&pif_spawn, "\
+    size_t arg%d_size;\n\
+    uint64_t * arg%d;\n",
+            arg_idx,
+            arg_idx);
+
+        }
+        else
+        {
+            pp_printf(&pif_spawn, "\
     size_t arg%d_size;\n\
     %s* arg%d;\n",
-        arg_idx,
-        arg_list[arg_idx].c_str(), arg_idx);
+            arg_idx,
+            arg_list[arg_idx].c_str(), arg_idx);
+        }
+
     }
         pp_printf(&pif_spawn, "\
 }; \n\n");
@@ -1425,14 +1439,21 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
         struct %s_cpu_args_struct * cpu_args = (struct %s_cpu_args_struct *)kernel_packet->arg[1];\n", pif_name, pif_name); 
 
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-        pp_printf((&pif_spawn), "\
+        if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
+        {
+            pp_printf((&pif_spawn), "\
+        *(cpu_args->arg%d) = (uint64_t)var%d;\n", 
+            arg_idx, arg_idx);
+
+        }
+        else
+        {
+            pp_printf((&pif_spawn), "\
         *(cpu_args->arg%d) = var%d;\n", 
-        arg_idx, arg_idx);
+            arg_idx, arg_idx);
+
+        }
     }
-    
-    //pp_printf(&pif_spawn, "\
-        //*(cpu_args->arg1) = (__global int *)var1;\n\
-        //*(cpu_args->arg2) = var2;\n");
 
     pp_printf(&pif_spawn, "\
         kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle));\n");

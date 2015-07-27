@@ -1,5 +1,8 @@
 #ifndef __ATMI_KL_H__
 #define __ATMI_KL_H__
+
+#define MAX_NUM_KERNELS 128
+
 typedef struct atmi_kernel_packet_s atmi_kernel_packet_t;
 struct atmi_kernel_packet_s {
     unsigned char resevered[64];
@@ -9,6 +12,10 @@ typedef struct atmi_klist_s atmi_klist_t;
 struct atmi_klist_s { 
     int num_kernel_packets;
     int num_queues;
+    void *cpu_kernarg_heap;
+    int cpu_kernarg_offset;
+    void *gpu_kernarg_heap;
+    int gpu_kernarg_offset;
     unsigned long int *queues;
     unsigned long int worker_sig;
     atmi_kernel_packet_t *kernel_packets;

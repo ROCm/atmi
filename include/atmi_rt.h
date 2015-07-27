@@ -123,7 +123,8 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
 void snk_kl_init(const atmi_lparm_t *lparm,
                  atmi_klist_t *atmi_klist,
                  hsa_executable_t g_executable,
-                 const char *pif_name, const int pif_id, void *cpu_kernel_args);
+                 const char *pif_name,
+                 const int pif_id);
 
 
 #ifdef __cplusplus

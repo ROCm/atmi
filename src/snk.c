@@ -1169,7 +1169,8 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
 void snk_kl_init(const atmi_lparm_t *lparm,
                  atmi_klist_t *atmi_klist,
                  hsa_executable_t g_executable,
-                 const char *pif_name, const int pif_id, void *cpu_kernel_args) {
+                 const char *pif_name,
+                 const int pif_id) {
 
     atmi_stream_t *stream = NULL;
     if(lparm->stream == NULL) {
@@ -1203,8 +1204,8 @@ void snk_kl_init(const atmi_lparm_t *lparm,
     uint32_t _KN__Private_Segment_Size;
 
     /* Allocate the kernel argument buffer from the correct region. */
-    void* thisKernargAddress;
-    snk_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
+    //void* thisKernargAddress;
+    //snk_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
 
     uint16_t i;
     atmi_task_t *ret = NULL;
@@ -1235,7 +1236,7 @@ void snk_kl_init(const atmi_lparm_t *lparm,
                     /* thisKernargAddress has already been set up in the beginning of this routine */
                     /*  Bind kernel argument buffer to the aql packet.  */
                     this_aql->header = 0;
-                    this_aql->kernarg_address = (void*) thisKernargAddress;
+                    //this_aql->kernarg_address = (void*) thisKernargAddress;
                     this_aql->kernel_object = _KN__Kernel_Object;
                     this_aql->private_segment_size = _KN__Private_Segment_Size;
                     this_aql->group_segment_size = _KN__Group_Segment_Size;
@@ -1258,7 +1259,7 @@ void snk_kl_init(const atmi_lparm_t *lparm,
                     const uint32_t num_params = snk_kernels[i].num_params;
                     ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                     this_aql->arg[0] = num_params;
-                    this_aql->arg[1] = (uint64_t) cpu_kernel_args;
+                    //this_aql->arg[1] = (uint64_t) cpu_kernel_args;
                     this_aql->arg[2] = (uint64_t) ret; 
                     this_aql->arg[3] = UINT64_MAX; 
                     SNK_NextTaskId++;

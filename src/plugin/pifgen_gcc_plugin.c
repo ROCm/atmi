@@ -98,7 +98,7 @@ fprintf(fp, "#ifdef __cplusplus \n\
 void write_globals(FILE *fp) {
 fprintf(fp, "\
 static hsa_executable_t g_executable;\n\
-static int klist_initalized = 0;\n\
+static int num_pif = 0;\n\
 static int gpu_initalized = 0;\n\
 static int cpu_initalized = 0;\n\n\
 atmi_klist_t *atmi_klist = NULL;\n\n\
@@ -1123,18 +1123,7 @@ void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string>
         pp_printf((pif_printers[pif_index].pifdefs), "\
 extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n\n", pif_name);
 
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    int num_pif = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]); \n\n\
-    if (%s_FK == 0 ) { \n\
-        snk_pif_init(%s_pif_fn_table, num_pif);\n\
-        %s_FK = 1; \n\
-    }\n\n",
-        pif_name,
-        pif_name, pif_name, pif_name,
-        pif_name);
-
-
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+           pp_printf((pif_printers[pif_index].pifdefs), "\
     typedef struct cpu_args_struct_s {\n\
         size_t arg0_size;\n\
         atmi_task_t **arg0;\n");
@@ -1170,24 +1159,30 @@ extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n\n", pif_name);
     } gpu_args_struct_t __attribute__ ((aligned (16))) ;\n\
     void *gpuKernargAddress = malloc(sizeof(gpu_args_struct_t) * MAX_NUM_KERNELS);\n\n");
 
+     pp_printf((pif_printers[pif_index].pifdefs), "\
+    int num_kernels = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]); \n\n\
+    if (%s_FK == 0 ) { \n\
+        snk_pif_init(%s_pif_fn_table, num_kernels);\n",
+        pif_name,
+        pif_name, pif_name, pif_name);
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if (klist_initalized == 0) { \n\
-        atmi_klist = (atmi_klist_t * )malloc(sizeof(atmi_klist_t) * num_pif); \n\
-        int i; \n\
-        for(i = 0; i < num_pif; i++) { \n\
-            atmi_klist[i].kernel_packets = NULL; \n\
-            atmi_klist[i].queues = NULL; \n\
-            atmi_klist[i].num_kernel_packets = 0; \n\
-            atmi_klist[i].num_queues = 0; \n\
-            atmi_klist[i].cpu_kernarg_heap = cpuKernargAddress; \n\
-            atmi_klist[i].cpu_kernarg_offset = 0;\n\
-            atmi_klist[i].gpu_kernarg_heap = gpuKernargAddress; \n\
-            atmi_klist[i].gpu_kernarg_offset = 0;\n\
-        }\n\
-        klist_initalized = 1; \n\
-    }\n\n");
+        num_pif++;\n\
+        atmi_klist = (atmi_klist_t * )realloc(atmi_klist, sizeof(atmi_klist_t) * num_pif); \n\
+        atmi_klist[num_pif - 1].kernel_packets = NULL; \n\
+        atmi_klist[num_pif - 1].queues = NULL; \n\
+        atmi_klist[num_pif - 1].num_kernel_packets = 0; \n\
+        atmi_klist[num_pif - 1].num_queues = 0; \n\
+        atmi_klist[num_pif - 1].cpu_kernarg_heap = cpuKernargAddress; \n\
+        atmi_klist[num_pif - 1].cpu_kernarg_offset = 0;\n\
+        atmi_klist[num_pif - 1].gpu_kernarg_heap = gpuKernargAddress; \n\
+        atmi_klist[num_pif - 1].gpu_kernarg_offset = 0;\n\
+        %s_FK = 1;\n\
+    }\n\n", pif_name);
+
+
+
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if(gpu_initalized == 0) { \n\
         snk_init_context(); \n\

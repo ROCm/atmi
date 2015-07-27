@@ -1161,7 +1161,7 @@ extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n\n", pif_name);
         uint64_t arg5; \n\
         atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf(&pif_spawn, "\
+            pp_printf((pif_printers[pif_index].pifdefs), "\
         %s arg%d;\n", 
             arg_list[arg_idx].c_str(), arg_idx + 6);
         }

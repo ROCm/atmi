@@ -546,7 +546,6 @@ alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
    do
        entry_line=$((${entry_lines[$i]} + $offset))
        offset=$(($offset + 4))
-       echo "insert $entry_line"
        sed -i -e "${entry_line}i\
     //init ATMI_CONTEXT\n\
     ld_kernarg_align(8)_width(all)_u64  \$d0, [%__printf_buffer];\n\

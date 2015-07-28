@@ -19,7 +19,11 @@ struct atmi_klist_s {
     unsigned long int *queues;
     unsigned long int worker_sig;
     atmi_kernel_packet_t *kernel_packets;
+    atmi_kernel_packet_t *kernel_packets_heap;
+    int kernel_packets_offset;
 };
+
+extern atmi_klist_t atmi_klist[];
 
 /*----------------------------------------------------------------------------*/
 typedef struct atmi_klparm_s {

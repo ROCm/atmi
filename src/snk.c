@@ -1257,12 +1257,12 @@ void snk_kl_init(const atmi_lparm_t *lparm,
                     this_aql->header = 1;
                     this_aql->type = (uint16_t)i;
                     const uint32_t num_params = snk_kernels[i].num_params;
-                    ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
+                    //ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                     this_aql->arg[0] = num_params;
                     //this_aql->arg[1] = (uint64_t) cpu_kernel_args;
-                    this_aql->arg[2] = (uint64_t) ret; 
+                    //this_aql->arg[2] = (uint64_t) ret; 
                     this_aql->arg[3] = UINT64_MAX; 
-                    SNK_NextTaskId++;
+                    //SNK_NextTaskId++;
                 }
             }
         }

@@ -23,6 +23,7 @@ __kernel void reduction_gpu(__global atmi_task_t *thisTask, __global int* in, in
 
 extern "C" void reduction_kl_init(atmi_lparm_t *lparm);
 
+
 int main(int argc, char* argv[]) {
     int length = 1024;
 	int *input_gpu = (int*) malloc(sizeof(int)*(length));

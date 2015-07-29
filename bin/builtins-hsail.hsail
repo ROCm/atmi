@@ -44,12 +44,25 @@ prog function &hsa_signal_add_relaxed()(
 	arg_u64 %arg_p0,
 	arg_u64 %arg_p1)
 {
-   @hsa_signal_store_add_entry:
+   @hsa_signal_store_add_relaxed_entry:
    ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
    ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has value 
    signalnoret_add_rlx_u64_sig64 $d0, $d1;                  // add value d1 to signal handle d0
    ret;
 };
+
+prog function &hsa_signal_add_release()(
+	arg_u64 %arg_p0,
+	arg_u64 %arg_p1)
+{
+   @hsa_signal_store_add_release_entry:
+   ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+   ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has value 
+   signalnoret_add_screl_u64_sig64 $d0, $d1;                  // add value d1 to signal handle d0
+   ret;
+};
+
+
 
 prog function &hsa_signal_load_relaxed(arg_u64 %ret)(arg_u64 %arg_p0)
 {

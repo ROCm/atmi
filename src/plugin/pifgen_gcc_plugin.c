@@ -1357,7 +1357,7 @@ void agent_dispatch(const atmi_klparm_t *lparm, hsa_agent_dispatch_packet_t *ker
     this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE); \n\
  \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
-    //hsa_signal_store_relaxed(this_Q->doorbell_signal, index + 1); \n\
+    //hsa_signal_store_relaxed(this_Q->doorbell_signal, atmi_klist[pif_id].cpu_kernarg_offset); \n\
     hsa_signal_add_relaxed(this_Q->doorbell_signal, 1); \n\
  \n\
     //FIXME ring doorbell not work on GPU \n\
@@ -1409,8 +1409,8 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
         } __attribute__ ((aligned (16))) ;\n\n");
 
     pp_printf(&pif_spawn, "\
-        int kernarg_offset = atomic_add((__global int *)(&(atmi_klist[pif_id].gpu_kernarg_offset)), 1);\n\
-        int packet_offset = atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
+        int kernarg_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].gpu_kernarg_offset)), 1);\n\
+        int packet_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
         hsa_kernel_dispatch_packet_t * this_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
         this_packet->header = 0;\n\
         this_packet->kernel_object = kernel_packet->kernel_object;\n\
@@ -1475,8 +1475,8 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
 
     pp_printf(&pif_spawn, "\
-        int kernarg_offset = atomic_add((__global int *)(&(atmi_klist[pif_id].cpu_kernarg_offset)), 1);\n\
-        int packet_offset = atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
+        int kernarg_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].cpu_kernarg_offset)), 1);\n\
+        int packet_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
         hsa_agent_dispatch_packet_t * this_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
         this_packet->header = 1;\n\
         this_packet->type   = kernel_packet->type;\n\

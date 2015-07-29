@@ -104,7 +104,7 @@ int process_packet(hsa_queue_t *queue, int id)
         DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index, queue->size);
         hsa_signal_value_t doorbell_value = SNK_MAX_TASKS;
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
-                    HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
+                    HSA_WAIT_STATE_BLOCKED)) <= (hsa_signal_value_t) read_index );
         //fprintf(stderr, "doorbell: %ld read_index: %ld\n", doorbell_value, read_index);
         if (doorbell_value == SNK_MAX_TASKS) break;
         atmi_task_t *this_task = NULL; // will be assigned to collect metrics
@@ -118,7 +118,8 @@ int process_packet(hsa_queue_t *queue, int id)
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
         int i;
         DEBUG_PRINT("Processing CPU task with header: %d\n", get_packet_type(packet->header));
-        //fprintf(stderr, "Processing CPU task with header: %d\n", get_packet_type(packet->header));
+        //FIXME: change of aql packet on GPU is not instantly visiable on CPU
+        while(get_packet_type(packet->header) == 0);
         switch (get_packet_type(packet->header)) {
             case HSA_PACKET_TYPE_BARRIER_OR: 
                 ;
@@ -674,7 +675,7 @@ cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
         check(Creating a HSA signal for agent dispatch worker threads, err);
 
         hsa_signal_t db_signal;
-        err = hsa_signal_create(1, 0, NULL, &db_signal);
+        err = hsa_signal_create(0, 0, NULL, &db_signal);
         check(Creating a HSA signal for agent dispatch db signal, err);
 
         err = hsa_soft_queue_create(cpu_region, capacity, HSA_QUEUE_TYPE_SINGLE,

@@ -30,7 +30,7 @@ extern "C" void print_cpu(__global atmi_task_t *thisTask, __global char* out, co
 extern "C" void print_cpu(__global atmi_task_t *thisTask, __global char* out, const size_t strlength, int kid)
 {
     out[strlength] = '\0';
-    cout << "Output from decode_gpu kernel " << kid  << " : "<< out << endl;
+    //cout << "Output from decode_gpu kernel " << kid  << " : "<< out << endl;
 }
 
 
@@ -40,7 +40,6 @@ extern _CPPSTRING_ void decode_kl_init(atmi_lparm_t *lparm);
 int main(int argc, char* argv[]) {
 	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
 	size_t strlength = strlen(input);
-    //char *output_cpu = (char*) malloc(strlength + 1);
     int numTasks = 1024;
 	char *output_gpu = (char*) malloc((strlength + 1) * numTasks);
 

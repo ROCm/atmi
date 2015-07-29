@@ -30,7 +30,7 @@ extern "C" void print_cpu(__global atmi_task_t *thisTask, __global char* out, co
 extern "C" void print_cpu(__global atmi_task_t *thisTask, __global char* out, const size_t strlength, int kid)
 {
     out[strlength] = '\0';
-    //cout << "Output from decode_gpu kernel " << kid  << " : "<< out << endl;
+    cout << "Output from decode_gpu kernel " << kid  << " : "<< out << endl;
 }
 
 

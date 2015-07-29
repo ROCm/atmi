@@ -196,6 +196,7 @@ void enqueue_barrier_cpu(hsa_queue_t *queue, const int dep_task_count, atmi_task
 extern void snk_task_wait(atmi_task_t *task) {
     if(task != NULL) {
         //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", ((hsa_signal_t *)(task->handle))->handle);
+        //fprintf(stderr, "Signal handle: %" PRIu64 " Signal value:%ld\n", ((hsa_signal_t *)(task->handle))->handle, hsa_signal_load_relaxed(*((hsa_signal_t *)(task->handle))));
         hsa_signal_wait_acquire(*((hsa_signal_t *)(task->handle)), HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */

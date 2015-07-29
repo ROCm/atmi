@@ -1324,8 +1324,8 @@ void kernel_dispatch(const atmi_klparm_t *lparm, hsa_kernel_dispatch_packet_t *k
  \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
     //FIXME ring doorbell not work on GPU \n\
-    //hsa_signal_store_relaxed(this_Q->doorbell_signal, index + 1); \n\
-    hsa_signal_add_relaxed(this_Q->doorbell_signal, 1); \n\
+    hsa_signal_store_relaxed(this_Q->doorbell_signal, atmi_klist[pif_id].gpu_kernarg_offset); \n\
+    //hsa_signal_add_relaxed(this_Q->doorbell_signal, 1); \n\
 }\n\n\n");
 
 fprintf(fp,"\

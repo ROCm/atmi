@@ -104,8 +104,6 @@ void write_globals(FILE *fp) {
 fprintf(fp, "\
 static hsa_executable_t g_executable;\n\
 static int num_pif = 0;\n\
-static int gpu_initalized = 0;\n\
-static int cpu_initalized = 0;\n\n\
 atmi_klist_t atmi_klist[1000];\n\n\
 #define ErrorCheck(msg, status) \\\n\
 if (status != HSA_STATUS_SUCCESS) { \\\n\
@@ -1159,12 +1157,24 @@ int plugin_init(struct plugin_name_args *plugin_info,
 
 void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
 {
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+static int %s_kl_FK = 0;\n", pif_name);
+
         /* add init function for dynamic kernel */
         pp_printf((pif_printers[pif_index].pifdefs), "\
 extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
+        /* add init function for dynamic kernel into kl_init() */
         pp_printf(&kl_init_funs, "\
     %s_kl_init();\n", pif_name);
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(%s_kl_FK == 0) { \n\
+        %s_kl_FK = 1; \n\
+    } \n\
+    else { \n\
+        return; \n\
+    }\n\n", pif_name, pif_name);
 
            pp_printf((pif_printers[pif_index].pifdefs), "\
     typedef struct cpu_args_struct_s {\n\
@@ -1232,7 +1242,7 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(gpu_initalized == 0) { \n\
+    if(atlc.g_gpu_initialized == 0) { \n\
         snk_init_context(); \n\
         snk_init_gpu_context(); \n\
         snk_gpu_create_program(); \n");
@@ -1243,13 +1253,13 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         snk_gpu_build_executable(&g_executable);\n\
-        gpu_initalized = 1;\n\
+        atlc.g_gpu_initialized = 1;\n\
     }\n\n");
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(cpu_initalized == 0) {\n\
+    if(atlc.g_cpu_initialized == 0) {\n\
         snk_init_cpu_context();\n\
-        cpu_initalized = 1;\n\
+        atlc.g_cpu_initialized = 1;\n\
     }\n\n");
 
         pp_printf((pif_printers[pif_index].pifdefs), "\

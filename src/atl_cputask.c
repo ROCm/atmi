@@ -40,9 +40,9 @@
 
 */ 
 /* This file contains logic for CPU tasking in SNACK */
-#include "snk_internal.h"
-#include "bindthread.h"
-#include "profiling.h"
+#include "atl_internal.h"
+#include "atl_bindthread.h"
+#include "atl_profile.h"
 
 #include <assert.h>
 agent_t agent[SNK_MAX_CPU_QUEUES];

@@ -1,4 +1,3 @@
-
 #include "atmi.h"
 #include <gcc-plugin.h>
 #include <plugin-version.h>
@@ -22,6 +21,9 @@
 #include <cgraph.h>
 #include <c-family/c-pragma.h>
 #include <gimple-expr.h>
+#include <coretypes.h>
+
+#include "atl_pifgen.h"
 
 #include <map>
 #include <set>
@@ -83,7 +85,7 @@ void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
 #include \"atmi_kl.h\"\n\
-#include \"atmi_rt.h\"\n\n");
+#include \"atl_rt.h\"\n\n");
 }
 
 void write_cpp_warning_header(FILE *fp) {
@@ -122,6 +124,8 @@ static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {\n\
     }\n\
     return HSA_STATUS_SUCCESS;\n\
 }\n\n\
+//static atl_context_t atlc; \n\
+//static atmi_context_t * atmi_context;\n\n\
 ");
 }
 
@@ -578,9 +582,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     } \n\
     atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
     if(devtype == ATMI_DEVTYPE_CPU) {\n\
-        if(cpu_initalized == 0) { \n\
+        if(atlc.g_cpu_initialized == 0) { \n\
             snk_init_cpu_context();\n\
-            cpu_initalized = 1;\n\
+            atlc.g_cpu_initialized = 1;\n\
         }\n",
         pif_name, pif_name,
         pif_name,
@@ -634,7 +638,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
     else if(devtype == ATMI_DEVTYPE_GPU) {\n\
-        if(gpu_initalized == 0) {\n\
+        if(atlc.g_gpu_initialized == 0) {\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
         
@@ -645,7 +649,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
             snk_gpu_build_executable(&g_executable);\n\
-            gpu_initalized = 1;\n\
+            atlc.g_gpu_initialized = 1;\n\
         }\n\
         /* Allocate the kernel argument buffer from the correct region. */\n\
         void* thisKernargAddress;\n\
@@ -773,6 +777,13 @@ register_attributes (void *event_data, void *data)
  */
 
 static void
+register_start_parse_function (void *event_data, void *data)
+{
+    //warning (0, G_("Callback to register header files"));
+    DEBUG_PRINT("Starting to parse function: %s \n", (const char *)event_data);
+}
+
+static void
 register_headers (void *event_data, void *data)
 {
     //warning (0, G_("Callback to register header files"));
@@ -882,18 +893,31 @@ register_start_unit (void *event_data, void *data) {
     }
     //cpp_define(parse_in, "cl_long_long=char*");
 }
-#if 0
+#if 1
 static void
 register_finish_type(void *event_data, void *data) {
     tree type = (tree)event_data;
-    if(TREE_CODE(type) == FUNCTION_DECL || 
-       TREE_CODE(type) == VAR_DECL || 
-       TREE_CODE(type) == TYPE_DECL) {
+    if(TREE_CODE(type) == FUNCTION_DECL  
+       //|| TREE_CODE(type) == VAR_DECL  
+       //|| TREE_CODE(type) == TYPE_DECL
+       ) {
         DEBUG_PRINT("Callback at finish of type %p %p\n", event_data, data);
-        debug_tree_chain(type);
+        //debug_tree_chain(type);
     }
 }
 
+static void
+register_finish_decl(void *event_data, void *data) {
+    tree type = (tree)event_data;
+    if(TREE_CODE(type) == FUNCTION_DECL 
+       // || TREE_CODE(type) == VAR_DECL 
+       // || TREE_CODE(type) == TYPE_DECL
+       ) {
+        DEBUG_PRINT("Callback at finish of decl %p %p\n", event_data, data);
+        //debug_tree_chain(type);
+    }
+}
+#endif
 static void print_tree_node(tree t, int indent)
 {
     // indentation..
@@ -949,7 +973,7 @@ static void print_tree_node(tree t, int indent)
 static void parse_tree(tree t, void (*callback)(tree t, int indent), int indent)
 {
     // null => return
-    if (t == 0)
+    if (t == 0 || indent > 3)
         return;
 
     (*callback)(t, indent);
@@ -981,11 +1005,10 @@ static void parse_tree(tree t, void (*callback)(tree t, int indent), int indent)
             code != GOTO_EXPR &&
             code != NOP_EXPR &&
             code != DECL_EXPR &&
-            code            !=            ADDR_EXPR            && 
-            code            !=            INDIRECT_REF            &&
-            code            !=            COMPONENT_REF)
-        parse_tree(TREE_OPERAND(t,                    1),               callback,                indent+1);
-
+            code != ADDR_EXPR && 
+            code != INDIRECT_REF &&
+            code != COMPONENT_REF)
+        parse_tree(TREE_OPERAND(t, 1), callback, indent+1);
 }
 
 static void handle_pre_generic(void *gcc_data, void *user_data)
@@ -994,15 +1017,19 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
     tree fndecl = (tree)gcc_data;
 
     if(
-       //TREE_CODE(fndecl) == FUNCTION_DECL || 
+       TREE_CODE(fndecl) == FUNCTION_DECL || 
        TREE_CODE(fndecl) == VAR_DECL || 
        TREE_CODE(fndecl) == TYPE_DECL) {
         tree id = DECL_NAME(fndecl);
         const char *fnname = id ? IDENTIFIER_POINTER(id) : "<unnamed>";
-        printf("%s %s\n", get_tree_code_name(FUNCTION_DECL), fnname);
+        printf("[Pregenericize] %s %s\n", get_tree_code_name(FUNCTION_DECL), fnname);
 
+        if(strcmp(fnname, "main") == 0) {
+        DEBUG_PRINT("In main function\n");
         // Print function body..
         tree fnbody = DECL_SAVED_TREE(fndecl);
+        //debug_tree_chain(fnbody);
+        print_generic_stmt(stdout, fnbody, 1);
         if (TREE_CODE(fnbody) == BIND_EXPR) {
             // second operand of BIND_EXPR
             tree t = TREE_OPERAND(fnbody, 1);
@@ -1011,9 +1038,9 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
             // through the tree recursively  (../include/parse-tree.h)
             parse_tree(t, print_tree_node, 1);
         }
+        }
     }                                                                                                                
 }
-#endif
 
 int plugin_init(struct plugin_name_args *plugin_info,
         struct plugin_gcc_version *version) {
@@ -1022,6 +1049,11 @@ int plugin_init(struct plugin_name_args *plugin_info,
         return 1;
 
     int i;
+
+    for(i = 0; i < save_decoded_options_count; i++) {
+        DEBUG_PRINT("Cmd line option[%d]: %s\n", i, save_decoded_options[i].orig_option_with_args_text);
+    }
+
     g_output_pifdefs_filename.clear();
     g_cl_modules.clear();
 
@@ -1105,13 +1137,17 @@ int plugin_init(struct plugin_name_args *plugin_info,
     register_callback (plugin_name, PLUGIN_ATTRIBUTES,
             register_attributes, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
-            register_headers, NULL);
+                  register_headers, NULL);
 
-#if 0
     register_callback (plugin_name, PLUGIN_FINISH_TYPE,
-            register_finish_type, NULL);
+                  register_finish_type, NULL);
+    register_callback (plugin_name, PLUGIN_FINISH_DECL,
+                  register_finish_decl, NULL);
+#if 0
     register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
-            handle_pre_generic, NULL);
+                          handle_pre_generic, NULL);
+    register_callback (plugin_name, PLUGIN_START_PARSE_FUNCTION,
+                  register_start_parse_function, NULL);
 #endif
     return 0;
 }

@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 #  Set HSA Environment variables
-[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
-[ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib
+[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa.1_1T/
+[ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa.1_1T/lib
 [ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=$HOME/git/ATMI/bin
 [ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=$HOME/git/ATMI
 export ATMI_PATH=$HOME/git/ATMI/

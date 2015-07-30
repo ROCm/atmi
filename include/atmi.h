@@ -84,6 +84,8 @@ typedef struct atmi_place_s {
 typedef struct atmi_context_s {
    int                atmi_id;        /* ATMI version information             */
 } atmi_context_t;
+static atmi_context_t* atmi_context;
+static atmi_context_t  atmi_context_data;;
 
 /*----------------------------------------------------------------------------*/
 /*                                                                            */

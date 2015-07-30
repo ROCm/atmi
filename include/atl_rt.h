@@ -136,6 +136,8 @@ typedef struct atl_context_s {
    int g_gpu_initialized;
    int g_tasks_initialized;
 } atl_context_t ;
+static atl_context_t atlc ;
+static atl_context_t * atlc_p ;
 
 #ifdef __cplusplus
 }

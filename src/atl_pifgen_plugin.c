@@ -70,12 +70,15 @@ static std::vector<pif_printers_t> pif_printers;
 
 static pretty_printer pif_spawn;
 
+static pretty_printer kl_init_funs;
+
 static pretty_printer g_kerneldecls;
 
 static int initialized = 0;
 
 static std::string g_output_pifdefs_filename;
 
+void append_kl_init_funs(FILE *pifFile);
 void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
 void write_kernel_dispatch_routine(FILE *fp);
 void write_pif_kl(FILE *clFile);
@@ -108,6 +111,7 @@ atmi_klist_t atmi_klist[1000];\n\n\
 if (status != HSA_STATUS_SUCCESS) { \\\n\
    printf(\"%%s failed.\\n\", #msg); \\\n\
 } \n\n\
+void kl_init(); \n\n\
 ");
 }
 
@@ -124,11 +128,8 @@ static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {\n\
     }\n\
     return HSA_STATUS_SUCCESS;\n\
 }\n\n\
-//static atl_context_t atlc; \n\
-//static atmi_context_t * atmi_context;\n\n\
 ");
 }
-
 
 
 std::string exec(const char* cmd) {
@@ -639,6 +640,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     } \n\
     else if(devtype == ATMI_DEVTYPE_GPU) {\n\
         if(atlc.g_gpu_initialized == 0) {\n\
+            kl_init();\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
         
@@ -843,6 +845,7 @@ register_finish_unit (void *event_data, void *data) {
         pp_clear_output_area((it->pifdefs));
     }
 
+    append_kl_init_funs(fp_pifdefs_genw);
     fclose(fp_pifdefs_genw);
 
     /* Inject all the PIF declarations into the CL file and compile (cloc) */
@@ -879,6 +882,7 @@ register_start_unit (void *event_data, void *data) {
     g_all_pifdecls.clear();
     pp_needs_newline (&g_kerneldecls) = true;
     pp_needs_newline (&pif_spawn) = true;
+    pp_needs_newline (&kl_init_funs) = true;
 
     /* Replace CL or other kernel-specific keywords with 
      * regular C/C++ keywords. 
@@ -1157,7 +1161,10 @@ void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string>
 {
         /* add init function for dynamic kernel */
         pp_printf((pif_printers[pif_index].pifdefs), "\
-extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n\n", pif_name);
+extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
+
+        pp_printf(&kl_init_funs, "\
+    %s_kl_init();\n", pif_name);
 
            pp_printf((pif_printers[pif_index].pifdefs), "\
     typedef struct cpu_args_struct_s {\n\
@@ -1268,7 +1275,7 @@ extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n\n", pif_name);
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    snk_kl_init(lparm, atmi_klist, g_executable, \"%s\", pif_id);\n\n", pif_name);
+    snk_kl_init(atmi_klist, g_executable, \"%s\", pif_id);\n\n", pif_name);
 
         pp_printf((pif_printers[pif_index].pifdefs), "}\n\n");
         
@@ -1552,7 +1559,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     pp_printf(&pif_spawn, "\
     return NULL; \n\
 }\n\n");
-        
+
 }
 
 void write_pif_kl(FILE *clFile) {
@@ -1560,4 +1567,20 @@ void write_pif_kl(FILE *clFile) {
     char *cl_text = (char *)pp_formatted_text(&pif_spawn);
     fprintf(clFile, "%s", cl_text);
     pp_clear_output_area(&pif_spawn);
+}
+
+void append_kl_init_funs(FILE *pifFile)
+{
+    char *kl_init_funs_text = (char *)pp_formatted_text(&kl_init_funs);
+
+    fprintf(pifFile, "%s", "\
+void kl_init() {\n");
+
+    fprintf(pifFile, "%s", kl_init_funs_text);
+
+    fprintf(pifFile, "%s", "\
+}\n\n");
+
+    pp_clear_output_area(&kl_init_funs);
+
 }

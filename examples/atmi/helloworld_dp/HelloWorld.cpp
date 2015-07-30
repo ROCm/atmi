@@ -47,8 +47,6 @@ int main(int argc, char* argv[]) {
     lparm->synchronous = ATMI_TRUE;
 
     lparm->kernel_id = 0;
-    decode_kl_init(lparm);
-    print_kl_init(lparm);
     atmi_task_t *task = split(lparm, input, output_gpu, strlength);
 
 	free(output_gpu);

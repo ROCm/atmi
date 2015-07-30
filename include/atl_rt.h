@@ -125,12 +125,6 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  const char *pif_name,
                  void *kernel_args);
 
-void snk_kl_init(const atmi_lparm_t *lparm,
-                 atmi_klist_t *atmi_klist,
-                 hsa_executable_t g_executable,
-                 const char *pif_name,
-                 const int pif_id);
-
 /*  All global values go in this global structure */
 typedef struct atl_context_s {
    int struct_initialized;
@@ -141,6 +135,13 @@ typedef struct atl_context_s {
 } atl_context_t ;
 static atl_context_t atlc ;
 static atl_context_t * atlc_p ;
+
+
+void snk_kl_init(atmi_klist_t *atmi_klist,
+        hsa_executable_t g_executable,
+        const char *pif_name,
+        const int pif_id);
+
 
 #ifdef __cplusplus
 }

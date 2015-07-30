@@ -1198,18 +1198,12 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
-void snk_kl_init(const atmi_lparm_t *lparm,
-                 atmi_klist_t *atmi_klist,
+void snk_kl_init(atmi_klist_t *atmi_klist,
                  hsa_executable_t g_executable,
                  const char *pif_name,
                  const int pif_id) {
 
-    atmi_stream_t *stream = NULL;
-    if(lparm->stream == NULL) {
-        stream = &snk_default_stream_obj;
-    } else {
-        stream = lparm->stream;
-    }
+    atmi_stream_t *stream  = &snk_default_stream_obj;
 
     /* Add row to stream table for purposes of future synchronizations */
     register_stream(stream);

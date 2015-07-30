@@ -21,8 +21,6 @@ extern "C" void reduction_cpu(atmi_task_t *thisTask, int* in, int length) {
 // Declare reduction as the PIF for the GPU kernel implementation reduction_gpu
 __kernel void reduction_gpu(__global atmi_task_t *thisTask, __global int* in, int length) __attribute__((atmi_kernel("reduction", "gpu")));
 
-extern "C" void reduction_kl_init(atmi_lparm_t *lparm);
-
 int main(int argc, char* argv[]) {
     int length = 1024;
 	int *input_gpu = (int*) malloc(sizeof(int)*(length));
@@ -37,7 +35,6 @@ int main(int argc, char* argv[]) {
     lparm_gpu->synchronous = ATMI_TRUE;
     lparm_gpu->kernel_id = 1;
 
-    reduction_kl_init(lparm_gpu);
     reduction(lparm_gpu, input_gpu, length >> 1);
 
     ATMI_LPARM_1D(lparm_cpu, length >> 1);

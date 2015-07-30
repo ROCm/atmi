@@ -1,6 +1,6 @@
 #ifndef __SNK_INTERNAL
 #define __SNK_INTERNAL
-#include "atmi_rt.h"
+#include "atl_rt.h"
 #include <pthread.h>
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API

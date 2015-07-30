@@ -18,6 +18,10 @@
 
 #ifdef __cplusplus
 extern "C" {
+#define _CPPSTRING_ "C"
+#endif
+#ifndef __cplusplus
+#define _CPPSTRING_ 
 #endif
 
 #define ATMI_MAX_STREAMS            8 
@@ -60,6 +64,7 @@ typedef enum status_t {
     STATUS_UNKNOWN=1,
     STATUS_ERROR=2
 } status_t;
+
 
 typedef void (*snk_generic_fp)(void);
 typedef struct snk_cpu_kernel_s {
@@ -120,10 +125,22 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  const char *pif_name,
                  void *kernel_args);
 
-void snk_kl_init(const atmi_lparm_t *lparm,
-                 atmi_klist_t *atmi_klist,
-                 hsa_executable_t g_executable,
-                 const char *pif_name, const int pif_id, void *cpu_kernel_args);
+/*  All global values go in this global structure */
+typedef struct atl_context_s {
+   int struct_initialized;
+   int g_cpu_initialized;
+   int g_hsa_initialized;
+   int g_gpu_initialized;
+   int g_tasks_initialized;
+} atl_context_t ;
+static atl_context_t atlc ;
+static atl_context_t * atlc_p ;
+
+
+void snk_kl_init(atmi_klist_t *atmi_klist,
+        hsa_executable_t g_executable,
+        const char *pif_name,
+        const int pif_id);
 
 
 #ifdef __cplusplus

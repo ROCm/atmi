@@ -40,9 +40,9 @@
 
 */ 
 /* This file contains logic for CPU tasking in SNACK */
-#include "snk_internal.h"
-#include "bindthread.h"
-#include "profiling.h"
+#include "atl_internal.h"
+#include "atl_bindthread.h"
+#include "atl_profile.h"
 
 #include <assert.h>
 agent_t agent[SNK_MAX_CPU_QUEUES];
@@ -105,6 +105,7 @@ int process_packet(hsa_queue_t *queue, int id)
         hsa_signal_value_t doorbell_value = SNK_MAX_TASKS;
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
+        //fprintf(stderr, "doorbell: %ld read_index: %ld\n", doorbell_value, read_index);
         if (doorbell_value == SNK_MAX_TASKS) break;
         atmi_task_t *this_task = NULL; // will be assigned to collect metrics
         char *kernel_name = NULL;
@@ -117,6 +118,9 @@ int process_packet(hsa_queue_t *queue, int id)
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
         int i;
         DEBUG_PRINT("Processing CPU task with header: %d\n", get_packet_type(packet->header));
+        //fprintf(stderr, "read_index: %ld header: %d\n", read_index, get_packet_type(packet->header));
+        //FIXME: change of aql packet on GPU is not instantly visiable on CPU
+        while(get_packet_type(packet->header) == 0);
         switch (get_packet_type(packet->header)) {
             case HSA_PACKET_TYPE_BARRIER_OR: 
                 ;
@@ -161,6 +165,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 char **kernel_args = (char **)malloc(sizeof(char *) * num_params);
                 int kernarg_id = 0;
                 size_t kernarg_offset = 0;
+                //fprintf(stderr, "kernel_args_ptr: %p\n", kernel_args_ptr);
                 // unpack kernel_args to num_params * (void *) args and invoke function
                 for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
                     size_t kernarg_size = *(size_t *)(kernel_args_ptr + kernarg_offset);
@@ -545,13 +550,14 @@ int process_packet(hsa_queue_t *queue, int id)
                              break;
                 }
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
+                //fprintf(stderr, "Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
                 for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
                     if(kernarg_id == 0) continue; // task handle should be managed elsewhere in the runtime
                     free(kernel_args[kernarg_id]);
                 }
                 free(kernel_args);
-                free(kernel_args_ptr);
+                //free(kernel_args_ptr);
                 break;
         }
         if (packet->completion_signal.handle != 0) {

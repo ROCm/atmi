@@ -538,11 +538,14 @@ if [ "$HSAILLIB" != "" ] ; then
 alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
        " $TMPDIR/composite.hsail
 
-   entry_lines=$(grep -n "@__OpenCL_" $TMPDIR/composite.hsail | grep -Eo '^[^:]+')
+   entry_lines=($(grep -n "@__OpenCL_" $TMPDIR/composite.hsail | grep -Eo '^[^:]+'))
 
-   for entry_line in "${entry_lines[@]}"
+   num_kernels=${#entry_lines[@]}
+   offset=2;
+   for ((i=0; i<${num_kernels}; i++))
    do
-       entry_line=$(($entry_line + 2))
+       entry_line=$((${entry_lines[$i]} + $offset))
+       offset=$(($offset + 4))
        sed -i -e "${entry_line}i\
     //init ATMI_CONTEXT\n\
     ld_kernarg_align(8)_width(all)_u64  \$d0, [%__printf_buffer];\n\

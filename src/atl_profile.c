@@ -1,5 +1,5 @@
-#include "profiling.h"
-#include "snk_internal.h"
+#include "atl_profile.h"
+#include "atl_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

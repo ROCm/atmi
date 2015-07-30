@@ -8,6 +8,16 @@ prog function &hsa_queue_load_write_index_relaxed(arg_u64 %ret)(arg_u64 %arg_p0)
     ret;
 };
 
+prog function &hsa_queue_add_write_index_relaxed(arg_u64 %ret)(arg_u64 %arg_p0, arg_u64 %arg_p1)
+{
+    @hsa_queue_add_write_index_relaxed_entry:
+    ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has the queue address
+    ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d1 has the queue address
+    addqueuewriteindex_global_rlx_u64 $d2, [$d0], $d1;      // add write index of queue d0 by d1
+    st_arg_u64 $d2, [%ret];                                 // return write index
+    ret;
+};
+
 prog function &hsa_queue_store_write_index_relaxed()(
 	arg_u64 %arg_p0,
 	arg_u64 %arg_p1)
@@ -34,12 +44,25 @@ prog function &hsa_signal_add_relaxed()(
 	arg_u64 %arg_p0,
 	arg_u64 %arg_p1)
 {
-   @hsa_signal_store_add_entry:
+   @hsa_signal_store_add_relaxed_entry:
    ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
    ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has value 
    signalnoret_add_rlx_u64_sig64 $d0, $d1;                  // add value d1 to signal handle d0
    ret;
 };
+
+prog function &hsa_signal_add_release()(
+	arg_u64 %arg_p0,
+	arg_u64 %arg_p1)
+{
+   @hsa_signal_store_add_release_entry:
+   ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+   ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has value 
+   signalnoret_add_screl_u64_sig64 $d0, $d1;                  // add value d1 to signal handle d0
+   ret;
+};
+
+
 
 prog function &hsa_signal_load_relaxed(arg_u64 %ret)(arg_u64 %arg_p0)
 {
@@ -68,5 +91,15 @@ prog function &get_atmi_context(arg_u64 %ret)()
     @get_atmi_context_entry:
     ld_global_align(8)_const_width(all)_u64 $d0, [&ATMI_CONTEXT];
     st_arg_u64 $d0, [%ret];
+    ret;
+};
+
+prog function &hsa_global_atomic_add(arg_u32 %ret)(arg_u64 %arg_p0, arg_u32 %arg_p1)
+{
+    @hsa_global_atomic_add_entry:
+    ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+    ld_arg_align(8)_s32	$s0, [%arg_p1];                     // d2 has value 
+	atomic_add_global_rlx_system_s32	$s1, [$d0], $s0;
+    st_arg_u32 $s1, [%ret];
     ret;
 };

@@ -40,11 +40,9 @@
 
 */ 
 
-/* This file is the SNACK library. Idea is to move as much of code as possible
- * from the snk_genw.sh script to a library
- */
-#include "snk_internal.h"
-#include "profiling.h"
+/* This file is the ATMI library.  */
+#include "atl_internal.h"
+#include "atl_profile.h"
 #include <time.h>
 #include <assert.h>
 
@@ -75,9 +73,6 @@ hsa_ext_program_t snk_hsa_program;
 //hsa_executable_t snk_executable;
 hsa_region_t snk_gpu_KernargRegion;
 hsa_region_t snk_cpu_KernargRegion;
-int g_cpu_initialized = 0;
-int g_hsa_initialized = 0;
-int g_gpu_initialized = 0;
 hsa_agent_t snk_gpu_agent;
 hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 atmi_task_t   SNK_Tasks[SNK_MAX_TASKS];
@@ -89,10 +84,10 @@ int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
 extern snk_pif_kernel_table_t snk_kernels[SNK_MAX_FUNCTIONS];
 
-int g_tasks_initialized = 0;
 
 struct timespec context_init_time;
 static int context_init_time_init = 0;
+
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
     long int nanosecs;
     if ((end_time.tv_nsec-start_time.tv_nsec)<0) nanosecs =
@@ -196,6 +191,7 @@ void enqueue_barrier_cpu(hsa_queue_t *queue, const int dep_task_count, atmi_task
 extern void snk_task_wait(atmi_task_t *task) {
     if(task != NULL) {
         //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", ((hsa_signal_t *)(task->handle))->handle);
+        //fprintf(stderr, "Signal handle: %" PRIu64 " Signal value:%ld\n", ((hsa_signal_t *)(task->handle))->handle, hsa_signal_load_relaxed(*((hsa_signal_t *)(task->handle))));
         hsa_signal_wait_acquire(*((hsa_signal_t *)(task->handle)), HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
@@ -569,9 +565,29 @@ status_t register_stream(atmi_stream_t *stream) {
     return STATUS_SUCCESS;
 }
 
-/* -------------- SNACK launch functions -------------------------- */
+/* 
+   All global values are defined here in two data structures. 
+
+1  atmi_context is all information we expose externally. 
+   The structure atmi_context_t is defined in atmi.h. 
+   Most references will use pointer prefix atmi_context->
+   The value atmi_context_data. is equivalent to atmi_context->
+
+2  atlc is all internal global values.
+   The structure atl_context_t is defined in atl_rt.h
+   Most references will use the global structure prefix atlc.
+   However the pointer value atlc_p-> is equivalent to atlc.
+
+*/
+
+
+static atmi_context_t atmi_context_data;
+static atmi_context_t * atmi_context;
+static atl_context_t atlc = { .struct_initialized=0 };
+static atl_context_t * atlc_p ;
+
 void init_tasks() {
-    if(g_tasks_initialized != 0) return;
+    if(atlc.g_tasks_initialized != 0) return;
     hsa_status_t err;
     int task_num;
     /* Initialize all preallocated tasks and signals */
@@ -580,7 +596,17 @@ void init_tasks() {
        SNK_Tasks[task_num].handle = (void *)(&SNK_Signals[task_num]);
        ErrorCheck(Creating a HSA signal, err);
     }
-    g_tasks_initialized = 1;
+    atlc.g_tasks_initialized = 1;
+}
+
+void atmi_init_context_structs() {
+    atmi_context = &atmi_context_data;
+    atlc_p = &atlc;
+    atlc.struct_initialized = 1; /* This only gets called one time */
+    atlc.g_cpu_initialized = 0;
+    atlc.g_hsa_initialized = 0;
+    atlc.g_gpu_initialized = 0;
+    atlc.g_tasks_initialized = 0;
 }
 
 status_t snk_init_context() {
@@ -592,16 +618,19 @@ status_t snk_init_context() {
 }
 
 void init_hsa() {
-    if(g_hsa_initialized == 0) {
+    if(atlc.g_hsa_initialized == 0) {
         status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
-        g_hsa_initialized = 1;
+        atlc.g_hsa_initialized = 1;
     }
 }
 
 status_t snk_init_cpu_context() {
-    if(g_cpu_initialized != 0) return;
-  
+   
+    if(atlc.struct_initialized == 0) atmi_init_context_structs();
+
+    if(atlc.g_cpu_initialized != 0) return;
+     
     hsa_status_t err;
     init_hsa();
     
@@ -634,7 +663,7 @@ status_t snk_init_cpu_context() {
     }
 
     init_tasks();
-    g_cpu_initialized = 1;
+    atlc.g_cpu_initialized = 1;
     return STATUS_SUCCESS;
 }
 
@@ -686,7 +715,8 @@ status_t snk_gpu_build_executable(hsa_executable_t *executable) {
 
 status_t snk_init_gpu_context() {
 
-    if(g_gpu_initialized != 0) return;
+    if(atlc.struct_initialized == 0) atmi_init_context_structs();
+    if(atlc.g_gpu_initialized != 0) return;
     
     hsa_status_t err;
 
@@ -734,7 +764,7 @@ status_t snk_init_gpu_context() {
     }
 
     init_tasks();
-    g_gpu_initialized = 1;
+    atlc.g_gpu_initialized = 1;
     return STATUS_SUCCESS;
 }
 
@@ -811,6 +841,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  const char *pif_name,
                  void *kernel_args) {
     
+    DEBUG_PRINT("CPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpus, lparm->place.gpus);
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
@@ -996,6 +1027,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
                  void *thisKernargAddress) {
+    DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpus, lparm->place.gpus);
     atmi_stream_t *stream = NULL;
     if(lparm->stream == NULL) {
         stream = &snk_default_stream_obj;
@@ -1166,17 +1198,12 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
-void snk_kl_init(const atmi_lparm_t *lparm,
-                 atmi_klist_t *atmi_klist,
+void snk_kl_init(atmi_klist_t *atmi_klist,
                  hsa_executable_t g_executable,
-                 const char *pif_name, const int pif_id, void *cpu_kernel_args) {
+                 const char *pif_name,
+                 const int pif_id) {
 
-    atmi_stream_t *stream = NULL;
-    if(lparm->stream == NULL) {
-        stream = &snk_default_stream_obj;
-    } else {
-        stream = lparm->stream;
-    }
+    atmi_stream_t *stream  = &snk_default_stream_obj;
 
     /* Add row to stream table for purposes of future synchronizations */
     register_stream(stream);
@@ -1203,8 +1230,8 @@ void snk_kl_init(const atmi_lparm_t *lparm,
     uint32_t _KN__Private_Segment_Size;
 
     /* Allocate the kernel argument buffer from the correct region. */
-    void* thisKernargAddress;
-    snk_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
+    //void* thisKernargAddress;
+    //snk_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
 
     uint16_t i;
     atmi_task_t *ret = NULL;
@@ -1235,7 +1262,7 @@ void snk_kl_init(const atmi_lparm_t *lparm,
                     /* thisKernargAddress has already been set up in the beginning of this routine */
                     /*  Bind kernel argument buffer to the aql packet.  */
                     this_aql->header = 0;
-                    this_aql->kernarg_address = (void*) thisKernargAddress;
+                    //this_aql->kernarg_address = (void*) thisKernargAddress;
                     this_aql->kernel_object = _KN__Kernel_Object;
                     this_aql->private_segment_size = _KN__Private_Segment_Size;
                     this_aql->group_segment_size = _KN__Group_Segment_Size;
@@ -1256,12 +1283,12 @@ void snk_kl_init(const atmi_lparm_t *lparm,
                     this_aql->header = 1;
                     this_aql->type = (uint16_t)i;
                     const uint32_t num_params = snk_kernels[i].num_params;
-                    ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
+                    //ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
                     this_aql->arg[0] = num_params;
-                    this_aql->arg[1] = (uint64_t) cpu_kernel_args;
-                    this_aql->arg[2] = (uint64_t) ret; 
+                    //this_aql->arg[1] = (uint64_t) cpu_kernel_args;
+                    //this_aql->arg[2] = (uint64_t) ret; 
                     this_aql->arg[3] = UINT64_MAX; 
-                    SNK_NextTaskId++;
+                    //SNK_NextTaskId++;
                 }
             }
         }

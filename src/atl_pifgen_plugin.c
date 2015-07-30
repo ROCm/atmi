@@ -1,4 +1,3 @@
-
 #include "atmi.h"
 #include <gcc-plugin.h>
 #include <plugin-version.h>
@@ -22,6 +21,9 @@
 #include <cgraph.h>
 #include <c-family/c-pragma.h>
 #include <gimple-expr.h>
+#include <coretypes.h>
+
+#include "atl_pifgen.h"
 
 #include <map>
 #include <set>
@@ -68,12 +70,15 @@ static std::vector<pif_printers_t> pif_printers;
 
 static pretty_printer pif_spawn;
 
+static pretty_printer kl_init_funs;
+
 static pretty_printer g_kerneldecls;
 
 static int initialized = 0;
 
 static std::string g_output_pifdefs_filename;
 
+void append_kl_init_funs(FILE *pifFile);
 void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params);
 void write_kernel_dispatch_routine(FILE *fp);
 void write_pif_kl(FILE *clFile);
@@ -83,7 +88,7 @@ void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
 #include \"atmi_kl.h\"\n\
-#include \"atmi_rt.h\"\n\n");
+#include \"atl_rt.h\"\n\n");
 }
 
 void write_cpp_warning_header(FILE *fp) {
@@ -98,14 +103,13 @@ fprintf(fp, "#ifdef __cplusplus \n\
 void write_globals(FILE *fp) {
 fprintf(fp, "\
 static hsa_executable_t g_executable;\n\
-static int klist_initalized = 0;\n\
-static int gpu_initalized = 0;\n\
-static int cpu_initalized = 0;\n\n\
-atmi_klist_t *atmi_klist = NULL;\n\n\
+static int num_pif = 0;\n\
+atmi_klist_t atmi_klist[1000];\n\n\
 #define ErrorCheck(msg, status) \\\n\
 if (status != HSA_STATUS_SUCCESS) { \\\n\
    printf(\"%%s failed.\\n\", #msg); \\\n\
 } \n\n\
+void kl_init(); \n\n\
 ");
 }
 
@@ -124,7 +128,6 @@ static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {\n\
 }\n\n\
 ");
 }
-
 
 
 std::string exec(const char* cmd) {
@@ -578,9 +581,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     } \n\
     atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
     if(devtype == ATMI_DEVTYPE_CPU) {\n\
-        if(cpu_initalized == 0) { \n\
+        if(atlc.g_cpu_initialized == 0) { \n\
             snk_init_cpu_context();\n\
-            cpu_initalized = 1;\n\
+            atlc.g_cpu_initialized = 1;\n\
         }\n",
         pif_name, pif_name,
         pif_name,
@@ -634,7 +637,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
     else if(devtype == ATMI_DEVTYPE_GPU) {\n\
-        if(gpu_initalized == 0) {\n\
+        if(atlc.g_gpu_initialized == 0) {\n\
+            kl_init();\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
         
@@ -645,7 +649,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
             snk_gpu_build_executable(&g_executable);\n\
-            gpu_initalized = 1;\n\
+            atlc.g_gpu_initialized = 1;\n\
         }\n\
         /* Allocate the kernel argument buffer from the correct region. */\n\
         void* thisKernargAddress;\n\
@@ -773,6 +777,13 @@ register_attributes (void *event_data, void *data)
  */
 
 static void
+register_start_parse_function (void *event_data, void *data)
+{
+    //warning (0, G_("Callback to register header files"));
+    DEBUG_PRINT("Starting to parse function: %s \n", (const char *)event_data);
+}
+
+static void
 register_headers (void *event_data, void *data)
 {
     //warning (0, G_("Callback to register header files"));
@@ -832,6 +843,7 @@ register_finish_unit (void *event_data, void *data) {
         pp_clear_output_area((it->pifdefs));
     }
 
+    append_kl_init_funs(fp_pifdefs_genw);
     fclose(fp_pifdefs_genw);
 
     /* Inject all the PIF declarations into the CL file and compile (cloc) */
@@ -868,6 +880,7 @@ register_start_unit (void *event_data, void *data) {
     g_all_pifdecls.clear();
     pp_needs_newline (&g_kerneldecls) = true;
     pp_needs_newline (&pif_spawn) = true;
+    pp_needs_newline (&kl_init_funs) = true;
 
     /* Replace CL or other kernel-specific keywords with 
      * regular C/C++ keywords. 
@@ -882,18 +895,31 @@ register_start_unit (void *event_data, void *data) {
     }
     //cpp_define(parse_in, "cl_long_long=char*");
 }
-#if 0
+#if 1
 static void
 register_finish_type(void *event_data, void *data) {
     tree type = (tree)event_data;
-    if(TREE_CODE(type) == FUNCTION_DECL || 
-       TREE_CODE(type) == VAR_DECL || 
-       TREE_CODE(type) == TYPE_DECL) {
+    if(TREE_CODE(type) == FUNCTION_DECL  
+       //|| TREE_CODE(type) == VAR_DECL  
+       //|| TREE_CODE(type) == TYPE_DECL
+       ) {
         DEBUG_PRINT("Callback at finish of type %p %p\n", event_data, data);
-        debug_tree_chain(type);
+        //debug_tree_chain(type);
     }
 }
 
+static void
+register_finish_decl(void *event_data, void *data) {
+    tree type = (tree)event_data;
+    if(TREE_CODE(type) == FUNCTION_DECL 
+       // || TREE_CODE(type) == VAR_DECL 
+       // || TREE_CODE(type) == TYPE_DECL
+       ) {
+        DEBUG_PRINT("Callback at finish of decl %p %p\n", event_data, data);
+        //debug_tree_chain(type);
+    }
+}
+#endif
 static void print_tree_node(tree t, int indent)
 {
     // indentation..
@@ -949,7 +975,7 @@ static void print_tree_node(tree t, int indent)
 static void parse_tree(tree t, void (*callback)(tree t, int indent), int indent)
 {
     // null => return
-    if (t == 0)
+    if (t == 0 || indent > 3)
         return;
 
     (*callback)(t, indent);
@@ -981,11 +1007,10 @@ static void parse_tree(tree t, void (*callback)(tree t, int indent), int indent)
             code != GOTO_EXPR &&
             code != NOP_EXPR &&
             code != DECL_EXPR &&
-            code            !=            ADDR_EXPR            && 
-            code            !=            INDIRECT_REF            &&
-            code            !=            COMPONENT_REF)
-        parse_tree(TREE_OPERAND(t,                    1),               callback,                indent+1);
-
+            code != ADDR_EXPR && 
+            code != INDIRECT_REF &&
+            code != COMPONENT_REF)
+        parse_tree(TREE_OPERAND(t, 1), callback, indent+1);
 }
 
 static void handle_pre_generic(void *gcc_data, void *user_data)
@@ -994,15 +1019,19 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
     tree fndecl = (tree)gcc_data;
 
     if(
-       //TREE_CODE(fndecl) == FUNCTION_DECL || 
+       TREE_CODE(fndecl) == FUNCTION_DECL || 
        TREE_CODE(fndecl) == VAR_DECL || 
        TREE_CODE(fndecl) == TYPE_DECL) {
         tree id = DECL_NAME(fndecl);
         const char *fnname = id ? IDENTIFIER_POINTER(id) : "<unnamed>";
-        printf("%s %s\n", get_tree_code_name(FUNCTION_DECL), fnname);
+        printf("[Pregenericize] %s %s\n", get_tree_code_name(FUNCTION_DECL), fnname);
 
+        if(strcmp(fnname, "main") == 0) {
+        DEBUG_PRINT("In main function\n");
         // Print function body..
         tree fnbody = DECL_SAVED_TREE(fndecl);
+        //debug_tree_chain(fnbody);
+        print_generic_stmt(stdout, fnbody, 1);
         if (TREE_CODE(fnbody) == BIND_EXPR) {
             // second operand of BIND_EXPR
             tree t = TREE_OPERAND(fnbody, 1);
@@ -1011,9 +1040,9 @@ static void handle_pre_generic(void *gcc_data, void *user_data)
             // through the tree recursively  (../include/parse-tree.h)
             parse_tree(t, print_tree_node, 1);
         }
+        }
     }                                                                                                                
 }
-#endif
 
 int plugin_init(struct plugin_name_args *plugin_info,
         struct plugin_gcc_version *version) {
@@ -1022,6 +1051,11 @@ int plugin_init(struct plugin_name_args *plugin_info,
         return 1;
 
     int i;
+
+    for(i = 0; i < save_decoded_options_count; i++) {
+        DEBUG_PRINT("Cmd line option[%d]: %s\n", i, save_decoded_options[i].orig_option_with_args_text);
+    }
+
     g_output_pifdefs_filename.clear();
     g_cl_modules.clear();
 
@@ -1105,13 +1139,17 @@ int plugin_init(struct plugin_name_args *plugin_info,
     register_callback (plugin_name, PLUGIN_ATTRIBUTES,
             register_attributes, NULL);
     register_callback (plugin_name, PLUGIN_INCLUDE_FILE,
-            register_headers, NULL);
+                  register_headers, NULL);
 
-#if 0
     register_callback (plugin_name, PLUGIN_FINISH_TYPE,
-            register_finish_type, NULL);
+                  register_finish_type, NULL);
+    register_callback (plugin_name, PLUGIN_FINISH_DECL,
+                  register_finish_decl, NULL);
+#if 0
     register_callback (plugin_name, PLUGIN_PRE_GENERICIZE,
-            handle_pre_generic, NULL);
+                          handle_pre_generic, NULL);
+    register_callback (plugin_name, PLUGIN_START_PARSE_FUNCTION,
+                  register_start_parse_function, NULL);
 #endif
     return 0;
 }
@@ -1119,54 +1157,26 @@ int plugin_init(struct plugin_name_args *plugin_info,
 
 void write_kl_init(const char *pif_name, int pif_index, std::vector<std::string> arg_list, int num_params)
 {
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+static int %s_kl_FK = 0;\n", pif_name);
+
         /* add init function for dynamic kernel */
         pp_printf((pif_printers[pif_index].pifdefs), "\
-extern _CPPSTRING_ void %s_kl_init(atmi_lparm_t *lparm) {\n\n", pif_name);
+extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
+
+        /* add init function for dynamic kernel into kl_init() */
+        pp_printf(&kl_init_funs, "\
+    %s_kl_init();\n", pif_name);
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    int num_pif = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]); \n\n\
-    if (%s_FK == 0 ) { \n\
-        snk_pif_init(%s_pif_fn_table, num_pif);\n\
-        %s_FK = 1; \n\
-    }\n\n",
-                pif_name,
-                pif_name, pif_name, pif_name,
-                pif_name);
+    if(%s_kl_FK == 0) { \n\
+        %s_kl_FK = 1; \n\
+    } \n\
+    else { \n\
+        return; \n\
+    }\n\n", pif_name, pif_name);
 
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    if (klist_initalized == 0) { \n\
-        atmi_klist = (atmi_klist_t * )malloc(sizeof(atmi_klist_t) * num_pif); \n\
-        int i; \n\
-        for(i = 0; i < num_pif; i++) { \n\
-            atmi_klist[i].kernel_packets = NULL; \n\
-            atmi_klist[i].queues = NULL; \n\
-            atmi_klist[i].num_kernel_packets = 0; \n\
-            atmi_klist[i].num_queues = 0; \n\
-        }\n\
-        klist_initalized = 1; \n\
-    }\n\n");
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(gpu_initalized == 0) { \n\
-        snk_init_context(); \n\
-        snk_init_gpu_context(); \n\
-        snk_gpu_create_program(); \n");
-for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
-                it != g_cl_modules.end(); it++) {
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-        snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
-        }
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-        snk_gpu_build_executable(&g_executable);\n\
-        gpu_initalized = 1;\n\
-    }\n\n");
-
-        pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(cpu_initalized == 0) {\n\
-        snk_init_cpu_context();\n\
-        cpu_initalized = 1;\n\
-    }\n\n");
-
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+           pp_printf((pif_printers[pif_index].pifdefs), "\
     typedef struct cpu_args_struct_s {\n\
         size_t arg0_size;\n\
         atmi_task_t **arg0;\n");
@@ -1180,27 +1190,102 @@ for(std::vector<std::string>::iterator it = g_cl_modules.begin();
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
     } cpu_args_struct_t; \n\
-    void *cpuKernargAddress = malloc(sizeof(cpu_args_struct_t));\n\n");
+    void *cpuKernargAddress = malloc(sizeof(cpu_args_struct_t) * MAX_NUM_KERNELS);\n\n");
+
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    cpu_args_struct_t *args = (cpu_args_struct_t *)cpuKernargAddress; \n\
-    args->arg0_size = sizeof(atmi_task_t **);\n\
-    args->arg0 = NULL; \n");
+    typedef struct gpu_args_struct_s {\n\
+        uint64_t arg0; \n\
+        uint64_t arg1; \n\
+        uint64_t arg2; \n\
+        uint64_t arg3; \n\
+        uint64_t arg4; \n\
+        uint64_t arg5; \n\
+        atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-    args->arg%d_size = sizeof(%s*); \n\
-    args->arg%d = (%s*)malloc(sizeof(%s));\n",
+        %s arg%d;\n", 
+            arg_list[arg_idx].c_str(), arg_idx + 6);
+        }
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    } gpu_args_struct_t __attribute__ ((aligned (16))) ;\n\
+    void *gpuKernargAddress = malloc(sizeof(gpu_args_struct_t) * MAX_NUM_KERNELS);\n\n");
+
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    int num_kernels = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]); \n\n\
+    if (%s_FK == 0 ) { \n\
+        snk_pif_init(%s_pif_fn_table, num_kernels);\n\
+        %s_FK = 1;\n\
+    }\n\n",
+        pif_name,
+        pif_name, pif_name, pif_name, pif_name);
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    int pif_id = %d;\n\n", pif_index);
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    //num_pif++;\n\
+    //atmi_klist = (atmi_klist_t * )realloc(atmi_klist, sizeof(atmi_klist_t) * num_pif); \n\
+    atmi_klist[pif_id].kernel_packets = NULL; \n\
+    atmi_klist[pif_id].queues = NULL; \n\
+    atmi_klist[pif_id].num_kernel_packets = 0; \n\
+    atmi_klist[pif_id].num_queues = 0; \n\
+    atmi_klist[pif_id].cpu_kernarg_heap = cpuKernargAddress; \n\
+    atmi_klist[pif_id].cpu_kernarg_offset = 0;\n\
+    atmi_klist[pif_id].gpu_kernarg_heap = gpuKernargAddress; \n\
+    atmi_klist[pif_id].gpu_kernarg_offset = 0;\n\
+    atmi_klist[pif_id].kernel_packets_heap = (atmi_kernel_packet_t *)malloc(sizeof(atmi_kernel_packet_t) * MAX_NUM_KERNELS);\n\
+    atmi_klist[pif_id].kernel_packets_offset = 0;\n\n");
+
+
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(atlc.g_gpu_initialized == 0) { \n\
+        snk_init_context(); \n\
+        snk_init_gpu_context(); \n\
+        snk_gpu_create_program(); \n");
+        for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+                it != g_cl_modules.end(); it++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_gpu_build_executable(&g_executable);\n\
+        atlc.g_gpu_initialized = 1;\n\
+    }\n\n");
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(atlc.g_cpu_initialized == 0) {\n\
+        snk_init_cpu_context();\n\
+        atlc.g_cpu_initialized = 1;\n\
+    }\n\n");
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    int i; \n\
+    for(i = 0; i < MAX_NUM_KERNELS; i++) { \n\
+        cpu_args_struct_t *args = (cpu_args_struct_t *)cpuKernargAddress + i; \n\
+        args->arg0_size = sizeof(atmi_task_t **);\n\
+        args->arg0 = NULL; \n");
+        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        args->arg%d_size = sizeof(%s*); \n\
+        args->arg%d = (%s*)malloc(sizeof(%s));\n",
             arg_idx, arg_list[arg_idx].c_str(),
             arg_idx, arg_list[arg_idx].c_str(), arg_list[arg_idx].c_str()
             );
         }
+
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+    }\n\n");
 
         //pp_printf((pif_printers[pif_index].pifdefs), "\
         //printf(\"%%d %%d\\n\", args->arg1, args->arg2);\n");
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    snk_kl_init(lparm, atmi_klist, g_executable, \"%s\", %d, cpuKernargAddress);\n\n", pif_name, pif_index);
+    snk_kl_init(atmi_klist, g_executable, \"%s\", pif_id);\n\n", pif_name);
 
         pp_printf((pif_printers[pif_index].pifdefs), "}\n\n");
         
@@ -1212,7 +1297,9 @@ fprintf(fp, "\
 #include \"hsa_kl.h\" \n\
 #include \"atmi.h\" \n\
 #include \"atmi_kl.h\" \n\
- \n\
+\n\
+enum queue_type{device_queue = 0, soft_queue}; \n\
+\n\
 uint64_t get_atmi_context();\n\n\
 uint16_t create_header(hsa_packet_type_t type, int barrier) {\n\
    uint16_t header = type << HSA_PACKET_HEADER_TYPE;\n\
@@ -1233,16 +1320,16 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {\n\
 //}\n\n");
 
 fprintf(fp, "\
-void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id) { \n\
+void kernel_dispatch(const atmi_klparm_t *lparm, hsa_kernel_dispatch_packet_t *kernel_packet, const int pif_id) { \n\
  \n\
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
-    hsa_kernel_dispatch_packet_t *kernel_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
+    //hsa_kernel_dispatch_packet_t *kernel_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
  \n\
-    hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[0]; \n\
+    hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[device_queue]; \n\
  \n\
     /* Find the queue index address to write the packet info into.  */ \n\
     const uint32_t queueMask = this_Q->size - 1; \n\
-    uint64_t index = hsa_queue_load_write_index_relaxed(this_Q); \n\
+    uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1); \n\
     hsa_kernel_dispatch_packet_t *this_aql = &(((hsa_kernel_dispatch_packet_t *)(this_Q->base_address))[index&queueMask]); \n\
  \n\n\
     int ndim = -1;\n\
@@ -1289,25 +1376,26 @@ void kernel_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_i
     this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE); \n\
  \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
-    hsa_queue_store_write_index_relaxed(this_Q, index + 1); \n\
- \n\
     //FIXME ring doorbell not work on GPU \n\
-    hsa_signal_store_relaxed(this_Q->doorbell_signal, index); \n\
-}\n\n");
+    hsa_signal_store_relaxed(this_Q->doorbell_signal, atmi_klist[pif_id].gpu_kernarg_offset); \n\
+    //hsa_signal_add_relaxed(this_Q->doorbell_signal, 1); \n\
+}\n\n\n");
 
 fprintf(fp,"\
-void agent_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id) { \n\
+void agent_dispatch(const atmi_klparm_t *lparm, hsa_agent_dispatch_packet_t *kernel_packet, const int pif_id) { \n\
  \n\
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
-    hsa_agent_dispatch_packet_t *kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
+    //hsa_agent_dispatch_packet_t *kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
+    //hsa_agent_dispatch_packet_t *kernel_packet = this_packet; \n\
  \n\
-    hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[1]; \n\
+    hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[soft_queue]; \n\
     hsa_signal_t worker_sig = *((hsa_signal_t *)atmi_klist[pif_id].worker_sig); \n\
  \n\
     /* Find the queue index address to write the packet info into.  */ \n\
     const uint32_t queueMask = this_Q->size - 1; \n\
-    uint64_t index = hsa_queue_load_write_index_relaxed(this_Q); \n\
-    hsa_agent_dispatch_packet_t *this_aql = &(((hsa_agent_dispatch_packet_t *)(this_Q->base_address))[index&queueMask]); \n\
+    uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1); \n\
+    hsa_agent_dispatch_packet_t *this_aql = \n\
+        &(((hsa_agent_dispatch_packet_t *)(this_Q->base_address))[index&queueMask]); \n\
     \n\
     this_aql->type   = kernel_packet->type; \n\
     this_aql->arg[0] = kernel_packet->arg[0]; \n\
@@ -1322,12 +1410,12 @@ void agent_dispatch(const atmi_klparm_t *lparm, const int pif_id, const int k_id
     this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE); \n\
  \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
-    hsa_queue_store_write_index_relaxed(this_Q, index + 1); \n\
+    //hsa_signal_store_relaxed(this_Q->doorbell_signal, atmi_klist[pif_id].cpu_kernarg_offset); \n\
+    hsa_signal_add_relaxed(this_Q->doorbell_signal, 1); \n\
  \n\
     //FIXME ring doorbell not work on GPU \n\
-    hsa_signal_store_relaxed(this_Q->doorbell_signal, index); \n\
     hsa_signal_store_relaxed(worker_sig, 0); \n\
-}\n\n");
+}\n\n\n");
 
 }
 
@@ -1374,8 +1462,16 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
         } __attribute__ ((aligned (16))) ;\n\n");
 
     pp_printf(&pif_spawn, "\
-        struct gpu_args_struct * gpu_args = (struct gpu_args_struct *)kernel_packet->kernarg_address; \n\
-        kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n");
+        int kernarg_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].gpu_kernarg_offset)), 1);\n\
+        int packet_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
+        hsa_kernel_dispatch_packet_t * this_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
+        this_packet->header = 0;\n\
+        this_packet->kernel_object = kernel_packet->kernel_object;\n\
+        this_packet->private_segment_size = kernel_packet->private_segment_size;\n\
+        this_packet->group_segment_size = kernel_packet->group_segment_size;\n\
+        this_packet->kernarg_address =  (void *)((struct gpu_args_struct *)atmi_klist[pif_id].gpu_kernarg_heap + kernarg_offset);\n\
+        struct gpu_args_struct * gpu_args = (struct gpu_args_struct *)this_packet->kernarg_address; \n\
+        this_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n");
 
 
     pp_printf(&pif_spawn, "\
@@ -1395,18 +1491,18 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     }
 
     pp_printf(&pif_spawn, "\
-        kernel_dispatch(lparm, pif_id, lparm->kernel_id);\n\
+        kernel_dispatch(lparm, this_packet, pif_id);\n\
     }\n");
 
     pp_printf(&pif_spawn, "\
-    else{\n");
+    else{\n\n");
     pp_printf(&pif_spawn, "\
         hsa_agent_dispatch_packet_t * kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + lparm->kernel_id); \n\n");
 
     pp_printf(&pif_spawn, "\
         struct cpu_args_struct {\n\
             int arg0_size;\n\
-            atmi_task_t **arg0;\n");
+            uint64_t * arg0;\n");
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
         {
@@ -1432,36 +1528,48 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
 
     pp_printf(&pif_spawn, "\
-        struct cpu_args_struct * cpu_args = (struct cpu_args_struct *)kernel_packet->arg[1];\n"); 
+        int kernarg_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].cpu_kernarg_offset)), 1);\n\
+        int packet_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
+        hsa_agent_dispatch_packet_t * this_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
+        this_packet->header = 1;\n\
+        this_packet->type   = kernel_packet->type;\n\
+        this_packet->arg[0] = kernel_packet->arg[0];\n\
+        this_packet->arg[1] = (uint64_t)((struct cpu_args_struct *)atmi_klist[pif_id].cpu_kernarg_heap + kernarg_offset);\n\
+        this_packet->arg[2] = (uint64_t)lparm->prevTask; \n\
+        this_packet->arg[3] = kernel_packet->arg[3];\n\
+        struct cpu_args_struct *cpu_args = (struct cpu_args_struct *)this_packet->arg[1];\n"); 
+
+    pp_printf(&pif_spawn, "\
+        *(cpu_args->arg0) = (uint64_t)lparm->prevTask;\n");
 
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
         {
             pp_printf((&pif_spawn), "\
         *(cpu_args->arg%d) = (uint64_t)var%d;\n", 
-            arg_idx, arg_idx);
+                    arg_idx, arg_idx);
 
         }
         else
         {
             pp_printf((&pif_spawn), "\
         *(cpu_args->arg%d) = var%d;\n", 
-            arg_idx, arg_idx);
+                    arg_idx, arg_idx);
 
         }
     }
 
     pp_printf(&pif_spawn, "\
-        kernel_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle));\n");
+        this_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle));\n");
 
     pp_printf(&pif_spawn, "\
-        agent_dispatch(lparm, pif_id, lparm->kernel_id);\n\
+        agent_dispatch(lparm, this_packet, pif_id);\n\
     }\n");
 
     pp_printf(&pif_spawn, "\
     return NULL; \n\
 }\n\n");
-        
+
 }
 
 void write_pif_kl(FILE *clFile) {
@@ -1469,4 +1577,20 @@ void write_pif_kl(FILE *clFile) {
     char *cl_text = (char *)pp_formatted_text(&pif_spawn);
     fprintf(clFile, "%s", cl_text);
     pp_clear_output_area(&pif_spawn);
+}
+
+void append_kl_init_funs(FILE *pifFile)
+{
+    char *kl_init_funs_text = (char *)pp_formatted_text(&kl_init_funs);
+
+    fprintf(pifFile, "%s", "\
+void kl_init() {\n");
+
+    fprintf(pifFile, "%s", kl_init_funs_text);
+
+    fprintf(pifFile, "%s", "\
+}\n\n");
+
+    pp_clear_output_area(&kl_init_funs);
+
 }

@@ -1198,16 +1198,17 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
+enum queue_type{device_queue = 0, soft_queue}; 
 void snk_kl_init(atmi_klist_t *atmi_klist,
-                 hsa_executable_t g_executable,
-                 const char *pif_name,
-                 const int pif_id) {
+        hsa_executable_t g_executable,
+        const char *pif_name,
+        const int pif_id) {
 
     atmi_stream_t *stream  = &snk_default_stream_obj;
 
     /* Add row to stream table for purposes of future synchronizations */
     register_stream(stream);
-    
+
     atmi_klist_t *atmi_klist_curr = atmi_klist + pif_id; 
 
     /* get this stream's HSA queue (could be dynamically mapped or round robin
@@ -1219,10 +1220,10 @@ void snk_kl_init(atmi_klist_t *atmi_klist,
     if(!this_softQ) return;
 
     atmi_klist_curr->num_queues = 2;
-    atmi_klist_curr->queues = (uint64_t *)malloc(sizeof(uint64_t) * atmi_klist_curr->num_queues);
+    //atmi_klist_curr->queues = (uint64_t *)malloc(sizeof(uint64_t) * atmi_klist_curr->num_queues);
 
-    atmi_klist_curr->queues[0] = (uint64_t)this_devQ; 
-    atmi_klist_curr->queues[1] = (uint64_t)this_softQ; 
+    atmi_klist_curr->queues[device_queue] = (uint64_t)this_devQ; 
+    atmi_klist_curr->queues[soft_queue] = (uint64_t)this_softQ; 
     atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ); 
 
     uint64_t _KN__Kernel_Object;
@@ -1255,8 +1256,8 @@ void snk_kl_init(atmi_klist_t *atmi_klist,
 
                     hsa_kernel_dispatch_packet_t *this_aql = 
                         (hsa_kernel_dispatch_packet_t *)(atmi_klist_curr
-                        ->kernel_packets +
-                        atmi_klist_curr->num_kernel_packets - 1);
+                                ->kernel_packets +
+                                atmi_klist_curr->num_kernel_packets - 1);
 
 
                     /* thisKernargAddress has already been set up in the beginning of this routine */
@@ -1278,8 +1279,8 @@ void snk_kl_init(atmi_klist_t *atmi_klist,
 
                     hsa_agent_dispatch_packet_t *this_aql = 
                         (hsa_agent_dispatch_packet_t *)(atmi_klist_curr
-                        ->kernel_packets +
-                        atmi_klist_curr->num_kernel_packets - 1);
+                                ->kernel_packets +
+                                atmi_klist_curr->num_kernel_packets - 1);
                     this_aql->header = 1;
                     this_aql->type = (uint16_t)i;
                     const uint32_t num_params = snk_kernels[i].num_params;

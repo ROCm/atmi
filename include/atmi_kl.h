@@ -16,7 +16,7 @@ struct atmi_klist_s {
     int cpu_kernarg_offset;
     void *gpu_kernarg_heap;
     int gpu_kernarg_offset;
-    unsigned long int *queues;
+    unsigned long int queues[2];
     unsigned long int worker_sig;
     atmi_kernel_packet_t *kernel_packets;
     atmi_kernel_packet_t *kernel_packets_heap;

@@ -72,6 +72,8 @@ static pretty_printer pif_spawn;
 
 static pretty_printer kl_init_funs;
 
+static pretty_printer enum_kid;
+
 static pretty_printer g_kerneldecls;
 
 static int initialized = 0;
@@ -705,6 +707,10 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
        
         /* add PIF function table definition */
         pp_printf((pif_printers[pif_index].fn_table), "\nsnk_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
+        pp_printf(&enum_kid, "K_ID_%s = 0, ", fn_name);
+    }
+    else {
+        pp_printf(&enum_kid, "K_ID_%s, ", fn_name);
     }
     if(devtype == ATMI_DEVTYPE_CPU) {
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
@@ -869,8 +875,8 @@ register_finish_unit (void *event_data, void *data) {
         }
         vector<string> tokens = split(it->c_str(), '.');
         cl2brigh("tmp.cl", tokens[0].c_str());
-        //int ret_del = remove("tmp.cl");
-        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+        int ret_del = remove("tmp.cl");
+        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
 }
 
@@ -881,6 +887,7 @@ register_start_unit (void *event_data, void *data) {
     pp_needs_newline (&g_kerneldecls) = true;
     pp_needs_newline (&pif_spawn) = true;
     pp_needs_newline (&kl_init_funs) = true;
+    pp_needs_newline (&enum_kid) = true;
 
     /* Replace CL or other kernel-specific keywords with 
      * regular C/C++ keywords. 
@@ -1226,12 +1233,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     int pif_id = %d;\n\n", pif_index);
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    //num_pif++;\n\
-    //atmi_klist = (atmi_klist_t * )realloc(atmi_klist, sizeof(atmi_klist_t) * num_pif); \n\
     atmi_klist[pif_id].kernel_packets = NULL; \n\
-    atmi_klist[pif_id].queues = NULL; \n\
     atmi_klist[pif_id].num_kernel_packets = 0; \n\
-    atmi_klist[pif_id].num_queues = 0; \n\
     atmi_klist[pif_id].cpu_kernarg_heap = cpuKernargAddress; \n\
     atmi_klist[pif_id].cpu_kernarg_offset = 0;\n\
     atmi_klist[pif_id].gpu_kernarg_heap = gpuKernargAddress; \n\
@@ -1567,7 +1570,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     }\n");
 
     pp_printf(&pif_spawn, "\
-    return NULL; \n\
+    return lparm->prevTask; \n\
 }\n\n");
 
 }
@@ -1575,8 +1578,11 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 void write_pif_kl(FILE *clFile) {
     write_kernel_dispatch_routine(clFile);
     char *cl_text = (char *)pp_formatted_text(&pif_spawn);
+    char *enum_kid_text = (char *)pp_formatted_text(&enum_kid);
+    fprintf(clFile, "enum kid_klist{%s};\n", enum_kid_text);
     fprintf(clFile, "%s", cl_text);
     pp_clear_output_area(&pif_spawn);
+    pp_clear_output_area(&enum_kid);
 }
 
 void append_kl_init_funs(FILE *pifFile)

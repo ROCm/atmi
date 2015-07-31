@@ -19,7 +19,7 @@ extern "C" void print_taskId_cpu(__global atmi_task_t *thisTask, int taskId) __a
 
 extern "C" void print_taskId_cpu(__global atmi_task_t *thisTask, int taskId)
 {
-    cout << "GPU Task ID " << " : "<< taskId << endl;
+    cout << "GPU Task ID" << ": "<< taskId << endl;
 }
 
 
@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
     ATMI_LPARM_1D(lparm, numTasks);
     lparm->synchronous = ATMI_FALSE;
 
-    lparm->kernel_id = 0;
+    lparm->kernel_id = K_ID_mainTask_gpu;
     atmi_task_t *task = mainTask(lparm, numTasks);
 
     SYNC_TASK(task);

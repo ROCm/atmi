@@ -1,15 +1,12 @@
 #!/bin/bash
 set -e
 #  Set HSA Environment variables
-[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa.1_1T/
-[ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa.1_1T/lib
-[ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=$HOME/git/ATMI/bin
-[ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=$HOME/git/ATMI
-export ATMI_PATH=$HOME/git/ATMI/
+[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
+[ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=$HSA_RUNTIME_PATH/lib
+[ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/cloc/bin
+[ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=/opt/amd/atmi
 ATMI_INC=$ATMI_RUNTIME_PATH/include
 export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$ATMI_RUNTIME_PATH/lib:$LD_LIBRARY_PATH
-export PATH=$HSA_LLVM_PATH:$PATH
-
 
 # Do not compile accelerated functions separately. This script will be invoked by the GCC plugin itself.
 #echo cl2brigh.sh -v -gccopt 3 hw.cl

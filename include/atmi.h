@@ -141,7 +141,6 @@ typedef struct atmi_lparm_s {
     //   boolean          nested;         /* This task may create more tasks        */
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
-
 #define WORKITEMS gridDim[0] 
 #define WORKITEMS2D gridDim[0] 
 #define WORKITEMS3D gridDim[0] 

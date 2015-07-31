@@ -14,6 +14,7 @@
 */
 
 #include "atmi.h"
+#include "atmi_kl.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -87,12 +88,8 @@ typedef struct snk_pif_kernel_table_s {
     snk_gpu_kernel_t gpu_kernel;
 } snk_pif_kernel_table_t;
 
-status_t snk_init_context(
-                        char _CN__HSA_BrigMem[],
-                        hsa_region_t *_CN__KernargRegion,
-                        hsa_agent_t *_CN__CPU_Agent,
-                        hsa_region_t *_CN__CPU_KernargRegion
-                        );
+
+status_t snk_init_context();
 status_t snk_init_cpu_context();
 status_t snk_init_gpu_context();
 status_t snk_gpu_create_program();
@@ -138,6 +135,13 @@ typedef struct atl_context_s {
 } atl_context_t ;
 static atl_context_t atlc ;
 static atl_context_t * atlc_p ;
+
+
+void snk_kl_init(atmi_klist_t *atmi_klist,
+        hsa_executable_t g_executable,
+        const char *pif_name,
+        const int pif_id);
+
 
 #ifdef __cplusplus
 }

@@ -188,6 +188,7 @@ while [ $# -gt 0 ] ; do
    shift
 done
 
+
 # The above while loop is exited when last string with a "-" is processed
 LASTARG=$1
 shift
@@ -259,6 +260,7 @@ if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then
    exit $DEADRC
 fi
 
+[ -z $HSAILLIB  ] && HSAILLIB=$ATMI_PATH/bin/builtins-hsail.hsail
 if [ "$HSAILLIB" != "" ] ; then 
    if [ ! -f $HSAILLIB ] ; then 
       echo "ERROR:  The HSAIL file $HSAILLIB does not exist."
@@ -437,7 +439,10 @@ else
   
 #  Not step 2, do normal steps
 #   [ $VERBOSE ] && echo cp $INDIR/$CLNAME $TMPDIR/updated.cl
-   cp $INDIR/$CLNAME $TMPDIR/updated.cl
+cp $INDIR/$CLNAME $TMPDIR/updated.cl
+
+#echo $HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
+#$ATMI_PATH/bin/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
 
 #   [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
 #   if [ $DRYRUN ] ; then
@@ -527,6 +532,26 @@ if [ "$HSAILLIB" != "" ] ; then
    else
       $HSA_LLVM_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
    fi
+
+   # Inject ATMI_CONTEXT
+   sed -i -e "5i\
+alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
+       " $TMPDIR/composite.hsail
+
+   entry_lines=($(grep -n "@__OpenCL_" $TMPDIR/composite.hsail | grep -Eo '^[^:]+'))
+
+   num_kernels=${#entry_lines[@]}
+   offset=2;
+   for ((i=0; i<${num_kernels}; i++))
+   do
+       entry_line=$((${entry_lines[$i]} + $offset))
+       offset=$(($offset + 4))
+       sed -i -e "${entry_line}i\
+    //init ATMI_CONTEXT\n\
+    ld_kernarg_align(8)_width(all)_u64  \$d0, [%__printf_buffer];\n\
+    st_global_align(8)_u64 \$d0, [&ATMI_CONTEXT];\n\
+           " $TMPDIR/composite.hsail 
+   done
  
    # Add $HSAILLIB to file 
    if [ $DRYRUN ] ; then
@@ -548,7 +573,6 @@ if [ "$HSAILLIB" != "" ] ; then
       echo "        $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail"
       do_err $rc
    fi
-  
 fi
 
 #   Not depricated option -str 

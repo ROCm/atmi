@@ -5,9 +5,9 @@ HSA_LLVM_PATH=/opt/amd/cloc/bin
 
 AR=ar
 ARFLAGS=-cvq
-CC=gcc
-CFLAGS=-O0 -c -fpic -g
-INC_FLAGS=-I./include -I../include -I${HSA_RUNTIME_PATH}/include 
+CC=gcc-4.9
+CFLAGS=-O2 -c -fpic -g
+INC_FLAGS=-I../include -I${HSA_RUNTIME_PATH}/include -I./include 
 LIB_FLAGS=-L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -Wl,--no-as-needed -Wl,-rpath=${HSA_RUNTIME_PATH}/lib
 
 OBJS=atl_bindthread.o atl_profile.o atl_rt.o atl_cputask.o atl_synckernel.o

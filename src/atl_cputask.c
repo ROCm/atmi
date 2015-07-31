@@ -117,6 +117,8 @@ int process_packet(hsa_queue_t *queue, int id)
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
         int i;
         DEBUG_PRINT("Processing CPU task with header: %d\n", get_packet_type(packet->header));
+        //wait til the packet is ready to be dispatched
+        while(get_packet_type(packet->header) == HSA_PACKET_TYPE_VENDOR_SPECIFIC);
         switch (get_packet_type(packet->header)) {
             case HSA_PACKET_TYPE_BARRIER_OR: 
                 ;
@@ -551,7 +553,7 @@ int process_packet(hsa_queue_t *queue, int id)
                     free(kernel_args[kernarg_id]);
                 }
                 free(kernel_args);
-                free(kernel_args_ptr);
+                //free(kernel_args_ptr);
                 break;
         }
         if (packet->completion_signal.handle != 0) {
@@ -723,4 +725,15 @@ agent_fini()
     }
 
     DEBUG_PRINT("agent_fini completed\n");
+}
+
+hsa_signal_t *get_worker_sig(hsa_queue_t *queue) {
+    DEBUG_PRINT("Signaling work %d\n", signal);
+    int id;
+    for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
+        if(agent[id].queue == queue) break;
+
+    }
+    return &(worker_sig[id]);
+
 }

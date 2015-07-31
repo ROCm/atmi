@@ -191,6 +191,7 @@ void enqueue_barrier_cpu(hsa_queue_t *queue, const int dep_task_count, atmi_task
 extern void snk_task_wait(atmi_task_t *task) {
     if(task != NULL) {
         //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", ((hsa_signal_t *)(task->handle))->handle);
+        //fprintf(stderr, "Signal handle: %" PRIu64 " Signal value:%ld\n", ((hsa_signal_t *)(task->handle))->handle, hsa_signal_load_relaxed(*((hsa_signal_t *)(task->handle))));
         hsa_signal_wait_acquire(*((hsa_signal_t *)(task->handle)), HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
@@ -608,12 +609,7 @@ void atmi_init_context_structs() {
     atlc.g_tasks_initialized = 0;
 }
 
-status_t snk_init_context(
-                        char _CN__HSA_BrigMem[],
-                        hsa_region_t *_CN__KernargRegion,
-                        hsa_agent_t *_CN__CPU_Agent,
-                        hsa_region_t *_CN__CPU_KernargRegion
-                        ) {
+status_t snk_init_context() {
     snk_init_gpu_context();
 
     snk_init_cpu_context();
@@ -697,7 +693,7 @@ status_t snk_gpu_build_executable(hsa_executable_t *executable) {
     hsa_ext_control_directives_t control_directives;
     memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
     hsa_code_object_t code_object;
-    err = hsa_ext_program_finalize(snk_hsa_program, isa, 0, control_directives, "", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
+    err = hsa_ext_program_finalize(snk_hsa_program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
     ErrorCheck(Finalizing the program, err);
 
     /* Destroy the program, it is no longer needed.  */
@@ -1202,3 +1198,99 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
+void snk_kl_init(atmi_klist_t *atmi_klist,
+                 hsa_executable_t g_executable,
+                 const char *pif_name,
+                 const int pif_id) {
+
+    atmi_stream_t *stream  = &snk_default_stream_obj;
+
+    /* Add row to stream table for purposes of future synchronizations */
+    register_stream(stream);
+    
+    atmi_klist_t *atmi_klist_curr = atmi_klist + pif_id; 
+
+    /* get this stream's HSA queue (could be dynamically mapped or round robin
+     * if it is an unordered stream */
+    hsa_queue_t* this_devQ = acquire_and_set_next_gpu_queue(stream);
+    if(!this_devQ) return;
+
+    hsa_queue_t* this_softQ = acquire_and_set_next_cpu_queue(stream);
+    if(!this_softQ) return;
+
+    atmi_klist_curr->num_queues = 2;
+    atmi_klist_curr->queues = (uint64_t *)malloc(sizeof(uint64_t) * atmi_klist_curr->num_queues);
+
+    atmi_klist_curr->queues[0] = (uint64_t)this_devQ; 
+    atmi_klist_curr->queues[1] = (uint64_t)this_softQ; 
+    atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ); 
+
+    uint64_t _KN__Kernel_Object;
+    uint32_t _KN__Group_Segment_Size;
+    uint32_t _KN__Private_Segment_Size;
+
+    /* Allocate the kernel argument buffer from the correct region. */
+    //void* thisKernargAddress;
+    //snk_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
+
+    uint16_t i;
+    atmi_task_t *ret = NULL;
+    for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
+        if(snk_kernels[i].pif_name && pif_name) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) { 
+                if(snk_kernels[i].devtype == ATMI_DEVTYPE_GPU) {
+
+                    snk_get_gpu_kernel_info(g_executable, 
+                            snk_kernels[i].gpu_kernel.kernel_name,
+                            &_KN__Kernel_Object, 
+                            &_KN__Group_Segment_Size, 
+                            &_KN__Private_Segment_Size);
+
+                    atmi_klist_curr->num_kernel_packets++;
+                    atmi_klist_curr->kernel_packets = 
+                        (atmi_kernel_packet_t *)realloc(
+                                atmi_klist_curr->kernel_packets, 
+                                sizeof(atmi_kernel_packet_t) * 
+                                atmi_klist_curr->num_kernel_packets);
+
+                    hsa_kernel_dispatch_packet_t *this_aql = 
+                        (hsa_kernel_dispatch_packet_t *)(atmi_klist_curr
+                        ->kernel_packets +
+                        atmi_klist_curr->num_kernel_packets - 1);
+
+
+                    /* thisKernargAddress has already been set up in the beginning of this routine */
+                    /*  Bind kernel argument buffer to the aql packet.  */
+                    this_aql->header = 0;
+                    //this_aql->kernarg_address = (void*) thisKernargAddress;
+                    this_aql->kernel_object = _KN__Kernel_Object;
+                    this_aql->private_segment_size = _KN__Private_Segment_Size;
+                    this_aql->group_segment_size = _KN__Group_Segment_Size;
+
+                }
+                else if(snk_kernels[i].devtype == ATMI_DEVTYPE_CPU){
+                    atmi_klist_curr->num_kernel_packets++;
+                    atmi_klist_curr->kernel_packets = 
+                        (atmi_kernel_packet_t *)realloc(
+                                atmi_klist_curr->kernel_packets, 
+                                sizeof(atmi_kernel_packet_t) * 
+                                atmi_klist_curr->num_kernel_packets);
+
+                    hsa_agent_dispatch_packet_t *this_aql = 
+                        (hsa_agent_dispatch_packet_t *)(atmi_klist_curr
+                        ->kernel_packets +
+                        atmi_klist_curr->num_kernel_packets - 1);
+                    this_aql->header = 1;
+                    this_aql->type = (uint16_t)i;
+                    const uint32_t num_params = snk_kernels[i].num_params;
+                    //ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
+                    this_aql->arg[0] = num_params;
+                    //this_aql->arg[1] = (uint64_t) cpu_kernel_args;
+                    //this_aql->arg[2] = (uint64_t) ret; 
+                    this_aql->arg[3] = UINT64_MAX; 
+                    //SNK_NextTaskId++;
+                }
+            }
+        }
+    }
+}

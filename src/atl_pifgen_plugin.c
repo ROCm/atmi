@@ -908,8 +908,8 @@ register_finish_unit (void *event_data, void *data) {
         }
         vector<string> tokens = split(it->c_str(), '.');
         cl2brigh("tmp.cl", tokens[0].c_str());
-        //int ret_del = remove("tmp.cl");
-        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+        int ret_del = remove("tmp.cl");
+        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
 }
 

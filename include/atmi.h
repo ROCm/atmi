@@ -141,9 +141,10 @@ typedef struct atmi_lparm_s {
     //   boolean          nested;         /* This task may create more tasks        */
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
+
 #define WORKITEMS gridDim[0] 
-#define WORKITEMS2D gridDim[0] 
-#define WORKITEMS3D gridDim[0] 
+#define WORKITEMS2D gridDim[1] 
+#define WORKITEMS3D gridDim[2] 
 
 /* String macros to initialize popular default launch parameters.             */ 
 #define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
@@ -194,6 +195,9 @@ extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
     __sync_kernel_pif(__lparm_sync_kernel); \
 }
 #endif
+
+#define ATMI_myTask __global atmi_task_t*thisTask
+
 /*----------------------------------------------------------------------------*/
 /* ATMI Example: HelloWorld                                                   */ 
 /*----------------------------------------------------------------------------*/

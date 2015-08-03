@@ -2,7 +2,7 @@
 set -e
 #  Set HSA Environment variables
 [ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
-[ -z $ATMI_PATH ] && ATMI_PATH=/home/grodgers/git/atmi
+[ -z $ATMI_PATH ] && ATMI_PATH=$HOME/git/atmi
 
 export PATH=$ATMI_PATH/bin:$PATH
 ATMI_INC=$ATMI_PATH/include

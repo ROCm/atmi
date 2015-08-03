@@ -7,7 +7,7 @@
 extern void startKernel(atmi_task_t*thisTask)
    __attribute__((atmi_kernel("start","CPU")));
 
-__kernel void racerKernel(ATMI_myTask, const int myNumber,
+__kernel void racerKernel(ATMI_myTask, int myNumber,
     __global int*winner, __global int*loser, __global int*finishers)
     __attribute__((atmi_kernel("racer","GPU")));
 
@@ -31,10 +31,12 @@ int main(int argc, char **argv) {
    int winner=0,loser=0,finishers[3]={0,0,0};
    ATMI_LPARM(start_lp); ATMI_LPARM(racer_lp);ATMI_LPARM(finish_lp);
    atmi_task_t* racers[3];
+   atmi_task_t* starter[1];
 
    racer_lp->WORKITEMS    = 64; /* Racers are GPUs */
    racer_lp->num_required = 1;
-   racer_lp->requires[0]  = start(start_lp); 
+   starter[0]             = start(start_lp); 
+   racer_lp->requires     = starter;
 
    /*  Dispatch the three racer tasks */
    racers[0] = racer(racer_lp,1,&winner,&loser,finishers);

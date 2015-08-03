@@ -689,7 +689,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             {
                 pp_printf((pif_printers[pif_index].pifdefs), "\
             //FIXME: a workground that ignores const data type in arg_struct\n");
-                new_arg.replace(found, sizeof("const"), "");
+                    new_arg.replace(found, sizeof("const"), "");
             }
             pp_printf((pif_printers[pif_index].pifdefs), "\
             %s arg%d;\n", 
@@ -708,8 +708,17 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg5=0;\n\
         gpu_args->arg6=NULL;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            //FIXME: a workground that ignores const data type in arg_struct
+            string new_arg = arg_list[arg_idx]; 
+            size_t found = new_arg.find("const");
+            if(found != std::string::npos)
+            {
+                pp_printf((pif_printers[pif_index].pifdefs), "\
+        //FIXME: a workground that ignores const data type in arg_struct\n");
+                    new_arg.replace(found, sizeof("const"), "");
+            }
             pp_printf((pif_printers[pif_index].pifdefs), "\
-        gpu_args->arg%d=var%d;\n", arg_idx+6, arg_idx);
+        gpu_args->arg%d=(%s) var%d;\n", arg_idx+6, new_arg.c_str(), arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         return snk_gpu_kernel(lparm,\n\

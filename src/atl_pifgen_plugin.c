@@ -510,6 +510,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     arg_list.clear();
     FOREACH_FUNCTION_ARGS(fn_type, arg, args_iter)
     {
+        TREE_READONLY(arg) = 0;
     //for(idx = 0; idx < 32; idx++) {
      //DEBUG_PRINT("%s ", IDENTIFIER_POINTER(DECL_NAME(TYPE_IDENTIFIER(arg))));
      //tree arg_type_name = DECL_ARG_TYPE(arg);
@@ -1379,7 +1380,6 @@ void kernel_dispatch(const atmi_klparm_t *lparm, hsa_kernel_dispatch_packet_t *k
     this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE); \n\
  \n\
     /* Increment write index and ring doorbell to dispatch the kernel.  */ \n\
-    //FIXME ring doorbell not work on GPU \n\
     hsa_signal_store_relaxed(this_Q->doorbell_signal, atmi_klist[pif_id].gpu_kernarg_offset); \n\
     //hsa_signal_add_relaxed(this_Q->doorbell_signal, 1); \n\
 }\n\n\n");
@@ -1416,7 +1416,6 @@ void agent_dispatch(const atmi_klparm_t *lparm, hsa_agent_dispatch_packet_t *ker
     //hsa_signal_store_relaxed(this_Q->doorbell_signal, atmi_klist[pif_id].cpu_kernarg_offset); \n\
     hsa_signal_add_relaxed(this_Q->doorbell_signal, 1); \n\
  \n\
-    //FIXME ring doorbell not work on GPU \n\
     hsa_signal_store_relaxed(worker_sig, 0); \n\
 }\n\n\n");
 

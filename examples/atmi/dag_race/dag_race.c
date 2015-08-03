@@ -7,7 +7,7 @@
 extern void startKernel(atmi_task_t*thisTask)
    __attribute__((atmi_kernel("start","CPU")));
 
-__kernel void racerKernel(ATMI_myTask, int myNumber,
+__kernel void racerKernel(ATMI_myTask, const int myNumber,
     __global int*winner, __global int*loser, __global int*finishers)
     __attribute__((atmi_kernel("racer","GPU")));
 

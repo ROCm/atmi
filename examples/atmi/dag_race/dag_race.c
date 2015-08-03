@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
    racer_lp->WORKITEMS    = 64; /* Racers are GPUs */
    racer_lp->num_required = 1;
-   starter[0]             = start(start_lp); 
+   starter[0]  = start(start_lp); 
    racer_lp->requires     = starter;
 
    /*  Dispatch the three racer tasks */

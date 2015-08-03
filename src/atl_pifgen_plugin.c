@@ -510,6 +510,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     arg_list.clear();
     FOREACH_FUNCTION_ARGS(fn_type, arg, args_iter)
     {
+        TREE_READONLY(arg) = 0;
     //for(idx = 0; idx < 32; idx++) {
      //DEBUG_PRINT("%s ", IDENTIFIER_POINTER(DECL_NAME(TYPE_IDENTIFIER(arg))));
      //tree arg_type_name = DECL_ARG_TYPE(arg);
@@ -597,44 +598,28 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             size_t arg0_size;\n\
             atmi_task_t **arg0;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-            //FIXME: a workground that ignores const data type in arg_struct\n");
-                new_arg.replace(found, sizeof("const"), "");
-            }
             pp_printf((pif_printers[pif_index].pifdefs), "\
             size_t arg%d_size;\n\
             %s* arg%d;\n",
             arg_idx,
-            new_arg.c_str(), arg_idx);
+            arg_list[arg_idx].c_str(), arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } cpu_args_struct_t; \n\
         void *thisKernargAddress = malloc(sizeof(cpu_args_struct_t));\n\
         cpu_args_struct_t *args = (cpu_args_struct_t *)thisKernargAddress; \n\
         args->arg0_size = sizeof(atmi_task_t **);\n\
-        args->arg0 = NULL;\n");
+        args->arg0 = NULL; \
+        ");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        //FIXME: a workground that ignores const data type in arg_struct\n");
-                new_arg.replace(found, sizeof("const"), "");
-            }
-            pp_printf((pif_printers[pif_index].pifdefs), "\
+            pp_printf((pif_printers[pif_index].pifdefs), "\n\
         args->arg%d_size = sizeof(%s*); \n\
         args->arg%d = (%s*)malloc(sizeof(%s));\n\
-        memcpy(args->arg%d, &var%d, sizeof(%s));\n",
-            arg_idx, new_arg.c_str(),
-            arg_idx, new_arg.c_str(), new_arg.c_str(),
-            arg_idx, arg_idx, new_arg.c_str()
+        memcpy(args->arg%d, &var%d, sizeof(%s));\
+        ",
+            arg_idx, arg_list[arg_idx].c_str(),
+            arg_idx, arg_list[arg_idx].c_str(), arg_list[arg_idx].c_str(),
+            arg_idx, arg_idx, arg_list[arg_idx].c_str()
             );
         }
 #else
@@ -682,18 +667,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             uint64_t arg5;\n\
             atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-            //FIXME: a workground that ignores const data type in arg_struct\n");
-                    new_arg.replace(found, sizeof("const"), "");
-            }
             pp_printf((pif_printers[pif_index].pifdefs), "\
             %s arg%d;\n", 
-            new_arg.c_str(), arg_idx + 6);
+            arg_list[arg_idx].c_str(), arg_idx + 6);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         } __attribute__ ((aligned (16))); \n\
@@ -708,17 +684,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg5=0;\n\
         gpu_args->arg6=NULL;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        //FIXME: a workground that ignores const data type in arg_struct\n");
-                    new_arg.replace(found, sizeof("const"), "");
-            }
             pp_printf((pif_printers[pif_index].pifdefs), "\
-        gpu_args->arg%d=(%s) var%d;\n", arg_idx+6, new_arg.c_str(), arg_idx);
+        gpu_args->arg%d=var%d;\n", arg_idx+6, arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         return snk_gpu_kernel(lparm,\n\
@@ -909,8 +876,8 @@ register_finish_unit (void *event_data, void *data) {
         }
         vector<string> tokens = split(it->c_str(), '.');
         cl2brigh("tmp.cl", tokens[0].c_str());
-        //int ret_del = remove("tmp.cl");
-        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+        int ret_del = remove("tmp.cl");
+        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
 }
 
@@ -1223,20 +1190,11 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         atmi_task_t **arg0;\n");
         int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        //FIXME: a workground that ignores const data type in arg_struct\n");
-                new_arg.replace(found, sizeof("const"), "");
-            }
             pp_printf((pif_printers[pif_index].pifdefs), "\
         size_t arg%d_size;\n\
         %s* arg%d;\n",
             arg_idx,
-            new_arg.c_str(), arg_idx);
+            arg_list[arg_idx].c_str(), arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
     } cpu_args_struct_t; \n\
@@ -1253,18 +1211,9 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         uint64_t arg5; \n\
         atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        //FIXME: a workground that ignores const data type in arg_struct\n");
-                new_arg.replace(found, sizeof("const"), "");
-            }
             pp_printf((pif_printers[pif_index].pifdefs), "\
         %s arg%d;\n", 
-            new_arg.c_str(), arg_idx + 6);
+            arg_list[arg_idx].c_str(), arg_idx + 6);
         }
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1324,25 +1273,19 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         args->arg0_size = sizeof(atmi_task_t **);\n\
         args->arg0 = NULL; \n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        //FIXME: a workground that ignores const data type in arg_struct\n");
-                new_arg.replace(found, sizeof("const"), "");
-            }
             pp_printf((pif_printers[pif_index].pifdefs), "\
         args->arg%d_size = sizeof(%s*); \n\
         args->arg%d = (%s*)malloc(sizeof(%s));\n",
-            arg_idx, new_arg.c_str(),
-            arg_idx, new_arg.c_str(), new_arg.c_str()
+            arg_idx, arg_list[arg_idx].c_str(),
+            arg_idx, arg_list[arg_idx].c_str(), arg_list[arg_idx].c_str()
             );
         }
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
     }\n\n");
+
+        //pp_printf((pif_printers[pif_index].pifdefs), "\
+        //printf(\"%%d %%d\\n\", args->arg1, args->arg2);\n");
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1512,20 +1455,9 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
             uint64_t arg5; \n\
             atmi_task_t* arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            //FIXME: a workground that ignores const data type in arg_struct
-            string new_arg = arg_list[arg_idx]; 
-            size_t found = new_arg.find("const");
-            if(found != std::string::npos)
-            {
-                pp_printf(&pif_spawn, "\
-            //FIXME: a workground that ignores const data type in arg_struct\n");
-                new_arg.replace(found, sizeof("const"), "");
-                //cout << new_arg << endl;
-                //printf("Ignore const data type\n");
-            }
             pp_printf(&pif_spawn, "\
             %s arg%d;\n", 
-            new_arg.c_str(), arg_idx + 6);
+            arg_list[arg_idx].c_str(), arg_idx + 6);
         }
             
     pp_printf(&pif_spawn, "\
@@ -1574,25 +1506,14 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
             int arg0_size;\n\
             uint64_t * arg0;\n");
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-        //FIXME: a workground that ignores const data type in arg_struct
-        string new_arg = arg_list[arg_idx]; 
-        size_t found = new_arg.find("const");
-        if(found != std::string::npos)
-        {
-            pp_printf(&pif_spawn, "\
-            //FIXME: a workground that ignores const data type in arg_struct\n");
-            new_arg.replace(found, sizeof("const"), "");
-        }
-
-        //FIXME: since clfile cannot support double pointers, use a uint64_t integer
-        //as a pointer instead
-        if(new_arg.c_str()[new_arg.size() - 1] == '*')
+        if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
         {
             pp_printf(&pif_spawn, "\
             size_t arg%d_size;\n\
             uint64_t * arg%d;\n",
             arg_idx,
             arg_idx);
+
         }
         else
         {
@@ -1600,7 +1521,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
             size_t arg%d_size;\n\
             %s* arg%d;\n",
             arg_idx,
-            new_arg.c_str(), arg_idx);
+            arg_list[arg_idx].c_str(), arg_idx);
         }
 
     }

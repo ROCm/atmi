@@ -1464,8 +1464,8 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
         } __attribute__ ((aligned (16))) ;\n\n");
 
     pp_printf(&pif_spawn, "\
-        int kernarg_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].gpu_kernarg_offset)), 1);\n\
-        int packet_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
+        int kernarg_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].gpu_kernarg_offset)), 1);\n\
+        int packet_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
         hsa_kernel_dispatch_packet_t * this_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
         this_packet->header = 0;\n\
         this_packet->kernel_object = kernel_packet->kernel_object;\n\
@@ -1530,8 +1530,8 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
 
     pp_printf(&pif_spawn, "\
-        int kernarg_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].cpu_kernarg_offset)), 1);\n\
-        int packet_offset = hsa_global_atomic_add((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
+        int kernarg_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].cpu_kernarg_offset)), 1);\n\
+        int packet_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
         hsa_agent_dispatch_packet_t * this_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
         this_packet->header = 1;\n\
         this_packet->type   = kernel_packet->type;\n\

@@ -15,10 +15,10 @@ ATMI_INC=$ATMI_RUNTIME_PATH/include
 #echo 
 if [ -f hello ] ; then rm hello ; fi
 echo g++ -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=reduction.cl -O3 -I$ATMI_INC
-g++-4.9 -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=reduction.cl -fplugin-arg-atmi_pifgen-pifgenfile=Reduction.cpp.pifdefs.c -O3 -I$ATMI_INC
+g++ -c -o Reduction.o Reduction.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=reduction.cl -fplugin-arg-atmi_pifgen-pifgenfile=Reduction.cpp.pifdefs.c -O3 -I$ATMI_INC
 
 echo g++ -o hello Reduction.o Reduction.cpp.pifdefs.c -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -latmi_runtime -L$HSA_TEST_RUNTIME_PATH/lib -lhsa-runtime64 -I$ATMI_INC -I$HSA_TEST_RUNTIME_PATH/include
-g++-4.9 -o reduction Reduction.o Reduction.cpp.pifdefs.c -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -latmi_runtime -L$HSA_TEST_RUNTIME_PATH/lib -lhsa-runtime64 -I$ATMI_INC -I$HSA_TEST_RUNTIME_PATH/include
+g++ -o reduction Reduction.o Reduction.cpp.pifdefs.c -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -latmi_runtime -L$HSA_TEST_RUNTIME_PATH/lib -lhsa-runtime64 -I$ATMI_INC -I$HSA_TEST_RUNTIME_PATH/include
 
 #  Execute
 echo

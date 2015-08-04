@@ -20,7 +20,7 @@ echo g++ -c -o HelloWorld.o HelloWorld.cpp -g -fplugin=atmi_pifgen.so -fplugin-a
 g++ -c -o HelloWorld.o HelloWorld.cpp -g -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=hw.cl -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.cpp -O3 -I$ATMI_INC
 
 echo g++ -o hello HelloWorld.o pifdefs.cpp -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -latmi_runtime -L$HSA_TEST_RUNTIME_PATH/lib -lhsa-runtime64 -I$ATMI_INC -I$HSA_TEST_RUNTIME_PATH/include
-g++-4.9 -o hello HelloWorld.o pifdefs.cpp -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -latmi_runtime -L$HSA_TEST_RUNTIME_PATH/lib -lhsa-runtime64 -I$ATMI_INC -I$HSA_TEST_RUNTIME_PATH/include
+g++ -o hello HelloWorld.o pifdefs.cpp -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -latmi_runtime -L$HSA_TEST_RUNTIME_PATH/lib -lhsa-runtime64 -I$ATMI_INC -I$HSA_TEST_RUNTIME_PATH/include
 #g++ -o hello HelloWorld.o HelloWorld.cpp.pifdefs.cpp -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -latmi_runtime -L$HSA_TEST_RUNTIME_PATH/lib -lhsa-runtime64 -I$ATMI_INC -I$HSA_TEST_RUNTIME_PATH/include
 
 #  Execute

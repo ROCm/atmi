@@ -6,7 +6,6 @@
 using namespace std;
 #include "atmi.h"
 #include "atmi_kl.h"
-#include "hsa_kl.h"
 #include <sched.h>
 
 __kernel void mainTask_gpu(__global atmi_task_t *thisTask, int numTasks) __attribute__((atmi_kernel("mainTask", "gpu")));

@@ -1297,8 +1297,9 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
 
 void write_kernel_dispatch_routine(FILE *fp) {
+
 fprintf(fp, "\
-#include \"hsa_kl.h\" \n\
+#include \"hsa_cl.h\" \n\
 #include \"atmi.h\" \n\
 #include \"atmi_kl.h\" \n\
 \n\

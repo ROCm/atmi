@@ -62,6 +62,31 @@ typedef struct atmi_stream_s {
    atmi_full_policy_t full_policy;  /* What to do if maxsize reached          */
 } atmi_stream_t;
 
+#define ATMI_MAX_NODES  1024
+#define ATMI_MAX_CUS    32
+typedef struct atmi_place_s {
+    unsigned int node_id;           /* node_id = 0 for local computations     */
+    unsigned long cpu_set;          /* CPU (core) set.                        */
+    unsigned long gpu_set;          /* GPU (CU) set. Today, all CUs are set   */
+} atmi_place_t;
+
+#define ATMI_PLACE_ANY(node) {.node_id=node, .cpu_set=0xFFFFFFFF, .gpu_set=0xFFFFFFFF} 
+#define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .cpu_set=0xFFFFFFFF, .gpu_set=0x0} 
+#define ATMI_PLACE_ANY_GPU(node) {,node_id=node, .cpu_set=0x0, .gpu_set=0xFFFFFFFF} 
+#define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .cpu_set=(1 << cpu_id), .gpu_set=0x0} 
+#define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .cpu_set=0x0, .gpu_set=(1 << gpu_id)} 
+
+/*----------------------------------------------------------------------------*/
+/*                                                                            */
+/* atmi_context_t  ATMI Context Data Structure for system information         */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+typedef struct atmi_context_s {
+   int                atmi_id;        /* ATMI version information             */
+} atmi_context_t;
+static atmi_context_t* atmi_context;
+static atmi_context_t  atmi_context_data;;
+
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* atmi_task_t  ATMI Task Handle Data Structure                               */
@@ -73,7 +98,7 @@ typedef struct atmi_task_s {
    atmi_handle_t    handle;
    atmi_state_t     state;    /* Eventually consistent state of task    */
    atmi_tprofile_t  profile;  /* Profile if reqeusted by lparm          */
-//   atmi_handle_t    continuation;   /*                                        */
+//   atmi_handle_t    continuation;   /*                                      */
 } atmi_task_t;
 
 /*----------------------------------------------------------------------------*/
@@ -109,28 +134,28 @@ typedef struct atmi_lparm_s {
     atmi_task_t**    requires;       /* Array of required parent tasks         */
     int              num_needs_any;  /* # needed parents, only 1 must complete */
     atmi_task_t**    needs_any;      /* Array of needed parent tasks           */
-    //atmi_devtype_t   devtype;        /* ATMI_DEVTYPE_GPU or ATMI_DEVTYPE_CPU   */
     boolean          profilable;     /* Points to tprofile if metrics desired  */ 
     int              atmi_id;        /* Constant that PIFs can check for       */
     int              kernel_id;
+    atmi_place_t     place;
     //   boolean          nested;         /* This task may create more tasks        */
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
 
 #define WORKITEMS gridDim[0] 
-#define WORKITEMS2D gridDim[0] 
-#define WORKITEMS3D gridDim[0] 
+#define WORKITEMS2D gridDim[1] 
+#define WORKITEMS3D gridDim[2] 
 
 /* String macros to initialize popular default launch parameters.             */ 
-#define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
+#define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
-#define ATMI_LPARM_STREAM(X,Y) atmi_stream_t * Y; atmi_stream_t _ ## Y ={.ordered=ATMI_TRUE} ; Y = &_ ## Y ; atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=Y,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
+#define ATMI_LPARM_STREAM(X,Y) atmi_stream_t * Y; atmi_stream_t _ ## Y ={.ordered=ATMI_TRUE} ; Y = &_ ## Y ; atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=Y,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
-#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y},.groupDim={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
+#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y},.groupDim={64},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
  
-#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z},.groupDim={64,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
+#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z},.groupDim={64,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
  
-#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,V},.groupDim={8,8,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0} ; X = &_ ## X ;
+#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,V},.groupDim={8,8,8},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
 #define ATMI_STREAM(NAME) atmi_stream_t * NAME; atmi_stream_t _ ## NAME ={.ordered=ATMI_TRUE} ; NAME = &_ ## NAME ; 
 
@@ -170,6 +195,9 @@ extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
     __sync_kernel_pif(__lparm_sync_kernel); \
 }
 #endif
+
+#define ATMI_myTask __global atmi_task_t*thisTask
+
 /*----------------------------------------------------------------------------*/
 /* ATMI Example: HelloWorld                                                   */ 
 /*----------------------------------------------------------------------------*/

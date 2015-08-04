@@ -21,9 +21,8 @@
 #         snack github repository.  
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
-#  Maintained by Shreyas Ramalingam Shreyas.Ramalingam@amd.com
 #
-PROGVERSION=0.1.0
+PROGVERSION=0.1.1
 #
 # Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  Patent pending.
 # 
@@ -96,6 +95,7 @@ function usage(){
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
     -o        <outfilename>  Default=<filename>.<ft> 
     -hsaillib <hsail filename>  
+    -clopts   <compiler opts>  Default="-cl-std=CL2.0"
 
    Examples:
     cl2brigh.sh my.cl              /* create my.snackwrap.c and my.h    */
@@ -170,6 +170,7 @@ while [ $# -gt 0 ] ; do
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
       -hsaillib)        HSAILLIB=$2; shift ;; 
+      -clopts) 		CLOPTS=$2; shift ;; 
       -p)               ATMI_PATH=$2; shift ;;
       -cp)              HSA_LLVM_PATH=$2; shift ;;
       -rp)              HSA_RUNTIME_PATH=$2; shift ;;
@@ -186,6 +187,7 @@ while [ $# -gt 0 ] ; do
    esac
    shift
 done
+
 
 # The above while loop is exited when last string with a "-" is processed
 LASTARG=$1
@@ -214,7 +216,7 @@ HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
 GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
-CMD_BRI=${CMD_BRI:-hsailasm }
+CMD_BRI=${CMD_BRI:-HSAILasm }
 
 FORTRAN=${FORTRAN:-0};
 NOGLOBFUNS=${NOGLOBFUNS:-0};
@@ -258,6 +260,7 @@ if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then
    exit $DEADRC
 fi
 
+[ -z $HSAILLIB  ] && HSAILLIB=$ATMI_PATH/bin/builtins-hsail.hsail
 if [ "$HSAILLIB" != "" ] ; then 
    if [ ! -f $HSAILLIB ] ; then 
       echo "ERROR:  The HSAIL file $HSAILLIB does not exist."
@@ -272,6 +275,7 @@ fi
 
 # Parse LASTARG for directory, filename, and symbolname
 INDIR=$(getdname $LASTARG)
+CLOPTS=${CLOPTS:-cl-std=CL2.0 -I$INDIR -I$ATMI_PATH/include}
 CLNAME=${LASTARG##*/}
 # FNAME has the .cl extension removed, used for symbolname and intermediate filenames
 FNAME=`echo "$CLNAME" | cut -d'.' -f1`
@@ -339,8 +343,8 @@ if [ ! -d $TMPDIR ] && [ ! $DRYRUN ] ; then
    echo "ERROR:  Directory $TMPDIR does not exist or could not be created"
    exit $DEADRC
 fi 
-if [ ! -e $HSA_LLVM_PATH/hsailasm ] ; then 
-   echo "ERROR:  Missing hsailasm in $HSA_LLVM_PATH"
+if [ ! -e $HSA_LLVM_PATH/HSAILasm ] ; then 
+   echo "ERROR:  Missing HSAILasm in $HSA_LLVM_PATH"
    echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi 
@@ -435,7 +439,10 @@ else
   
 #  Not step 2, do normal steps
 #   [ $VERBOSE ] && echo cp $INDIR/$CLNAME $TMPDIR/updated.cl
-   cp $INDIR/$CLNAME $TMPDIR/updated.cl
+cp $INDIR/$CLNAME $TMPDIR/updated.cl
+
+#echo $HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
+#$ATMI_PATH/bin/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
 
 #   [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
 #   if [ $DRYRUN ] ; then
@@ -525,6 +532,26 @@ if [ "$HSAILLIB" != "" ] ; then
    else
       $HSA_LLVM_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
    fi
+
+   # Inject ATMI_CONTEXT
+   sed -i -e "5i\
+alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
+       " $TMPDIR/composite.hsail
+
+   entry_lines=($(grep -n "@__OpenCL_" $TMPDIR/composite.hsail | grep -Eo '^[^:]+'))
+
+   num_kernels=${#entry_lines[@]}
+   offset=2;
+   for ((i=0; i<${num_kernels}; i++))
+   do
+       entry_line=$((${entry_lines[$i]} + $offset))
+       offset=$(($offset + 4))
+       sed -i -e "${entry_line}i\
+    //init ATMI_CONTEXT\n\
+    ld_kernarg_align(8)_width(all)_u64  \$d0, [%__printf_buffer];\n\
+    st_global_align(8)_u64 \$d0, [&ATMI_CONTEXT];\n\
+           " $TMPDIR/composite.hsail 
+   done
  
    # Add $HSAILLIB to file 
    if [ $DRYRUN ] ; then
@@ -546,7 +573,6 @@ if [ "$HSAILLIB" != "" ] ; then
       echo "        $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail"
       do_err $rc
    fi
-  
 fi
 
 #   Not depricated option -str 

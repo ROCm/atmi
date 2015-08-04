@@ -4,10 +4,8 @@ set -e
 [ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
 [ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib
 [ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/cloc/bin
-[ -z $ATMI_PATH ] && ATMI_PATH=/home/grodgers/git/atmi
-export PATH=$ATMI_PATH/bin:$PATH
-ATMI_INC=$ATMI_PATH/include
-export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$ATMI_PATH/lib:$LD_LIBRARY_PATH
+[ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=/opt/amd/atmi
+ATMI_INC=$ATMI_RUNTIME_PATH/include
 
 echo 
 if [ -f kps ] ; then rm kps ; fi

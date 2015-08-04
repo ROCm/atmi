@@ -10,7 +10,7 @@
 #define NTIMERS 13
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
 
-__kernel void nullKernel(__global atmi_task_t *thisTask ) __attribute__((atmi_kernel("nullKernelPIF","GPU")));
+__kernel void nullKernel_impl(__global atmi_task_t *thisTask ) __attribute__((atmi_kernel("nullKernel","GPU")));
 
 int main(int argc, char **argv) {
 
@@ -34,17 +34,17 @@ int main(int argc, char **argv) {
    lparm1->synchronous=ATMI_TRUE;
 
    /* Inidialize the Kernel */
-   nullKernelPIF(lparm1);
+   nullKernel(lparm1, kcalls);
 
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
-   for(int i=0; i<kcalls; i++) nullKernelPIF(lparm1); 
+   for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
 
    lparm1->synchronous=ATMI_FALSE;
    stream1->ordered=ATMI_TRUE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
-   for(int i=0; i<kcalls; i++) nullKernelPIF(lparm1); 
+   for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
    SYNC_STREAM(stream1); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
    stream1->ordered=ATMI_FALSE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[4]);
-   for(int i=0; i<kcalls; i++) nullKernelPIF(lparm1); 
+   for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
    SYNC_STREAM(stream1); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
@@ -62,8 +62,8 @@ int main(int argc, char **argv) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[5]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[6]);
    for(int i=0; i<kcalls/2; i++) {
-      nullKernelPIF(lparm1); 
-      nullKernelPIF(lparm2); 
+      nullKernel(lparm1, kcalls); 
+      nullKernel(lparm2, kcalls); 
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[5]);
    SYNC_STREAM(stream1); 
@@ -75,8 +75,8 @@ int main(int argc, char **argv) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[7]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[8]);
    for(int i=0; i<kcalls/2; i++) {
-      nullKernelPIF(lparm1); 
-      nullKernelPIF(lparm2); 
+      nullKernel(lparm1, kcalls); 
+      nullKernel(lparm2, kcalls); 
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[7]);
    SYNC_STREAM(stream1); 
@@ -90,10 +90,10 @@ int main(int argc, char **argv) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[9]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[10]);
    for(int i=0; i<kcalls/4; i++) {
-      nullKernelPIF(lparm1); 
-      nullKernelPIF(lparm2); 
-      nullKernelPIF(lparm3); 
-      nullKernelPIF(lparm4); 
+      nullKernel(lparm1, kcalls); 
+      nullKernel(lparm2, kcalls); 
+      nullKernel(lparm3, kcalls); 
+      nullKernel(lparm4, kcalls); 
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[9]);
    SYNC_STREAM(stream1); 
@@ -109,10 +109,10 @@ int main(int argc, char **argv) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[11]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[12]);
    for(int i=0; i<kcalls/4; i++) {
-      nullKernelPIF(lparm1); 
-      nullKernelPIF(lparm2); 
-      nullKernelPIF(lparm3); 
-      nullKernelPIF(lparm4); 
+      nullKernel(lparm1, kcalls); 
+      nullKernel(lparm2, kcalls); 
+      nullKernel(lparm3, kcalls); 
+      nullKernel(lparm4, kcalls); 
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[11]);
    SYNC_STREAM(stream1); 

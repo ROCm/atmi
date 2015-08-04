@@ -1,34 +1,13 @@
 ```
 Make sure to have the compiler and cloc.sh installed in /opt/amd/cloc/bin and 
-the HSA runtime in /opt/hsa as per the instructions in INSTALL.md. 
+the HSA runtime in /opt/hsa and ATMI in /opt/amd/atmi as per the instructions \
+in INSTALL.md. 
 
-#  Make a copy of the examples in your home directory 
-cp -r /opt/amd/cloc/examples ~/examples
+# Make a copy of the examples in your home directory 
+cp -r /opt/amd/atmi/examples ~/examples
 
-#For building HSA examples. 
-cd ~/examples/hsa/vector_copy  
-make 
-make test
-cd ~/examples/hsa/vector_copy_async
-make 
-make test
-
-#For SNACK examples
-cd ~/examples/snack/csquares
-./buildrun.sh
-cd ~/examples/snack/fortran
-./buildrun.sh
-cd ~/examples/snack/helloworld
-./buildrun.sh
-./buildrun.sh f
-./buildrun.sh cpp
-cd ~/examples/snack/matmul
-./buildrun.sh
-cd ~/examples/snack/multiple_cl_files
-./buildrun.sh
-cd ~/examples/snack/vector_copy
-./buildrun.sh
-cd ~/examples/snack/async_vecsum
+# Build and run the ATMI examples
+cd ~/examples/atmi/helloworld
 ./buildrun.sh
 ```
 

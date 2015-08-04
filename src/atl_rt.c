@@ -112,7 +112,7 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {
    return header;
 }
 
-hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list) {
+hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list, int barrier_flag) {
     /* This routine will enqueue a barrier packet for all dependent packets to complete
        irrespective of their stream
      */
@@ -125,7 +125,10 @@ hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_
     status_t err;
     hsa_signal_t last_signal;
     if(queue == NULL || dep_task_list == NULL || dep_task_count <= 0) return last_signal;
-    err = hsa_signal_create(0, 0, NULL, &last_signal);
+    if(barrier_flag == SNK_OR)
+        err = hsa_signal_create(1, 0, NULL, &last_signal);
+    else
+        err = hsa_signal_create(0, 0, NULL, &last_signal);
     ErrorCheck(HSA Signal Creaion, err);
     atmi_task_t **tasks = dep_task_list;
     int tasks_remaining = dep_task_count;
@@ -140,11 +143,22 @@ hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_
         /* Obtain the write index for the command queue for this stream.  */
         uint64_t index = hsa_queue_load_write_index_relaxed(queue);
         const uint32_t queueMask = queue->size - 1;
-        /* Define the barrier packet to be at the calculated queue index address.  */
         hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
-        memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
-        barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_AND, 0);
-
+        assert(sizeof(hsa_barrier_or_packet_t) == sizeof(hsa_barrier_and_packet_t));
+        if(barrier_flag == SNK_OR) {
+            /* Define the barrier packet to be at the calculated queue index address.  */
+            memset(barrier, 0, sizeof(hsa_barrier_or_packet_t));
+            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_OR, 0);
+        }
+        else {
+            /* Define the barrier packet to be at the calculated queue index address.  */
+            memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
+            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_AND, 0);
+        }
+        int j;
+        for(j = 0; j < 5; j++) {
+            barrier->dep_signal[j] = last_signal;
+        }
         /* populate all dep_signals */
         int dep_signal_id = 0;
         int iter = 0;
@@ -169,8 +183,8 @@ hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_
     return last_signal;
 }
 
-void enqueue_barrier_gpu(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list, int wait_flag) {
-    hsa_signal_t last_signal = enqueue_barrier(queue, dep_task_count, dep_task_list);
+void enqueue_barrier_gpu(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list, int wait_flag, int barrier_flag) {
+    hsa_signal_t last_signal = enqueue_barrier(queue, dep_task_count, dep_task_list, barrier_flag);
     /* Wait on completion signal if blockine */
     if(wait_flag == SNK_WAIT) {
         hsa_signal_wait_acquire(last_signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
@@ -178,8 +192,8 @@ void enqueue_barrier_gpu(hsa_queue_t *queue, const int dep_task_count, atmi_task
     }
 }
 
-void enqueue_barrier_cpu(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list, int wait_flag) {
-    hsa_signal_t last_signal = enqueue_barrier(queue, dep_task_count, dep_task_list);
+void enqueue_barrier_cpu(hsa_queue_t *queue, const int dep_task_count, atmi_task_t **dep_task_list, int wait_flag, int barrier_flag) {
+    hsa_signal_t last_signal = enqueue_barrier(queue, dep_task_count, dep_task_list, barrier_flag);
     signal_worker(queue, PROCESS_PKT);
     /* Wait on completion signal if blockine */
     if(wait_flag == SNK_WAIT) {
@@ -496,12 +510,12 @@ status_t check_change_in_device_type(atmi_stream_t *stream, hsa_queue_t *queue, 
 
             if(new_task_device_type == ATMI_DEVTYPE_GPU) {
                 if(queue) {
-                    enqueue_barrier_gpu(queue, num_required, &requires, SNK_NOWAIT);
+                    enqueue_barrier_gpu(queue, num_required, &requires, SNK_NOWAIT, SNK_AND);
                 }
             }
             else {
                 if(queue) {
-                    enqueue_barrier_cpu(queue, num_required, &requires, SNK_NOWAIT);
+                    enqueue_barrier_cpu(queue, num_required, &requires, SNK_NOWAIT, SNK_AND);
                 }
             }
         }
@@ -866,7 +880,10 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     /* For dependent child tasks, wait till all parent kernels are finished.  */
     DEBUG_PRINT("Pif %s requires %d task\n", pif_name, lparm->num_required);
     if ( lparm->num_required > 0) {
-        enqueue_barrier_cpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
+        enqueue_barrier_cpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT, SNK_AND);
+    }
+    else if ( lparm->num_needs_any > 0) {
+        enqueue_barrier_cpu(this_Q, lparm->num_needs_any, lparm->needs_any, SNK_NOWAIT, SNK_OR);
     }
     else if(lparm->synchronous == ATMI_TRUE && lparm->num_required == 0 && lparm->num_needs_any == 0
                     //&& stream->ordered == ATMI_TRUE
@@ -1057,7 +1074,10 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
     DEBUG_PRINT("Pif %s requires %d task\n", pif_name, lparm->num_required);
     if ( lparm->num_required > 0) {
-        enqueue_barrier_gpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT);
+        enqueue_barrier_gpu(this_Q, lparm->num_required, lparm->requires, SNK_NOWAIT, SNK_AND);
+    }
+    else if ( lparm->num_needs_any > 0) {
+        enqueue_barrier_gpu(this_Q, lparm->num_needs_any, lparm->needs_any, SNK_NOWAIT, SNK_OR);
     }
     else if(lparm->synchronous == ATMI_TRUE && lparm->num_required == 0 && lparm->num_needs_any == 0
                     //&& stream->ordered == ATMI_TRUE

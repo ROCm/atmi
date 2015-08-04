@@ -36,6 +36,9 @@ extern "C" {
 #define SNK_WAIT    1
 #define SNK_NOWAIT  0
 
+#define SNK_OR      1
+#define SNK_AND     0
+
 #define check(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
     printf("%s failed.\n", #msg); \

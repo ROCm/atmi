@@ -130,6 +130,7 @@ int process_packet(hsa_queue_t *queue, int id)
                                 HSA_SIGNAL_CONDITION_EQ,
                                 0, UINT64_MAX,
                                 HSA_WAIT_STATE_BLOCKED);
+                        DEBUG_PRINT("OR Signal %d completed...breaking loop\n", i);
                         break;
                     }
                 }
@@ -146,6 +147,7 @@ int process_packet(hsa_queue_t *queue, int id)
                                 HSA_SIGNAL_CONDITION_EQ,
                                 0, UINT64_MAX,
                                 HSA_WAIT_STATE_BLOCKED);
+                        DEBUG_PRINT("AND Signal %d completed...\n", i);
                     }
                 }
                 packet_store_release((uint32_t*) barrier, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_AND);

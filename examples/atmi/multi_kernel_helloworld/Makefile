@@ -1,8 +1,8 @@
-HSA_RUNTIME_PATH=/opt/hsa
-ATMILIB_RUNTIME_PATH=/opt/amd/atmi
-ATMILIB_INC=${ATMILIB_RUNTIME_PATH}/include
+HSA_RUNTIME_PATH ?= /opt/hsa
+ATMI_RUNTIME_PATH ?= /opt/amd/atmi
+ATMI_INC=${ATMI_RUNTIME_PATH}/include
 CC=gcc
-CC_FLAGS=-O3 -lelf -L${ATMILIB_RUNTIME_PATH}/lib -latmi_runtime -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -I${ATMILIB_INC} -I${HSA_RUNTIME_PATH}/include
+CC_FLAGS=-O3 -lelf -L${ATMI_RUNTIME_PATH}/lib -latmi_runtime -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include
 
 LIB=../../../lib/atmi_pifgen.so
 

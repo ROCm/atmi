@@ -10,7 +10,6 @@ using namespace std;
 
 __kernel void mainTask_gpu(__global atmi_task_t *thisTask, int numTasks) __attribute__((atmi_kernel("mainTask", "gpu")));
 
-
 // Declare decode as the PIF for the GPU kernel implementation decode_gpu
 __kernel void subTask_gpu(__global atmi_task_t *thisTask, int taskId) __attribute__((atmi_kernel("subTask", "gpu")));
 
@@ -18,7 +17,7 @@ extern "C" void print_taskId_cpu(__global atmi_task_t *thisTask, int taskId) __a
 
 extern "C" void print_taskId_cpu(__global atmi_task_t *thisTask, int taskId)
 {
-    cout << "GPU Task ID" << ": "<< taskId << endl;
+    cout << "Leaf Sub-task ID" << ": "<< taskId << endl;
 }
 
 

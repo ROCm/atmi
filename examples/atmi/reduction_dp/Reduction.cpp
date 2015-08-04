@@ -42,13 +42,8 @@ int main(int argc, char* argv[]) {
     lparm_cpu->kernel_id = 0;
     reduction(lparm_cpu, input_cpu, length >> 1);
 
-    //for(int ii = 0; ii < length; ii++)
-    //{
-        //printf("%d ", input_gpu[ii]);
-    //}
-    //printf("\n");
-    printf("gpu sum: %d\n", input_gpu[0]);
-    printf("cpu sum: %d\n", input_cpu[0]);
+    printf("GPU Sum: %d\n", input_gpu[0]);
+    printf("CPU Sum: %d\n", input_cpu[0]);
 	free(input_gpu);
     free(input_cpu);
 	return 0;

@@ -10,7 +10,7 @@
 #define NTIMERS 13
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
 
-__kernel void nullKernel(__global atmi_task_t *thisTask ) __attribute__((atmi_kernel("nullKernel","GPU")));
+__kernel void nullKernel_impl(__global atmi_task_t *thisTask ) __attribute__((atmi_kernel("nullKernel","GPU")));
 
 int main(int argc, char **argv) {
 

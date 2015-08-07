@@ -45,7 +45,8 @@
 #include "atl_profile.h"
 #include <time.h>
 #include <assert.h>
-
+#include <fstream>
+#include <iostream>
 #define NSECPERSEC 1000000000L
 
 //  set NOTCOHERENT needs this include
@@ -698,7 +699,52 @@ status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]) {
     return STATUS_SUCCESS;
 }
 
-status_t snk_gpu_add_finalized_module(const char *module) {
+status_t snk_gpu_create_executable(hsa_executable_t *executable) {
+    /* Create the empty executable.  */
+    hsa_status_t err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
+    ErrorCheck(Create the executable, err);
+    return STATUS_SUCCESS;
+}
+
+status_t snk_gpu_freeze_executable(hsa_executable_t *executable) {
+    /* Freeze the executable; it can now be queried for symbols.  */
+    hsa_status_t err = hsa_executable_freeze(*executable, "");
+    ErrorCheck(Freeze the executable, err);
+    return STATUS_SUCCESS;
+}
+
+status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, const char *module) {
+    // Open file.
+    std::ifstream file(module, std::ios::in | std::ios::binary);
+    assert(file.is_open() && file.good());
+
+    // Find out file size.
+    file.seekg(0, file.end);
+    size_t size = file.tellg();
+    file.seekg(0, file.beg);
+
+    // Allocate memory for raw code object.
+    void *raw_code_object = malloc(size);
+    assert(raw_code_object);
+
+    // Read file contents.
+    file.read((char*)raw_code_object, size);
+
+    // Close file.
+    file.close();
+
+    // Deserialize code object.
+    hsa_code_object_t code_object = {0};
+    hsa_status_t err = hsa_code_object_deserialize(raw_code_object, size, NULL, &code_object);
+    ErrorCheck(Code Object Deserialization, err);
+    assert(0 != code_object.handle);
+
+    // Free raw code object memory.
+    free(raw_code_object);
+
+    /* Load the code object.  */
+    err = hsa_executable_load_code_object(*executable, snk_gpu_agent, code_object, "");
+    ErrorCheck(Loading the code object, err);
     return STATUS_SUCCESS;
 }
 
@@ -731,6 +777,7 @@ status_t snk_gpu_build_executable(hsa_executable_t *executable) {
     /* Freeze the executable; it can now be queried for symbols.  */
     err = hsa_executable_freeze(*executable, "");
     ErrorCheck(Freeze the executable, err);
+
     return STATUS_SUCCESS;
 }
 

@@ -82,6 +82,7 @@ function usage(){
     -fort     Generate fortran function names
     -noglobs  Do not generate global functions 
     -kstats   Print out kernel statistics (post finalization)
+    -hof      HSA Offline Finalizer, does not hexdump to a string array
     -str      Depricated, create .o file needed for okra
 
    Options with values:
@@ -162,6 +163,7 @@ while [ $# -gt 0 ] ; do
       -fort) 		FORTRAN=1;;  
       -noglobs)  	NOGLOBFUNS=1;;  
       -kstats)  	KSTATS=1;;  
+      -hof)      	HOF=1;;  
       -str) 		MAKESTR=true;; 
       -hsail) 		GEN_IL=true;; 
       -opt) 		LLVMOPT=$2; shift ;; 
@@ -221,6 +223,7 @@ CMD_BRI=${CMD_BRI:-HSAILasm }
 FORTRAN=${FORTRAN:-0};
 NOGLOBFUNS=${NOGLOBFUNS:-0};
 KSTATS=${KSTATS:-0};
+HOF=${HOF:-0};
 
 RUNDATE=`date`
 
@@ -287,8 +290,8 @@ if [ -z $OUTFILE ] ; then
 #  Output file not specified so use input directory
    OUTDIR=$INDIR
 #  Make up the output file name based on last step 
-   if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
-      OUTFILE=${FNAME}.o
+   if [ $MAKESTR ] || [ $MAKEOBJ ] || [ $HOF ]; then 
+      OUTFILE=${SYMBOLNAME}.o
    else
 #     Output is snackwrap.c
       OUTFILE=${FNAME}.snackwrap.c
@@ -576,21 +579,34 @@ alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
 fi
 
 #   Not depricated option -str 
-[ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
-if [ $DRYRUN ] ; then
-   echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
-else
-   echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLBRIGHFILE
-   hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLBRIGHFILE
-   rc=$?
-   if [ $rc != 0 ] ; then 
-      echo "ERROR:  The hexdump command failed with return code $rc."
-      exit $rc
-   fi
-   echo "};" >> $FULLBRIGHFILE
-   echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLBRIGHFILE
+if [ $HOF != 0 ] ; then 
+    [ $VERBOSE ] && echo "#Step:  offline finalization of brig --> $SYMBOLNAME.o ..."
+    if [ $DRYRUN ] ; then
+        echo "hof -output $OUTFILE -brig $BRIGDIR/$BRIGNAME"
+    else
+        hof -output $OUTFILE -brig $BRIGDIR/$BRIGNAME
+        rc=$?
+        if [ $rc != 0 ] ; then 
+            echo "ERROR:  The hof command failed with return code $rc."
+            exit $rc
+        fi
+    fi
+else 
+    [ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
+    if [ $DRYRUN ] ; then
+        echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
+    else
+        echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLBRIGHFILE
+        hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLBRIGHFILE
+        rc=$?
+        if [ $rc != 0 ] ; then 
+            echo "ERROR:  The hexdump command failed with return code $rc."
+            exit $rc
+        fi
+        echo "};" >> $FULLBRIGHFILE
+        echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLBRIGHFILE
+    fi
 fi
-
 
 if [ $MAKEOBJ ] ; then 
    [ $VERBOSE ] && echo "#Step:  gcc		snackwrap.c + _brig.h --> $OUTFILE  ..."

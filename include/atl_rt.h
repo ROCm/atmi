@@ -31,7 +31,7 @@ extern "C" {
 #define SNK_MAX_GPU_QUEUES 4 
 #define SNK_MAX_FUNCTIONS   100
 
-#define SNK_MAX_TASKS 100000 // ((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
+#define SNK_MAX_TASKS 240 //((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
 
 #define SNK_WAIT    1
 #define SNK_NOWAIT  0
@@ -98,6 +98,11 @@ status_t snk_init_gpu_context();
 status_t snk_gpu_create_program();
 status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
 status_t snk_gpu_build_executable(hsa_executable_t *executable);
+
+status_t snk_gpu_create_executable(hsa_executable_t *executable);
+status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, const char *module);
+status_t snk_gpu_freeze_executable(hsa_executable_t *executable);
+
 status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,

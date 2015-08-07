@@ -46,6 +46,6 @@ $(LIBDIR)/$(LIB): $(OBJS)
 	$(CC) -g -shared $(LIB_FLAGS) -o $@ $^ 	
 #	$(AR) $(ARFLAGS) $@ $^
 
-%.o: %.c ../include/*.h
+%.o: %.c ../include/*.h include/*.h
 	$(CC) -o $@ $(INC_FLAGS) $(CFLAGS) $< $(LIB_FLAGS)
 

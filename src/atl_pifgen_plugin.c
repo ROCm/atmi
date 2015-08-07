@@ -77,7 +77,7 @@ static pretty_printer enum_kid;
 static pretty_printer g_kerneldecls;
 
 static int initialized = 0;
-
+static int g_hsa_offline_finalize = 0;
 static std::string g_output_pifdefs_filename;
 
 void append_kl_init_funs(FILE *pifFile);
@@ -151,35 +151,46 @@ std::string exec(const char* cmd) {
 }
 
 void brig2brigh(const char *brigfilename, const char *cl_module_name) {
-    std::string cmd = exec("which hexdump");
-    
-    if(cmd == "" || cmd == "ERROR") {
-        fprintf(stderr, "hexdump command is needed for converting brig to a string array, and it is not found in the PATH.\n");
-        exit(-1);
-    }
     std::string outfile(cl_module_name);
-    outfile += "_brig.h"; 
-    FILE *fp_brigh = fopen(outfile.c_str(), "w");
-    fprintf(fp_brigh, "char %s_HSA_BrigMem[] = {\n", cl_module_name); 
-
-    std::string hex_cmd("hexdump -v -e '\"0x\" 1/1 \"%02X\" \",\"' ");
-    hex_cmd += std::string(brigfilename);
-    std::string hex_str = exec(hex_cmd.c_str());
-    if(hex_str == "" || hex_str == "ERROR") {
-        fprintf(stderr, "hexdump on brig file %s failed.\n", brigfilename);
-        exit(-1);
+    if(g_hsa_offline_finalize == 1) {
+        // hof -output cl_module_name.o -brig brigfile
+        std::string hof_cmd("hof -output ");
+        hof_cmd += (std::string(outfile) + ".o -brig " + std::string(brigfilename));
+        std::string hof_str = exec(hof_cmd.c_str());
+        if(hof_str == "" || hof_str == "ERROR") {
+            fprintf(stderr, "HSA Offline Finalized failed with command: %s\n", hof_cmd.c_str());
+            exit(-1);
+        }
     }
-    
-    fprintf(fp_brigh, "%s};\n", hex_str.c_str());
-    fprintf(fp_brigh, "size_t %s_HSA_BrigMemSz = sizeof(%s_HSA_BrigMem);\n", cl_module_name, cl_module_name); 
-    fclose(fp_brigh);
+    else {
+        std::string cmd = exec("which hexdump");
+        if(cmd == "" || cmd == "ERROR") {
+            fprintf(stderr, "hexdump command is needed for converting brig to a string array, and it is not found in the PATH.\n");
+            exit(-1);
+        }
+        outfile += "_brig.h"; 
+        FILE *fp_brigh = fopen(outfile.c_str(), "w");
+        fprintf(fp_brigh, "char %s_HSA_BrigMem[] = {\n", cl_module_name); 
+
+        std::string hex_cmd("hexdump -v -e '\"0x\" 1/1 \"%02X\" \",\"' ");
+        hex_cmd += std::string(brigfilename);
+        std::string hex_str = exec(hex_cmd.c_str());
+        if(hex_str == "" || hex_str == "ERROR") {
+            fprintf(stderr, "hexdump on brig file %s failed.\n", brigfilename);
+            exit(-1);
+        }
+
+        fprintf(fp_brigh, "%s};\n", hex_str.c_str());
+        fprintf(fp_brigh, "size_t %s_HSA_BrigMemSz = sizeof(%s_HSA_BrigMem);\n", cl_module_name, cl_module_name); 
+        fclose(fp_brigh);
+    }
 }
 
 void cl2brigh(const char *clfilename, const char *symbolname) {
     std::string cmd;
     cmd.clear();
     cmd += exec("which cl2brigh.sh");
-    
+
     if(cmd == "" || cmd == "ERROR") {
         fprintf(stderr, "cl2brigh.sh script not found in the PATH.\n");
         exit(-1);
@@ -194,8 +205,10 @@ void cl2brigh(const char *clfilename, const char *symbolname) {
         strcat(cmd_c, symbolname);
         strcat(cmd_c, " ");
     }
+    if(g_hsa_offline_finalize == 1) {
+        strcat(cmd_c, "-hof ");
+    }
     strcat(cmd_c, clfilename);
-    
     DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
     int ret = system(cmd_c);
     if(WIFEXITED(ret) == 0 || WEXITSTATUS(ret) != 0) {
@@ -645,19 +658,38 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         if(g_gpu_initialized == 0) {\n\
             status_t err;\n\
             kl_init();\n\
-            snk_init_gpu_context();\n\
+            snk_init_gpu_context();\n");
+        if(g_hsa_offline_finalize == 1) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\n\
+            snk_gpu_create_executable(&g_executable);\n");
+        
+            for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+                it != g_cl_modules.end(); it++) {
+                pp_printf((pif_printers[pif_index].pifdefs), "\
+            snk_gpu_add_finalized_module(&g_executable, \"%s.o\"); \n", it->c_str());
+            }
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+            err = snk_gpu_freeze_executable(&g_executable);\n\
+            ErrorCheck(Building Executable, err); \n\
+            g_gpu_initialized = 1;\n\
+        }\n");
+        }
+        else {
+            pp_printf((pif_printers[pif_index].pifdefs), "\n\
             snk_gpu_create_program();\n");
         
-        for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+            for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
-            pp_printf((pif_printers[pif_index].pifdefs), "\
+                pp_printf((pif_printers[pif_index].pifdefs), "\
             snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
-        }
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+            }
+            pp_printf((pif_printers[pif_index].pifdefs), "\
             err = snk_gpu_build_executable(&g_executable);\n\
             ErrorCheck(Building Executable, err); \n\
             g_gpu_initialized = 1;\n\
-        }\n\
+        }\n");
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\n\
         /* Allocate the kernel argument buffer from the correct region. */\n\
         void* thisKernargAddress;\n\
         snk_gpu_memory_allocate(lparm, g_executable, \"%s\", &thisKernargAddress);\n", pif_name);
@@ -830,11 +862,13 @@ register_finish_unit (void *event_data, void *data) {
     write_cpp_warning_header(fp_pifdefs_genw);
     write_cpp_get_gpu_agent(fp_pifdefs_genw);
     write_globals(fp_pifdefs_genw);
-    /* 1) dump kernel impl declarations (fn pointers */
-    for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+    if(g_hsa_offline_finalize == 0) {
+        for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
-        fprintf(fp_pifdefs_genw, "#include \"%s_brig.h\"\n", it->c_str());
+            fprintf(fp_pifdefs_genw, "#include \"%s_brig.h\"\n", it->c_str());
+        }
     }
+    /* 1) dump kernel impl declarations (fn pointers */
     char *decl_text = (char *)pp_formatted_text(&g_kerneldecls);
     fputs (decl_text, fp_pifdefs_genw);
     pp_clear_output_area(&g_kerneldecls);
@@ -1071,6 +1105,7 @@ int plugin_init(struct plugin_name_args *plugin_info,
     g_output_pifdefs_filename.clear();
     g_cl_modules.clear();
 
+
     for(i = 0; i < plugin_info->argc; i++) { 
         if(strcmp(plugin_info->argv[i].key, "clfile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
@@ -1136,6 +1171,15 @@ int plugin_init(struct plugin_name_args *plugin_info,
         else if(strcmp(plugin_info->argv[i].key, "pifgenfile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             g_output_pifdefs_filename = std::string(plugin_info->argv[i].value);
+        }
+        else if(strcmp(plugin_info->argv[i].key, "brigfinalize") == 0) {
+            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
+            const char *should_finalize = plugin_info->argv[i].value;
+            std::string finalize_str(should_finalize);
+            std::transform(finalize_str.begin(), finalize_str.end(), finalize_str.begin(), ::tolower);
+            if(strcmp(finalize_str.c_str(), "true") == 0) {
+                g_hsa_offline_finalize = 1;
+            }
         }
         else {
             fprintf(stderr, "Unknown plugin argument pair (%s %s).\nAllowed plugin arguments are clfile, brighfile and pifgenfile.\n", plugin_info->argv[i].key, plugin_info->argv[i].value);
@@ -1248,24 +1292,42 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     atmi_klist[pif_id].kernel_packets_offset = 0;\n\n");
 
 
-
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+        if(g_hsa_offline_finalize == 1) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+    if(g_gpu_initialized == 0) { \n\
+        status_t err;\n\
+        snk_init_context(); \n\
+        snk_init_gpu_context(); \n\
+        snk_gpu_create_executable(&g_executable); \n");
+            for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+                it != g_cl_modules.end(); it++) {
+                pp_printf((pif_printers[pif_index].pifdefs), "\
+        snk_gpu_add_finalized_module(&g_executable, \"%s.o\"); \n", it->c_str());
+            }
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        err = snk_gpu_freeze_executable(&g_executable);\n\
+        ErrorCheck(Freezing Executable, err); \n\
+        g_gpu_initialized = 1;\n\
+    }\n\n");
+        }
+        else {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
     if(g_gpu_initialized == 0) { \n\
         status_t err;\n\
         snk_init_context(); \n\
         snk_init_gpu_context(); \n\
         snk_gpu_create_program(); \n");
-        for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
+            for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
-            pp_printf((pif_printers[pif_index].pifdefs), "\
+                pp_printf((pif_printers[pif_index].pifdefs), "\
         snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
-        }
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+            }
+            pp_printf((pif_printers[pif_index].pifdefs), "\
         err = snk_gpu_build_executable(&g_executable);\n\
         ErrorCheck(Building Executable, err); \n\
         g_gpu_initialized = 1;\n\
     }\n\n");
-
+        }
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if(g_cpu_initialized == 0) {\n\
         snk_init_cpu_context();\n\

@@ -82,7 +82,7 @@ int atmi_profiling_output(int tid)
         }
         buffer = buffer->next_buffer;
     }
-    close(pFile);
+    fclose(pFile);
     return 0; 
 }
 

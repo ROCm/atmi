@@ -122,7 +122,7 @@ hsa_signal_t enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atmi_
     /* Keep adding barrier packets in multiples of 5 because that is the maximum signals that 
        the HSA barrier packet can support today
      */
-    status_t err;
+    hsa_status_t err;
     hsa_signal_t last_signal;
     if(queue == NULL || dep_task_list == NULL || dep_task_count <= 0) return last_signal;
     if(barrier_flag == SNK_OR)
@@ -595,10 +595,10 @@ status_t register_stream(atmi_stream_t *stream) {
 */
 
 
-static atmi_context_t atmi_context_data;
-static atmi_context_t * atmi_context;
-static atl_context_t atlc = { .struct_initialized=0 };
-static atl_context_t * atlc_p ;
+atmi_context_t atmi_context_data;
+atmi_context_t * atmi_context = NULL;
+atl_context_t atlc = { .struct_initialized=0 };
+atl_context_t * atlc_p = NULL;
 
 void init_tasks() {
     if(atlc.g_tasks_initialized != 0) return;
@@ -633,7 +633,7 @@ status_t snk_init_context() {
 
 void init_hsa() {
     if(atlc.g_hsa_initialized == 0) {
-        status_t err = hsa_init();
+        hsa_status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
         atlc.g_hsa_initialized = 1;
     }
@@ -643,7 +643,7 @@ status_t snk_init_cpu_context() {
    
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
 
-    if(atlc.g_cpu_initialized != 0) return;
+    if(atlc.g_cpu_initialized != 0) return STATUS_SUCCESS;
      
     hsa_status_t err;
     init_hsa();
@@ -682,22 +682,28 @@ status_t snk_init_cpu_context() {
 }
 
 status_t snk_gpu_create_program() {
-    status_t err;
+    hsa_status_t err;
     /* Create hsa program.  */
     memset(&snk_hsa_program,0,sizeof(hsa_ext_program_t));
     err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &snk_hsa_program);
     ErrorCheck(Create the program, err);
+    return STATUS_SUCCESS;
 }
 
 status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]) {
-    status_t err;
+    hsa_status_t err;
     /* Add the BRIG module to hsa program.  */
     err = hsa_ext_program_add_module(snk_hsa_program, (hsa_ext_module_t)_CN__HSA_BrigMem);
     ErrorCheck(Adding the brig module to the program, err);
+    return STATUS_SUCCESS;
+}
+
+status_t snk_gpu_add_finalized_module(const char *module) {
+    return STATUS_SUCCESS;
 }
 
 status_t snk_gpu_build_executable(hsa_executable_t *executable) {
-    status_t err;
+    hsa_status_t err;
     /* Determine the agents ISA.  */
     hsa_isa_t isa;
     err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_ISA, &isa);
@@ -725,12 +731,13 @@ status_t snk_gpu_build_executable(hsa_executable_t *executable) {
     /* Freeze the executable; it can now be queried for symbols.  */
     err = hsa_executable_freeze(*executable, "");
     ErrorCheck(Freeze the executable, err);
+    return STATUS_SUCCESS;
 }
 
 status_t snk_init_gpu_context() {
 
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
-    if(atlc.g_gpu_initialized != 0) return;
+    if(atlc.g_gpu_initialized != 0) return STATUS_SUCCESS;
     
     hsa_status_t err;
 
@@ -855,7 +862,7 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
                  const char *pif_name,
                  void *kernel_args) {
     
-    DEBUG_PRINT("CPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpus, lparm->place.gpus);
+    DEBUG_PRINT("CPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
     atmi_stream_t *stream = NULL;
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
@@ -992,10 +999,26 @@ atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
+#if 0
+hsa_status_t get_all_symbol_names(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
+    uint32_t name_length;
+    hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length); 
+    printf("Symbol length found: %" PRIu32 "\n", name_length);
+    char *name = (char *)malloc(name_length + 1);
+    hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME, name); 
+    name[name_length] = 0;
+    printf("Symbol found: %s\n", name);
+    free(name);
+}
+#endif
+
 status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
                  void **thisKernargAddress) {
+    hsa_status_t err;
+    //err = hsa_executable_iterate_symbols(executable, get_all_symbol_names, NULL); 
+    //ErrorCheck(Iterating over symbols for execuatable, err);
     uint16_t i;
     int this_kernel_iter = 0;
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
@@ -1011,9 +1034,9 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                     return STATUS_ERROR;
                 }
                 const char *kernel_name = snk_kernels[i].gpu_kernel.kernel_name;
-                hsa_status_t err;
                 hsa_executable_symbol_t symbol;
                 /* Extract the symbol from the executable.  */
+                DEBUG_PRINT("Extracting symbol for kernel %s\n", kernel_name);
                 err = hsa_executable_get_symbol(executable, NULL, kernel_name, snk_gpu_agent, 0, &symbol);
                 ErrorCheck(Extract the symbol from the executable, err);
 
@@ -1044,7 +1067,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
                  void *thisKernargAddress) {
-    DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpus, lparm->place.gpus);
+    DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
     atmi_stream_t *stream = NULL;
     if(lparm->stream == NULL) {
         stream = &snk_default_stream_obj;

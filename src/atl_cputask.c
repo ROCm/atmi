@@ -121,6 +121,7 @@ int process_packet(hsa_queue_t *queue, int id)
         while(get_packet_type(packet->header) == HSA_PACKET_TYPE_VENDOR_SPECIFIC);
         switch (get_packet_type(packet->header)) {
             case HSA_PACKET_TYPE_BARRIER_OR: 
+                {
                 ;
                 hsa_barrier_or_packet_t *barrier_or = (hsa_barrier_or_packet_t *)packet; 
                 DEBUG_PRINT("Executing OR barrier\n");
@@ -135,8 +136,10 @@ int process_packet(hsa_queue_t *queue, int id)
                     }
                 }
                 packet_store_release((uint32_t*) barrier_or, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_OR);
+                }
                 break;
             case HSA_PACKET_TYPE_BARRIER_AND: 
+                {
                 ;
                 hsa_barrier_and_packet_t *barrier = (hsa_barrier_and_packet_t *)packet; 
                 DEBUG_PRINT("Executing AND barrier\n");
@@ -151,8 +154,10 @@ int process_packet(hsa_queue_t *queue, int id)
                     }
                 }
                 packet_store_release((uint32_t*) barrier, create_header(HSA_PACKET_TYPE_INVALID, 0), HSA_PACKET_TYPE_BARRIER_AND);
+                }
                 break;
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
+                {
                 ;
                 kernel_name = (char *)snk_kernels[packet->type].cpu_kernel.kernel_name;
                 uint64_t num_params = packet->arg[0];
@@ -176,6 +181,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 kernel_args[0] = (char *)&this_task;
                 switch(num_params) {
                     case 0: 
+                        {
                         ;
                         void (*function0) (void) =
                             (void (*)(void)) snk_kernels[packet->type].cpu_kernel.function;
@@ -184,8 +190,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 );
                         function0(
                                 );
+                        }
                         break;
                     case 1: 
+                        {
                         ;
                         void (*function1) (ARG_TYPE) =
                             (void (*)(ARG_TYPE)) snk_kernels[packet->type].cpu_kernel.function;
@@ -195,8 +203,10 @@ int process_packet(hsa_queue_t *queue, int id)
                         function1(
                                 kernel_args[0]
                                 );
+                        }
                         break;
                     case 2: 
+                        {
                         ;
                         void (*function2) (ARG_TYPE, ARG_TYPE) =
                             (void (*)(ARG_TYPE, ARG_TYPE)) snk_kernels[packet->type].cpu_kernel.function;
@@ -208,8 +218,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 kernel_args[0],
                                 kernel_args[1]
                                 );
+                        }
                         break;
                     case 3: 
+                        {
                         ;
                         void (*function3) (ARG_TYPE REPEAT2(ARG_TYPE)) =
                             (void (*)(ARG_TYPE REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -218,8 +230,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 kernel_args[1],
                                 kernel_args[2]
                                 );
+                        }
                         break;
                     case 4: 
+                        {
                         ;
                         void (*function4) (ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) =
                             (void (*)(ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -229,8 +243,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 kernel_args[2],
                                 kernel_args[3]
                                 );
+                        }
                         break;
                     case 5: 
+                        {
                         ;
                         void (*function5) (ARG_TYPE REPEAT4(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT4(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -241,8 +257,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 kernel_args[3],
                                 kernel_args[4]
                                 );
+                        }
                         break;
                     case 6: 
+                        {
                         ;
                         void (*function6) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -254,8 +272,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[4]
                                 ,kernel_args[5]
                                 );
+                        }
                         break;
                     case 7: 
+                        {
                         ;
                         void (*function7) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -268,8 +288,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[5]
                                 ,kernel_args[6]
                                 );
+                        }
                         break;
                     case 8: 
+                        {
                         ;
                         void (*function8) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -283,8 +305,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[6]
                                 ,kernel_args[7]
                                 );
+                        }
                         break;
                     case 9: 
+                        {
                         ;
                         void (*function9) (ARG_TYPE REPEAT8(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -299,8 +323,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[7]
                                 ,kernel_args[8]
                                 );
+                        }
                         break;
                     case 10: 
+                        {
                         ;
                         void (*function10) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -316,8 +342,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[8]
                                 ,kernel_args[9]
                                 );
+                        }
                         break;
                     case 11: 
+                        {
                         ;
                         void (*function11) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -334,8 +362,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[9]
                                 ,kernel_args[10]
                                 );
+                        }
                         break;
                     case 12: 
+                        {
                         ;
                         void (*function12) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -353,8 +383,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[10]
                                 ,kernel_args[11]
                                 );
+                        }
                         break;
                     case 13: 
+                        {
                         ;
                         void (*function13) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -373,8 +405,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[11]
                                 ,kernel_args[12]
                                 );
+                        }
                         break;
                     case 14: 
+                        {
                         ;
                         void (*function14) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -394,8 +428,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[12]
                                 ,kernel_args[13]
                                 );
+                        }
                         break;
                     case 15: 
+                        {
                         ;
                         void (*function15) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -416,8 +452,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[13]
                                 ,kernel_args[14]
                                 );
+                        }
                         break;
                     case 16: 
+                        {
                         ;
                         void (*function16) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -439,8 +477,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[14]
                                 ,kernel_args[15]
                                 );
+                        }
                         break;
                     case 17: 
+                        {
                         ;
                         void (*function17) (ARG_TYPE REPEAT16(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT16(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -463,8 +503,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[15]
                                 ,kernel_args[16]
                                 );
+                        }
                         break;
                     case 18: 
+                        {
                         ;
                         void (*function18) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -488,8 +530,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[16]
                                 ,kernel_args[17]
                                 );
+                        }
                         break;
                     case 19: 
+                        {
                         ;
                         void (*function19) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -514,8 +558,10 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[17]
                                 ,kernel_args[18]
                                 );
+                        }
                         break;
                     case 20: 
+                        {
                         ;
                         void (*function20) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
                             (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
@@ -541,6 +587,7 @@ int process_packet(hsa_queue_t *queue, int id)
                                 ,kernel_args[18]
                                 ,kernel_args[19]
                                 );
+                        }
                         break;
                     default: 
 
@@ -556,6 +603,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 }
                 free(kernel_args);
                 //free(kernel_args_ptr);
+                }
                 break;
         }
         if (packet->completion_signal.handle != 0) {
@@ -730,7 +778,6 @@ agent_fini()
 }
 
 hsa_signal_t *get_worker_sig(hsa_queue_t *queue) {
-    DEBUG_PRINT("Signaling work %d\n", signal);
     int id;
     for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
         if(agent[id].queue == queue) break;

@@ -104,11 +104,13 @@ fprintf(fp, "#ifdef __cplusplus \n\
 
 void write_globals(FILE *fp) {
 fprintf(fp, "\
+static int g_gpu_initialized = 0;\n\
+static int g_cpu_initialized = 0;\n\
 static hsa_executable_t g_executable;\n\
 static int num_pif = 0;\n\
 atmi_klist_t atmi_klist[1000];\n\n\
 #define ErrorCheck(msg, status) \\\n\
-if (status != HSA_STATUS_SUCCESS) { \\\n\
+if (status != STATUS_SUCCESS) { \\\n\
    printf(\"%%s failed.\\n\", #msg); \\\n\
 } \n\n\
 void kl_init(); \n\n\
@@ -584,9 +586,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     } \n\
     atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
     if(devtype == ATMI_DEVTYPE_CPU) {\n\
-        if(atlc.g_cpu_initialized == 0) { \n\
+        if(g_cpu_initialized == 0) { \n\
             snk_init_cpu_context();\n\
-            atlc.g_cpu_initialized = 1;\n\
+            g_cpu_initialized = 1;\n\
         }\n",
         pif_name, pif_name,
         pif_name,
@@ -640,7 +642,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     } \n\
     else if(devtype == ATMI_DEVTYPE_GPU) {\n\
-        if(atlc.g_gpu_initialized == 0) {\n\
+        if(g_gpu_initialized == 0) {\n\
+            status_t err;\n\
             kl_init();\n\
             snk_init_gpu_context();\n\
             snk_gpu_create_program();\n");
@@ -651,8 +654,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
-            snk_gpu_build_executable(&g_executable);\n\
-            atlc.g_gpu_initialized = 1;\n\
+            err = snk_gpu_build_executable(&g_executable);\n\
+            ErrorCheck(Building Executable, err); \n\
+            g_gpu_initialized = 1;\n\
         }\n\
         /* Allocate the kernel argument buffer from the correct region. */\n\
         void* thisKernargAddress;\n\
@@ -1246,7 +1250,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(atlc.g_gpu_initialized == 0) { \n\
+    if(g_gpu_initialized == 0) { \n\
+        status_t err;\n\
         snk_init_context(); \n\
         snk_init_gpu_context(); \n\
         snk_gpu_create_program(); \n");
@@ -1256,14 +1261,15 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        snk_gpu_build_executable(&g_executable);\n\
-        atlc.g_gpu_initialized = 1;\n\
+        err = snk_gpu_build_executable(&g_executable);\n\
+        ErrorCheck(Building Executable, err); \n\
+        g_gpu_initialized = 1;\n\
     }\n\n");
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(atlc.g_cpu_initialized == 0) {\n\
+    if(g_cpu_initialized == 0) {\n\
         snk_init_cpu_context();\n\
-        atlc.g_cpu_initialized = 1;\n\
+        g_cpu_initialized = 1;\n\
     }\n\n");
 
         pp_printf((pif_printers[pif_index].pifdefs), "\

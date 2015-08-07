@@ -84,8 +84,9 @@ typedef struct atmi_place_s {
 typedef struct atmi_context_s {
    int                atmi_id;        /* ATMI version information             */
 } atmi_context_t;
-static atmi_context_t* atmi_context;
-static atmi_context_t  atmi_context_data;;
+extern atmi_context_t* atmi_context;
+// Why are we exposing the object AND the pointer to the programmer?
+// extern atmi_context_t  atmi_context_data;;
 
 /*----------------------------------------------------------------------------*/
 /*                                                                            */

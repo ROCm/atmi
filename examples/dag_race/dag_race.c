@@ -16,10 +16,10 @@ extern void finishKernel(atmi_task_t*thisTask, const int*winner,
    __attribute__((atmi_kernel("finish","CPU")));
 
 /*  Define two CPU kernels, GPU kernel is defined in racers.cl */
-extern  void startKernel(atmi_task_t*thisTask ){
+extern void startKernel(atmi_task_t*thisTask ){
 }
 
-extern  void finishKernel(atmi_task_t*thisTask, const int*winner, 
+extern void finishKernel(atmi_task_t*thisTask, const int*winner, 
    const int*loser, const int*finishers) {
    printf("Winner is %d\n",*winner);
    printf("Loser is  %d\n",*loser);

@@ -5,6 +5,7 @@
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
  * --------------------------------------------------------------------------------- */
+long int get_nanosecs( struct timespec start_time, struct timespec end_time);
 typedef void* ARG_TYPE;
 #define COMMA ,
 #define REPEAT(name)   COMMA name
@@ -72,9 +73,14 @@ status_t register_stream(atmi_stream_t *stream);
 void set_task_state(atmi_task_t *t, atmi_state_t state);
 void set_task_metrics(atmi_task_t *task, atmi_devtype_t devtype, boolean profilable);
 
+void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest);
 uint16_t create_header(hsa_packet_type_t type, int barrier);
+hsa_signal_t* get_worker_sig(hsa_queue_t *queue);
 
-#if 1
+#ifdef __cplusplus
+extern "C" {
+#endif 
+
 typedef struct hsa_amd_profiling_dispatch_time_s { 
     uint64_t start; 
     uint64_t end; 
@@ -84,8 +90,7 @@ hsa_status_t HSA_API hsa_amd_profiling_get_dispatch_time(
     hsa_agent_t agent, hsa_signal_t signal,
     hsa_amd_profiling_dispatch_time_t* time);
 
-
-hsa_signal_t* get_worker_sig(hsa_queue_t *queue);
-
-#endif 
+#ifdef __cplusplus
+}
+#endif //__cplusplus
 #endif //__SNK_INTERNAL

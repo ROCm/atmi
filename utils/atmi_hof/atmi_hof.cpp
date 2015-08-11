@@ -194,11 +194,12 @@ main (int argc, char **argv)
     hsa_status_t err;
     err = hsa_init();
     ErrorCheck(HSA Init, err);
+    /*
     printf ("Brig File = %s\nHSAIL File = %s\nOUTPUT_FILE = %s\n",
             arguments.brig_file,
             arguments.hsail_file,
             arguments.output_file);
-
+    */
     /* 
      * Iterate over the agents and pick the gpu agent using 
      * the get_gpu_agent callback.
@@ -214,7 +215,6 @@ main (int argc, char **argv)
     char name[64] = { 0 };
     err = hsa_agent_get_info(agent, HSA_AGENT_INFO_NAME, name);
     ErrorCheck(Querying the agent name, err);
-    printf("The agent name is %s.\n", name);
 
     /*
      * Create hsa program.
@@ -275,12 +275,10 @@ main (int argc, char **argv)
     ErrorCheck(Destroying the code object, err);
 
     err = hsa_shut_down();
-    printf("Finished Loading module without errors!\n");
     ErrorCheck(HSA Finalize, err);
 
     free(serialized_code_object);
     free((char *)module);
 
-    printf("Finished HOF without errors!\n");
     exit(0);
 }

@@ -153,9 +153,9 @@ std::string exec(const char* cmd) {
 void brig2brigh(const char *brigfilename, const char *cl_module_name) {
     std::string outfile(cl_module_name);
     if(g_hsa_offline_finalize == 1) {
-        // hof -output cl_module_name.o -brig brigfile
-        std::string hof_cmd("hof -output ");
-        hof_cmd += (std::string(outfile) + ".o -brig " + std::string(brigfilename));
+        // atmi_hof -o cl_module_name.o -b brigfile
+        std::string hof_cmd("atmi_hof -o ");
+        hof_cmd += (std::string(outfile) + ".o -b " + std::string(brigfilename));
         std::string hof_str = exec(hof_cmd.c_str());
         if(hof_str == "" || hof_str == "ERROR") {
             fprintf(stderr, "HSA Offline Finalized failed with command: %s\n", hof_cmd.c_str());
@@ -205,8 +205,11 @@ void cl2brigh(const char *clfilename, const char *symbolname) {
         strcat(cmd_c, symbolname);
         strcat(cmd_c, " ");
     }
+    //if(some_condition) {
+    //strcat(cmd_c, "-rp /opt/hsa.1_1T ");
+    //}
     if(g_hsa_offline_finalize == 1) {
-        strcat(cmd_c, "-hof ");
+        strcat(cmd_c, " -hof ");
     }
     strcat(cmd_c, clfilename);
     DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
@@ -1172,17 +1175,17 @@ int plugin_init(struct plugin_name_args *plugin_info,
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             g_output_pifdefs_filename = std::string(plugin_info->argv[i].value);
         }
-        else if(strcmp(plugin_info->argv[i].key, "brigfinalize") == 0) {
+        else if(strcmp(plugin_info->argv[i].key, "jitcompile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             const char *should_finalize = plugin_info->argv[i].value;
             std::string finalize_str(should_finalize);
             std::transform(finalize_str.begin(), finalize_str.end(), finalize_str.begin(), ::tolower);
-            if(strcmp(finalize_str.c_str(), "true") == 0) {
+            if(strcmp(finalize_str.c_str(), "false") == 0) {
                 g_hsa_offline_finalize = 1;
             }
         }
         else {
-            fprintf(stderr, "Unknown plugin argument pair (%s %s).\nAllowed plugin arguments are clfile, brighfile and pifgenfile.\n", plugin_info->argv[i].key, plugin_info->argv[i].value);
+            fprintf(stderr, "Unknown plugin argument pair (%s %s).\nAllowed plugin arguments are clfile, brigfile, jitcompile and pifgenfile.\n", plugin_info->argv[i].key, plugin_info->argv[i].value);
             exit(-1);
         }
     }

@@ -580,11 +580,11 @@ fi
 
 #   Not depricated option -str 
 if [ $HOF != 0 ] ; then 
-    [ $VERBOSE ] && echo "#Step:  offline finalization of brig --> $SYMBOLNAME.o ..."
+    [ $VERBOSE ] && echo "#Step:  offline finalization of brig --> $OUTFILE ..."
     if [ $DRYRUN ] ; then
-        echo "hof -output $OUTFILE -brig $BRIGDIR/$BRIGNAME"
+        echo " LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME "
     else
-        hof -output $OUTFILE -brig $BRIGDIR/$BRIGNAME
+        LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME 
         rc=$?
         if [ $rc != 0 ] ; then 
             echo "ERROR:  The hof command failed with return code $rc."

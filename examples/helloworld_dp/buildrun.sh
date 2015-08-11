@@ -25,5 +25,5 @@ g++ -o hello HelloWorld.o pifdefs.cpp -g -O3 -lelf -L$ATMI_RUNTIME_PATH/lib -lat
 
 #  Execute
 echo
-echo ./hello 
+echo LD_LIBRARY_PATH=$HSA_TEST_RUNTIME_PATH/lib:$LD_LIBRARY_PATH ./hello 
 LD_LIBRARY_PATH=$HSA_TEST_RUNTIME_PATH/lib:$LD_LIBRARY_PATH ./hello 

@@ -584,7 +584,8 @@ if [ $HOF != 0 ] ; then
     if [ $DRYRUN ] ; then
         echo " LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME "
     else
-        LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME 
+        atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME 
+        #LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME 
         rc=$?
         if [ $rc != 0 ] ; then 
             echo "ERROR:  The hof command failed with return code $rc."

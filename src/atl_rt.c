@@ -713,7 +713,8 @@ status_t snk_gpu_freeze_executable(hsa_executable_t *executable) {
     return STATUS_SUCCESS;
 }
 
-status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, const char *module) {
+status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, char *module, const size_t module_sz) {
+#if 0
     // Open file.
     std::ifstream file(module, std::ios::in | std::ios::binary);
     assert(file.is_open() && file.good());
@@ -741,7 +742,14 @@ status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, const char *
 
     // Free raw code object memory.
     free(raw_code_object);
+#else
+    // Deserialize code object.
+    hsa_code_object_t code_object = {0};
+    hsa_status_t err = hsa_code_object_deserialize(module, module_sz, NULL, &code_object);
+    ErrorCheck(Code Object Deserialization, err);
+    assert(0 != code_object.handle);
 
+#endif
     /* Load the code object.  */
     err = hsa_executable_load_code_object(*executable, snk_gpu_agent, code_object, "");
     ErrorCheck(Loading the code object, err);

@@ -100,7 +100,8 @@ status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
 status_t snk_gpu_build_executable(hsa_executable_t *executable);
 
 status_t snk_gpu_create_executable(hsa_executable_t *executable);
-status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, const char *module);
+status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, char *module, 
+                const size_t module_sz);
 status_t snk_gpu_freeze_executable(hsa_executable_t *executable);
 
 status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,

@@ -71,38 +71,35 @@ function usage(){
    Usage: cl2brigh.sh [ options ] filename.cl
 
    Options without values:
-    -c        Compile generated source code to create .o file
-    -hsail    Generate text hsail for manual optimization
-    -version  Display version of snack then exit
+    -version  Display version of this tool and exit
     -v        Verbose messages
     -vv       Get additional verbose messages from cloc.sh
     -n        Dryrun, do nothing, show commands that would execute
     -h        Print this help message
     -k        Keep temporary files
-    -fort     Generate fortran function names
-    -noglobs  Do not generate global functions 
-    -kstats   Print out kernel statistics (post finalization)
-    -hof      HSA Offline Finalizer, does not hexdump to a string array
-    -str      Depricated, create .o file needed for okra
+    -hof      Use HSA Offline Finalizer to create machine ISA 
 
    Options with values:
     -opt      <LLVM opt>     Default=2, passed to cloc.sh to build HSAIL 
-    -gccopt   <gcc opt>      Default=2, gcc optimization for snack wrapper
     -t        <tempdir>      Default=/tmp/atmi_$$, Temp dir for files
     -s        <symbolname>   Default=filename 
     -p        <path>         $ATMI_PATH or <sdir> if ATMI_PATH not set
                              <sdir> is actual directory of cl2brigh.sh
     -cp       <path>         $HSA_LLVM_PATH or /opt/amd/cloc/bin
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
-    -o        <outfilename>  Default=<filename>.<ft> 
-    -hsaillib <hsail filename>  
+    -o        <outfilename>  Default=<file>_brig.h or <file>_hof.h
+    -hsaillib <hsail file>   Add HSAIL library to kernel code 
     -clopts   <compiler opts>  Default="-cl-std=CL2.0"
 
    Examples:
-    cl2brigh.sh my.cl              /* create my.snackwrap.c and my.h    */
-    cl2brigh.sh -c my.cl           /* gcc compile to create  my.o       */
-    cl2brigh.sh -hsail my.cl       /* create hsail and snackwrap.c      */
-    cl2brigh.sh -c -hsail my.cl    /* create hsail snackwrap.c and .o   */
+    cl2brigh.sh my.cl              /* create my_brig.h                  */
+    cl2brigh.sh -hof my.cl         /* create my_hof.h (finalized)       */
+    cl2brigh.sh -hsaillib mylib.hsail my.cl  
+                                   /* creates my_brig.h, a composition  *
+                                    * of my.cl & mylib.hsail            */
+    cl2brigh.sh -hof -hsaillib mylib.hsail my.cl  
+                                   /* creates my_hof.h, a composition   *
+                                    * of my.cl & mylib.hsail (finalized)*/
     cl2brigh.sh -t /tmp/foo my.cl  /* will automatically set -k         */
 
    You may set environment variables ATMI_PATH,HSA_LLVM_PATH, or HSA_RUNTIME_PATH, 
@@ -153,21 +150,11 @@ function getdname(){
 #  Argument processing
 while [ $# -gt 0 ] ; do 
    case "$1" in 
-      -q)               QUIET=true;;
-      --quiet)          QUIET=true;;
       -k) 		KEEPTDIR=true;; 
       --keep) 		KEEPTDIR=true;; 
       -n) 		DRYRUN=true;; 
-      -n) 		DRYRUN=true;;
-      -c) 		MAKEOBJ=true;;  
-      -fort) 		FORTRAN=1;;  
-      -noglobs)  	NOGLOBFUNS=1;;  
-      -kstats)  	KSTATS=1;;  
-      -hof)      	HOF=1;;  
-      -str) 		MAKESTR=true;; 
-      -hsail) 		GEN_IL=true;; 
+      -hof)      	HOF=true;;  
       -opt) 		LLVMOPT=$2; shift ;; 
-      -gccopt) 		GCCOPT=$2; shift ;; 
       -s) 		SYMBOLNAME=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
       -t) 		TMPDIR=$2; shift ;; 
@@ -215,21 +202,11 @@ ATMI_PATH=${ATMI_PATH:-$sdir/..}
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
 
 #  Set Default values
-GCCOPT=${GCCOPT:-3}
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
 CMD_BRI=${CMD_BRI:-HSAILasm }
 
-FORTRAN=${FORTRAN:-0};
-NOGLOBFUNS=${NOGLOBFUNS:-0};
-KSTATS=${KSTATS:-0};
-HOF=${HOF:-0};
-
 RUNDATE=`date`
-
-#We assume that the HSAIL_HLC_Stable always generates dummy arguments
-GENW_ADD_DUMMY=t
-export GENW_ADD_DUMMY
 
 filetype=${LASTARG##*\.}
 if [ "$filetype" != "cl" ]  ; then 
@@ -250,18 +227,6 @@ if [ ! -d $HSA_LLVM_PATH ] ; then
    echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
 fi
-if [ $MAKEOBJ ] && [ ! -d "$HSA_RUNTIME_PATH/lib" ] && [ ! -d "$ATMI_PATH/lib" ] ; then 
-   echo "ERROR:  cl2brigh.sh -c option needs HSA_RUNTIME_PATH and ATMI_PATH"
-   echo "        Missing directory $HSA_RUNTIME_PATH/lib or $ATMI_PATH/lib"
-   echo "        Set env variable HSA_RUNTIME_PATH or use -rp option"
-   echo "        Set env variable ATMI_PATH or use -p option"
-   exit $DEADRC
-fi
-if [ $MAKEOBJ ] && [ ! -f $HSA_RUNTIME_PATH/include/hsa.h ] ; then 
-   echo "ERROR:  Missing $HSA_RUNTIME_PATH/include/hsa.h"
-   echo "        cl2brigh.sh requires HSA includes"
-   exit $DEADRC
-fi
 
 [ -z $HSAILLIB  ] && HSAILLIB=$ATMI_PATH/bin/builtins-hsail.hsail
 if [ "$HSAILLIB" != "" ] ; then 
@@ -269,11 +234,6 @@ if [ "$HSAILLIB" != "" ] ; then
       echo "ERROR:  The HSAIL file $HSAILLIB does not exist."
       exit $DEADRC
    fi
-fi
-if [ $MAKEOBJ ] && [ ! -f $ATMI_PATH/include/atmi.h ] ; then 
-   echo "ERROR:  Missing $ATMI_PATH/include/atmi.h"
-   echo "        cl2brigh.sh requires HSA includes"
-   exit $DEADRC
 fi
 
 # Parse LASTARG for directory, filename, and symbolname
@@ -284,17 +244,17 @@ CLNAME=${LASTARG##*/}
 FNAME=`echo "$CLNAME" | cut -d'.' -f1`
 SYMBOLNAME=${SYMBOLNAME:-$FNAME}
 BRIGHFILE="${SYMBOLNAME}_brig.h"
+HOFHFILE="${SYMBOLNAME}_hof.h"
 OTHERCLOCFLAGS="-opt $LLVMOPT"
 
 if [ -z $OUTFILE ] ; then 
 #  Output file not specified so use input directory
    OUTDIR=$INDIR
 #  Make up the output file name based on last step 
-   if [ $MAKESTR ] || [ $MAKEOBJ ] || [ $HOF ]; then 
-      OUTFILE=${SYMBOLNAME}.o
+   if [ $HOF ]; then 
+      OUTFILE=$HOFHFILE
    else
-#     Output is snackwrap.c
-      OUTFILE=${FNAME}.snackwrap.c
+      OUTFILE=$BRIGHFILE
    fi
 else 
 #  Use the specified OUTFILE.  Bad idea for snack
@@ -306,25 +266,7 @@ if [ $CLOCVERBOSE ] ; then
    VERBOSE=true
 fi
 
-if [ $GEN_IL ] ; then
-#   -hsail specified.  This should be step 1 of HSAIL optimization process 
-   if [ $HSAIL_OPT_STEP2 ] ; then 
-      echo "ERROR:  Step 2 of manual HSAIL optimization process for file: $FNAME.hsail "
-      echo "        For step 2, do not use the -hsail option."
-      echo "        -hsail is used for step 1 to create hsail."
-      exit $DEADRC
-   fi
-   OTHERCLOCFLAGS="$OTHERCLOCFLAGS -hsail"
-fi
-
 if [ $HSAIL_OPT_STEP2 ] ; then 
-   if [ ! -f $INDIR/$FNAME.snackwrap.c ] ; then 
-      echo "        "
-      echo "ERROR:  Step 2 of manual HSAIL optimization process requires: $INDIR/$FNAME.snackwrap.c"
-      echo "        Complete step 1 by building files with \"snack -c -hsail $FNAME.cl \" command "
-      echo "        "
-      exit $DEADRC
-   fi
    [ $VERBOSE ] && echo " " && echo "#WARN:  ***** Step 2 of manual HSAIL optimization process detected. ***** "
 fi
 
@@ -354,60 +296,17 @@ fi
 if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then 
    echo "ERROR:  The output directory $OUTDIR does not exist"
    exit $DEADRC
-fi 
-
-# Snack only needs to compile if -c or -str specified
-if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
-   CMD_GCC=`which gcc`
-   if [ -z "$CMD_GCC" ] ; then  
-      echo "ERROR:  No gcc compiler found."
-      exit $DEADRC
-   fi
 fi
-
-if [ $MAKESTR ] && [ $GEN_IL ] ; then 
-   echo "ERROR:  The use of -hsail with -str is depricated "
-   echo "        In the future , -str will be completely depricated"
-   exit $DEADRC
-fi 
+FULLOUTFILE=$OUTDIR/$OUTFILE
 
 [ $VERBOSE ] && echo "#Info:  Version:	cl2brigh.sh $PROGVERSION" 
-
-if [ $HSAIL_OPT_STEP2 ] ; then 
-   CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
-   [ $VERBOSE ] && echo "#Info:  Input Files:	"
-   [ $VERBOSE ] && echo "#           HSAIL file:	   $INDIR/$FNAME.hsail"
-#   [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
-#   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
-   [ $VERBOSE ] && echo "#Info:  Output Files:"
-   FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
-   [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
+[ $VERBOSE ] && echo "#Info:  Input Files:	"
+[ $VERBOSE ] && echo "#           File:	       $INDIR/$CLNAME"
+[ $VERBOSE ] && echo "#Info:  Output Files:"
+if [ $HOF ] ; then 
+   [ $VERBOSE ] && echo "#           HOF incl:	   $FULLOUTFILE"
 else
-   [ $VERBOSE ] && echo "#Info:  Input File:	"
-   [ $VERBOSE ] && echo "#           CL file:	   $INDIR/$CLNAME"
-   [ $VERBOSE ] && echo "#Info:  Output Files:"
-   if [ $GEN_IL ] ; then 
-      [ $VERBOSE ] && echo "#WARN:  ***** Step 1 of manual HSAIL optimization process detected. ***** "
-      CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
-      FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
-#      [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
-      [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
-      [ $VERBOSE ] && echo "#           HSAIL:	   $OUTDIR/$FNAME.hsail"
-   else
-      if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
-         FULLBRIGHFILE=$TMPDIR/$BRIGHFILE
-         CWRAPFILE=$TMPDIR/$FNAME.snackwrap.c
-      else
-         CWRAPFILE=$OUTDIR/$FNAME.snackwrap.c
-         FULLBRIGHFILE=$OUTDIR/$BRIGHFILE
-#         [ $VERBOSE ] && echo "#           Wrapper:       $CWRAPFILE"
-         [ $VERBOSE ] && echo "#           Brig incl:	   $FULLBRIGHFILE"
-      fi
-   fi
-   if [ $MAKESTR ] || [ $MAKEOBJ ] ; then 
-      [ $VERBOSE ] && echo "#           Object:	   $OUTDIR/$OUTFILE"
-   fi
-#   [ $VERBOSE ] && echo "#           Headers:	   $OUTDIR/$FNAME.h"
+   [ $VERBOSE ] && echo "#           BRIG incl:	   $FULLOUTFILE"
 fi
 
 [ $VERBOSE ] && echo "#Info:  Run date:	$RUNDATE" 
@@ -415,17 +314,13 @@ fi
 [ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  Runtime:	$HSA_RUNTIME_PATH"
 [ $MAKEOBJ ] && [ $VERBOSE ] && echo "#Info:  ATMI Runtime:	$ATMI_PATH"
 [ $KEEPTDIR ] && [ $VERBOSE ] && echo "#Info:  Temp dir:	$TMPDIR" 
-if [ $MAKESTR ] || [ $MAKEOBJ ] ; then  
-   [ $VERBOSE ] && echo "#Info:  gcc loc:	$CMD_GCC" 
-fi
 rc=0
 
 if [ $HSAIL_OPT_STEP2 ] ; then 
 #  This is step 2 of manual HSAIL
    BRIGDIR=$TMPDIR
    BRIGNAME=$FNAME.brig
-   CWRAPFILE=$INDIR/$FNAME.snackwrap.c
-   [ $VERBOSE ] && echo "#Step:  gcc		hsail --> brig  ..."
+   [ $VERBOSE ] && echo "#Step:  		hsail --> brig  ..."
    if [ $DRYRUN ] ; then
       echo "$HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail"
    else
@@ -441,25 +336,8 @@ if [ $HSAIL_OPT_STEP2 ] ; then
 else
   
 #  Not step 2, do normal steps
-#   [ $VERBOSE ] && echo cp $INDIR/$CLNAME $TMPDIR/updated.cl
+[ $VERBOSE ] && echo "Step:   Copy:           $INDIR/$CLNAME --> $TMPDIR/updated.cl"
 cp $INDIR/$CLNAME $TMPDIR/updated.cl
-
-#echo $HSA_LLVM_PATH/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
-#$ATMI_PATH/bin/cl_genw.sh $INDIR/$CLNAME $ATMI_PATH $TMPDIR $TMPDIR/updated.cl
-
-#   [ $VERBOSE ] && echo "#Step:  genw  		cl --> $FNAME.snackwrap.c + $FNAME.h ..."
-#   if [ $DRYRUN ] ; then
-#      echo "$ATMI_PATH/bin/atmi_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_PATH" 
-#   else
-#      echo "$ATMI_PATH/bin/atmi_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_PATH" 
-#      $ATMI_PATH/bin/atmi_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_PATH
-#      rc=$?
-#      if [ $rc != 0 ] ; then 
-#         echo "ERROR:  The following command failed with return code $rc."
-#         echo "        $ATMI_PATH/bin/atmi_genw.sh $SYMBOLNAME $INDIR/$CLNAME $PROGVERSION $TMPDIR $CWRAPFILE $OUTDIR/$FNAME.h $TMPDIR/updated.cl $FORTRAN $NOGLOBFUNS $ATMI_PATH"
-#         do_err $rc
-#      fi
-#   fi
 
 #  Call cloc to generate brig
    if [ $CLOCVERBOSE ] ; then 
@@ -479,53 +357,11 @@ cp $INDIR/$CLNAME $TMPDIR/updated.cl
          echo "        $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
          do_err $rc
       fi
-      if [ $GEN_IL ] ; then 
-         cp $TMPDIR/updated.hsail $OUTDIR/$FNAME.hsail
-         if [ "$HSAILLIB" != "" ] ; then 
-            cat $HSAILLIB >> $OUTDIR/$FNAME.hsail
-         fi
-      fi
    fi
    BRIGDIR=$TMPDIR
    BRIGNAME=updated.brig
 
 fi
-
-#  This section will be depricated with Okra and -str option
-if [ $MAKESTR ] ; then 
-      [ $VERBOSE ] && echo "#Step:  hexdump  	brig --> c char array ..."
-      if [ $DRYRUN ] ; then
-         echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $TMPDIR/$BRIGNAME "
-      else
-         echo "#include <stddef.h>" > $TMPDIR/$FNAME.c
-         echo "char ${SYMBOLNAME}[] = {" >> $TMPDIR/$FNAME.c
-         hexdump -v -e '"0x" 1/1 "%02X" ","' $TMPDIR/$BRIGNAME >> $TMPDIR/$FNAME.c
-         rc=$?
-         if [ $rc != 0 ] ; then 
-            echo "ERROR:  The hexdump command failed with return code $rc."
-            do_err $rc
-         fi
-         echo "};" >> $TMPDIR/$FNAME.c
-#        okra needs the size of brig for createKernelFromBinary()
-         echo "size_t ${SYMBOLNAME}sz = sizeof($SYMBOLNAME);" >> $TMPDIR/$FNAME.c
-      fi
-      [ $VERBOSE ] && echo "#Step:  gcc  	 	c char array --> $OUTFILE ..."
-      if [ $DRYRUN ] ; then
-         echo $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
-      else
-         $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c
-         rc=$?
-         if [ $rc != 0 ] ; then 
-            echo "ERROR:  The following command failed with return code $rc."
-            echo "        $CMD_GCC -O$GCCOPT -o $OUTDIR/$OUTFILE -c $TMPDIR/$FNAME.c"
-            do_err $rc
-         fi
-#        Make the header file
-         echo "extern char ${SYMBOLNAME}[];" > $OUTDIR/$FNAME.h
-         echo "extern size_t ${SYMBOLNAME}sz;" >> $OUTDIR/$FNAME.h
-      fi
-
-else
 
 if [ "$HSAILLIB" != "" ] ; then 
    # disassemble brig $BRIGDIR/$BRIGNAME to composite.hsail
@@ -578,60 +414,44 @@ alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
    fi
 fi
 
-#   Not depricated option -str 
-if [ $HOF != 0 ] ; then 
+#   HSA Offline Finalizer 
+if [ $HOF ] ; then 
     [ $VERBOSE ] && echo "#Step:  offline finalization of brig --> $OUTFILE ..."
     if [ $DRYRUN ] ; then
-        echo " LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME "
+        echo "atmi_hof -o $BRIGDIR/$FNAME.hof -b $BRIGDIR/$BRIGNAME "
     else
-        atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME 
-        #LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $OUTFILE -b $BRIGDIR/$BRIGNAME 
+        atmi_hof -o $BRIGDIR/$FNAME.hof -b $BRIGDIR/$BRIGNAME 
+        #LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $BRIGDIR/$FNAME.hof -b $BRIGDIR/$BRIGNAME 
         rc=$?
         if [ $rc != 0 ] ; then 
             echo "ERROR:  The hof command failed with return code $rc."
             exit $rc
         fi
+        echo "char ${SYMBOLNAME}_HSA_HofMem[] = {" > $FULLOUTFILE
+        hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$FNAME.hof >> $FULLOUTFILE
+        rc=$?
+        if [ $rc != 0 ] ; then 
+            echo "ERROR:  The hexdump command failed with return code $rc."
+            exit $rc
+        fi
+        echo "};" >> $FULLOUTFILE
+        echo "size_t ${SYMBOLNAME}_HSA_HofMemSz = sizeof(${SYMBOLNAME}_HSA_HofMem);" >> $FULLOUTFILE
     fi
 else 
     [ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
     if [ $DRYRUN ] ; then
         echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
     else
-        echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLBRIGHFILE
-        hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLBRIGHFILE
+        echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLOUTFILE
+        hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLOUTFILE
         rc=$?
         if [ $rc != 0 ] ; then 
             echo "ERROR:  The hexdump command failed with return code $rc."
             exit $rc
         fi
-        echo "};" >> $FULLBRIGHFILE
-        echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLBRIGHFILE
+        echo "};" >> $FULLOUTFILE
+        echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLOUTFILE
     fi
-fi
-
-if [ $MAKEOBJ ] ; then 
-   [ $VERBOSE ] && echo "#Step:  gcc		snackwrap.c + _brig.h --> $OUTFILE  ..."
-   if [ $DRYRUN ] ; then
-      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
-   else
-      echo "$CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
-      $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE
-      rc=$?
-      if [ $rc != 0 ] ; then 
-         echo "ERROR:  The following command failed with return code $rc."
-         echo "        $CMD_GCC -O$GCCOPT -I$TMPDIR -I$INDIR -I$ATMI_PATH/include -I$HSA_RUNTIME_PATH/include -o $OUTDIR/$OUTFILE -c $CWRAPFILE"
-        do_err $rc
-      fi
-   fi
-   if [ $KSTATS == 1 ] ; then 
-      export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib
-      $CMD_GCC -o $TMPDIR/kstats -O$GCCOPT -I$TMPDIR -I$INDIR -I$HSA_RUNTIME_PATH/include $OUTDIR/$OUTFILE $TMPDIR/kstats.c -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 
-      $TMPDIR/kstats
-   fi 
-
-fi
-
-# end of NOT -str
 fi
 
 # cleanup
@@ -643,7 +463,6 @@ if [ ! $KEEPTDIR ] ; then
    fi
 fi
 
-[ $GEN_IL ] && [ $VERBOSE ] && echo " " &&  echo "#WARN:  ***** For Step 2, Make hsail updates then run \"cl2brigh.sh -c $FNAME.hsail \" ***** "
 [ $VERBOSE ] && echo "#Info:  Done"
 
 exit 0

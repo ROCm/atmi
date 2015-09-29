@@ -675,7 +675,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
 #endif
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
-        return snk_cpu_kernel(lparm, \n\
+        return atl_trylaunch_kernel(lparm, \n\
+                    g_executable,\n\
                     \"%s\", \n\
                     thisKernargAddress); \
                 ", pif_name);
@@ -752,7 +753,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg%d=var%d;\n", arg_idx+6, arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        return snk_gpu_kernel(lparm,\n\
+        return atl_trylaunch_kernel(lparm,\n\
                             g_executable,\n\
                             \"%s\",\n\
                             thisKernargAddress);\n", pif_name);

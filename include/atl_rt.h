@@ -31,7 +31,7 @@ extern "C" {
 #define SNK_MAX_GPU_QUEUES 16 
 #define SNK_MAX_FUNCTIONS   100
 
-#define SNK_MAX_TASKS 100000 //((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
+//#define SNK_MAX_TASKS 32 //100000 //((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
 
 #define SNK_WAIT    1
 #define SNK_NOWAIT  0
@@ -45,7 +45,7 @@ if (status != HSA_STATUS_SUCCESS) { \
     exit(1); \
 }
 //#define DEBUG_SNK
-//#define VERBOSE_SNK
+#define VERBOSE_SNK
 #ifdef DEBUG_SNK
 #define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
 #else
@@ -125,6 +125,12 @@ status_t snk_get_gpu_kernel_info(
                             uint32_t                         *_KN__Private_Segment_Size
                             );
 
+atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
+                 hsa_executable_t executable,
+                 const char *pif_name,
+                 void *thisKernargAddress);
+
+#if 0
 atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
@@ -133,7 +139,7 @@ atmi_task_t *snk_gpu_kernel(const atmi_lparm_t *lparm,
 atmi_task_t *snk_cpu_kernel(const atmi_lparm_t *lparm, 
                  const char *pif_name,
                  void *kernel_args);
-
+#endif
 /*  All global values go in this global structure */
 typedef struct atl_context_s {
    int struct_initialized;
@@ -141,6 +147,7 @@ typedef struct atl_context_s {
    int g_hsa_initialized;
    int g_gpu_initialized;
    int g_tasks_initialized;
+   int g_mutex_dag_initialized;
 } atl_context_t ;
 extern atl_context_t atlc ;
 extern atl_context_t * atlc_p ;

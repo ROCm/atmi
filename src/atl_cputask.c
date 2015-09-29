@@ -43,7 +43,7 @@
 #include "atl_internal.h"
 #include "atl_bindthread.h"
 #include "atl_profile.h"
-
+#include <climits>
 #include <assert.h>
 agent_t agent[SNK_MAX_CPU_QUEUES];
 
@@ -102,10 +102,10 @@ int process_packet(hsa_queue_t *queue, int id)
     /* FIXME: Handle queue overflows */
     while (read_index < queue->size) {
         DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index, queue->size);
-        hsa_signal_value_t doorbell_value = SNK_MAX_TASKS;
+        hsa_signal_value_t doorbell_value = INT_MAX;
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
-        if (doorbell_value == SNK_MAX_TASKS) break;
+        if (doorbell_value == INT_MAX) break;
         atmi_task_t *this_task = NULL; // will be assigned to collect metrics
         char *kernel_name = NULL;
 #if defined (ATMI_HAVE_PROFILE)
@@ -165,7 +165,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 char *kernel_args_ptr = (char *)(packet->arg[1]);
                 if(num_params > 0) assert(kernel_args_ptr != NULL);
                 this_task = (atmi_task_t *)(packet->arg[2]);
-                assert(this_task != NULL);
+                //assert(this_task != NULL);
                 DEBUG_PRINT("Invoking function %s with %" PRIu64 " args, thisTask: %p\n", kernel_name, num_params, this_task);
                 char **kernel_args = (char **)malloc(sizeof(char *) * num_params);
                 int kernarg_id = 0;
@@ -768,7 +768,7 @@ agent_fini()
     /* wait for the other threads */
     uint32_t i;
     for (i = 0; i < numWorkers; i++) {
-        hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
+        //hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
         hsa_signal_store_release(worker_sig[i], FINISH);
         pthread_join(agent_threads[i], NULL);
         hsa_queue_destroy(agent[i].queue);

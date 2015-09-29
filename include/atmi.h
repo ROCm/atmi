@@ -139,6 +139,7 @@ typedef struct atmi_lparm_s {
     int              atmi_id;        /* Constant that PIFs can check for       */
     int              kernel_id;
     atmi_place_t     place;
+    atmi_task_t*     task;
     //   boolean          nested;         /* This task may create more tasks        */
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
@@ -187,12 +188,12 @@ extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
     __sync_kernel_pif(__lparm_sync_kernel); \
 }
 
-#define SYNC_TASK(task) \
+#define SYNC_TASK(t) \
 { \
     ATMI_LPARM(__lparm_sync_kernel); \
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
     __lparm_sync_kernel->num_required = 1; \
-    __lparm_sync_kernel->requires = &task; \
+    __lparm_sync_kernel->requires = &t; \
     __sync_kernel_pif(__lparm_sync_kernel); \
 }
 #endif

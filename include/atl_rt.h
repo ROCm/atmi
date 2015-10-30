@@ -27,8 +27,8 @@ extern "C" {
 #define ATMI_MAX_STREAMS            8 
 #define ATMI_MAX_TASKS_PER_STREAM   125
 
-#define SNK_MAX_CPU_QUEUES 3
-#define SNK_MAX_GPU_QUEUES 16 
+#define SNK_MAX_CPU_QUEUES 1
+#define SNK_MAX_GPU_QUEUES 16
 #define SNK_MAX_FUNCTIONS   100
 
 //#define SNK_MAX_TASKS 32 //100000 //((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
@@ -47,7 +47,7 @@ if (status != HSA_STATUS_SUCCESS) { \
 //#define DEBUG_SNK
 #define VERBOSE_SNK
 #ifdef DEBUG_SNK
-#define DEBUG_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
+#define DEBUG_PRINT(...) do{ fprintf( stdout, __VA_ARGS__ ); } while( false )
 #else
 #define DEBUG_PRINT(...) do{ } while ( false )
 #endif
@@ -126,7 +126,7 @@ status_t snk_get_gpu_kernel_info(
                             );
 
 atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
-                 hsa_executable_t executable,
+                 hsa_executable_t *executable,
                  const char *pif_name,
                  void *thisKernargAddress);
 

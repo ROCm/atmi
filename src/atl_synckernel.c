@@ -47,9 +47,9 @@ extern _CPPSTRING_ atmi_task_t* __sync_kernel_pif(atmi_lparm_t * lparm) {
       cpu_args_t *args = (cpu_args_t *)thisKernargAddress;
       args->arg0_size = sizeof(atmi_task_t **);
       args->arg0 = NULL;
-
+      
       return atl_trylaunch_kernel(lparm, 
-              g_executable,
+              &g_executable,
               "__sync_kernel_pif",
               thisKernargAddress);
   } 

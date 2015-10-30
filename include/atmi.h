@@ -165,6 +165,74 @@ typedef struct atmi_lparm_s {
 
 #define ATMI_PROFILE_NEW(NAME) atmi_tprofile_t * NAME ; atmi_tprofile_t _ ## NAME ={.dispatch_time=0,.ready_time=0,.start_time=0,.end_time=0} ; NAME = &_ ## NAME;
 
+#define ATMI_TASK_INIT(NAME) \
+{ \
+    NAME = (atmi_task_t *)malloc(sizeof(atmi_task_t)); \
+}
+
+#define ATMI_TASKS_1D_INIT(NAME,N) \
+{ \
+    int idx; \
+    for(idx = 0; idx < N; idx++) { \
+        NAME[idx] = (atmi_task_t *)malloc(sizeof(atmi_task_t)); \
+    } \
+}
+
+#define ATMI_TASKS_2D_INIT(NAME,M,N) \
+{ \
+    int idx1, idx2; \
+    for(idx1 = 0; idx1 < M; idx1++) { \
+        for(idx2 = 0; idx2 < N; idx2++) { \
+            NAME[idx1][idx2] = (atmi_task_t *)malloc(sizeof(atmi_task_t)); \
+        } \
+    } \
+}
+
+#define ATMI_TASKS_3D_INIT(NAME,M,N,K) \
+{ \
+    int idx1, idx2, idx3; \
+    for(idx1 = 0; idx1 < M; idx1++) { \
+        for(idx2 = 0; idx2 < N; idx2++) { \
+            for(idx3 = 0; idx3 < K; idx3++) { \
+                NAME[idx1][idx2][idx3] = (atmi_task_t *)malloc(sizeof(atmi_task_t)); \
+            } \
+        } \
+    } \
+}
+
+#define ATMI_TASK_FINALIZE(NAME) free(NAME); 
+
+#define ATMI_TASKS_1D_FINALIZE(NAME,N) \
+{ \
+    int idx; \
+    for(idx = 0; idx < N; idx++) { \
+        free(NAME[idx]); \
+    } \
+}
+
+#define ATMI_TASKS_2D_FINALIZE(NAME,M,N) \
+{ \
+    int idx1, idx2; \
+    for(idx1 = 0; idx1 < M; idx1++) { \
+        for(idx2 = 0; idx2 < N; idx2++) { \
+            free(NAME[idx1][idx2]); \
+        } \
+    } \
+}
+
+#define ATMI_TASKS_3D_FINALIZE(NAME,M,N,K) \
+{ \
+    int idx1, idx2, idx3; \
+    for(idx1 = 0; idx1 < M; idx1++) { \
+        for(idx2 = 0; idx2 < N; idx2++) { \
+            for(idx3 = 0; idx3 < K; idx3++) { \
+                free(NAME[idx1][idx2][idx3]); \
+            } \
+        } \
+    } \
+}
+
+
 /*----------------------------------------------------------------------------*/
 /* String macros that look like an API, but actually implement feature by     */
 /* calling a null kernel under specific conditions.                           */ 
@@ -194,6 +262,8 @@ extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
     __lparm_sync_kernel->num_required = 1; \
     __lparm_sync_kernel->requires = &t; \
+    atmi_task_t temp; \
+    __lparm_sync_kernel->task = &temp; \
     __sync_kernel_pif(__lparm_sync_kernel); \
 }
 #endif

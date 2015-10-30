@@ -18,7 +18,9 @@ typedef void* ARG_TYPE;
 #define REPEAT8(name)  REPEAT4(name)  REPEAT4(name)
 #define REPEAT16(name) REPEAT8(name) REPEAT8(name)
 
-#define SNK_MAX_SIGNALS 4096
+#define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
+//#define SNK_MAX_SIGNALS (1*1024*1024)
+#define SNK_MAX_SIGNALS 24
 typedef struct agent_t
 {
   int num_queues;
@@ -59,6 +61,8 @@ typedef struct atmi_stream_table_s {
     atmi_devtype_t last_device_type;
     int next_gpu_qid;
     int next_cpu_qid;
+    hsa_signal_t stream_common_signal;
+    pthread_mutex_t mutex;
 }atmi_stream_table_t;
 
 typedef enum atl_dep_sync_s {
@@ -74,7 +78,6 @@ typedef std::vector<atl_task_t *> atl_task_list_t;
 typedef struct atl_task_s {
     // all encmopassing task packet
     // hsa_kernel_dispatch_packet_t *packet;
-
     void *cpu_kernelargs;
     int cpu_kernelid;
     int num_params;
@@ -85,7 +88,7 @@ typedef struct atl_task_s {
 
     // list of dependents
     uint32_t num_predecessors; // cant we get this from lparm?
-    std::atomic<uint32_t> num_successors; // cant we get this from lparm?
+    uint32_t num_successors; // cant we get this from lparm?
     atl_dep_sync_t dep_sync_type;
 
     // reference to HSA signal and the applications task structure
@@ -95,18 +98,34 @@ typedef struct atl_task_s {
     // other miscellaneous flags
     atmi_devtype_t devtype;
     boolean profilable;
-    volatile std::atomic<atmi_state_t> state;
+    std::atomic<atmi_state_t> state;
 
     // per task mutex to reduce contention
     pthread_mutex_t mutex;
-    const char *name;
-    //
-    // lparm to control some of the execution flow (synchronous, requires and so
-    // on)
+
+    // lparm to control some of the execution flow (synchronous, requires, etc)
     atmi_lparm_t lparm;
     // FIXME: queue or vector?
     atl_task_list_t and_successors;
     atl_task_list_t and_predecessors;
+    atl_task_list_t predecessors;
+    int id;
+    atl_task_s() : cpu_kernelargs(0), cpu_kernelid(-1), num_params(-1), gpu_kernargptr(0), kernel_object(0), private_segment_size(0),
+                   group_segment_size(0), num_predecessors(0), num_successors(0), atmi_task(0)
+    {
+        and_successors.clear();
+        and_predecessors.clear();
+        memset(&lparm, 0, sizeof(atmi_lparm_t));
+    }
+
+#if 0
+    atl_task_s(const atl_task_s &task) {
+//        cpu_kernelargs = task.cpu_kernelargs;i
+//        cpu_kernelid = task.cpu_kernelid;
+//        num_params = task.num_params;
+//        gpu_kernargptr = task.gpu_kernargptr;
+    }
+#endif
 } atl_task_t;
 
 extern std::map<atmi_stream_t *, atmi_stream_table_t> StreamTable;
@@ -115,7 +134,7 @@ extern std::vector<atl_task_t *> AllTasks;
 extern std::queue<atl_task_t *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
 extern std::map<atmi_task_t *, atl_task_t *> PublicTaskMap;
-
+extern hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
 /*
 typedef struct atmi_task_table_s {
     atmi_task_t *task;
@@ -128,7 +147,7 @@ void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
 
 void dispatch_ready_task_for_free_signal();
-void dispatch_ready_task_or_release_signal(hsa_signal_t signal);
+void dispatch_ready_task_or_release_signal(atl_task_t *task);
 status_t dispatch_task(atl_task_t *task);
 status_t check_change_in_device_type(atmi_stream_t *stream, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
 hsa_signal_t enqueue_barrier_async(hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
@@ -147,6 +166,7 @@ void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest);
 uint16_t create_header(hsa_packet_type_t type, int barrier);
 hsa_signal_t* get_worker_sig(hsa_queue_t *queue);
 
+bool try_dispatch_barrier_pkt(atl_task_t *ret);
 #if 0
 #ifdef __cplusplus
 extern "C" {

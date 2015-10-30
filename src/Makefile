@@ -1,6 +1,6 @@
 #Set HSA Environment variables
-HSA_RUNTIME_PATH=/opt/hsa
-HSA_LIBHSAIL_PATH=/opt/hsa/lib
+#HSA_RUNTIME_PATH=/opt/hsa
+HSA_RUNTIME_PATH=/opt/hsa-oct15
 HSA_LLVM_PATH=/opt/amd/cloc/bin
 
 AR=ar

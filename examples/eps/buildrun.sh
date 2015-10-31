@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 #  Set HSA Environment variables
-#[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/home/aaji/git/HSA-Runtime-Reference-Source
-[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
+[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/home/aaji/opt/hsa-oct15
+#[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/home/aaji/opt/hsa
+#[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
 [ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib
 [ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/cloc/bin
 [ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=/opt/amd/atmi

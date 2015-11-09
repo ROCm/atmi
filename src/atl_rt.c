@@ -140,11 +140,11 @@ status_t set_thread_affinity(int id) {
     if (s != 0)
         handle_error_en(s, "pthread_getaffinity_np");
 
-    printf("Set returned by pthread_getaffinity_np() contained:\n");
+    /*printf("Set returned by pthread_getaffinity_np() contained:\n");
     for (j = 0; j < CPU_SETSIZE; j++)
         if (CPU_ISSET(j, &cpuset))
             printf("    CPU %d\n", j);
-
+    */
     return STATUS_SUCCESS; 
 }
 
@@ -257,7 +257,7 @@ void enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atl_task_t **
 
 extern void snk_task_wait(atl_task_t *task) {
     if(task != NULL) {
-        #if 1
+        #if 0
         while(true) {
             int value = task->state;//.load(std::memory_order_seq_cst);
             if(value != ATMI_COMPLETED) {

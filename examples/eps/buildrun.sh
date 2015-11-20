@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 #  Set HSA Environment variables
-[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/home/aaji/opt/hsa-oct15
+[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa-nov15
 #[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/home/aaji/opt/hsa
 #[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
 [ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib

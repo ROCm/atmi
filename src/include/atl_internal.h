@@ -135,7 +135,7 @@ typedef struct atl_task_s {
 
 extern std::map<atmi_stream_t *, atmi_stream_table_t *> StreamTable;
 //atmi_task_table_t TaskTable[SNK_MAX_TASKS];
-extern std::vector<atl_task_t> AllTasks;
+extern std::vector<atl_task_t *> AllTasks;
 extern std::queue<atl_task_t *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
 extern std::map<atmi_task_t *, atl_task_t *> PublicTaskMap;

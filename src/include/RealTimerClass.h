@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <string>
-
+//#define ATL_TIMER
 namespace Global {
   
 /// \class RealTimer RealTimer.h "Global/RealTimer.h"
@@ -95,6 +95,7 @@ inline RealTimer::~RealTimer()
 
 inline void RealTimer::Start()
 {
+#ifdef ATL_TIMER
   static std::string functionName("RealTimer::Start()");
   if (isRunning == true) {
     std::cout << functionName << ": Warning: Timer " << fDesc << " has already been started." <<  std::endl; 
@@ -102,10 +103,12 @@ inline void RealTimer::Start()
     start_time = CurrentTime();
     isRunning = true;
   }
+#endif
 }
 
 inline void RealTimer::Stop()
 {
+#ifdef ATL_TIMER
   static std::string functionName("RealTimer::Stop()");
   if (isRunning == false) {
     std::cout << functionName << ": Warning: Timer " << fDesc << " has already been stopped." <<  std::endl; 
@@ -114,6 +117,7 @@ inline void RealTimer::Stop()
     isRunning = false;
     count++;
   }
+#endif
 }
 
 inline bool
@@ -143,15 +147,15 @@ inline int RealTimer::Count() const {return count;}
 
 inline double RealTimer::CurrentTime() const
 {
-// #ifdef SUN
-//   timespec ts;
-//   clock_gettime(CLOCK_REALTIME, &ts);
-//   return (double)(ts.tv_sec-time_offset) + (double)ts.tv_nsec*1e-9;
-//#else
+#if 1
+   timespec ts;
+   clock_gettime(CLOCK_REALTIME, &ts);
+   return (double)(ts.tv_sec-time_offset) + (double)ts.tv_nsec*1e-9;
+#else
   timeval tv;
   gettimeofday(&tv, NULL);
   return (double)(tv.tv_sec-time_offset) + (double)tv.tv_usec*1e-6;
-//#endif
+#endif
 }
 
 

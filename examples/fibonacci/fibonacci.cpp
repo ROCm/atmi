@@ -1,8 +1,11 @@
 #include <iostream>
 #include <stdlib.h>
+#include <vector>
 #include "atmi.h"
+
 using namespace std;
 
+std::vector<atmi_task_t *> tasks;
 extern "C" void sum_cpu(atmi_task_t *t, int *a, int *b, int *c) __attribute__((atmi_kernel("sum", "CPU")));
 
 extern "C" void sum_cpu(atmi_task_t *t, int *a, int *b, int *c) { 
@@ -17,8 +20,8 @@ void fib(const int n , int *result , atmi_task_t **my_sum_task) {
         *result = n; 
         *my_sum_task = NULL;
     } else {
-        atmi_task_t *task_sum1;
-        atmi_task_t *task_sum2; 
+        atmi_task_t *task_sum1 = NULL;
+        atmi_task_t *task_sum2 = NULL; 
         int *result1 = new int;
         int *result2 = new int;
         fib(n-1,result1,&task_sum1);
@@ -35,7 +38,10 @@ void fib(const int n , int *result , atmi_task_t **my_sum_task) {
             lparm_child->num_required +=1;
         }
         lparm_child->requires = requires;
-        *my_sum_task = sum(lparm_child,result1,result2,result);
+        *my_sum_task = new atmi_task_t;
+        tasks.push_back(*my_sum_task);
+        lparm_child->task = *my_sum_task;
+        sum(lparm_child,result1,result2,result);
     }
 }
 
@@ -46,9 +52,14 @@ int main(int argc, char *argv[]) {
     }
     int result;
 
-    atmi_task_t *root_sum_task;
+    atmi_task_t *root_sum_task = NULL;
     fib(N,&result,&root_sum_task);
     SYNC_TASK(root_sum_task);
     cout << "Fib(" << N << ") = " << result << endl;    
+    for(std::vector<atmi_task_t *>::iterator it = tasks.begin(); 
+           it != tasks.end(); it++) {
+        delete *it;
+    }
+    tasks.clear();
     return 0;
 }

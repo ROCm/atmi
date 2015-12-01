@@ -95,12 +95,13 @@ extern atmi_context_t* atmi_context;
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 typedef void* atmi_handle_t;
-typedef struct atmi_task_s { 
+typedef struct atmi_task_s atmi_task_t;
+struct atmi_task_s { 
    atmi_handle_t    handle;
    atmi_state_t     state;    /* Eventually consistent state of task    */
    atmi_tprofile_t  profile;  /* Profile if reqeusted by lparm          */
-//   atmi_handle_t    continuation;   /*                                      */
-} atmi_task_t;
+   atmi_task_t *continuation; /*                                        */
+};
 
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
@@ -144,12 +145,19 @@ typedef struct atmi_lparm_s {
 } atmi_lparm_t ;
 /*----------------------------------------------------------------------------*/
 
+typedef struct atmi_task_list_s {
+    atmi_task_t *task;
+    struct atmi_task_list_s *next;
+} atmi_task_list_t;
+
 #define WORKITEMS gridDim[0] 
 #define WORKITEMS2D gridDim[1] 
 #define WORKITEMS3D gridDim[2] 
 
 /* String macros to initialize popular default launch parameters.             */ 
 #define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+
+#define ATMI_LPARM_WITH_TASK(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=NULL,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0),.task=Y} ; X = &_ ## X ;
 
 #define ATMI_LPARM_STREAM(X,Y) atmi_stream_t * Y; atmi_stream_t _ ## Y ={.ordered=ATMI_TRUE} ; Y = &_ ## Y ; atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.stream=Y,.waitable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
@@ -165,10 +173,27 @@ typedef struct atmi_lparm_s {
 
 #define ATMI_PROFILE_NEW(NAME) atmi_tprofile_t * NAME ; atmi_tprofile_t _ ## NAME ={.dispatch_time=0,.ready_time=0,.start_time=0,.end_time=0} ; NAME = &_ ## NAME;
 
-#define ATMI_TASK_INIT(NAME) \
-{ \
-    NAME = (atmi_task_t *)malloc(sizeof(atmi_task_t)); \
+#define ATMI_PUSH_BACK_REQUIRES(REQS, TASK) { \
+    atmi_task_list_t *list = (atmi_task_list_t *)malloc(sizeof(atmi_task_list_t));\
+    list->task = TASK; \
+    list->next = REQS; \
+    REQS = list; \
 }
+
+#define ATMI_FREE_REQUIRES(REQS) {\
+    atmi_task_list_t *cur = REQS; \
+    while(cur != NULL) {\
+        REQS = cur->next;\
+        free(cur); \
+        cur = REQS;\
+    }\
+}
+
+#define ATMI_TASK_INIT(NAME) atmi_task_t *NAME = (atmi_task_t *)malloc(sizeof(atmi_task_t)); 
+
+#define ATMI_TASK_INIT_WITH_CONTINUATION(NAME) \
+    atmi_task_t *NAME = (atmi_task_t *)malloc(sizeof(atmi_task_t)); \
+    NAME->continuation = (atmi_task_t *)malloc(sizeof(atmi_task_t)); 
 
 #define ATMI_TASKS_1D_INIT(NAME,N) \
 { \
@@ -201,6 +226,12 @@ typedef struct atmi_lparm_s {
 }
 
 #define ATMI_TASK_FINALIZE(NAME) free(NAME); 
+
+#define ATMI_TASK_FINALIZE_WITH_CONTINUATION(NAME) \
+{ \
+    free((NAME)->continuation); \
+    free(NAME); \
+}
 
 #define ATMI_TASKS_1D_FINALIZE(NAME,N) \
 { \
@@ -258,13 +289,16 @@ extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
 
 #define SYNC_TASK(t) \
 { \
+    if(t) { \
     ATMI_LPARM(__lparm_sync_kernel); \
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
     __lparm_sync_kernel->num_required = 1; \
     __lparm_sync_kernel->requires = &t; \
     atmi_task_t temp; \
+    temp.continuation = NULL; \
     __lparm_sync_kernel->task = &temp; \
     __sync_kernel_pif(__lparm_sync_kernel); \
+    } \
 }
 #endif
 

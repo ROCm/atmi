@@ -756,7 +756,7 @@ status_t snk_init_cpu_context() {
     ErrorCheck(Finding a CPU kernarg memory region handle, err);
 
     int num_queues = SNK_MAX_CPU_QUEUES;
-    int queue_capacity = 32768;
+    int queue_capacity = (1024 * 1024);
     cpu_agent_init(snk_cpu_agent, snk_cpu_KernargRegion, num_queues, queue_capacity);
 
     int stream_num;
@@ -1212,7 +1212,7 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     #if 1
     static bool is_called = false;
     if(!is_called) {
-        set_thread_affinity(2);
+        set_thread_affinity(3);
         /*
         int policy;
         struct sched_param param;
@@ -1692,7 +1692,7 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 #if 1
     static bool is_called = false;
     if(!is_called) {
-        set_thread_affinity(0);
+        set_thread_affinity(2);
 
         /* int policy;
            struct sched_param param;
@@ -1725,17 +1725,43 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 
     //TryLaunchTimer.Start();
     uint16_t i;
-    atl_task_t *task = new atl_task_t;
-    memset(task, 0, sizeof(atl_task_t));
-    lock(&mutex_all_tasks_);
-    AllTasks.push_back(task);
-    //AllTasks.push_back(atl_task_t());
-    //AllTasks.emplace_back();
-    atl_task_t *ret = AllTasks[AllTasks.size() - 1];
-    //AllTasks.push_back(task); 
-    //atl_task_t *ret = task; //AllTasks[AllTasks.size() - 1];
-    unlock(&mutex_all_tasks_);
-    pthread_mutex_init(&(ret->mutex), NULL);
+    atl_task_t *ret = NULL;
+    atl_task_t *continuation_task = NULL;
+    bool has_continuation = false;
+    if(lparm->task) {
+        has_continuation = (lparm->task->continuation != NULL);
+        if(PublicTaskMap.find(lparm->task) != PublicTaskMap.end()) {
+            // task is already found, so use it and dont create a new one
+            ret = PublicTaskMap[lparm->task];
+        }
+    }
+    if(ret == NULL) {
+        ret = new atl_task_t;
+        memset(ret, 0, sizeof(atl_task_t));
+        lock(&mutex_all_tasks_);
+        AllTasks.push_back(ret);
+        //AllTasks.push_back(atl_task_t());
+        //AllTasks.emplace_back();
+        //ret = AllTasks[AllTasks.size() - 1];
+        ret->id = AllTasks.size();
+        //AllTasks.push_back(task); 
+        //atl_task_t *ret = task; //AllTasks[AllTasks.size() - 1];
+        unlock(&mutex_all_tasks_);
+        PublicTaskMap[lparm->task] = ret;
+        DEBUG_PRINT("Task Map[%p] = %p (%s)\n", lparm->task, PublicTaskMap[lparm->task], pif_name);
+        pthread_mutex_init(&(ret->mutex), NULL);
+    }
+    if(has_continuation) {
+        continuation_task = new atl_task_t;
+        memset(continuation_task, 0, sizeof(atl_task_t));
+        lock(&mutex_all_tasks_);
+        AllTasks.push_back(continuation_task);
+        continuation_task->id = AllTasks.size();
+        unlock(&mutex_all_tasks_);
+        PublicTaskMap[lparm->task->continuation] = continuation_task;
+        DEBUG_PRINT("Continuation Map[%p] = %p (%s)\n", lparm->task->continuation, PublicTaskMap[lparm->task->continuation], pif_name);
+        pthread_mutex_init(&(continuation_task->mutex), NULL);
+    }
 
     int this_kernel_iter = 0;
     const char *pif_found_name = NULL;
@@ -1801,15 +1827,7 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.stream, lparm->stream);
     ret->num_predecessors = 0;
     ret->num_successors = 0;
-    ret->id = AllTasks.size();
 
-    if(lparm->task) {
-        PublicTaskMap[lparm->task] = ret;
-        DEBUG_PRINT("Map[%p] = %p\n", lparm->task, PublicTaskMap[lparm->task]);
-    }
-    else {
-        //fprintf(stderr, "No task\n");
-    }
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
     DEBUG_PRINT("Pif %s requires %d task\n", pif_name, lparm->num_required);
 
@@ -1834,6 +1852,7 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 
    // TryLaunchTimer.Stop();
     if(should_dispatch) {
+        if(lparm->task) lparm->task->handle = (void *)&(ret->signal);
         direct_dispatch++;
         dispatch_task(ret);
         if(should_register_callback) {

@@ -1,6 +1,5 @@
-#include <string.h>
-#include <stdlib.h>
 #include <iostream>
+#include <stdlib.h>
 #include <stdio.h>
 using namespace std;
 #include "atmi.h"
@@ -32,14 +31,18 @@ int main(int argc, char* argv[]) {
     }
 
     ATMI_LPARM_1D(lparm_gpu, length >> 1);
+    atmi_task_t t_gpu;
     lparm_gpu->synchronous = ATMI_TRUE;
     lparm_gpu->kernel_id = 1;
+    lparm_gpu->task = &t_gpu;
 
     reduction(lparm_gpu, input_gpu, length >> 1);
 
     ATMI_LPARM_1D(lparm_cpu, length >> 1);
+    atmi_task_t t_cpu;
     lparm_cpu->synchronous = ATMI_TRUE;
     lparm_cpu->kernel_id = 0;
+    lparm_cpu->task = &t_cpu;
     reduction(lparm_cpu, input_cpu, length >> 1);
 
     printf("GPU Sum: %d\n", input_gpu[0]);

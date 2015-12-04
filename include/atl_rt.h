@@ -27,7 +27,7 @@ extern "C" {
 #define ATMI_MAX_STREAMS            8 
 #define ATMI_MAX_TASKS_PER_STREAM   125
 
-#define SNK_MAX_CPU_QUEUES 2
+#define SNK_MAX_CPU_QUEUES 1
 #define SNK_MAX_GPU_QUEUES 24
 #define SNK_MAX_FUNCTIONS   100
 

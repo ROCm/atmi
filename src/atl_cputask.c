@@ -174,9 +174,10 @@ int process_packet(hsa_queue_t *queue, int id)
                 for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
                     size_t kernarg_size = *(size_t *)(kernel_args_ptr + kernarg_offset);
                     kernarg_offset += sizeof(size_t); 
-                    kernel_args[kernarg_id] = *(char **)(kernel_args_ptr + kernarg_offset);
+                    if(kernarg_id != 0) kernel_args[kernarg_id] = *(char **)(kernel_args_ptr + kernarg_offset);
                     kernarg_offset += kernarg_size; 
                 }
+                
                 // pass task handle to kernel_args first param
                 kernel_args[0] = (char *)&this_task;
                 switch(num_params) {

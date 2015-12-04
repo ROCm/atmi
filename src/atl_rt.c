@@ -1852,7 +1852,9 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 
    // TryLaunchTimer.Stop();
     if(should_dispatch) {
-        if(lparm->task) lparm->task->handle = (void *)&(ret->signal);
+        if(ret->atmi_task) {
+            ret->atmi_task->handle = (void *)(&(ret->signal));
+        }
         direct_dispatch++;
         dispatch_task(ret);
         if(should_register_callback) {

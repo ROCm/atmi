@@ -235,6 +235,8 @@ void cl2brigh(const char *clfilename, const char *symbolname) {
     if(g_hsa_offline_finalize == 1) {
         strcat(cmd_c, " -hof ");
     }
+    //keep the temp files?
+    //strcat(cmd_c, " -k ");
     strcat(cmd_c, clfilename);
     DEBUG_PRINT("Executing cmd: %s\n", cmd_c);
     int ret = system(cmd_c);
@@ -1577,15 +1579,14 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
     pp_printf(&pif_spawn, "\
         int kernarg_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].gpu_kernarg_offset)), 1);\n\
-        int packet_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
-        hsa_kernel_dispatch_packet_t * this_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
-        this_packet->header = 0;\n\
-        this_packet->kernel_object = kernel_packet->kernel_object;\n\
-        this_packet->private_segment_size = kernel_packet->private_segment_size;\n\
-        this_packet->group_segment_size = kernel_packet->group_segment_size;\n\
-        this_packet->kernarg_address =  (void *)((struct gpu_args_struct *)atmi_klist[pif_id].gpu_kernarg_heap + kernarg_offset);\n\
-        struct gpu_args_struct * gpu_args = (struct gpu_args_struct *)this_packet->kernarg_address; \n\
-        this_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n");
+        hsa_kernel_dispatch_packet_t this_packet; \n\
+        this_packet.header = 0;\n\
+        this_packet.kernel_object = kernel_packet->kernel_object;\n\
+        this_packet.private_segment_size = kernel_packet->private_segment_size;\n\
+        this_packet.group_segment_size = kernel_packet->group_segment_size;\n\
+        this_packet.kernarg_address =  (void *)((struct gpu_args_struct *)atmi_klist[pif_id].gpu_kernarg_heap + kernarg_offset);\n\
+        struct gpu_args_struct * gpu_args = (struct gpu_args_struct *)this_packet.kernarg_address; \n\
+        this_packet.completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle)); \n\n");
 
 
     pp_printf(&pif_spawn, "\
@@ -1605,7 +1606,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     }
 
     pp_printf(&pif_spawn, "\
-        kernel_dispatch(lparm, this_packet, pif_id);\n\
+        kernel_dispatch(lparm, &this_packet, pif_id);\n\
     }\n");
 
     pp_printf(&pif_spawn, "\
@@ -1615,7 +1616,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
     pp_printf(&pif_spawn, "\
         struct cpu_args_struct {\n\
-            int arg0_size;\n\
+            size_t arg0_size;\n\
             uint64_t * arg0;\n");
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
@@ -1643,18 +1644,17 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
     pp_printf(&pif_spawn, "\
         int kernarg_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].cpu_kernarg_offset)), 1);\n\
-        int packet_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].kernel_packets_offset)), 1);\n\
-        hsa_agent_dispatch_packet_t * this_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets_heap + packet_offset);\n\
-        this_packet->header = 1;\n\
-        this_packet->type   = kernel_packet->type;\n\
-        this_packet->arg[0] = kernel_packet->arg[0];\n\
-        this_packet->arg[1] = (uint64_t)((struct cpu_args_struct *)atmi_klist[pif_id].cpu_kernarg_heap + kernarg_offset);\n\
-        this_packet->arg[2] = (uint64_t)lparm->prevTask; \n\
-        this_packet->arg[3] = kernel_packet->arg[3];\n\
-        struct cpu_args_struct *cpu_args = (struct cpu_args_struct *)this_packet->arg[1];\n"); 
+        hsa_agent_dispatch_packet_t this_packet; \n\
+        this_packet.header = 1;\n\
+        this_packet.type   = kernel_packet->type;\n\
+        this_packet.arg[0] = kernel_packet->arg[0];\n\
+        this_packet.arg[1] = (uint64_t)((struct cpu_args_struct *)atmi_klist[pif_id].cpu_kernarg_heap + kernarg_offset);\n\
+        this_packet.arg[2] = (uint64_t)lparm->prevTask; \n\
+        this_packet.arg[3] = kernel_packet->arg[3];\n\
+        struct cpu_args_struct *cpu_args = (struct cpu_args_struct *)(this_packet->arg[1]);\n"); 
 
     pp_printf(&pif_spawn, "\
-        *(cpu_args->arg0) = (uint64_t)lparm->prevTask;\n");
+        cpu_args->arg0 = NULL;\n");
 
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
@@ -1674,10 +1674,10 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
     }
 
     pp_printf(&pif_spawn, "\
-        this_packet->completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle));\n");
+        this_packet.completion_signal = *((hsa_signal_t *)(((atmi_task_t *)lparm->prevTask)->handle));\n");
 
     pp_printf(&pif_spawn, "\
-        agent_dispatch(lparm, this_packet, pif_id);\n\
+        agent_dispatch(lparm, &this_packet, pif_id);\n\
     }\n");
 
     pp_printf(&pif_spawn, "\

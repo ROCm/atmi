@@ -1651,7 +1651,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
         this_packet.arg[1] = (uint64_t)((struct cpu_args_struct *)atmi_klist[pif_id].cpu_kernarg_heap + kernarg_offset);\n\
         this_packet.arg[2] = (uint64_t)lparm->prevTask; \n\
         this_packet.arg[3] = kernel_packet->arg[3];\n\
-        struct cpu_args_struct *cpu_args = (struct cpu_args_struct *)(this_packet->arg[1]);\n"); 
+        struct cpu_args_struct *cpu_args = (struct cpu_args_struct *)(this_packet.arg[1]);\n"); 
 
     pp_printf(&pif_spawn, "\
         cpu_args->arg0 = NULL;\n");

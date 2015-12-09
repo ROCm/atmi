@@ -98,6 +98,8 @@ std::queue<hsa_signal_t> FreeSignalPool;
 std::map<atmi_task_t *, atl_task_t *> PublicTaskMap;
 std::map<const char *, atl_kernel_info_t> KernelInfoTable;
 hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
+hsa_signal_t IdentityORSignal;
+hsa_signal_t IdentityANDSignal;
 static int StreamCommonSignalIdx = 0;
 std::queue<int> DispatchedTaskIds;
 std::queue<atl_task_t *> DispatchedTasks;
@@ -179,7 +181,7 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {
    return header;
 }
 
-hsa_signal_t enqueue_barrier_async(hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag) {
+hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag) {
     /* This routine will enqueue a barrier packet for all dependent packets to complete
        irrespective of their stream
      */
@@ -193,10 +195,9 @@ hsa_signal_t enqueue_barrier_async(hsa_queue_t *queue, const int dep_task_count,
     hsa_signal_t last_signal;
     if(queue == NULL || dep_task_list == NULL || dep_task_count <= 0) return last_signal;
     if(barrier_flag == SNK_OR)
-        err = hsa_signal_create(1, 0, NULL, &last_signal);
+        last_signal = IdentityORSignal;
     else
-        err = hsa_signal_create(0, 0, NULL, &last_signal);
-    ErrorCheck(HSA Signal Creaion, err);
+        last_signal = IdentityANDSignal;
     atl_task_t **tasks = dep_task_list;
     int tasks_remaining = dep_task_count;
     const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
@@ -205,8 +206,9 @@ hsa_signal_t enqueue_barrier_async(hsa_queue_t *queue, const int dep_task_count,
     int barrier_pkt_id = 0;
 
     for(barrier_pkt_id = 0; barrier_pkt_id < barrier_pkt_count; barrier_pkt_id++) {
-        hsa_signal_t signal;
-        hsa_signal_create(1, 0, NULL, &signal);
+        hsa_signal_t signal = task->barrier_signals[barrier_pkt_id];
+        //hsa_signal_create(1, 0, NULL, &signal);
+        hsa_signal_store_relaxed(signal, 1);
         /* Obtain the write index for the command queue for this stream.  */
         uint64_t index = hsa_queue_load_write_index_relaxed(queue);
         const uint32_t queueMask = queue->size - 1;
@@ -250,8 +252,8 @@ hsa_signal_t enqueue_barrier_async(hsa_queue_t *queue, const int dep_task_count,
     return last_signal;
 }
 
-void enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype) {
-    hsa_signal_t last_signal = enqueue_barrier_async(queue, dep_task_count, dep_task_list, barrier_flag);
+void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype) {
+    hsa_signal_t last_signal = enqueue_barrier_async(task, queue, dep_task_count, dep_task_list, barrier_flag);
     if(devtype == ATMI_DEVTYPE_CPU) {
         signal_worker(queue, PROCESS_PKT);
     }
@@ -561,7 +563,7 @@ status_t clear_saved_tasks(atmi_stream_table_t *stream_obj) {
     return STATUS_SUCCESS;
 }
 
-status_t check_change_in_device_type(atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type) {
+status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type) {
     if(stream_obj->ordered != ATMI_ORDERED) return STATUS_SUCCESS;
 
     if(stream_obj->tasks != NULL) {
@@ -573,12 +575,12 @@ status_t check_change_in_device_type(atmi_stream_table_t *stream_obj, hsa_queue_
 
             if(new_task_device_type == ATMI_DEVTYPE_GPU) {
                 if(queue) {
-                    enqueue_barrier(queue, num_required, &requires, SNK_NOWAIT, SNK_AND, ATMI_DEVTYPE_GPU);
+                    enqueue_barrier(task, queue, num_required, &requires, SNK_NOWAIT, SNK_AND, ATMI_DEVTYPE_GPU);
                 }
             }
             else {
                 if(queue) {
-                    enqueue_barrier(queue, num_required, &requires, SNK_NOWAIT, SNK_AND, ATMI_DEVTYPE_CPU);
+                    enqueue_barrier(task, queue, num_required, &requires, SNK_NOWAIT, SNK_AND, ATMI_DEVTYPE_CPU);
                 }
             }
         }
@@ -686,6 +688,10 @@ void init_tasks() {
        ErrorCheck(Creating a HSA signal, err);
        FreeSignalPool.push(new_signal);
     }
+    err=hsa_signal_create(1, 0, NULL, &IdentityORSignal);
+    ErrorCheck(Creating a HSA signal, err);
+    err=hsa_signal_create(0, 0, NULL, &IdentityANDSignal);
+    ErrorCheck(Creating a HSA signal, err);
     DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
     atlc.g_tasks_initialized = 1;
 }
@@ -1173,6 +1179,7 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     
     lock_vec(mutexes);
 
+    DEBUG_PRINT("{%d}\n", task->id);
     l = &(task->lparm);
     set_task_state(task, ATMI_COMPLETED);
     set_task_metrics(task, task->devtype, task->profilable);
@@ -1196,6 +1203,13 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
             temp_list.push_back(task->signal);
         }
     }
+    for(std::vector<hsa_signal_t>::iterator it = task->barrier_signals.begin();
+            it != task->barrier_signals.end(); it++) {
+        //hsa_signal_store_relaxed((*it), 1);
+        FreeSignalPool.push(*it);
+        DEBUG_PRINT("[Handle Barrier_Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+    }
+    task->barrier_signals.clear();
     for(std::vector<hsa_signal_t>::iterator it = temp_list.begin();
             it != temp_list.end(); it++) {
         //hsa_signal_store_relaxed((*it), 1);
@@ -1227,7 +1241,6 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     //HandleSignalTimer.Start();
     atl_task_t *task = (atl_task_t *)arg;
     //static int counter = 0;
-    //DEBUG_PRINT("Handling Task[%d]: %d\n", counter++, task->id);
     if(g_dep_sync_type == ATL_SYNC_CALLBACK) {
         handle_signal_callback(task); 
     }
@@ -1369,26 +1382,30 @@ status_t dispatch_task(atl_task_t *task) {
 
     /* if stream is ordered and the devtype changed for this task, 
      * enqueue a barrier to wait for previous device to complete */
-    //check_change_in_device_type(stream_obj, this_Q, task->devtype);
+    //check_change_in_device_type(task, stream_obj, this_Q, task->devtype);
 
     if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
         /* For dependent child tasks, add dependent parent kernels to barriers.  */
         DEBUG_PRINT("Pif requires %d tasks\n", lparm->num_required);
         if ( task->and_predecessors.size() > 0) {
             int val = 0;
+            DEBUG_PRINT("(");
             for(size_t count = 0; count < task->and_predecessors.size(); count++) {
                 if(task->and_predecessors[count]->state < ATMI_DISPATCHED) val++;
                 assert(task->and_predecessors[count]->state >= ATMI_DISPATCHED);
+                DEBUG_PRINT("%d ", task->and_predecessors[count]->id);
             }
+            DEBUG_PRINT(")\n");
             if(val > 0) printf("Task[%d] has %d not-dispatched predecessor tasks\n", task->id, val);
-            enqueue_barrier(this_Q, task->and_predecessors.size(), &(task->and_predecessors[0]), SNK_NOWAIT, SNK_AND, task->devtype);
+            enqueue_barrier(task, this_Q, task->and_predecessors.size(), &(task->and_predecessors[0]), SNK_NOWAIT, SNK_AND, task->devtype);
         }
+        DEBUG_PRINT("%d\n", task->id);
         /*else if ( lparm->num_needs_any > 0) {
             std::vector<atl_task_t *> needs_any(lparm->num_needs_any);
             for(int idx = 0; idx < lparm->num_needs_any; idx++) {
                 needs_any[idx] = PublicTaskMap[lparm->needs_any[idx]];
             }
-            enqueue_barrier(this_Q, lparm->num_needs_any, &needs_any[0], SNK_NOWAIT, SNK_OR, task->devtype);
+            enqueue_barrier(task, this_Q, lparm->num_needs_any, &needs_any[0], SNK_NOWAIT, SNK_OR, task->devtype);
         }*/
     }
     /*  Obtain the current queue write index. increases with each call to kernel  */
@@ -1526,6 +1543,8 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret) {
     get_stream_mutex(stream_obj, &stream_mutex);
     req_mutexes.push_back(&stream_mutex);
     lock_vec(req_mutexes);
+    //std::cout << "[" << ret->id << "]Signals Before: " << FreeSignalPool.size() << std::endl;
+    int dep_count = 0;
     for(int idx = 0; idx < lparm->num_required; idx++) {
         atl_task_t *pred_task = temp_vecs[idx]; 
         DEBUG_PRINT("Task %d depends on %d as %d th predecessor ",
@@ -1540,12 +1559,22 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret) {
             DEBUG_PRINT("(dispatched)\n");
         }
     }
+    int required_tasks = 0;
+    for(int idx = 0; idx < lparm->num_required; idx++) {
+        atl_task_t *pred_task = temp_vecs[idx]; 
+        if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
+            required_tasks++;
+        }
+    }
+    const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
+    /* round up */
+    int barrier_pkt_count = (required_tasks + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
     if(should_dispatch) {
         if(ret->atmi_task != NULL) {
             // this is a task that uses individual signals (not stream-signals)
             // and we did not find a free signal, so just enqueue  
             // for a later dispatch
-            if(FreeSignalPool.empty()) {
+            if(FreeSignalPool.size() < barrier_pkt_count + 1) {
                 should_dispatch = false;
                 ret->and_predecessors.clear();
             }
@@ -1553,20 +1582,36 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret) {
                 new_signal = FreeSignalPool.front();
                 FreeSignalPool.pop();
                 ret->signal = new_signal;
+                for(int barrier_id = 0; barrier_id < barrier_pkt_count; barrier_id++) { 
+                    new_signal = FreeSignalPool.front();
+                    FreeSignalPool.pop();
+                    ret->barrier_signals.push_back(new_signal);
+                }
             }
         }
         else {
-            hsa_signal_t signal;
-            get_stream_signal(stream_obj, &signal);
-            if(signal.handle != (uint64_t)-1) {
-                ret->signal = signal;
+            if(FreeSignalPool.size() < barrier_pkt_count) {
+                should_dispatch = false;
+                ret->and_predecessors.clear();
             }
             else {
-                assert(StreamCommonSignalIdx < ATMI_MAX_STREAMS);
-                // get the next free signal from the stream common signal pool
-                signal = StreamCommonSignalPool[StreamCommonSignalIdx++];
-                ret->signal = signal;
-                set_stream_signal(stream_obj, signal);
+                hsa_signal_t signal;
+                get_stream_signal(stream_obj, &signal);
+                if(signal.handle != (uint64_t)-1) {
+                    ret->signal = signal;
+                }
+                else {
+                    assert(StreamCommonSignalIdx < ATMI_MAX_STREAMS);
+                    // get the next free signal from the stream common signal pool
+                    signal = StreamCommonSignalPool[StreamCommonSignalIdx++];
+                    ret->signal = signal;
+                    set_stream_signal(stream_obj, signal);
+                }
+                for(int barrier_id = 0; barrier_id < barrier_pkt_count; barrier_id++) { 
+                    new_signal = FreeSignalPool.front();
+                    FreeSignalPool.pop();
+                    ret->barrier_signals.push_back(new_signal);
+                }
             }
         }
     }
@@ -1585,6 +1630,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret) {
         ReadyTaskQueue.push(ret);
         max_ready_queue_sz++;
     }
+    //std::cout << "[" << ret->id << "]Signals After (" << should_dispatch << "): " << FreeSignalPool.size() << std::endl;
     unlock_vec(req_mutexes);
     // try to dispatch if 
     // a) you are using callbacks to resolve dependencies and all
@@ -1881,7 +1927,7 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     }
     #if 0
     if(strcmp(pif_name, "__sync_kernel_pif") == 0) {
-        std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
+        /*std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
         std::cout << "Try Dispatch Timer: " << TryDispatchTimer << std::endl;
         std::cout << "Signal Timer: " << SignalAddTimer << std::endl;
         std::cout << "Task Wait Time: " << TaskWaitTimer << std::endl;
@@ -1891,6 +1937,8 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         std::cout << "Waiting Tasks: " << waiting_count << std::endl;
         std::cout << "Direct Dispatch Tasks: " << direct_dispatch << std::endl;
         std::cout << "Callback Dispatch Tasks: " << callback_dispatch << std::endl;
+        */
+        std::cout << "SYNC_TASK(" << ret->id << ");" << std::endl;
         max_ready_queue_sz = 0;
         waiting_count = 0;
         direct_dispatch = 0;

@@ -114,6 +114,7 @@ typedef struct atl_task_s {
     atl_task_list_t and_successors;
     atl_task_list_t and_predecessors;
     atl_task_list_t predecessors;
+    std::vector<hsa_signal_t> barrier_signals;
     int id;
     atl_task_s() : cpu_kernelargs(0), cpu_kernelid(-1), num_params(-1), gpu_kernargptr(0), kernel_object(0), private_segment_size(0),
                    group_segment_size(0), num_predecessors(0), num_successors(0), atmi_task(0)
@@ -154,9 +155,9 @@ bool handle_signal(hsa_signal_value_t value, void *arg);
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 status_t dispatch_task(atl_task_t *task);
-status_t check_change_in_device_type(atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
-hsa_signal_t enqueue_barrier_async(hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
-void enqueue_barrier(hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype);
+status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
+hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
+void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype);
 
 int get_stream_id(atmi_stream_table_t *stream_obj);
 hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_table_t *stream_obj);

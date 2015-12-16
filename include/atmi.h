@@ -18,9 +18,9 @@
 #define ATMI_FALSE      0
 
 typedef enum atmi_devtype_s {
-    ATMI_DEVTYPE_CPU = 0,
-    ATMI_DEVTYPE_GPU = 1,
-    ATMI_DEVTYPE_DSP = 2
+    ATMI_DEVTYPE_CPU = (1 << 0),
+    ATMI_DEVTYPE_GPU = (1 << 1),
+    ATMI_DEVTYPE_DSP = (1 << 2)
 } atmi_devtype_t;
 
 typedef enum atmi_state_s {
@@ -275,7 +275,6 @@ typedef struct atmi_task_list_s {
 #define _CPPSTRING_ 
 #endif
 extern _CPPSTRING_ void atmi_stream_sync(atmi_stream_t *stream);
-extern _CPPSTRING_ void atmi_task_wait(atmi_task_t *task);
 extern _CPPSTRING_ atmi_task_t *__sync_kernel_pif(atmi_lparm_t *lparm);
 
 #if 1

@@ -10,12 +10,12 @@
 #define _CPPSTRING_ 
 #endif
 extern _CPPSTRING_ void __sync_kernel(atmi_task_t *thisTask) {}
-extern _CPPSTRING_ void __sync_kernel_wrapper(atmi_task_t **thisTaskPtr) {__sync_kernel(*thisTaskPtr);}
+extern _CPPSTRING_ void __sync_kernel_wrapper(atmi_task_t *thisTaskPtr) {__sync_kernel(thisTaskPtr);}
 static int cpu_initalized = 0;
 static hsa_executable_t g_executable;
 
 snk_pif_kernel_table_t __sync_kernel_pif_fn_table[] = {
-{.pif_name="__sync_kernel_pif",.devtype=ATMI_DEVTYPE_CPU,.num_params=1,.cpu_kernel={.kernel_name="__sync_kernel_wrapper",.function=(snk_generic_fp)__sync_kernel_wrapper},.gpu_kernel={.kernel_name=NULL}},
+{.pif_name="__sync_kernel_pif",.devtype=ATMI_DEVTYPE_CPU,.num_params=1,.cpu_kernel={.kernel_name="__sync_kernel_wrapper",.function=(atmi_generic_fp)__sync_kernel_wrapper},.gpu_kernel={.kernel_name=NULL}},
 };
 
 static int                              __sync_kernel_CPU_FK = 0 ; 
@@ -39,16 +39,16 @@ extern _CPPSTRING_ atmi_task_t* __sync_kernel_pif(atmi_lparm_t * lparm) {
           cpu_initalized = 1;
       }
       typedef struct cpu_args_s {
-          size_t arg0_size;
-          atmi_task_t **arg0;
+          //size_t arg0_size;
+          atmi_task_t *arg0;
       } cpu_args_t;
       size_t cpu_args_total_size = sizeof(cpu_args_t);
       void *thisKernargAddress = malloc(cpu_args_total_size);
       cpu_args_t *args = (cpu_args_t *)thisKernargAddress;
-      args->arg0_size = sizeof(atmi_task_t **);
+      //args->arg0_size = sizeof(atmi_task_t **);
       args->arg0 = NULL;
       
-      return atl_trylaunch_kernel(lparm, 
+      return atl_trylaunch_pif(lparm, 
               &g_executable,
               "__sync_kernel_pif",
               thisKernargAddress);

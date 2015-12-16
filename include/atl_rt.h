@@ -14,6 +14,7 @@
 */
 
 #include "atmi.h"
+#include "atmi_runtime.h"
 #include "atmi_kl.h"
 
 #ifdef __cplusplus
@@ -62,17 +63,9 @@ if (status != HSA_STATUS_SUCCESS) { \
 typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 #endif
 
-typedef enum status_t {
-    STATUS_SUCCESS=0,
-    STATUS_UNKNOWN=1,
-    STATUS_ERROR=2
-} status_t;
-
-
-typedef void (*snk_generic_fp)(void);
 typedef struct snk_cpu_kernel_s {
     const char *kernel_name; 
-    snk_generic_fp function;
+    atmi_generic_fp function;
 } snk_cpu_kernel_t;
 
 typedef struct snk_gpu_kernel_s {
@@ -92,40 +85,41 @@ typedef struct snk_pif_kernel_table_s {
 } snk_pif_kernel_table_t;
 
 
-status_t snk_init_context();
-status_t snk_init_cpu_context();
-status_t snk_init_gpu_context();
-status_t snk_gpu_create_program();
-status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
-status_t snk_gpu_build_executable(hsa_executable_t *executable);
+atmi_status_t snk_init_context();
+atmi_status_t snk_init_cpu_context();
+atmi_status_t snk_init_gpu_context();
+atmi_status_t snk_gpu_create_program();
+atmi_status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
+atmi_status_t snk_gpu_build_executable(hsa_executable_t *executable);
 
-status_t snk_gpu_create_executable(hsa_executable_t *executable);
-status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, char *module, 
+atmi_status_t snk_gpu_create_executable(hsa_executable_t *executable);
+atmi_status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, char *module, 
                 const size_t module_sz);
-status_t snk_gpu_freeze_executable(hsa_executable_t *executable);
+atmi_status_t snk_gpu_freeze_executable(hsa_executable_t *executable);
 
-status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
+atmi_status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
                  void **thisKernargAddress);
 
-status_t snk_init_kernel(
+atmi_status_t snk_init_kernel(
                              const char *pif_name, 
                              const atmi_devtype_t devtype,
                              const int num_params, 
                              const char *cpu_kernel_name, 
-                             snk_generic_fp fn_ptr,
+                             atmi_generic_fp fn_ptr,
                              const char *gpu_kernel_name);
-status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], int sz);
-status_t snk_get_gpu_kernel_info(
+atmi_status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], int sz);
+atmi_status_t snk_get_gpu_kernel_info(
                             hsa_executable_t executable,
                             const char *kernel_symbol_name,
                             uint64_t                         *_KN__Kernel_Object,
                             uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size
+                            uint32_t                         *_KN__Private_Segment_Size,
+                            uint32_t                         *_KN__Kernarg_Size
                             );
 
-atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
+atmi_task_t *atl_trylaunch_pif(const atmi_lparm_t *lparm,
                  hsa_executable_t *executable,
                  const char *pif_name,
                  void *thisKernargAddress);

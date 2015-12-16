@@ -92,11 +92,20 @@ extern bool handle_signal(hsa_signal_value_t value, void *arg);
 std::map<atmi_stream_t *, atmi_stream_table_t *> StreamTable;
 //atmi_task_table_t TaskTable[SNK_MAX_TASKS];
 
+struct cmp_str
+{
+    bool operator()(char const *a, char const *b)
+    {
+        return strcmp(a, b) < 0;
+    }
+};
+
 std::vector<atl_task_t *> AllTasks;
 std::queue<atl_task_t *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
 std::map<atmi_task_t *, atl_task_t *> PublicTaskMap;
-std::map<const char *, atl_kernel_info_t> KernelInfoTable;
+std::map<std::string, atl_kernel_info_t> KernelInfoTable;
+std::map<const char *, hsa_executable_t, cmp_str> ModuleMap;
 hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
 hsa_signal_t IdentityORSignal;
 hsa_signal_t IdentityANDSignal;
@@ -127,7 +136,7 @@ static int context_init_time_init = 0;
 #define handle_error_en(en, msg) \
     do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
 
-status_t set_thread_affinity(int id) {
+atmi_status_t set_thread_affinity(int id) {
     int s, j;
     cpu_set_t cpuset;
     pthread_t thread;
@@ -154,7 +163,7 @@ status_t set_thread_affinity(int id) {
         if (CPU_ISSET(j, &cpuset))
             printf("    CPU %d\n", j);
     */
-    return STATUS_SUCCESS; 
+    return ATMI_STATUS_SUCCESS; 
 }
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
@@ -288,15 +297,16 @@ extern void snk_task_wait(atl_task_t *task) {
         set_task_state(task, ATMI_COMPLETED);
     }
 
-    return;// STATUS_SUCCESS;
+    return;// ATMI_STATUS_SUCCESS;
 }
 
-extern void atmi_task_wait(atmi_task_t *task) {
+extern atmi_status_t atmi_task_wait(atmi_task_t *task) {
     snk_task_wait(PublicTaskMap[task]);
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t queue_sync(hsa_queue_t *queue) {
-    if(queue == NULL) return STATUS_SUCCESS;
+atmi_status_t queue_sync(hsa_queue_t *queue) {
+    if(queue == NULL) return ATMI_STATUS_SUCCESS;
     /* This function puts a barrier packet into the queue 
        This routine will wait for all packets to complete on this queue.
     */
@@ -323,7 +333,7 @@ status_t queue_sync(hsa_queue_t *queue) {
     hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
     hsa_signal_destroy(signal);
 
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
 /* Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
@@ -548,7 +558,7 @@ hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_table_t *stream_obj) {
     return queue;
 }
 
-status_t clear_saved_tasks(atmi_stream_table_t *stream_obj) {
+atmi_status_t clear_saved_tasks(atmi_stream_table_t *stream_obj) {
     hsa_status_t err;
     snk_task_list_t *cur = stream_obj->tasks;
     snk_task_list_t *prev = cur;
@@ -560,11 +570,11 @@ status_t clear_saved_tasks(atmi_stream_table_t *stream_obj) {
 
     stream_obj->tasks = NULL;
 
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type) {
-    if(stream_obj->ordered != ATMI_ORDERED) return STATUS_SUCCESS;
+atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type) {
+    if(stream_obj->ordered != ATMI_ORDERED) return ATMI_STATUS_SUCCESS;
 
     if(stream_obj->tasks != NULL) {
         if(stream_obj->last_device_type != new_task_device_type) {
@@ -587,7 +597,7 @@ status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stre
     }
 }
 
-status_t register_task(atmi_stream_table_t *stream_obj, atl_task_t *task, atmi_devtype_t devtype, boolean profilable) {
+atmi_status_t register_task(atmi_stream_table_t *stream_obj, atl_task_t *task, atmi_devtype_t devtype, boolean profilable) {
 
     snk_task_list_t *node = (snk_task_list_t *)malloc(sizeof(snk_task_list_t));
     node->task = task;
@@ -605,30 +615,30 @@ status_t register_task(atmi_stream_table_t *stream_obj, atl_task_t *task, atmi_d
     //DEBUG_PRINT("Registering %s task %p Profilable? %s\n", 
     //            (devtype == ATMI_DEVTYPE_GPU) ? "GPU" : "CPU",
     //            task, (profilable == ATMI_TRUE) ? "Yes" : "No");
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t get_stream_signal(atmi_stream_table_t *stream_obj, hsa_signal_t *signal) {
+atmi_status_t get_stream_signal(atmi_stream_table_t *stream_obj, hsa_signal_t *signal) {
     *signal = stream_obj->stream_common_signal;
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t set_stream_signal(atmi_stream_table_t *stream_obj, hsa_signal_t signal) {
+atmi_status_t set_stream_signal(atmi_stream_table_t *stream_obj, hsa_signal_t signal) {
     stream_obj->stream_common_signal = signal;
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t get_stream_mutex(atmi_stream_table_t *stream_obj, pthread_mutex_t *m) {
+atmi_status_t get_stream_mutex(atmi_stream_table_t *stream_obj, pthread_mutex_t *m) {
     *m = stream_obj->mutex;
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t set_stream_mutex(atmi_stream_table_t *stream_obj, pthread_mutex_t *m) {
+atmi_status_t set_stream_mutex(atmi_stream_table_t *stream_obj, pthread_mutex_t *m) {
     stream_obj->mutex = *m;
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t register_stream(atmi_stream_t *stream) {
+atmi_status_t register_stream(atmi_stream_t *stream) {
     /* Check if the stream exists in the stream table. 
      * If no, then add this stream to the stream table.
      */
@@ -647,7 +657,7 @@ status_t register_stream(atmi_stream_t *stream) {
     }
     StreamTable[stream]->ordered = stream->ordered;
 
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
 /* 
@@ -706,12 +716,21 @@ void atmi_init_context_structs() {
     atlc.g_tasks_initialized = 0;
 }
 
-status_t snk_init_context() {
+atmi_status_t snk_init_context() {
     snk_init_gpu_context();
-
     snk_init_cpu_context();
 
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
+}
+
+atmi_status_t atmi_init(int devtype) {
+    if(devtype & ATMI_DEVTYPE_GPU) 
+        snk_init_gpu_context();
+
+    if(devtype & ATMI_DEVTYPE_CPU) 
+        snk_init_cpu_context();
+
+    return ATMI_STATUS_SUCCESS;
 }
 
 void init_hsa() {
@@ -734,11 +753,11 @@ void init_hsa() {
     }
 }
 
-status_t snk_init_cpu_context() {
+atmi_status_t snk_init_cpu_context() {
    
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
 
-    if(atlc.g_cpu_initialized != 0) return STATUS_SUCCESS;
+    if(atlc.g_cpu_initialized != 0) return ATMI_STATUS_SUCCESS;
      
     hsa_status_t err;
     init_hsa();
@@ -773,41 +792,64 @@ status_t snk_init_cpu_context() {
 
     init_tasks();
     atlc.g_cpu_initialized = 1;
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_gpu_create_program() {
+void *atl_read_binary_from_file(const char *module, size_t *module_size) {
+    // Open file.
+    std::ifstream file(module, std::ios::in | std::ios::binary);
+    assert(file.is_open() && file.good());
+
+    // Find out file size.
+    file.seekg(0, file.end);
+    size_t size = file.tellg();
+    file.seekg(0, file.beg);
+
+    // Allocate memory for raw code object.
+    void *raw_code_object = malloc(size);
+    assert(raw_code_object);
+
+    // Read file contents.
+    file.read((char*)raw_code_object, size);
+
+    // Close file.
+    file.close();
+    *module_size = size;
+    return raw_code_object;
+}
+
+atmi_status_t snk_gpu_create_program() {
     hsa_status_t err;
     /* Create hsa program.  */
     memset(&snk_hsa_program,0,sizeof(hsa_ext_program_t));
     err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &snk_hsa_program);
     ErrorCheck(Create the program, err);
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]) {
+atmi_status_t snk_gpu_add_brig_module(char _CN__HSA_BrigMem[]) {
     hsa_status_t err;
     /* Add the BRIG module to hsa program.  */
     err = hsa_ext_program_add_module(snk_hsa_program, (hsa_ext_module_t)_CN__HSA_BrigMem);
     ErrorCheck(Adding the brig module to the program, err);
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_gpu_create_executable(hsa_executable_t *executable) {
+atmi_status_t snk_gpu_create_executable(hsa_executable_t *executable) {
     /* Create the empty executable.  */
     hsa_status_t err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
     ErrorCheck(Create the executable, err);
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_gpu_freeze_executable(hsa_executable_t *executable) {
+atmi_status_t snk_gpu_freeze_executable(hsa_executable_t *executable) {
     /* Freeze the executable; it can now be queried for symbols.  */
     hsa_status_t err = hsa_executable_freeze(*executable, "");
     ErrorCheck(Freeze the executable, err);
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, char *module, const size_t module_sz) {
+atmi_status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, char *module, const size_t module_sz) {
 #if 0
     // Open file.
     std::ifstream file(module, std::ios::in | std::ios::binary);
@@ -847,10 +889,10 @@ status_t snk_gpu_add_finalized_module(hsa_executable_t *executable, char *module
     /* Load the code object.  */
     err = hsa_executable_load_code_object(*executable, snk_gpu_agent, code_object, "");
     ErrorCheck(Loading the code object, err);
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_gpu_build_executable(hsa_executable_t *executable) {
+atmi_status_t snk_gpu_build_executable(hsa_executable_t *executable) {
     hsa_status_t err;
     /* Determine the agents ISA.  */
     hsa_isa_t isa;
@@ -880,13 +922,117 @@ status_t snk_gpu_build_executable(hsa_executable_t *executable) {
     err = hsa_executable_freeze(*executable, "");
     ErrorCheck(Freeze the executable, err);
 
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_init_gpu_context() {
+hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
+    hsa_symbol_kind_t type;
+
+    uint32_t name_length;
+    hsa_status_t err;
+    err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_TYPE, &type); 
+    ErrorCheck(Symbol info extraction, err);
+    if(type == HSA_SYMBOL_KIND_KERNEL) {
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length); 
+        ErrorCheck(Symbol info extraction, err);
+        char *name = (char *)malloc(name_length + 1);
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME, name); 
+        ErrorCheck(Symbol info extraction, err);
+        name[name_length] = 0;
+
+        atl_kernel_info_t info;
+        /* Extract dispatch information from the symbol */
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &(info.kernel_object));
+        ErrorCheck(Extracting the symbol from the executable, err);
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE, &(info.group_segment_size));
+        ErrorCheck(Extracting the group segment size from the executable, err);
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, &(info.private_segment_size));
+        ErrorCheck(Extracting the private segment from the executable, err);
+
+        /* Extract dispatch information from the symbol */
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &(info.kernel_segment_size));
+        ErrorCheck(Extracting the kernarg segment size from the executable, err);
+
+        KernelInfoTable[std::string(name)] = info;
+        free(name);
+
+        /*
+        void *thisKernargAddress = NULL;
+        // create a memory segment for this kernel's arguments
+        err = hsa_memory_allocate(snk_gpu_KernargRegion, info.kernel_segment_size * MAX_NUM_KERNELS, &thisKernargAddress);
+        ErrorCheck(Allocating memory for the executable-kernel, err);
+        */
+    }
+    return HSA_STATUS_SUCCESS;
+}
+
+atmi_status_t atmi_module_register(const char *filename, atmi_platform_type_t type) {
+    snk_gpu_create_program();
+    hsa_executable_t executable; 
+    hsa_status_t err;
+    size_t module_size;
+    void *module_bytes = atl_read_binary_from_file(filename, &module_size); 
+
+    if(ModuleMap.find(filename) != ModuleMap.end()) {
+        executable = ModuleMap[filename];
+    }
+    else {
+        /* Create the empty executable.  */
+        err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
+        ErrorCheck(Create the executable, err);
+        ModuleMap[filename] = executable;
+    }
+
+    if(type == BRIG) {
+        hsa_ext_module_t module = (hsa_ext_module_t)module_bytes;
+        /* Add the BRIG module to hsa program.  */
+        err = hsa_ext_program_add_module(snk_hsa_program, module);
+        ErrorCheck(Adding the brig module to the program, err);
+        /* Determine the agents ISA.  */
+        hsa_isa_t isa;
+        err = hsa_agent_get_info(snk_gpu_agent, HSA_AGENT_INFO_ISA, &isa);
+        ErrorCheck(Query the agents isa, err);
+
+        /* * Finalize the program and extract the code object.  */
+        hsa_ext_control_directives_t control_directives;
+        memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
+        hsa_code_object_t code_object;
+        err = hsa_ext_program_finalize(snk_hsa_program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
+        ErrorCheck(Finalizing the program, err);
+
+        /* Destroy the program, it is no longer needed.  */
+        err=hsa_ext_program_destroy(snk_hsa_program);
+        ErrorCheck(Destroying the program, err);
+
+        /* Load the code object.  */
+        err = hsa_executable_load_code_object(executable, snk_gpu_agent, code_object, "");
+        ErrorCheck(Loading the code object, err);
+    }
+    else if (type == BRIG_FINAL) {
+        // Deserialize code object.
+        hsa_code_object_t code_object = {0};
+        hsa_status_t err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
+        ErrorCheck(Code Object Deserialization, err);
+        assert(0 != code_object.handle);
+
+        /* Load the code object.  */
+        err = hsa_executable_load_code_object(executable, snk_gpu_agent, code_object, "");
+        ErrorCheck(Loading the code object, err);
+    }
+
+    /* Freeze the executable; it can now be queried for symbols.  */
+    err = hsa_executable_freeze(executable, "");
+    ErrorCheck(Freeze the executable, err);
+    free(module_bytes);
+    
+    err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, NULL); 
+    ErrorCheck(Iterating over symbols for execuatable, err);
+}
+
+atmi_status_t snk_init_gpu_context() {
 
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
-    if(atlc.g_gpu_initialized != 0) return STATUS_SUCCESS;
+    if(atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
     
     hsa_status_t err;
 
@@ -935,20 +1081,20 @@ status_t snk_init_gpu_context() {
 
     init_tasks();
     atlc.g_gpu_initialized = 1;
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_init_kernel(
+atmi_status_t snk_init_kernel(
                              const char *pif_name, 
                              const atmi_devtype_t devtype,
                              const int num_params, 
                              const char *cpu_kernel_name, 
-                             snk_generic_fp fn_ptr,
+                             atmi_generic_fp fn_ptr,
                              const char *gpu_kernel_name) {
     static int snk_kernel_counter = 0;
     if(snk_kernel_counter < 0 || snk_kernel_counter >= SNK_MAX_FUNCTIONS) {
         DEBUG_PRINT("Too many kernel functions. Increase SNK_MAX_FUNCTIONS value.\n");
-        return STATUS_ERROR;
+        return ATMI_STATUS_ERROR;
     }
     //DEBUG_PRINT("PIF[%d] Entry Name: %s, Num args: %d CPU Kernel: %s, GPU Kernel: %s\n", snk_kernel_counter, pif_name, num_params, cpu_kernel_name, gpu_kernel_name);
     snk_kernels[snk_kernel_counter].pif_name = pif_name;
@@ -958,10 +1104,10 @@ status_t snk_init_kernel(
     snk_kernels[snk_kernel_counter].cpu_kernel.function = fn_ptr; 
     snk_kernels[snk_kernel_counter].gpu_kernel.kernel_name = gpu_kernel_name;
     snk_kernel_counter++;
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], const int sz) {
+atmi_status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], const int sz) {
     int i;
     // FIXME: Move away from a flat table structure to a hierarchical table where
     // each PIF has a table of potential kernels!
@@ -976,20 +1122,60 @@ status_t snk_pif_init(snk_pif_kernel_table_t pif_fn_table[], const int sz) {
                            pif_fn_table[i].gpu_kernel.kernel_name
                            );
     }
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
-status_t snk_get_gpu_kernel_info(
+atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *kernel) {
+    static int counter = 0;
+    char *pif = (char *)malloc(256);
+    memset(pif, 0, 256);
+    sprintf(pif, "num%d", counter);
+    kernel->handle = (uint64_t)pif;
+    counter++;
+    return ATMI_STATUS_SUCCESS;
+}
+
+atmi_status_t atmi_kernel_release(atmi_kernel_t kernel) {
+    char *pif = (char *)(kernel.handle);
+    free(pif);
+    return ATMI_STATUS_SUCCESS;
+}
+
+atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t kernel, const char *impl) {
+    const unsigned int num_params = 0;
+    const char *pif_name = (const char *)(kernel.handle);
+    std::string cl_pif_name("&__OpenCL_");
+    cl_pif_name += std::string(impl );
+    cl_pif_name += std::string("_kernel");
+    snk_init_kernel(
+            pif_name, 
+            ATMI_DEVTYPE_GPU, 
+            num_params,
+            NULL, NULL, cl_pif_name.c_str());
+}
+
+atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t kernel, atmi_generic_fp impl) {
+    const unsigned int num_params = 0;
+    const char *pif_name = (const char *)(kernel.handle);
+    snk_init_kernel(
+            pif_name, 
+            ATMI_DEVTYPE_CPU, 
+            num_params,
+            NULL, impl, NULL);
+}
+
+atmi_status_t snk_get_gpu_kernel_info(
                             hsa_executable_t executable,
                             const char *kernel_symbol_name,
                             uint64_t                         *_KN__Kernel_Object,
                             uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size
+                            uint32_t                         *_KN__Private_Segment_Size,
+                            uint32_t                         *_KN__Kernarg_Size
                             ) {
 
     hsa_status_t err;
     atl_kernel_info_t info;
-    if(KernelInfoTable.find(kernel_symbol_name) == KernelInfoTable.end()) {
+    if(KernelInfoTable.find(std::string(kernel_symbol_name)) == KernelInfoTable.end()) {
 
         hsa_executable_symbol_t symbol;
         /* Extract the symbol from the executable.  */
@@ -1005,39 +1191,25 @@ status_t snk_get_gpu_kernel_info(
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, &(info.private_segment_size));
         ErrorCheck(Extracting the private segment from the executable, err);
 
-        KernelInfoTable[kernel_symbol_name] = info;
+        KernelInfoTable[std::string(kernel_symbol_name)] = info;
     }
     else {
-        info = KernelInfoTable[kernel_symbol_name];
+        info = KernelInfoTable[std::string(kernel_symbol_name)];
     }
     *_KN__Kernel_Object = info.kernel_object;
     *_KN__Group_Segment_Size = info.group_segment_size;
     *_KN__Private_Segment_Size = info.private_segment_size;
+    *_KN__Kernarg_Size = info.kernel_segment_size;
 
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 
 }                    
 
-#if 0
-hsa_status_t get_all_symbol_names(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
-    uint32_t name_length;
-    hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length); 
-    printf("Symbol length found: %" PRIu32 "\n", name_length);
-    char *name = (char *)malloc(name_length + 1);
-    hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME, name); 
-    name[name_length] = 0;
-    printf("Symbol found: %s\n", name);
-    free(name);
-}
-#endif
-
-status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
+atmi_status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
                  void **thisKernargAddress) {
     hsa_status_t err;
-    //err = hsa_executable_iterate_symbols(executable, get_all_symbol_names, NULL); 
-    //ErrorCheck(Iterating over symbols for execuatable, err);
     uint16_t i;
     int this_kernel_iter = 0;
     for(i = 0; i < SNK_MAX_FUNCTIONS; i++) {
@@ -1050,7 +1222,7 @@ status_t snk_gpu_memory_allocate(const atmi_lparm_t *lparm,
                 }
                 if(snk_kernels[i].devtype != ATMI_DEVTYPE_GPU) {
                     fprintf(stderr, "ERROR:  Bad GPU kernel_id %d for PIF %s\n", this_kernel_iter, pif_name);
-                    return STATUS_ERROR;
+                    return ATMI_STATUS_ERROR;
                 }
                 const char *kernel_name = snk_kernels[i].gpu_kernel.kernel_name;
                 hsa_executable_symbol_t symbol;
@@ -1362,7 +1534,7 @@ void dispatch_ready_task_or_release_signal(atl_task_t *task) {
     }
 }
 
-status_t dispatch_task(atl_task_t *task) {
+atmi_status_t dispatch_task(atl_task_t *task) {
     atmi_lparm_t *lparm = &(task->lparm);
     //DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
 
@@ -1378,7 +1550,7 @@ status_t dispatch_task(atl_task_t *task) {
         this_Q = acquire_and_set_next_gpu_queue(stream_obj);
     else if(task->devtype == ATMI_DEVTYPE_CPU)
         this_Q = acquire_and_set_next_cpu_queue(stream_obj);
-    if(!this_Q) return STATUS_ERROR;
+    if(!this_Q) return ATMI_STATUS_ERROR;
 
     /* if stream is ordered and the devtype changed for this task, 
      * enqueue a barrier to wait for previous device to complete */
@@ -1521,7 +1693,7 @@ status_t dispatch_task(atl_task_t *task) {
     }
     //TryDispatchTimer.Stop();
     DEBUG_PRINT("Task %d (%d) Dispatched\n", task->id, task->devtype);
-    return STATUS_SUCCESS;
+    return ATMI_STATUS_SUCCESS;
 }
 
 bool try_dispatch_barrier_pkt(atl_task_t *ret) {
@@ -1729,7 +1901,186 @@ bool try_dispatch_callback(atl_task_t *ret) {
     return should_dispatch;
 }
 
-atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
+atmi_task_t *atl_trylaunch_kernel(const int kernel_id,
+                 const atmi_lparm_t *lparm,
+                 const char *kernel_name,
+                 void *thisKernargAddress) {
+    DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
+#if 1
+    static bool is_called = false;
+    if(!is_called) {
+        set_thread_affinity(2);
+
+        /* int policy;
+           struct sched_param param;
+           pthread_getschedparam(pthread_self(), &policy, &param);
+           param.sched_priority = sched_get_priority_min(policy); 
+           printf("Setting Priority Policy for %d: %d\n", policy, param.sched_priority);
+           pthread_setschedparam(pthread_self(), policy, &param);
+           */
+        is_called = true;
+    }
+#endif
+    atmi_stream_t *stream = NULL;
+    if(lparm->stream == NULL) {
+        stream = &snk_default_stream_obj;
+    } else {
+        stream = lparm->stream;
+    }
+    /* Add row to stream table for purposes of future synchronizations */
+    register_stream(stream);
+    atmi_stream_table_t *stream_obj = StreamTable[stream];
+
+    if(lparm->synchronous == ATMI_TRUE && lparm->num_required == 0 && lparm->num_needs_any == 0
+            //&& stream->ordered == ATMI_TRUE
+      ) { 
+        // Greg's logic is to flush the entire stream if the task is sync and has no dependencies */
+        // FIXME: This has to change for unordered streams. Why should we flush the entire stream 
+        // for every sync kernel in an unordered stream?
+        snk_stream_sync(stream_obj);
+    }
+
+    //TryLaunchTimer.Start();
+    uint16_t i;
+    atl_task_t *ret = NULL;
+    atl_task_t *continuation_task = NULL;
+    bool has_continuation = false;
+    if(lparm->task) {
+        has_continuation = (lparm->task->continuation != NULL);
+        if(PublicTaskMap.find(lparm->task) != PublicTaskMap.end()) {
+            // task is already found, so use it and dont create a new one
+            ret = PublicTaskMap[lparm->task];
+        }
+    }
+    if(ret == NULL) {
+        ret = new atl_task_t;
+        memset(ret, 0, sizeof(atl_task_t));
+        lock(&mutex_all_tasks_);
+        AllTasks.push_back(ret);
+        //AllTasks.push_back(atl_task_t());
+        //AllTasks.emplace_back();
+        //ret = AllTasks[AllTasks.size() - 1];
+        ret->id = AllTasks.size();
+        //AllTasks.push_back(task); 
+        //atl_task_t *ret = task; //AllTasks[AllTasks.size() - 1];
+        unlock(&mutex_all_tasks_);
+        PublicTaskMap[lparm->task] = ret;
+        DEBUG_PRINT("Task Map[%p] = %p (%s)\n", lparm->task, PublicTaskMap[lparm->task], kernel_name);
+        pthread_mutex_init(&(ret->mutex), NULL);
+    }
+    if(has_continuation) {
+        continuation_task = new atl_task_t;
+        memset(continuation_task, 0, sizeof(atl_task_t));
+        lock(&mutex_all_tasks_);
+        AllTasks.push_back(continuation_task);
+        continuation_task->id = AllTasks.size();
+        unlock(&mutex_all_tasks_);
+        PublicTaskMap[lparm->task->continuation] = continuation_task;
+        DEBUG_PRINT("Continuation Map[%p] = %p (%s)\n", lparm->task->continuation, PublicTaskMap[lparm->task->continuation], kernel_name);
+        pthread_mutex_init(&(continuation_task->mutex), NULL);
+    }
+
+    if(snk_kernels[kernel_id].devtype == ATMI_DEVTYPE_GPU) {
+        atl_kernel_info_t info = KernelInfoTable[std::string(snk_kernels[kernel_id].gpu_kernel.kernel_name)];
+        ret->gpu_kernargptr = (void*) thisKernargAddress;
+        ret->kernel_object = info.kernel_object; 
+        ret->private_segment_size = info.private_segment_size;
+        ret->group_segment_size = info.group_segment_size;
+    } 
+    else if(snk_kernels[kernel_id].devtype == ATMI_DEVTYPE_CPU) {
+        ret->cpu_kernelargs = thisKernargAddress;
+        ret->cpu_kernelid = kernel_id;
+    }
+    ret->num_params = snk_kernels[kernel_id].num_params;
+    ret->devtype = snk_kernels[kernel_id].devtype;
+    ret->profilable = lparm->profilable;
+    ret->atmi_task = lparm->task;
+    //memcpy(&(ret->lparm), lparm, sizeof(atmi_lparm_t));
+    ret->lparm = *lparm;
+    DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires, lparm->requires);
+    DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task, lparm->task);
+
+    ret->lparm.stream = stream;
+    ret->stream_obj = stream_obj;
+    DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.stream, lparm->stream);
+    ret->num_predecessors = 0;
+    ret->num_successors = 0;
+
+    /* For dependent child tasks, add dependent parent kernels to barriers.  */
+    DEBUG_PRINT("Pif %s requires %d task\n", kernel_name, lparm->num_required);
+
+    ret->predecessors.clear();
+    for(int idx = 0; idx < lparm->num_required; idx++) {
+        atl_task_t *pred_task = PublicTaskMap[lparm->requires[idx]];
+        assert(pred_task != NULL);
+        ret->predecessors.push_back(pred_task);
+    }
+
+    bool should_dispatch = true;
+    bool should_register_callback = true;
+    if(g_dep_sync_type == ATL_SYNC_CALLBACK) {
+        should_dispatch = try_dispatch_callback(ret);
+        should_register_callback = (ret->atmi_task != NULL);
+    }
+    else if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+        should_dispatch = try_dispatch_barrier_pkt(ret);
+        should_register_callback = ((ret->atmi_task != NULL) ||  
+                (ret->atmi_task == NULL && !(ret->and_predecessors.empty())));
+    }
+
+   // TryLaunchTimer.Stop();
+    if(should_dispatch) {
+        if(ret->atmi_task) {
+            ret->atmi_task->handle = (void *)(&(ret->signal));
+        }
+        direct_dispatch++;
+        dispatch_task(ret);
+        if(should_register_callback) {
+            hsa_status_t err = hsa_amd_signal_async_handler(ret->signal,
+                    HSA_SIGNAL_CONDITION_EQ, 0,
+                    handle_signal, (void *)ret);
+            ErrorCheck(Creating signal handler, err);
+        }
+    }
+
+    if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
+        /* For default synchrnous execution, wait til kernel is finished.  */
+    //    TaskWaitTimer.Start();
+        snk_task_wait(ret);
+        set_task_state(ret, ATMI_COMPLETED);
+        set_task_metrics(ret, snk_kernels[kernel_id].devtype, lparm->profilable);
+      //  TaskWaitTimer.Stop();
+        //std::cout << "Task Wait Interim Timer " << TaskWaitTimer << std::endl;
+    }
+    else {
+        /* add task to the corresponding row in the stream table */
+        if(ret->atmi_task)
+            register_task(stream_obj, ret, snk_kernels[kernel_id].devtype, lparm->profilable);
+    }
+    #if 0
+    if(strcmp(pif_name, "__sync_kernel_pif") == 0) {
+        /*std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
+        std::cout << "Try Dispatch Timer: " << TryDispatchTimer << std::endl;
+        std::cout << "Signal Timer: " << SignalAddTimer << std::endl;
+        std::cout << "Task Wait Time: " << TaskWaitTimer << std::endl;
+        std::cout << "Handle Signal Timer: " << HandleSignalTimer << std::endl;
+        std::cout << "Handle Signal Invoke Timer: " << HandleSignalInvokeTimer << std::endl;
+        std::cout << "Max Ready Queue Size: " << max_ready_queue_sz << std::endl;
+        std::cout << "Waiting Tasks: " << waiting_count << std::endl;
+        std::cout << "Direct Dispatch Tasks: " << direct_dispatch << std::endl;
+        std::cout << "Callback Dispatch Tasks: " << callback_dispatch << std::endl;
+        */
+        std::cout << "SYNC_TASK(" << ret->id << ");" << std::endl;
+        max_ready_queue_sz = 0;
+        waiting_count = 0;
+        direct_dispatch = 0;
+        callback_dispatch = 0;
+    }
+    #endif
+    return ret->atmi_task;
+}
+
+atmi_task_t *atl_trylaunch_pif(const atmi_lparm_t *lparm,
                  hsa_executable_t *p_executable,
                  const char *pif_name,
                  void *thisKernargAddress) {
@@ -1845,15 +2196,18 @@ atmi_task_t *atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         uint64_t _KN__Kernel_Object;
         uint32_t _KN__Group_Segment_Size;
         uint32_t _KN__Private_Segment_Size;
+        uint32_t _KN__Kernarg_Size;
 
         snk_get_gpu_kernel_info(executable, gpu_kernel_name, &_KN__Kernel_Object, 
-                &_KN__Group_Segment_Size, &_KN__Private_Segment_Size);
+                &_KN__Group_Segment_Size, &_KN__Private_Segment_Size,
+                &_KN__Kernarg_Size);
         /* thisKernargAddress has already been set up in the beginning of this routine */
         /*  Bind kernel argument buffer to the aql packet.  */
         ret->gpu_kernargptr = (void*) thisKernargAddress;
-        ret->kernel_object = _KN__Kernel_Object;
-        ret->private_segment_size = _KN__Private_Segment_Size;
-        ret->group_segment_size = _KN__Group_Segment_Size;
+        atl_kernel_info_t info = KernelInfoTable[std::string(gpu_kernel_name)];
+        ret->kernel_object = info.kernel_object; 
+        ret->private_segment_size = info.private_segment_size;
+        ret->group_segment_size = info.group_segment_size;
     } 
     else if(devtype == ATMI_DEVTYPE_CPU) {
         ret->cpu_kernelargs = thisKernargAddress;
@@ -1965,6 +2319,72 @@ atmi_task_t *snk_launch_cpu_kernel(const atmi_lparm_t *lparm,
     return ret;
 }
 
+atmi_task_t *atmi_task_launch(atmi_kernel_t kernel, atmi_lparm_t *lparm, void **args, size_t *arg_sizes, const int num_args) {
+    const char *pif_name = (const char *)(kernel.handle);
+    int this_kernel_iter = 0;
+    const char *pif_found_name = NULL;
+    const char *gpu_kernel_name = NULL;
+    const char *cpu_kernel_name = NULL;
+    atmi_devtype_t devtype;
+    int actual_num_args = num_args + 1; // to include atmi_task_t *
+    int kernel_id;
+    for(int i = 0; i < SNK_MAX_FUNCTIONS; i++) {
+        //DEBUG_PRINT("Comparing kernels %s %s\n", snk_kernels[i].pif_name, pif_name);
+        if(snk_kernels[i].pif_name && pif_name) {
+            if(strcmp(snk_kernels[i].pif_name, pif_name) == 0) // && snk_kernels[i].gpu_kernel.kernel_name != NULL) 
+            {
+                if(this_kernel_iter != lparm->kernel_id) {
+                    this_kernel_iter++;
+                }
+                else {
+                    devtype = snk_kernels[i].devtype;
+                    pif_found_name = snk_kernels[i].pif_name;
+                    gpu_kernel_name = snk_kernels[i].gpu_kernel.kernel_name;
+                    cpu_kernel_name = snk_kernels[i].cpu_kernel.kernel_name;
+                    //num_params = snk_kernels[i].num_params;
+                    snk_kernels[i].num_params = actual_num_args;
+                    kernel_id = i;
+                    break;
+                }
+            }
+        }
+    }
+    if(pif_found_name == NULL) {
+        fprintf(stderr, "ERROR: Kernel/PIF %s not found\n", pif_name);
+        return NULL;
+    }
+    char *thisKernargAddress;
+    if(devtype == ATMI_DEVTYPE_CPU) {
+        thisKernargAddress = (char *)malloc(actual_num_args * sizeof(char *));
+        char *kernargPtr = (char *)thisKernargAddress;
+        thisKernargAddress += sizeof(char *);
+        for(int i = 0; i < num_args; i++) {
+            void *arg_ptr = malloc(arg_sizes[i]);
+            memcpy(arg_ptr, args[i], arg_sizes[i]);
+            *(char **)thisKernargAddress = (char *)arg_ptr;
+            thisKernargAddress += sizeof(char *);
+        }
+        
+        return atl_trylaunch_kernel(kernel_id, lparm, cpu_kernel_name, kernargPtr);
+    }
+    else if(devtype == ATMI_DEVTYPE_GPU) {
+        atl_kernel_info_t info = KernelInfoTable[std::string(gpu_kernel_name)];
+        uint32_t kernel_segment_size = info.kernel_segment_size;
+        hsa_status_t err = hsa_memory_allocate(snk_gpu_KernargRegion, kernel_segment_size, (void **)&thisKernargAddress);
+        ErrorCheck(Allocating memory for the executable-kernel, err);
+        // skip over the six special HSA kernel arguments
+        char *kernargPtr = thisKernargAddress;
+        thisKernargAddress += (6 * sizeof(uint64_t));
+        thisKernargAddress += sizeof(char *);
+        for(int i = 0; i < num_args; i++) {
+            memcpy(thisKernargAddress, args[i], arg_sizes[i]);
+            thisKernargAddress += arg_sizes[i];
+        }
+
+        return atl_trylaunch_kernel(kernel_id, lparm, gpu_kernel_name, kernargPtr);
+    }
+}
+
 enum queue_type{device_queue = 0, soft_queue}; 
 void snk_kl_init(atmi_klist_t *atmi_klist,
         hsa_executable_t g_executable,
@@ -1997,6 +2417,7 @@ void snk_kl_init(atmi_klist_t *atmi_klist,
     uint64_t _KN__Kernel_Object;
     uint32_t _KN__Group_Segment_Size;
     uint32_t _KN__Private_Segment_Size;
+    uint32_t _KN__Kernarg_Size;
 
     /* Allocate the kernel argument buffer from the correct region. */
     //void* thisKernargAddress;
@@ -2013,7 +2434,8 @@ void snk_kl_init(atmi_klist_t *atmi_klist,
                             snk_kernels[i].gpu_kernel.kernel_name,
                             &_KN__Kernel_Object, 
                             &_KN__Group_Segment_Size, 
-                            &_KN__Private_Segment_Size);
+                            &_KN__Private_Segment_Size,
+                            &_KN__Kernarg_Size);
 
                     atmi_klist_curr->num_kernel_packets++;
                     atmi_klist_curr->kernel_packets = 

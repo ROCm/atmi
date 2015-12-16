@@ -110,7 +110,7 @@ static hsa_executable_t g_executable;\n\
 static int num_pif = 0;\n\
 atmi_klist_t atmi_klist[1000];\n\n\
 #define ErrorCheck(msg, status) \\\n\
-if (status != STATUS_SUCCESS) { \\\n\
+if (status != ATMI_STATUS_SUCCESS) { \\\n\
    printf(\"%%s failed.\\n\", #msg); \\\n\
 } \n\n\
 void kl_init(); \n\n\
@@ -272,10 +272,10 @@ void generate_task_wrapper(char *text, const char *fn_name, const int num_params
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
     if(num_params == 1) {
-        strcat(fn_decl, "(atmi_task_t **var0)");
+        strcat(fn_decl, "(atmi_task_t *var0)");
     }
     else if(num_params > 1) {
-        strcat(fn_decl, "(atmi_task_t **var0, ");
+        strcat(fn_decl, "(atmi_task_t *var0, ");
     }
     
     int var_idx = 0;
@@ -639,11 +639,11 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 #if 1
         pp_printf((pif_printers[pif_index].pifdefs), "\
         typedef struct cpu_args_struct_s {\n\
-            size_t arg0_size;\n\
+            //size_t arg0_size;\n\
             atmi_task_t **arg0;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-            size_t arg%d_size;\n\
+            //size_t arg%d_size;\n\
             %s* arg%d;\n",
             arg_idx,
             arg_list[arg_idx].c_str(), arg_idx);
@@ -652,12 +652,12 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         } cpu_args_struct_t; \n\
         void *thisKernargAddress = malloc(sizeof(cpu_args_struct_t));\n\
         cpu_args_struct_t *args = (cpu_args_struct_t *)thisKernargAddress; \n\
-        args->arg0_size = sizeof(atmi_task_t **);\n\
+        //args->arg0_size = sizeof(atmi_task_t **);\n\
         args->arg0 = NULL; \
         ");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\n\
-        args->arg%d_size = sizeof(%s*); \n\
+        //args->arg%d_size = sizeof(%s*); \n\
         args->arg%d = (%s*)malloc(sizeof(%s));\n\
         memcpy(args->arg%d, &var%d, sizeof(%s));\
         ",
@@ -677,7 +677,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
 #endif
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
-        return atl_trylaunch_kernel(lparm, \n\
+        return atl_trylaunch_pif(lparm, \n\
                     &g_executable,\n\
                     \"%s\", \n\
                     thisKernargAddress); \
@@ -686,7 +686,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     } \n\
     else if(devtype == ATMI_DEVTYPE_GPU) {\n\
         if(g_gpu_initialized == 0) {\n\
-            status_t err;\n\
+            atmi_status_t err;\n\
             kl_init();\n\
             snk_init_gpu_context();\n");
         if(g_hsa_offline_finalize == 1) {
@@ -755,7 +755,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         gpu_args->arg%d=var%d;\n", arg_idx+6, arg_idx);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        return atl_trylaunch_kernel(lparm,\n\
+        return atl_trylaunch_pif(lparm,\n\
                             &g_executable,\n\
                             \"%s\",\n\
                             thisKernargAddress);\n", pif_name);
@@ -784,7 +784,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s {\n", fn_cpu_wrapper_decl);
         pp_printf(&g_kerneldecls, "\
-    %s(*var0",
+    %s(var0",
         fn_name);
         int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
@@ -792,12 +792,12 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
         pp_printf(&g_kerneldecls, ");\n}\n");
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s_wrapper\",.function=(snk_generic_fp)%s_wrapper},.gpu_kernel={.kernel_name=NULL}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={.kernel_name=\"%s_wrapper\",.function=(atmi_generic_fp)%s_wrapper},.gpu_kernel={.kernel_name=NULL}},\n",
             pif_name, num_params, fn_name, fn_name);
     } 
     else if(devtype == ATMI_DEVTYPE_GPU) {
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(snk_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
+    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={.kernel_name=NULL,.function=(atmi_generic_fp)NULL},.gpu_kernel={.kernel_name=\"&__OpenCL_%s_kernel\"}},\n",
             pif_name, num_params, fn_name);
     }
     // Push helper IDs for programmers to index into their kernels
@@ -1278,12 +1278,12 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
            pp_printf((pif_printers[pif_index].pifdefs), "\
     typedef struct cpu_args_struct_s {\n\
-        size_t arg0_size;\n\
+        //size_t arg0_size;\n\
         atmi_task_t **arg0;\n");
         int arg_idx;
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-        size_t arg%d_size;\n\
+        //size_t arg%d_size;\n\
         %s* arg%d;\n",
             arg_idx,
             arg_list[arg_idx].c_str(), arg_idx);
@@ -1339,7 +1339,7 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         if(g_hsa_offline_finalize == 1) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
     if(g_gpu_initialized == 0) { \n\
-        status_t err;\n\
+        atmi_status_t err;\n\
         snk_init_context(); \n\
         snk_init_gpu_context(); \n\
         snk_gpu_create_executable(&g_executable); \n");
@@ -1358,7 +1358,7 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         else {
             pp_printf((pif_printers[pif_index].pifdefs), "\
     if(g_gpu_initialized == 0) { \n\
-        status_t err;\n\
+        atmi_status_t err;\n\
         snk_init_context(); \n\
         snk_init_gpu_context(); \n\
         snk_gpu_create_program(); \n");
@@ -1383,11 +1383,11 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     int i; \n\
     for(i = 0; i < MAX_NUM_KERNELS; i++) { \n\
         cpu_args_struct_t *args = (cpu_args_struct_t *)cpuKernargAddress + i; \n\
-        args->arg0_size = sizeof(atmi_task_t **);\n\
+        //args->arg0_size = sizeof(atmi_task_t **);\n\
         args->arg0 = NULL; \n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
-        args->arg%d_size = sizeof(%s*); \n\
+        //args->arg%d_size = sizeof(%s*); \n\
         args->arg%d = (%s*)malloc(sizeof(%s));\n",
             arg_idx, arg_list[arg_idx].c_str(),
             arg_idx, arg_list[arg_idx].c_str(), arg_list[arg_idx].c_str()
@@ -1616,13 +1616,13 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
 
     pp_printf(&pif_spawn, "\
         struct cpu_args_struct {\n\
-            size_t arg0_size;\n\
+            //size_t arg0_size;\n\
             uint64_t * arg0;\n");
     for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
         if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
         {
             pp_printf(&pif_spawn, "\
-            size_t arg%d_size;\n\
+            //size_t arg%d_size;\n\
             uint64_t * arg%d;\n",
             arg_idx,
             arg_idx);
@@ -1631,7 +1631,7 @@ atmi_task_t * %s(atmi_klparm_t *lparm ", pif_name);
         else
         {
             pp_printf(&pif_spawn, "\
-            size_t arg%d_size;\n\
+            //size_t arg%d_size;\n\
             %s* arg%d;\n",
             arg_idx,
             arg_list[arg_idx].c_str(), arg_idx);

@@ -172,14 +172,15 @@ int process_packet(hsa_queue_t *queue, int id)
                 size_t kernarg_offset = 0;
                 // unpack kernel_args to num_params * (void *) args and invoke function
                 for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
-                    size_t kernarg_size = *(size_t *)(kernel_args_ptr + kernarg_offset);
-                    kernarg_offset += sizeof(size_t); 
+                    //size_t kernarg_size = *(size_t *)(kernel_args_ptr + kernarg_offset);
+                    //kernarg_offset += sizeof(size_t); 
                     if(kernarg_id != 0) kernel_args[kernarg_id] = *(char **)(kernel_args_ptr + kernarg_offset);
-                    kernarg_offset += kernarg_size; 
+                    kernarg_offset += sizeof(char *);// kernarg_size; 
                 }
                 
                 // pass task handle to kernel_args first param
-                kernel_args[0] = (char *)&this_task;
+                kernel_args[0] = (char *)this_task;
+                //kernel_args[0] = (char *)&this_task;
                 switch(num_params) {
                     case 0: 
                         {

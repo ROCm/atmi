@@ -73,6 +73,7 @@ typedef struct atl_kernel_info_s {
     uint64_t kernel_object;
     uint32_t group_segment_size;
     uint32_t private_segment_size;
+    uint32_t kernel_segment_size;
 } atl_kernel_info_t;
 extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
@@ -154,17 +155,17 @@ bool handle_signal(hsa_signal_value_t value, void *arg);
 
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
-status_t dispatch_task(atl_task_t *task);
-status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
+atmi_status_t dispatch_task(atl_task_t *task);
+atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
 void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype);
 
 int get_stream_id(atmi_stream_table_t *stream_obj);
 hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_table_t *stream_obj);
 hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_table_t *stream_obj);
-status_t clear_saved_tasks(atmi_stream_table_t *stream_obj);
-status_t register_task(atmi_stream_table_t *stream_obj, atl_task_t *task, atmi_devtype_t devtype, boolean profilable);
-status_t register_stream(atmi_stream_table_t *stream_obj);
+atmi_status_t clear_saved_tasks(atmi_stream_table_t *stream_obj);
+atmi_status_t register_task(atmi_stream_table_t *stream_obj, atl_task_t *task, atmi_devtype_t devtype, boolean profilable);
+atmi_status_t register_stream(atmi_stream_table_t *stream_obj);
 void set_task_state(atl_task_t *t, atmi_state_t state);
 void set_task_metrics(atl_task_t *task, atmi_devtype_t devtype, boolean profilable);
 

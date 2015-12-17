@@ -51,7 +51,7 @@ hsa_signal_t worker_sig[SNK_MAX_CPU_QUEUES];
 
 pthread_t agent_threads[SNK_MAX_CPU_QUEUES];
 
-snk_pif_kernel_table_t snk_kernels[SNK_MAX_FUNCTIONS];
+atl_pif_kernel_table_t atl_kernels[SNK_MAX_FUNCTIONS];
 
 size_t numWorkers;
 
@@ -159,7 +159,7 @@ int process_packet(hsa_queue_t *queue, int id)
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
                 {
                 ;
-                kernel_name = (char *)snk_kernels[packet->type].cpu_kernel.kernel_name;
+                kernel_name = (char *)atl_kernels[packet->type].cpu_kernel.kernel_name;
                 uint64_t num_params = packet->arg[0];
                 // typecast to char * to be able to do ptr arithmetic
                 char *kernel_args_ptr = (char *)(packet->arg[1]);
@@ -186,7 +186,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function0) (void) =
-                            (void (*)(void)) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(void)) atl_kernels[packet->type].cpu_kernel.function;
                         DEBUG_PRINT("Func Ptr: %p Args: NONE\n", 
                                 function0
                                 );
@@ -198,7 +198,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function1) (ARG_TYPE) =
-                            (void (*)(ARG_TYPE)) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE)) atl_kernels[packet->type].cpu_kernel.function;
                         DEBUG_PRINT("Args: %p\n", 
                                 kernel_args[0]
                                 );
@@ -211,7 +211,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function2) (ARG_TYPE, ARG_TYPE) =
-                            (void (*)(ARG_TYPE, ARG_TYPE)) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE, ARG_TYPE)) atl_kernels[packet->type].cpu_kernel.function;
                         DEBUG_PRINT("Args: %p %p\n", 
                                 kernel_args[0],
                                 kernel_args[1]
@@ -226,7 +226,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function3) (ARG_TYPE REPEAT2(ARG_TYPE)) =
-                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function3(
                                 kernel_args[0],
                                 kernel_args[1],
@@ -238,7 +238,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function4) (ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) =
-                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function4(
                                 kernel_args[0],
                                 kernel_args[1],
@@ -251,7 +251,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function5) (ARG_TYPE REPEAT4(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function5(
                                 kernel_args[0],
                                 kernel_args[1],
@@ -265,7 +265,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function6) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function6(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -280,7 +280,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function7) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function7(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -296,7 +296,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function8) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function8(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -313,7 +313,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function9) (ARG_TYPE REPEAT8(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function9(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -331,7 +331,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function10) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function10(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -350,7 +350,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function11) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function11(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -370,7 +370,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function12) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function12(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -391,7 +391,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function13) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function13(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -413,7 +413,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function14) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function14(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -436,7 +436,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function15) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function15(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -460,7 +460,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function16) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function16(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -485,7 +485,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function17) (ARG_TYPE REPEAT16(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function17(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -511,7 +511,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function18) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function18(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -538,7 +538,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function19) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function19(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -566,7 +566,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function20) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) snk_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
                         function20(
                                 kernel_args[0]
                                 ,kernel_args[1]

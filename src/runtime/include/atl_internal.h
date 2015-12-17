@@ -45,16 +45,16 @@ void *agent_worker(void *agent_args);
 int process_packet(hsa_queue_t *queue, int id);
 
 typedef struct atl_task_s atl_task_t;
-typedef struct snk_task_list_s {
+typedef struct atl_task_list_s {
     atl_task_t *task;
     atmi_devtype_t devtype;
     boolean profilable;
-    struct snk_task_list_s *next;
-} snk_task_list_t;
+    struct atl_task_list_s *next;
+} atl_task_list_t;
 
 typedef struct atmi_stream_table_s {
     boolean ordered;
-    snk_task_list_t *tasks;
+    atl_task_list_t *tasks;
     hsa_queue_t *gpu_queue;
     hsa_queue_t *cpu_queue;
     atmi_devtype_t last_device_type;
@@ -78,7 +78,7 @@ typedef struct atl_kernel_info_s {
 extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
-typedef std::vector<atl_task_t *> atl_task_list_t;
+typedef std::vector<atl_task_t *> atl_task_vector_t;
 
 typedef struct atl_task_s {
     // all encmopassing task packet
@@ -112,9 +112,9 @@ typedef struct atl_task_s {
     // lparm to control some of the execution flow (synchronous, requires, etc)
     atmi_lparm_t lparm;
     // FIXME: queue or vector?
-    atl_task_list_t and_successors;
-    atl_task_list_t and_predecessors;
-    atl_task_list_t predecessors;
+    atl_task_vector_t and_successors;
+    atl_task_vector_t and_predecessors;
+    atl_task_vector_t predecessors;
     std::vector<hsa_signal_t> barrier_signals;
     int id;
     atl_task_s() : cpu_kernelargs(0), cpu_kernelid(-1), num_params(-1), gpu_kernargptr(0), kernel_object(0), private_segment_size(0),

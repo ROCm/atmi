@@ -78,10 +78,10 @@ typedef struct atl_gpu_kernel_s {
 
 typedef struct atl_pif_kernel_table_s {
     const char *pif_name; 
-    atl_cpu_kernel_t cpu_kernel;
-    atl_gpu_kernel_t gpu_kernel;
     atmi_devtype_t devtype;
     int num_params;
+    atl_cpu_kernel_t cpu_kernel;
+    atl_gpu_kernel_t gpu_kernel;
 } atl_pif_kernel_table_t;
 
 

@@ -243,6 +243,8 @@ CLNAME=${LASTARG##*/}
 # FNAME has the .cl extension removed, used for symbolname and intermediate filenames
 FNAME=`echo "$CLNAME" | cut -d'.' -f1`
 SYMBOLNAME=${SYMBOLNAME:-$FNAME}
+BRIGOFILE="${SYMBOLNAME}.brig"
+HOFOFILE="${SYMBOLNAME}.hof"
 BRIGHFILE="${SYMBOLNAME}_brig.h"
 HOFHFILE="${SYMBOLNAME}_hof.h"
 OTHERCLOCFLAGS="-opt $LLVMOPT"
@@ -252,9 +254,9 @@ if [ -z $OUTFILE ] ; then
    OUTDIR=$INDIR
 #  Make up the output file name based on last step 
    if [ $HOF ]; then 
-      OUTFILE=$HOFHFILE
+      OUTFILE=$HOFOFILE
    else
-      OUTFILE=$BRIGHFILE
+      OUTFILE=$BRIGOFILE
    fi
 else 
 #  Use the specified OUTFILE.  Bad idea for snack
@@ -418,40 +420,43 @@ fi
 if [ $HOF ] ; then 
     [ $VERBOSE ] && echo "#Step:  offline finalization of brig --> $OUTFILE ..."
     if [ $DRYRUN ] ; then
-        echo "atmi_hof -o $BRIGDIR/$FNAME.hof -b $BRIGDIR/$BRIGNAME "
+        echo $ATMI_PATH/bin/atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
     else
-        atmi_hof -o $BRIGDIR/$FNAME.hof -b $BRIGDIR/$BRIGNAME 
-        #LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $BRIGDIR/$FNAME.hof -b $BRIGDIR/$BRIGNAME 
+        echo $ATMI_PATH/bin/atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
+        $ATMI_PATH/bin/atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
+        #LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
         rc=$?
         if [ $rc != 0 ] ; then 
             echo "ERROR:  The hof command failed with return code $rc."
             exit $rc
         fi
-        echo "char ${SYMBOLNAME}_HSA_HofMem[] = {" > $FULLOUTFILE
-        hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$FNAME.hof >> $FULLOUTFILE
-        rc=$?
-        if [ $rc != 0 ] ; then 
-            echo "ERROR:  The hexdump command failed with return code $rc."
-            exit $rc
-        fi
-        echo "};" >> $FULLOUTFILE
-        echo "size_t ${SYMBOLNAME}_HSA_HofMemSz = sizeof(${SYMBOLNAME}_HSA_HofMem);" >> $FULLOUTFILE
+        cp $BRIGDIR/$FNAME.o $FULLOUTFILE
+        #echo "char ${SYMBOLNAME}_HSA_HofMem[] = {" > $FULLOUTFILE
+        #hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$FNAME.hof >> $FULLOUTFILE
+        #rc=$?
+        #if [ $rc != 0 ] ; then 
+        #    echo "ERROR:  The hexdump command failed with return code $rc."
+        #    exit $rc
+        #fi
+        #echo "};" >> $FULLOUTFILE
+        #echo "size_t ${SYMBOLNAME}_HSA_HofMemSz = sizeof(${SYMBOLNAME}_HSA_HofMem);" >> $FULLOUTFILE
     fi
 else 
-    [ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
-    if [ $DRYRUN ] ; then
-        echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
-    else
-        echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLOUTFILE
-        hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLOUTFILE
-        rc=$?
-        if [ $rc != 0 ] ; then 
-            echo "ERROR:  The hexdump command failed with return code $rc."
-            exit $rc
-        fi
-        echo "};" >> $FULLOUTFILE
-        echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLOUTFILE
-    fi
+    cp $BRIGDIR/$BRIGNAME $FULLOUTFILE
+    #[ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
+    #if [ $DRYRUN ] ; then
+    #    echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
+    #else
+    #    echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLOUTFILE
+    #    hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLOUTFILE
+    #    rc=$?
+    #    if [ $rc != 0 ] ; then 
+    #        echo "ERROR:  The hexdump command failed with return code $rc."
+    #        exit $rc
+    #    fi
+    #    echo "};" >> $FULLOUTFILE
+    #    echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLOUTFILE
+    #fi
 fi
 
 # cleanup

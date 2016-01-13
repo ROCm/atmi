@@ -29,7 +29,7 @@ extern "C" {
 #define ATMI_MAX_TASKS_PER_STREAM   125
 
 #define SNK_MAX_CPU_QUEUES 1
-#define SNK_MAX_GPU_QUEUES 24
+#define SNK_MAX_GPU_QUEUES 16
 #define SNK_MAX_FUNCTIONS   100
 
 //#define SNK_MAX_TASKS 32 //100000 //((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
@@ -119,12 +119,12 @@ atmi_status_t atl_get_gpu_kernel_info(
                             uint32_t                         *_KN__Kernarg_Size
                             );
 
+#if 0
 atmi_task_t *atl_trylaunch_pif(const atmi_lparm_t *lparm,
                  hsa_executable_t *executable,
                  const char *pif_name,
                  void *thisKernargAddress);
 
-#if 0
 atmi_task_t *atl_gpu_kernel(const atmi_lparm_t *lparm,
                  hsa_executable_t executable,
                  const char *pif_name,
@@ -148,7 +148,7 @@ extern atl_context_t * atlc_p ;
 
 
 void atl_kl_init(atmi_klist_t *atmi_klist,
-        const char *pif_name,
+        atmi_kernel_t kernel,
         const int pif_id);
 
 

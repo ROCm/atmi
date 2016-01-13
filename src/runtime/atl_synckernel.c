@@ -30,7 +30,7 @@ extern _CPPSTRING_ atmi_task_t* __sync_kernel_pif(atmi_lparm_t * lparm) {
       /* Kernel initialization has to be done before kernel arguments are set/inspected */ 
       const char *kernel_name = "__sync_kernel"; 
       if (__sync_kernel_CPU_FK == 0 ) { 
-          atmi_kernel_create_empty(&__sync_kernel_obj, 0, "__sync_kernel_pif");
+          atmi_kernel_create_empty(&__sync_kernel_obj, 0);
           atmi_kernel_add_cpu_impl(__sync_kernel_obj, (atmi_generic_fp)(__sync_kernel_pif_fn_table[0].cpu_kernel.function));
           __sync_kernel_CPU_FK = 1; 
       }

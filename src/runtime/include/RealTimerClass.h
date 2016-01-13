@@ -131,6 +131,8 @@ inline void RealTimer::Reset()
   elapsed = 0.0;
   start_time = 0;
   count = 0;
+  time_offset = 0;
+  time_offset = (int)CurrentTime();
 }
 
 inline double RealTimer::Elapsed() const

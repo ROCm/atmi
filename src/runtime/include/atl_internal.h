@@ -117,6 +117,10 @@ typedef struct atl_task_s {
     atl_task_vector_t predecessors;
     std::vector<hsa_signal_t> barrier_signals;
     int id;
+    // flag to differentiate between a regular task and a continuation
+    // FIXME: probably make this a class hierarchy?
+    boolean is_continuation;
+
     atl_task_s() : cpu_kernelargs(0), cpu_kernelid(-1), num_params(-1), gpu_kernargptr(0), kernel_object(0), private_segment_size(0),
                    group_segment_size(0), num_predecessors(0), num_successors(0), atmi_task(0)
     {

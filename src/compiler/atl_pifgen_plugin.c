@@ -56,6 +56,7 @@ string_table_t res_keywords_table[] = {
 {"__global",""},
 };
 
+std::string main_input_filename_str;
 static std::vector<std::string> g_cl_modules;
 static std::vector<std::string> g_all_pifdecls;
 static std::vector<std::string> g_cl_files;
@@ -107,7 +108,6 @@ void write_globals(FILE *fp) {
 fprintf(fp, "\
 static int g_gpu_initialized = 0;\n\
 static int g_cpu_initialized = 0;\n\
-static int num_pif = 0;\n\
 atmi_klist_t atmi_klist[1000];\n\n\
 #define ErrorCheck(msg, status) \\\n\
 if (status != ATMI_STATUS_SUCCESS) { \\\n\
@@ -115,6 +115,15 @@ if (status != ATMI_STATUS_SUCCESS) { \\\n\
 } \n\n\
 void kl_init(); \n\n\
 ");
+fprintf(fp, "\
+typedef struct %s_kernel_table_s { \n\
+    atmi_devtype_t devtype; \n\
+    atmi_generic_fp cpu_kernel; \n\
+    const char *gpu_kernel; \n\
+} %s_kernel_table_t; \n", 
+main_input_filename_str.c_str(),
+main_input_filename_str.c_str()
+);
 }
 
 void write_cpp_get_gpu_agent(FILE *fp) {
@@ -571,21 +580,21 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "    /* launcher code (PIF definition) */\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if (%s_FK == 0 ) { \n\
-        atmi_kernel_create_empty(&%s_kernel, %d, \"%s\"); \n\
-        int num_impls = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]);\n\
+        atmi_kernel_create_empty(&%s_kernel, %d); \n\
+        int num_impls = sizeof(%s_fn_table)/sizeof(%s_fn_table[0]);\n\
         int idx; \n\
         for(idx = 0; idx < num_impls; idx++) { \n\
-            if(%s_pif_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
-                atmi_kernel_add_gpu_impl(%s_kernel, %s_pif_fn_table[idx].gpu_kernel.kernel_name); \n\
+            if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
+                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel); \n\
             }\n\
-            else if(%s_pif_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
-                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_pif_fn_table[idx].cpu_kernel.function));\n\
+            else if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
+                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel));\n\
             }\n\
         } \n\
         %s_FK = 1; \n\
     }\n",
                 pif_name,
-                pif_name, num_params - 1, pif_name,
+                pif_name, num_params - 1,
                 pif_name, pif_name,
                 pif_name,
                 pif_name, pif_name,
@@ -594,11 +603,11 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
     int k_id = lparm->kernel_id; \n\
-    if(k_id < 0 || k_id >= sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0])) { \n\
+    if(k_id < 0 || k_id >= sizeof(%s_fn_table)/sizeof(%s_fn_table[0])) { \n\
         fprintf(stderr, \"Kernel_id out of bounds for PIF %s.\\n\"); \n\
         return NULL; \n\
     } \n\
-    atmi_devtype_t devtype = %s_pif_fn_table[k_id].devtype; \n\
+    atmi_devtype_t devtype = %s_fn_table[k_id].devtype; \n\
     if(devtype == ATMI_DEVTYPE_CPU) {\n\
         if(g_cpu_initialized == 0) { \n\
             atmi_init(ATMI_DEVTYPE_CPU); \n\
@@ -624,7 +633,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
             for(int idx = 0; idx < g_cl_modules.size(); idx++) {
                 pp_printf((pif_printers[pif_index].pifdefs), "\
             modules[%d] = \"%s.hof\"; \n\
-            module_types[%d] = BRIG_FINAL; \n",
+            module_types[%d] = AMDGCN; \n",
                 idx, g_cl_modules[idx].c_str(),
                 idx);
             }
@@ -688,7 +697,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
 
        
         /* add PIF function table definition */
-        pp_printf((pif_printers[pif_index].fn_table), "\natl_pif_kernel_table_t %s_pif_fn_table[] = {\n", pif_name);
+        pp_printf((pif_printers[pif_index].fn_table), "\n%s_kernel_table_t %s_fn_table[] = {\n", main_input_filename_str.c_str(), pif_name);
         pp_printf(&enum_kid, "K_ID_%s = 0, ", fn_name);
     }
     else {
@@ -706,13 +715,13 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
         pp_printf(&g_kerneldecls, ");\n}\n");
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_CPU,.num_params=%d,.cpu_kernel={\"%s_wrapper\",.function=(atmi_generic_fp)%s_wrapper},.gpu_kernel={{}}},\n",
-            pif_name, num_params-1, fn_name, fn_name);
+    {.devtype=ATMI_DEVTYPE_CPU,.cpu_kernel=(atmi_generic_fp)%s_wrapper,.gpu_kernel=NULL},\n",
+            fn_name);
     } 
     else if(devtype == ATMI_DEVTYPE_GPU) {
         pp_printf((pif_printers[pif_index].fn_table), "\
-    {.pif_name=\"%s\",.devtype=ATMI_DEVTYPE_GPU,.num_params=%d,.cpu_kernel={{},.function=(atmi_generic_fp)NULL},.gpu_kernel={\"%s\"}},\n",
-            pif_name, num_params-1, fn_name);
+    {.devtype=ATMI_DEVTYPE_GPU,.cpu_kernel=(atmi_generic_fp)NULL,.gpu_kernel=\"%s\"},\n",
+            fn_name);
     }
     // Push helper IDs for programmers to index into their kernels
     // Helper IDs have prefix K_ID_
@@ -805,7 +814,7 @@ register_finish_unit (void *event_data, void *data) {
     }
     fprintf(fp_pifdefs_genw, "/*Headers carried over from %s*/\n%s\n", main_input_filename, headers.c_str());
     write_cpp_warning_header(fp_pifdefs_genw);
-    write_cpp_get_gpu_agent(fp_pifdefs_genw);
+    //write_cpp_get_gpu_agent(fp_pifdefs_genw);
     write_globals(fp_pifdefs_genw);
 #if 0
     if(g_hsa_offline_finalize == 0) {
@@ -1058,6 +1067,8 @@ int plugin_init(struct plugin_name_args *plugin_info,
     g_output_pifdefs_filename.clear();
     g_cl_modules.clear();
 
+    vector<string> main_tokens = split(main_input_filename, '.');
+    main_input_filename_str = main_tokens[0];
 
     /* Do this loop once before just to set HOF flag */
     for(i = 0; i < plugin_info->argc; i++) { 
@@ -1229,21 +1240,21 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if (%s_FK == 0 ) { \n\
-        atmi_kernel_create_empty(&%s_kernel, %d, \"%s\"); \n\
-        int num_impls = sizeof(%s_pif_fn_table)/sizeof(%s_pif_fn_table[0]);\n\
+        atmi_kernel_create_empty(&%s_kernel, %d); \n\
+        int num_impls = sizeof(%s_fn_table)/sizeof(%s_fn_table[0]);\n\
         int idx; \n\
         for(idx = 0; idx < num_impls; idx++) { \n\
-            if(%s_pif_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
-                atmi_kernel_add_gpu_impl(%s_kernel, %s_pif_fn_table[idx].gpu_kernel.kernel_name);\n\
+            if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
+                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel);\n\
             }\n\
-            else if(%s_pif_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
-                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_pif_fn_table[idx].cpu_kernel.function));\n\
+            else if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
+                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel));\n\
             }\n\
         } \n\
         %s_FK = 1;\n\
     }\n\n",
                 pif_name,
-                pif_name, num_params - 1, pif_name,
+                pif_name, num_params - 1,
                 pif_name, pif_name,
                 pif_name,
                 pif_name, pif_name,
@@ -1330,7 +1341,7 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    atl_kl_init(atmi_klist, \"%s\", pif_id);\n\n", pif_name);
+    atl_kl_init(atmi_klist, %s_kernel, pif_id);\n\n", pif_name);
 
         pp_printf((pif_printers[pif_index].pifdefs), "}\n\n");
         

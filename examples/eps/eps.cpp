@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -16,7 +17,11 @@ static int TDEGREE = 2;
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
 
-__kernel void nullKernel_impl(__global atmi_task_t *thisTask) __attribute__((atmi_kernel("nullKernel", "GPU")));
+__kernel void nullKernel_impl(__global atmi_task_t *thisTask, int i) __attribute__((atmi_kernel("nullKernel", "GPU")));
+
+//extern "C" void nullKernel_impl(atmi_task_t *thisTask) __attribute__((atmi_kernel("nullKernel", "CPU")));
+
+//extern "C" void nullKernel_impl(atmi_task_t *thisTask) {}
 
 std::vector<atmi_task_t *> tasks;
 /*  Recursive Fibonacci */
@@ -40,7 +45,7 @@ void fib(const int cur_depth, atmi_task_t *my_sum_task) {
         lparm->requires = requires;
     }
     lparm->task = my_sum_task;
-    nullKernel(lparm);
+    nullKernel(lparm, 0);
     if(requires) free(requires);
 }
 
@@ -56,35 +61,39 @@ int main(int argc, char *argv[]) {
     /* Initialize the Kernel */
     ATMI_LPARM_1D(lparm, 1);
     lparm->synchronous=ATMI_TRUE;
-    nullKernel(lparm);
+    atmi_task_t foo_task;
+    lparm->task = &foo_task;
+    nullKernel(lparm, 0);
 
     int ntasks = (TDEGREE <= 1) ? TDEPTH : (1 - pow((float)TDEGREE, (float)TDEPTH)) / (1 - TDEGREE);
     int ndependencies = ntasks - 1; 
     printf("Task count: %d Dependency count: %d\n", ntasks, ndependencies);
 
 #if 1
+    tasks.clear();
+    //tasks.resize(ntasks);
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
     atmi_task_t root_dfs;
     fib(1, &root_dfs);
     atmi_task_t *t_dfs = &root_dfs;
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
+    std::cout << "Waiting " << std::endl;
     //atmi_task_wait(t_dfs);
     SYNC_TASK(t_dfs);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-#endif
-
     /*for(std::vector<atmi_task_t *>::iterator it = tasks.begin(); 
             it != tasks.end(); it++) {
         delete *it;
     }*/
+#endif
+
+#if 1
     tasks.clear();
     tasks.resize(ntasks);
-    #if 1
+
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
-    atmi_task_t root_sum_task;
-
     int ntasks_n = pow((float)TDEGREE, (float)TDEPTH-1);
     int start_idx = ntasks;
     for(int level = TDEPTH - 1; level >= 0; level--) {
@@ -106,17 +115,18 @@ int main(int argc, char *argv[]) {
                 lparm->requires = requires;
             }
             lparm->task = tasks[start_idx + i];
-            nullKernel(lparm);
+            nullKernel(lparm, 0);
             free(requires); 
         }
         ntasks_n /= TDEGREE;
     }
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
-    atmi_task_t *t = tasks[0];
-    //atmi_task_wait(t);
-    SYNC_TASK(t);
+    atmi_task_t *t_bf = tasks[0];
+    //atmi_task_wait(t_bf);
+    SYNC_TASK(t_bf);
+
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
-    #endif
+#endif
     for(int i=0; i<NTIMERS; i++) {
         nanosecs[i] = get_nanosecs(start_time[i],end_time[i]);
         eps[i] = ((float) ndependencies * (float) NSECPERSEC) / (float) nanosecs[i] ;
@@ -124,7 +134,10 @@ int main(int argc, char *argv[]) {
 
     printf("Kernel Calls     =  %d\n",ntasks);
     printf("Number of Edges (Dependencies)     =  %d\n",ndependencies);
-    
+   
+    int barrier_pkt_count = (TDEGREE + 4 - 1) / 4;
+    //int nsignals = (ntasks - pow((float) TDEGREE, (float) (TDEPTH-1))) * barrier_pkt_count;
+    //printf("Number of signals: %d\n", ntasks + nsignals + 10);
     printf("Task Tree Depth-First Navigation\n");
     printf("Secs to dispatch =  %10.8f\n",((float)nanosecs[0])/NSECPERSEC);
     printf("EPS DF dispatched   =  %6.0f\n",eps[0]);

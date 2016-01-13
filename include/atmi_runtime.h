@@ -13,7 +13,7 @@ typedef enum atmi_status_t {
 
 typedef enum {
     BRIG = 0,
-    BRIG_FINAL, // offline finalized BRIG 
+    AMDGCN, // offline finalized BRIG 
     /* -- support in the future? -- 
     HSAIL,
     CL,
@@ -39,7 +39,7 @@ atmi_status_t atmi_finalize();
 atmi_status_t atmi_module_register(const char **filename, atmi_platform_type_t *type, const int num_modules);
 
 /* Kernel */
-atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *kernel, const int num_params, const char *pif = NULL);
+atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *kernel, const int num_params);
 atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t kernel, const char *impl);
 atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t kernel, atmi_generic_fp impl);
 atmi_status_t atmi_kernel_release(atmi_kernel_t kernel);

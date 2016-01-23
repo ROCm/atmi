@@ -106,7 +106,7 @@ int process_packet(hsa_queue_t *queue, int id)
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
         if (doorbell_value == INT_MAX) break;
-        atmi_task_t *this_task = NULL; // will be assigned to collect metrics
+        atl_task_t *this_task = NULL; // will be assigned to collect metrics
         char *kernel_name = NULL;
 #if defined (ATMI_HAVE_PROFILE)
         struct timespec start_time, end_time;
@@ -164,7 +164,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 // typecast to char * to be able to do ptr arithmetic
                 char *kernel_args_ptr = (char *)(packet->arg[1]);
                 if(num_params > 0) assert(kernel_args_ptr != NULL);
-                this_task = (atmi_task_t *)(packet->arg[2]);
+                this_task = (atl_task_t *)(packet->arg[2]);
                 //assert(this_task != NULL);
                 DEBUG_PRINT("Invoking function %s with %" PRIu64 " args, thisTask: %p\n", kernel_name, num_params, this_task);
                 char **kernel_args = (char **)malloc(sizeof(char *) * num_params);
@@ -179,8 +179,8 @@ int process_packet(hsa_queue_t *queue, int id)
                 }
                 
                 // pass task handle to kernel_args first param
-                kernel_args[0] = (char *)this_task;
-                //kernel_args[0] = (char *)&this_task;
+                //kernel_args[0] = (char *)this_task;
+                kernel_args[0] = (char *)&(this_task->id);
                 switch(num_params) {
                     case 0: 
                         {
@@ -614,16 +614,16 @@ int process_packet(hsa_queue_t *queue, int id)
 #if defined (ATMI_HAVE_PROFILE)
         clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
         end_time_ns = get_nanosecs(context_init_time, end_time);
-        if(this_task != NULL) {
+        if(this_task != NULL && this_task->atmi_task != NULL) {
             //if(this_task->profile != NULL) 
             if (kernel_name != NULL)
             {
-                this_task->profile.end_time = end_time_ns;
-                this_task->profile.start_time = start_time_ns;
-                this_task->profile.ready_time = start_time_ns;
+                this_task->atmi_task->profile.end_time = end_time_ns;
+                this_task->atmi_task->profile.start_time = start_time_ns;
+                this_task->atmi_task->profile.ready_time = start_time_ns;
                 DEBUG_PRINT("Task %p timing info (%" PRIu64", %" PRIu64")\n", 
-                        this_task, start_time_ns, end_time_ns);
-                atmi_profiling_record(id, &(this_task->profile), kernel_name);
+                        this_task->atmi_task, start_time_ns, end_time_ns);
+                atmi_profiling_record(id, &(this_task->atmi_task->profile), kernel_name);
             }
         }
 #endif /* ATMI_HAVE_PROFILE */

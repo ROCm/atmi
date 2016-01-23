@@ -29,7 +29,7 @@ extern atmi_klist_t atmi_klist[];
 typedef struct atmi_klparm_s {
     unsigned long    gridDim[3];     /* # of global threads for each dimension */
     unsigned long    groupDim[3];    /* Thread group size for each dimension   */
-    atmi_stream_t*   stream;         /* Group for this task, Default= NULL     */
+    atmi_task_group_t*   stream;         /* Group for this task, Default= NULL     */
     boolean          waitable;       /* Create signal for task, default = F    */
     boolean          synchronous;    /* Async or Sync,  default = F (async)    */
     int              acquire_scope;  /* Memory model, default = 2              */

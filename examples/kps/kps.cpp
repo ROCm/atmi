@@ -10,7 +10,7 @@
 #define NTIMERS 13
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
 
-__kernel void nullKernel_impl(__global atmi_task_t *thisTask, long int kcalls) __attribute__((atmi_kernel("nullKernel", "GPU")));
+__kernel void nullKernel_impl(atmi_task_handle_t thisTask, long int kcalls) __attribute__((atmi_kernel("nullKernel", "GPU")));
 
 int main(int argc, char *argv[]) {
    struct timespec start_time[NTIMERS],end_time[NTIMERS];
@@ -45,15 +45,17 @@ int main(int argc, char *argv[]) {
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
    SYNC_STREAM(stream1); 
+   //atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
-   stream1->ordered=ATMI_FALSE;
-   lparm1->synchronous=ATMI_FALSE;
+   stream1->ordered = ATMI_FALSE;
+   lparm1->synchronous = ATMI_FALSE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[4]);
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
    SYNC_STREAM(stream1); 
+   //atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
 
 #if 0

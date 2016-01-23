@@ -52,7 +52,7 @@ typedef struct atl_task_list_s {
     struct atl_task_list_s *next;
 } atl_task_list_t;
 
-typedef struct atmi_stream_table_s {
+typedef struct atmi_task_group_table_s {
     boolean ordered;
     atl_task_list_t *tasks;
     hsa_queue_t *gpu_queue;
@@ -60,9 +60,10 @@ typedef struct atmi_stream_table_s {
     atmi_devtype_t last_device_type;
     int next_gpu_qid;
     int next_cpu_qid;
-    hsa_signal_t stream_common_signal;
+    hsa_signal_t common_signal;
     pthread_mutex_t mutex;
-}atmi_stream_table_t;
+    std::vector<atl_task_t *> running_groupable_tasks;
+}atmi_task_group_table_t;
 
 typedef enum atl_dep_sync_s {
     ATL_SYNC_BARRIER_PKT    = 0,
@@ -99,8 +100,10 @@ typedef struct atl_task_s {
     // reference to HSA signal and the applications task structure
     hsa_signal_t signal;
     atmi_task_t *atmi_task;
-    atmi_stream_table_t *stream_obj;
-    
+
+    atmi_task_group_table_t *stream_obj;
+    boolean groupable;
+
     // other miscellaneous flags
     atmi_devtype_t devtype;
     boolean profilable;
@@ -116,10 +119,11 @@ typedef struct atl_task_s {
     atl_task_vector_t and_predecessors;
     atl_task_vector_t predecessors;
     std::vector<hsa_signal_t> barrier_signals;
-    int id;
+    atmi_task_handle_t id;
     // flag to differentiate between a regular task and a continuation
     // FIXME: probably make this a class hierarchy?
     boolean is_continuation;
+    atl_task_t *continuation_task;
 
     atl_task_s() : cpu_kernelargs(0), cpu_kernelid(-1), num_params(-1), gpu_kernargptr(0), kernel_object(0), private_segment_size(0),
                    group_segment_size(0), num_predecessors(0), num_successors(0), atmi_task(0)
@@ -139,12 +143,11 @@ typedef struct atl_task_s {
 #endif
 } atl_task_t;
 
-extern std::map<atmi_stream_t *, atmi_stream_table_t *> StreamTable;
+extern std::map<int, atmi_task_group_table_t *> StreamTable;
 //atmi_task_table_t TaskTable[SNK_MAX_TASKS];
 extern std::vector<atl_task_t *> AllTasks;
 extern std::queue<atl_task_t *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
-extern std::map<atmi_task_t *, atl_task_t *> PublicTaskMap;
 extern hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
 /*
 typedef struct atmi_task_table_s {
@@ -160,18 +163,18 @@ bool handle_signal(hsa_signal_value_t value, void *arg);
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);
-atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_stream_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
+atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
 void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype);
 
-int get_stream_id(atmi_stream_table_t *stream_obj);
-hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_stream_table_t *stream_obj);
-hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_stream_table_t *stream_obj);
-atmi_status_t clear_saved_tasks(atmi_stream_table_t *stream_obj);
-atmi_status_t register_task(atmi_stream_table_t *stream_obj, atl_task_t *task, atmi_devtype_t devtype, boolean profilable);
-atmi_status_t register_stream(atmi_stream_table_t *stream_obj);
+int get_stream_id(atmi_task_group_table_t *stream_obj);
+hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj);
+hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj);
+atmi_status_t clear_saved_tasks(atmi_task_group_table_t *stream_obj);
+atmi_status_t register_task(atmi_task_group_table_t *stream_obj, atl_task_t *task);
+atmi_status_t register_stream(atmi_task_group_table_t *stream_obj);
 void set_task_state(atl_task_t *t, atmi_state_t state);
-void set_task_metrics(atl_task_t *task, atmi_devtype_t devtype, boolean profilable);
+void set_task_metrics(atl_task_t *task);
 
 void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest);
 uint16_t create_header(hsa_packet_type_t type, int barrier);

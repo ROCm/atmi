@@ -17,35 +17,28 @@ static int TDEGREE = 2;
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
 
-__kernel void nullKernel_impl(__global atmi_task_t *thisTask, int i) __attribute__((atmi_kernel("nullKernel", "GPU")));
+__kernel void nullKernel_impl(atmi_task_handle_t thisTask, int i) __attribute__((atmi_kernel("nullKernel", "GPU")));
 
-//extern "C" void nullKernel_impl(atmi_task_t *thisTask) __attribute__((atmi_kernel("nullKernel", "CPU")));
+//extern "C" void nullKernel_impl(atmi_task_handle_t thisTask) __attribute__((atmi_kernel("nullKernel", "CPU")));
 
-//extern "C" void nullKernel_impl(atmi_task_t *thisTask) {}
+//extern "C" void nullKernel_impl(atmi_task_handle_t thisTask) {}
 
-std::vector<atmi_task_t *> tasks;
-/*  Recursive Fibonacci */
-void fib(const int cur_depth, atmi_task_t *my_sum_task) {
-    ATMI_LPARM_1D(lparm, 64); /* Remember ATMI default is asynchronous execution */
-    lparm->synchronous=ATMI_FALSE;
-    atmi_task_t **requires = NULL;
+/*  Recursive call to create the inverted task tree */
+void fib(const int cur_depth, atmi_task_handle_t *thisTaskHandle) {
+    ATMI_LPARM_1D(lparm, 1); 
+    atmi_task_handle_t *requires = NULL;
     if(cur_depth < TDEPTH) {
-        requires = (atmi_task_t **)malloc(TDEGREE * sizeof(atmi_task_t *));
+        requires = (atmi_task_handle_t *)malloc(TDEGREE * sizeof(atmi_task_handle_t));
         for(int i = 0; i < TDEGREE; i++) {
-            atmi_task_t *t = new atmi_task_t;
-            memset(t, 0, sizeof(atmi_task_t));
-            tasks.push_back(t);
-            requires[i] = t;// tasks[tasks.size() - 1];
+            atmi_task_handle_t t;
             //printf("[EPS] Creating the %luth task\n", tasks.size() - 1);
-        }
-        for(int i = 0; i < TDEGREE; i++) {
-            fib(cur_depth + 1, requires[i]);
+            fib(cur_depth + 1, &t);
+            requires[i] = t;
         }
         lparm->num_required = TDEGREE;
         lparm->requires = requires;
     }
-    lparm->task = my_sum_task;
-    nullKernel(lparm, 0);
+    *thisTaskHandle = nullKernel(lparm, 0);
     if(requires) free(requires);
 }
 
@@ -61,36 +54,25 @@ int main(int argc, char *argv[]) {
     /* Initialize the Kernel */
     ATMI_LPARM_1D(lparm, 1);
     lparm->synchronous=ATMI_TRUE;
-    atmi_task_t foo_task;
-    lparm->task = &foo_task;
     nullKernel(lparm, 0);
 
     int ntasks = (TDEGREE <= 1) ? TDEPTH : (1 - pow((float)TDEGREE, (float)TDEPTH)) / (1 - TDEGREE);
     int ndependencies = ntasks - 1; 
-    printf("Task count: %d Dependency count: %d\n", ntasks, ndependencies);
 
 #if 1
-    tasks.clear();
-    //tasks.resize(ntasks);
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
-    atmi_task_t root_dfs;
-    fib(1, &root_dfs);
-    atmi_task_t *t_dfs = &root_dfs;
+    atmi_task_handle_t t_dfs;
+    fib(1, &t_dfs);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
-    std::cout << "Waiting " << std::endl;
     //atmi_task_wait(t_dfs);
     SYNC_TASK(t_dfs);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-    /*for(std::vector<atmi_task_t *>::iterator it = tasks.begin(); 
-            it != tasks.end(); it++) {
-        delete *it;
-    }*/
 #endif
 
 #if 1
-    tasks.clear();
-    tasks.resize(ntasks);
+    std::vector<atmi_task_handle_t> task_handles;
+    task_handles.resize(ntasks);
 
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
@@ -98,30 +80,26 @@ int main(int argc, char *argv[]) {
     int start_idx = ntasks;
     for(int level = TDEPTH - 1; level >= 0; level--) {
         start_idx -= ntasks_n;
-        printf("Level: %d N_Tasks: %d\n", level, ntasks_n);
+        //printf("Level: %d N_Tasks: %d\n", level, ntasks_n);
         for(int i = 0; i < ntasks_n; i++) {
             ATMI_LPARM_1D(lparm, 1);
             lparm->synchronous = ATMI_FALSE;
-            atmi_task_t *t = new atmi_task_t;
-            memset(t, 0, sizeof(atmi_task_t));
-            tasks[start_idx + i] = t;
-            atmi_task_t **requires = (atmi_task_t **)malloc(TDEGREE * sizeof(atmi_task_t *));
+            atmi_task_handle_t *requires = (atmi_task_handle_t *)malloc(TDEGREE * sizeof(atmi_task_handle_t));
             if(level != TDEPTH - 1) {
                 for(int deg = 0; deg < TDEGREE; deg++) {
                     int req_idx = (start_idx + i) * TDEGREE + deg + 1;
-                    requires[deg] = tasks[req_idx];
+                    requires[deg] = task_handles[req_idx];
                 }
                 lparm->num_required = TDEGREE;
                 lparm->requires = requires;
             }
-            lparm->task = tasks[start_idx + i];
-            nullKernel(lparm, 0);
+            task_handles[start_idx + i] = nullKernel(lparm, 0);
             free(requires); 
         }
         ntasks_n /= TDEGREE;
     }
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
-    atmi_task_t *t_bf = tasks[0];
+    atmi_task_handle_t t_bf = task_handles[0];
     //atmi_task_wait(t_bf);
     SYNC_TASK(t_bf);
 

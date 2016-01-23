@@ -237,10 +237,10 @@ void generate_task_wrapper(char *text, const char *fn_name, const int num_params
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
     if(num_params == 1) {
-        strcat(fn_decl, "(atmi_task_t *var0)");
+        strcat(fn_decl, "(atmi_task_handle_t *var0)");
     }
     else if(num_params > 1) {
-        strcat(fn_decl, "(atmi_task_t *var0, ");
+        strcat(fn_decl, "(atmi_task_handle_t *var0, ");
     }
     
     int var_idx = 0;
@@ -268,10 +268,10 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
     if(num_params == 1) {
-        strcat(fn_decl, "(atmi_task_t *var0)");
+        strcat(fn_decl, "(atmi_task_handle_t var0)");
     }
     else if(num_params > 1) {
-        strcat(fn_decl, "(atmi_task_t *var0, ");
+        strcat(fn_decl, "(atmi_task_handle_t var0, ");
     }
     
     int var_idx = 0;
@@ -294,8 +294,8 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
 
 void generate_pif(char *text, const char *fn_name, const int num_params, char *fn_decl) {
     char *pch = strtok(text,"<");
-    // return atmi_task_t *
-    if(pch != NULL) strcpy(fn_decl, "atmi_task_t *");
+    // return atmi_task_handle_t
+    if(pch != NULL) strcpy(fn_decl, "atmi_task_handle_t ");
     pch = strtok (NULL, ">");
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
@@ -360,9 +360,9 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
         //debug_tree_chain(arg);
     }
     // return atmi_task_t *
-    tree ret_type_decl = lookup_name(get_identifier("atmi_task_t"));
-    new_ret_type = build_pointer_type(TREE_TYPE(ret_type_decl));
-    new_fn_type = build_function_type(new_ret_type, nreverse(new_fn_arglist));
+    tree ret_type_decl = lookup_name(get_identifier("atmi_task_handle_t"));
+    //new_ret_type = build_pointer_type(TREE_TYPE(ret_type_decl));
+    new_fn_type = build_function_type(TREE_TYPE(ret_type_decl), nreverse(new_fn_arglist));
     
     // build the PIF declaration 
     tree new_fndecl = build_decl(DECL_SOURCE_LOCATION(pifdecl),
@@ -605,7 +605,8 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     int k_id = lparm->kernel_id; \n\
     if(k_id < 0 || k_id >= sizeof(%s_fn_table)/sizeof(%s_fn_table[0])) { \n\
         fprintf(stderr, \"Kernel_id out of bounds for PIF %s.\\n\"); \n\
-        return NULL; \n\
+        atmi_task_handle_t null_task = {0}; \n\
+        return null_task; \n\
     } \n\
     atmi_devtype_t devtype = %s_fn_table[k_id].devtype; \n\
     if(devtype == ATMI_DEVTYPE_CPU) {\n\
@@ -708,7 +709,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s {\n", fn_cpu_wrapper_decl);
         int arg_idx;
         pp_printf(&g_kerneldecls, "\
-    %s(var0",
+    %s(*var0",
         fn_name);
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf(&g_kerneldecls, ", *var%d", arg_idx);

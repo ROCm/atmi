@@ -9,8 +9,8 @@
 #ifndef __cplusplus
 #define _CPPSTRING_ 
 #endif
-extern _CPPSTRING_ void __sync_kernel(atmi_task_t *thisTask) {}
-extern _CPPSTRING_ void __sync_kernel_wrapper(atmi_task_t *thisTaskPtr) {__sync_kernel(thisTaskPtr);}
+extern _CPPSTRING_ void __sync_kernel(atmi_task_handle_t thisTask) {}
+extern _CPPSTRING_ void __sync_kernel_wrapper(atmi_task_handle_t *thisTaskPtr) {__sync_kernel(*thisTaskPtr);}
 static int cpu_initalized = 0;
 
 atl_pif_kernel_table_t __sync_kernel_pif_fn_table[] = {
@@ -19,7 +19,7 @@ atl_pif_kernel_table_t __sync_kernel_pif_fn_table[] = {
 
 static int                              __sync_kernel_CPU_FK = 0 ; 
 static atmi_kernel_t                    __sync_kernel_obj;
-extern _CPPSTRING_ atmi_task_t* __sync_kernel_pif(atmi_lparm_t * lparm) {
+extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t * lparm) {
   int k_id = lparm->kernel_id;
   assert(k_id == 0);
   atmi_devtype_t devtype = __sync_kernel_pif_fn_table[k_id].devtype;

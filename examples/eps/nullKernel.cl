@@ -1,1 +1,1 @@
-__kernel void nullKernel_impl(__global atmi_task_t *thisTask, int i){}
+__kernel void nullKernel_impl(atmi_task_handle_t thisTask, int i){}

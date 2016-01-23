@@ -12,7 +12,7 @@ using namespace std;
 #endif 
 
 #include "hw_structs.h"
-extern _CPPSTRING_ void decode_cpu(atmi_task_t *thisTask, void *args) {
+extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t thisTask, void *args) {
     decode_args_t *cpu_args = (decode_args_t *)args;
     size_t strlength = cpu_args->strlength; 
     const char *in = cpu_args->in;
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     atmi_kernel_t kernel;
     const unsigned int num_args = 1;
-    atmi_kernel_create_empty(&kernel, num_args, "decode");
+    atmi_kernel_create_empty(&kernel, num_args);
     atmi_kernel_add_cpu_impl(kernel, (atmi_generic_fp)decode_cpu);
     atmi_kernel_add_gpu_impl(kernel, "decode_gpu");
 

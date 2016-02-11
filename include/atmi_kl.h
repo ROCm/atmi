@@ -1,7 +1,7 @@
 #ifndef __ATMI_KL_H__
 #define __ATMI_KL_H__
 
-#define MAX_NUM_KERNELS 10000
+#define MAX_NUM_KERNELS 1024
 
 typedef struct atmi_kernel_packet_s atmi_kernel_packet_t;
 struct atmi_kernel_packet_s {

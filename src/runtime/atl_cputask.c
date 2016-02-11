@@ -51,8 +51,6 @@ hsa_signal_t worker_sig[SNK_MAX_CPU_QUEUES];
 
 pthread_t agent_threads[SNK_MAX_CPU_QUEUES];
 
-atl_pif_kernel_table_t atl_kernels[SNK_MAX_FUNCTIONS];
-
 size_t numWorkers;
 
 extern struct timespec context_init_time;
@@ -159,34 +157,21 @@ int process_packet(hsa_queue_t *queue, int id)
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
                 {
                 ;
-                kernel_name = (char *)atl_kernels[packet->type].cpu_kernel.kernel_name;
-                uint64_t num_params = packet->arg[0];
-                // typecast to char * to be able to do ptr arithmetic
-                char *kernel_args_ptr = (char *)(packet->arg[1]);
-                if(num_params > 0) assert(kernel_args_ptr != NULL);
-                this_task = (atl_task_t *)(packet->arg[2]);
-                //assert(this_task != NULL);
-                DEBUG_PRINT("Invoking function %s with %" PRIu64 " args, thisTask: %p\n", kernel_name, num_params, this_task);
-                char **kernel_args = (char **)malloc(sizeof(char *) * num_params);
-                int kernarg_id = 0;
-                size_t kernarg_offset = 0;
-                // unpack kernel_args to num_params * (void *) args and invoke function
-                for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
-                    //size_t kernarg_size = *(size_t *)(kernel_args_ptr + kernarg_offset);
-                    //kernarg_offset += sizeof(size_t); 
-                    if(kernarg_id != 0) kernel_args[kernarg_id] = *(char **)(kernel_args_ptr + kernarg_offset);
-                    kernarg_offset += sizeof(char *);// kernarg_size; 
-                }
-                
-                // pass task handle to kernel_args first param
-                //kernel_args[0] = (char *)this_task;
-                kernel_args[0] = (char *)&(this_task->id);
+                atl_task_t *task = (atl_task_t *)(packet->arg[0]);
+                atl_kernel_t *kernel = task->kernel;
+                int kernel_id = packet->type;
+                atl_kernel_impl_t *kernel_impl = kernel->impls[kernel_id];
+                std::vector<void *> kernel_args = task->kernarg_region_ptrs;
+                void *kernel_args_region = (void *)(packet->arg[1]);
+                kernel_name = (char *)kernel_impl->kernel_name.c_str();
+                uint64_t num_params = kernel->num_args + 1;
+                kernel_args[0] = (char *)&(task->id);
                 switch(num_params) {
                     case 0: 
                         {
                         ;
                         void (*function0) (void) =
-                            (void (*)(void)) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(void)) kernel_impl->function;
                         DEBUG_PRINT("Func Ptr: %p Args: NONE\n", 
                                 function0
                                 );
@@ -198,7 +183,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function1) (ARG_TYPE) =
-                            (void (*)(ARG_TYPE)) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE)) kernel_impl->function;
                         DEBUG_PRINT("Args: %p\n", 
                                 kernel_args[0]
                                 );
@@ -211,7 +196,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function2) (ARG_TYPE, ARG_TYPE) =
-                            (void (*)(ARG_TYPE, ARG_TYPE)) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE, ARG_TYPE)) kernel_impl->function;
                         DEBUG_PRINT("Args: %p %p\n", 
                                 kernel_args[0],
                                 kernel_args[1]
@@ -226,7 +211,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function3) (ARG_TYPE REPEAT2(ARG_TYPE)) =
-                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE))) kernel_impl->function;
                         function3(
                                 kernel_args[0],
                                 kernel_args[1],
@@ -238,7 +223,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function4) (ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) =
-                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function4(
                                 kernel_args[0],
                                 kernel_args[1],
@@ -251,7 +236,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function5) (ARG_TYPE REPEAT4(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE))) kernel_impl->function;
                         function5(
                                 kernel_args[0],
                                 kernel_args[1],
@@ -265,7 +250,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function6) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function6(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -280,7 +265,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function7) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) kernel_impl->function;
                         function7(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -296,7 +281,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function8) (ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function8(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -313,7 +298,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function9) (ARG_TYPE REPEAT8(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE))) kernel_impl->function;
                         function9(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -331,7 +316,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function10) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function10(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -350,7 +335,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function11) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE))) kernel_impl->function;
                         function11(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -370,7 +355,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function12) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function12(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -391,7 +376,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function13) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE))) kernel_impl->function;
                         function13(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -413,7 +398,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function14) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function14(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -436,7 +421,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function15) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE))) kernel_impl->function;
                         function15(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -460,7 +445,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function16) (ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function16(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -485,7 +470,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function17) (ARG_TYPE REPEAT16(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE))) kernel_impl->function;
                         function17(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -511,7 +496,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function18) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function18(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -538,7 +523,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function19) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE))) kernel_impl->function;
                         function19(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -566,7 +551,7 @@ int process_packet(hsa_queue_t *queue, int id)
                         {
                         ;
                         void (*function20) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) = 
-                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) atl_kernels[packet->type].cpu_kernel.function;
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE))) kernel_impl->function;
                         function20(
                                 kernel_args[0]
                                 ,kernel_args[1]
@@ -599,12 +584,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 }
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
-                for(kernarg_id = 0; kernarg_id < num_params; kernarg_id++) {
-                    if(kernarg_id == 0) continue; // task handle should be managed elsewhere in the runtime
-                    free(kernel_args[kernarg_id]);
-                }
-                free(kernel_args);
-                //free(kernel_args_ptr);
+                kernel_args.clear();
                 }
                 break;
         }

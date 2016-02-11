@@ -12,8 +12,8 @@ using namespace std;
 #endif 
 
 #include "hw_structs.h"
-extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t thisTask, void *args) {
-    decode_args_t *cpu_args = (decode_args_t *)args;
+extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, void **args) {
+    decode_args_t *cpu_args = *(decode_args_t **)args;
     size_t strlength = cpu_args->strlength; 
     const char *in = cpu_args->in;
     char *out = cpu_args->out;
@@ -31,7 +31,9 @@ int main(int argc, char **argv) {
 
     atmi_kernel_t kernel;
     const unsigned int num_args = 1;
-    atmi_kernel_create_empty(&kernel, num_args);
+    size_t arg_sizes[num_args];
+    arg_sizes[0] = sizeof(void *);
+    atmi_kernel_create_empty(&kernel, num_args, arg_sizes);
     atmi_kernel_add_cpu_impl(kernel, (atmi_generic_fp)decode_cpu);
     atmi_kernel_add_gpu_impl(kernel, "decode_gpu");
 
@@ -45,26 +47,23 @@ int main(int argc, char **argv) {
 
     void *gpu_args[num_args];
     void *cpu_args[num_args];
-    size_t cpu_arg_sizes[num_args];
-    size_t gpu_arg_sizes[num_args];
     
-    void *tmp = &decode_gpu_args;
-    gpu_args[0] = &tmp;
-    cpu_args[0] = &decode_cpu_args;
-    gpu_arg_sizes[0] = sizeof(void *);
-    cpu_arg_sizes[0] = sizeof(decode_cpu_args);
+    void *tmp_gpu = &decode_gpu_args;
+    gpu_args[0] = &tmp_gpu;
+    void *tmp_cpu = &decode_cpu_args;
+    cpu_args[0] = &tmp_cpu;
 
     ATMI_LPARM_1D(lparm, strlength);
     lparm->synchronous = ATMI_TRUE;
 
-    lparm->kernel_id = 0;
-    atmi_task_launch(kernel, lparm, cpu_args, cpu_arg_sizes);
-    output_gpu[strlength] = '\0';
-    
     lparm->kernel_id = 1;
-    atmi_task_launch(kernel, lparm, gpu_args, gpu_arg_sizes);
-    output_cpu[strlength] = '\0';
+    atmi_task_launch(kernel, lparm, gpu_args);
+    output_gpu[strlength] = '\0';
 
+    lparm->kernel_id = 0;
+    atmi_task_launch(kernel, lparm, cpu_args);
+    output_cpu[strlength] = '\0';
+   
     cout << "Output from the GPU: " << output_gpu << endl;
     cout << "Output from the CPU: " << output_cpu << endl;
 	free(output_cpu);

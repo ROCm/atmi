@@ -63,28 +63,6 @@ if (status != HSA_STATUS_SUCCESS) { \
 typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 #endif
 
-typedef struct atl_cpu_kernel_s {
-    char kernel_name[256]; 
-    atmi_generic_fp function;
-} atl_cpu_kernel_t;
-
-typedef struct atl_gpu_kernel_s {
-    char kernel_name[256];
-    /* other fields? 
-     * hsa_program?
-     * hsa_executable?
-     */
-} atl_gpu_kernel_t;
-
-typedef struct atl_pif_kernel_table_s {
-    const char *pif_name; 
-    atmi_devtype_t devtype;
-    int num_params;
-    atl_cpu_kernel_t cpu_kernel;
-    atl_gpu_kernel_t gpu_kernel;
-} atl_pif_kernel_table_t;
-
-
 atmi_status_t atl_init_context();
 atmi_status_t atl_init_cpu_context();
 atmi_status_t atl_init_gpu_context();
@@ -109,7 +87,7 @@ atmi_status_t atl_init_kernel(
                              const char *cpu_kernel_name, 
                              atmi_generic_fp fn_ptr,
                              const char *gpu_kernel_name);
-atmi_status_t atl_pif_init(atl_pif_kernel_table_t pif_fn_table[], int sz);
+//atmi_status_t atl_pif_init(atl_pif_kernel_table_t pif_fn_table[], int sz);
 atmi_status_t atl_get_gpu_kernel_info(
                             hsa_executable_t executable,
                             const char *kernel_symbol_name,

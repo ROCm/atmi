@@ -44,6 +44,44 @@ void signal_worker(hsa_queue_t *queue, int signal);
 void *agent_worker(void *agent_args);
 int process_packet(hsa_queue_t *queue, int id);
 
+// ---------------------- Kernel Start -------------
+typedef struct atl_kernel_impl_s {
+    std::string kernel_name;
+    atmi_devtype_t devtype;
+
+    /* CPU kernel info */
+    atmi_generic_fp function;
+
+    /* GPU kernel info */
+    uint64_t kernel_object;
+    uint32_t group_segment_size;
+    uint32_t private_segment_size;
+    uint32_t kernarg_segment_size; // differs for CPU vs GPU
+    
+    /* Kernel argument map */
+    pthread_mutex_t mutex; // to lock changes to the free pool
+    void *kernarg_region;
+    std::queue<int> free_kernarg_segments;
+} atl_kernel_impl_t;
+
+typedef struct atl_kernel_s {
+    std::string pif_name; // FIXME: change this to ID later
+    int num_args;
+    std::vector<size_t> arg_sizes;
+    std::vector<atl_kernel_impl_t *> impls;
+} atl_kernel_t;
+
+typedef struct atl_kernel_info_s {
+    uint64_t kernel_object;
+    uint32_t group_segment_size;
+    uint32_t private_segment_size;
+    uint32_t kernel_segment_size;
+} atl_kernel_info_t;
+
+extern std::map<std::string, atl_kernel_t *> KernelImplMap;
+
+// ---------------------- Kernel End -------------
+
 typedef struct atl_task_s atl_task_t;
 typedef struct atl_task_list_s {
     atl_task_t *task;
@@ -70,12 +108,6 @@ typedef enum atl_dep_sync_s {
     ATL_SYNC_CALLBACK       = 1
 } atl_dep_sync_t;
 
-typedef struct atl_kernel_info_s {
-    uint64_t kernel_object;
-    uint32_t group_segment_size;
-    uint32_t private_segment_size;
-    uint32_t kernel_segment_size;
-} atl_kernel_info_t;
 extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
@@ -84,13 +116,13 @@ typedef std::vector<atl_task_t *> atl_task_vector_t;
 typedef struct atl_task_s {
     // all encmopassing task packet
     // hsa_kernel_dispatch_packet_t *packet;
-    void *cpu_kernelargs;
-    int cpu_kernelid;
-    int num_params;
-    void *gpu_kernargptr;
-    uint64_t kernel_object;
-    uint32_t private_segment_size;
-    uint32_t group_segment_size;
+    atl_kernel_t *kernel;
+    uint32_t kernel_id;
+    std::vector<void *> kernarg_region_ptrs;
+    void *kernarg_region; // malloced or acquired from a pool
+    size_t kernarg_region_size;
+    int kernarg_region_index;
+    bool kernarg_region_copied;
 
     // list of dependents
     uint32_t num_predecessors; // cant we get this from lparm?
@@ -125,8 +157,7 @@ typedef struct atl_task_s {
     boolean is_continuation;
     atl_task_t *continuation_task;
 
-    atl_task_s() : cpu_kernelargs(0), cpu_kernelid(-1), num_params(-1), gpu_kernargptr(0), kernel_object(0), private_segment_size(0),
-                   group_segment_size(0), num_predecessors(0), num_successors(0), atmi_task(0)
+    atl_task_s() : num_predecessors(0), num_successors(0), atmi_task(0)
     {
         and_successors.clear();
         and_predecessors.clear();
@@ -181,6 +212,9 @@ uint16_t create_header(hsa_packet_type_t type, int barrier);
 hsa_signal_t* get_worker_sig(hsa_queue_t *queue);
 
 bool try_dispatch_barrier_pkt(atl_task_t *ret);
+atl_task_t *get_task(atmi_task_handle_t t);
+bool try_dispatch_callback(atl_task_t *t, void **args);
+bool try_dispatch_barrier_pkt(atl_task_t *t, void **args);
 #if 0
 #ifdef __cplusplus
 extern "C" {

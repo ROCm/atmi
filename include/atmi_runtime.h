@@ -39,13 +39,14 @@ atmi_status_t atmi_finalize();
 atmi_status_t atmi_module_register(const char **filename, atmi_platform_type_t *type, const int num_modules);
 
 /* Kernel */
-atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *kernel, const int num_params);
+atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *kernel, const int num_args, 
+                                    const size_t *arg_sizes);
 atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t kernel, const char *impl);
 atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t kernel, atmi_generic_fp impl);
 atmi_status_t atmi_kernel_release(atmi_kernel_t kernel);
 
 /* Task (kernel invocation) */
-atmi_task_handle_t atmi_task_launch(atmi_kernel_t kernel, atmi_lparm_t *lparm, void **args, size_t *arg_sizes);
+atmi_task_handle_t atmi_task_launch(atmi_kernel_t kernel, atmi_lparm_t *lparm, void **args);
 atmi_status_t atmi_task_wait(atmi_task_handle_t task);
 
 #ifdef __cplusplus

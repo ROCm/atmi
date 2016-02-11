@@ -579,28 +579,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "extern _CPPSTRING_ %s { \n", pif_decl);
         pp_printf((pif_printers[pif_index].pifdefs), "    /* launcher code (PIF definition) */\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    if (%s_FK == 0 ) { \n\
-        atmi_kernel_create_empty(&%s_kernel, %d); \n\
-        int num_impls = sizeof(%s_fn_table)/sizeof(%s_fn_table[0]);\n\
-        int idx; \n\
-        for(idx = 0; idx < num_impls; idx++) { \n\
-            if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
-                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel); \n\
-            }\n\
-            else if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
-                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel));\n\
-            }\n\
-        } \n\
-        %s_FK = 1; \n\
-    }\n",
-                pif_name,
-                pif_name, num_params - 1,
-                pif_name, pif_name,
-                pif_name,
-                pif_name, pif_name,
-                pif_name,
-                pif_name, pif_name,
-                pif_name);
+    const int num_args = %d; \n",
+        num_params - 1
+        );
         pp_printf((pif_printers[pif_index].pifdefs), "\
     int k_id = lparm->kernel_id; \n\
     if(k_id < 0 || k_id >= sizeof(%s_fn_table)/sizeof(%s_fn_table[0])) { \n\
@@ -668,23 +649,50 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
     }\n");
-        int arg_idx;
         pp_printf((pif_printers[pif_index].pifdefs), "\
-    const int num_args = %d;\n\
-    void *args[num_args]; \n\
-    size_t arg_sizes[num_args]; \n",
-        num_params - 1);
+    if (%s_FK == 0 ) { \n\
+        size_t arg_sizes[num_args]; \n",
+        pif_name
+        );
+        int arg_idx;
         for(arg_idx = 0; arg_idx < num_params - 1; arg_idx++) {
-            pp_printf((pif_printers[pif_index].pifdefs), "\n\
-    args[%d] = &var%d; \n\
-    arg_sizes[%d] = sizeof(%s);\n",
-            arg_idx, arg_idx + 1,
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        arg_sizes[%d] = sizeof(%s);\n",
             arg_idx, arg_list[arg_idx + 1].c_str()
+        );
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        atmi_kernel_create_empty(&%s_kernel, %d, arg_sizes); \n\
+        int num_impls = sizeof(%s_fn_table)/sizeof(%s_fn_table[0]);\n\
+        int idx; \n\
+        for(idx = 0; idx < num_impls; idx++) { \n\
+            if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
+                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel); \n\
+            }\n\
+            else if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
+                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel));\n\
+            }\n\
+        } \n\
+        %s_FK = 1; \n\
+    }\n",
+                pif_name, num_params - 1,
+                pif_name, pif_name,
+                pif_name,
+                pif_name, pif_name,
+                pif_name,
+                pif_name, pif_name,
+                pif_name);
+    pp_printf((pif_printers[pif_index].pifdefs), "\
+    void *args[num_args]; \n");
+        for(arg_idx = 0; arg_idx < num_params - 1; arg_idx++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+    args[%d] = &var%d; \n",
+            arg_idx, arg_idx + 1
         );
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
     return atmi_task_launch(%s_kernel, lparm, \n\
-            args, arg_sizes);\n",
+            args);\n",
             pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
 }\n\n");
@@ -1227,7 +1235,7 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         uint64_t arg3; \n\
         uint64_t arg4; \n\
         uint64_t arg5; \n\
-        atmi_task_t* arg6;\n");
+        atmi_task_handle_t arg6;\n");
         for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
         %s arg%d;\n", 
@@ -1240,8 +1248,20 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
+    const int num_args = %d; \n\
     if (%s_FK == 0 ) { \n\
-        atmi_kernel_create_empty(&%s_kernel, %d); \n\
+        size_t arg_sizes[num_args]; \n",
+        num_params - 1,
+        pif_name
+        );
+        for(arg_idx = 0; arg_idx < num_params - 1; arg_idx++) {
+            pp_printf((pif_printers[pif_index].pifdefs), "\
+        arg_sizes[%d] = sizeof(%s);\n",
+            arg_idx, arg_list[arg_idx + 1].c_str()
+        );
+        }
+        pp_printf((pif_printers[pif_index].pifdefs), "\
+        atmi_kernel_create_empty(&%s_kernel, %d, arg_sizes); \n\
         int num_impls = sizeof(%s_fn_table)/sizeof(%s_fn_table[0]);\n\
         int idx; \n\
         for(idx = 0; idx < num_impls; idx++) { \n\
@@ -1254,7 +1274,6 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         } \n\
         %s_FK = 1;\n\
     }\n\n",
-                pif_name,
                 pif_name, num_params - 1,
                 pif_name, pif_name,
                 pif_name,

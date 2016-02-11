@@ -508,22 +508,22 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
         /* just insert a barrier packet to the CPU and GPU queues and wait */
         DEBUG_PRINT("Waiting for GPU Q\n");
         queue_sync(stream_obj->gpu_queue);
-        DEBUG_PRINT("Waiting for CPU Q\n");
-        queue_sync(stream_obj->cpu_queue);
         if(stream_obj->cpu_queue) 
             signal_worker(stream_obj->cpu_queue, PROCESS_PKT);
+        DEBUG_PRINT("Waiting for CPU Q\n");
+        queue_sync(stream_obj->cpu_queue);
         for(std::vector<atl_task_t *>::iterator it = stream_obj->running_groupable_tasks.begin();
                     it != stream_obj->running_groupable_tasks.end(); it++) {
             set_task_state(*it, ATMI_COMPLETED);
             set_task_metrics(*it);
         }
-        atl_task_list_t *task_head = stream_obj->tasks;
+        /*atl_task_list_t *task_head = stream_obj->tasks;
         DEBUG_PRINT("Waiting for async ordered tasks\n");
         while(task_head) {
             set_task_state(task_head->task, ATMI_COMPLETED);
             set_task_metrics(task_head->task);
             task_head = task_head->next;
-        }
+        }*/
     }
     else {
         /* wait on each one of the tasks in the task bag */
@@ -611,13 +611,13 @@ hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj)
 atmi_status_t clear_saved_tasks(atmi_task_group_table_t *stream_obj) {
     hsa_status_t err;
     atl_task_list_t *cur = stream_obj->tasks;
-    atl_task_list_t *prev = cur;
+    /*atl_task_list_t *prev = cur;
     while(cur != NULL ){
         cur = cur->next;
         free(prev);
         prev = cur;
     }
-
+    */
     stream_obj->tasks = NULL;
     stream_obj->running_groupable_tasks.clear();
     return ATMI_STATUS_SUCCESS;
@@ -1691,7 +1691,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         memset(this_aql, 0, sizeof(hsa_kernel_dispatch_packet_t));
         /*  FIXME: We need to check for queue overflow here. */
         //SignalAddTimer.Start();
-        hsa_signal_add_relaxed(task->signal, 1);
+        hsa_signal_add_acq_rel(task->signal, 1);
         //hsa_signal_store_relaxed(task->signal, 1);
         //SignalAddTimer.Stop();
         this_aql->completion_signal = task->signal;

@@ -74,6 +74,7 @@ static size_t max_ready_queue_sz = 0;
 static size_t waiting_count = 0;
 static size_t direct_dispatch = 0;
 static size_t callback_dispatch = 0;
+atl_task_t ***GlobalTaskPtr;
 #define NSECPERSEC 1000000000L
 
 //  set NOTCOHERENT needs this include
@@ -129,7 +130,8 @@ int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 struct timespec context_init_time;
 static int context_init_time_init = 0;
 
-atmi_task_handle_t NULL_TASK = {0}; 
+atmi_task_handle_t NULL_TASK = 0ull;
+//atmi_task_handle_t NULL_TASK = {0}; 
 
 #define handle_error_en(en, msg) \
     do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
@@ -188,14 +190,27 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {
    return header;
 }
 
+int get_task_handle_ID(atmi_task_handle_t t) {
+    return (int)(0xFFFFFFFF & t);
+}
+
+void set_task_handle_ID(atmi_task_handle_t *t, int ID) {
+    unsigned long int task_handle = *t;
+    task_handle |= 0xFFFFFFFF;
+    task_handle &= ID;
+    *t = task_handle;
+}
+
 atl_task_t *get_task(atmi_task_handle_t t) {
     /* FIXME: node 0 only for now */
-    return AllTasks[t.lo];
+    return AllTasks[get_task_handle_ID(t)];
+    //return AllTasks[t.lo];
 }
 
 atl_task_t *get_continuation_task(atmi_task_handle_t t) {
     /* FIXME: node 0 only for now */
-    return AllTasks[t.hi];
+    //return AllTasks[t.hi];
+    return NULL;
 }
 
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag) {
@@ -456,7 +471,7 @@ void init_dag_scheduler() {
         AllTasks.reserve(500000);
         //PublicTaskMap.clear();
         KernelInfoTable.clear();
-        NULL_TASK.all = 0;
+        NULL_TASK = 0ull;
         atlc.g_mutex_dag_initialized = 1;
         DEBUG_PRINT("main tid = %lu\n", syscall(SYS_gettid));
     }
@@ -758,6 +773,8 @@ void init_tasks() {
     err=hsa_signal_create(0, 0, NULL, &IdentityANDSignal);
     ErrorCheck(Creating a HSA signal, err);
     DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
+    //GlobalTaskPtr = (atl_task_t ***)malloc(sizeof(atl_task_t**));
+    posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
     atlc.g_tasks_initialized = 1;
 }
 
@@ -1238,7 +1255,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     std::string cl_pif_name("&__OpenCL_");
     cl_pif_name += std::string(impl );
     cl_pif_name += std::string("_kernel");
-
+    
     atl_kernel_impl_t *kernel_impl = new atl_kernel_impl_t;
     kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_GPU;
@@ -1716,9 +1733,10 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             /* other fields no needed to set task handle? */
         } __attribute__((aligned(16)));
         struct kernel_args_struct *kargs = (struct kernel_args_struct *)(task->kernarg_region);
-        kargs->arg6 = (task->id);
+        kargs->arg6 = task->id;
         //kargs->arg6.node = (task->id.node);
         //kargs->arg6.lo = (task->id.lo);
+        //kargs->arg6.hi = (task->id.hi);
         #endif
         //void *tmp = &(task->id);
         //memcpy((char *)task->gpu_kernargptr + (6 * sizeof(uint64_t)), &tmp, sizeof(atmi_task_handle_t *));
@@ -1777,7 +1795,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         /* Set function args */
         this_aql->arg[0] = (uint64_t) task;
         this_aql->arg[1] = (uint64_t) task->kernarg_region;
-        this_aql->arg[2] = UINT64_MAX;//(uint64_t) task->id; // pass task handle to fill in metrics
+        this_aql->arg[2] = (uint64_t) task->kernel; // pass task handle to fill in metrics
         this_aql->arg[3] = UINT64_MAX;
 
         /*  Prepare and set the packet header */
@@ -2222,8 +2240,9 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         AllTasks.push_back(ret);
         set_task_state(ret, ATMI_INITIALIZED);
         atmi_task_handle_t new_id;
-        new_id.node = 0;
-        new_id.lo = AllTasks.size() - 1;
+        //new_id.node = 0;
+        set_task_handle_ID(&new_id, AllTasks.size() - 1);
+        //new_id.lo = AllTasks.size() - 1;
         //PublicTaskMap[new_id] = ret;
         unlock(&mutex_all_tasks_);
         ret->id = new_id;
@@ -2234,7 +2253,6 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         pthread_mutex_init(&(ret->mutex), NULL);
 #endif
     TryLaunchInitTimer.Stop();
-    
     ret->kernel = kernel;
     ret->kernel_id = lparm->kernel_id;
     atl_kernel_impl_t *kernel_impl = kernel->impls[ret->kernel_id];
@@ -2385,6 +2403,9 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
 
     atmi_klist_t *atmi_klist_curr = atmi_klist + pif_id; 
 
+    atl_task_t **task_ptr = &AllTasks[0];
+    memcpy(GlobalTaskPtr, &task_ptr, sizeof(atl_task_t **));
+    atmi_klist_curr->tasks = (void *)(*GlobalTaskPtr);
     /* get this stream's HSA queue (could be dynamically mapped or round robin
      * if it is an unordered stream */
     hsa_queue_t* this_devQ = acquire_and_set_next_gpu_queue(stream_obj);
@@ -2410,7 +2431,6 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
     //atl_gpu_memory_allocate(lparm, g_executable, pif_name, &thisKernargAddress);
 
     uint16_t i = 0;
-    atmi_task_t *ret = NULL;
     for(std::vector<atl_kernel_impl_t *>::iterator it = kernel->impls.begin();
                                                  it != kernel->impls.end(); it++) {
         if((*it)->devtype == ATMI_DEVTYPE_GPU) {
@@ -2460,11 +2480,11 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
                         atmi_klist_curr->num_kernel_packets - 1);
             this_aql->header = 1;
             this_aql->type = (uint16_t)i;
-            const uint32_t num_params = kernel->num_args;
+            //const uint32_t num_params = kernel->num_args;
             //ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
             //this_aql->arg[0] = (uint64_t) task;
             //this_aql->arg[1] = (uint64_t) task->kernarg_region;
-            this_aql->arg[2] = UINT64_MAX;
+            this_aql->arg[2] = (uint64_t) kernel;
             this_aql->arg[3] = UINT64_MAX; 
             //SNK_NextTaskId++;
         }

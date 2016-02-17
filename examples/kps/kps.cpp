@@ -31,6 +31,7 @@ int main(int argc, char *argv[]) {
 
    /* Initialize the Kernel */
    stream1->ordered=ATMI_TRUE;
+   lparm1->groupable=ATMI_TRUE;
    lparm1->synchronous=ATMI_TRUE;
    nullKernel(lparm1, kcalls);
 #if 1
@@ -44,8 +45,8 @@ int main(int argc, char *argv[]) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-   SYNC_STREAM(stream1); 
-   //atmi_task_group_sync(stream1);
+   //SYNC_STREAM(stream1); 
+   atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
    stream1->ordered = ATMI_FALSE;
@@ -54,8 +55,8 @@ int main(int argc, char *argv[]) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[4]);
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
-   SYNC_STREAM(stream1); 
-   //atmi_task_group_sync(stream1);
+   //SYNC_STREAM(stream1); 
+   atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
 
 #if 0

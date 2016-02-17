@@ -114,6 +114,10 @@ extern pthread_mutex_t mutex_readyq_;
 typedef std::vector<atl_task_t *> atl_task_vector_t;
 
 typedef struct atl_task_s {
+    // reference to HSA signal and the applications task structure
+    hsa_signal_t signal;
+    atmi_task_t *atmi_task;
+
     // all encmopassing task packet
     // hsa_kernel_dispatch_packet_t *packet;
     atl_kernel_t *kernel;
@@ -128,10 +132,6 @@ typedef struct atl_task_s {
     uint32_t num_predecessors; // cant we get this from lparm?
     uint32_t num_successors; // cant we get this from lparm?
     atl_dep_sync_t dep_sync_type;
-
-    // reference to HSA signal and the applications task structure
-    hsa_signal_t signal;
-    atmi_task_t *atmi_task;
 
     atmi_task_group_table_t *stream_obj;
     boolean groupable;

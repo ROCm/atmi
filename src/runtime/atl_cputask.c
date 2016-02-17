@@ -158,14 +158,20 @@ int process_packet(hsa_queue_t *queue, int id)
                 {
                 ;
                 atl_task_t *task = (atl_task_t *)(packet->arg[0]);
-                atl_kernel_t *kernel = task->kernel;
+                atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
                 int kernel_id = packet->type;
                 atl_kernel_impl_t *kernel_impl = kernel->impls[kernel_id];
-                std::vector<void *> kernel_args = task->kernarg_region_ptrs;
+                std::vector<void *> kernel_args;
                 void *kernel_args_region = (void *)(packet->arg[1]);
                 kernel_name = (char *)kernel_impl->kernel_name.c_str();
                 uint64_t num_params = kernel->num_args + 1;
-                kernel_args[0] = (char *)&(task->id);
+                char *thisKernargAddress = (char *)(kernel_args_region);
+                kernel_args.push_back((void *)&(task->id));
+                thisKernargAddress += sizeof(atmi_task_handle_t);
+                for(int i = 0; i < kernel->num_args; i++) {
+                    kernel_args.push_back((void *)thisKernargAddress);
+                    thisKernargAddress += kernel->arg_sizes[i];
+                }
                 switch(num_params) {
                     case 0: 
                         {
@@ -212,6 +218,11 @@ int process_packet(hsa_queue_t *queue, int id)
                         ;
                         void (*function3) (ARG_TYPE REPEAT2(ARG_TYPE)) =
                             (void (*)(ARG_TYPE REPEAT2(ARG_TYPE))) kernel_impl->function;
+                        DEBUG_PRINT("Args: %p %p %p\n", 
+                                kernel_args[0],
+                                kernel_args[1],
+                                kernel_args[2]
+                                );
                         function3(
                                 kernel_args[0],
                                 kernel_args[1],

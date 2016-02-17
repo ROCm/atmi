@@ -19,7 +19,7 @@ OBJS = reduction
 
 all: $(OBJS)
 
-reduction: Reduction.cpp
+reduction: Reduction.cpp reduction.cl
 	$(CC) -c -o Reduction.o $^ -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-clfile=reduction.cl -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.cpp $(CFLAGS) $(INC_FLAGS)
 	$(CC) -o $@ Reduction.o pifdefs.cpp $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 

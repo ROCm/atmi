@@ -113,6 +113,7 @@ static int StreamCommonSignalIdx = 0;
 std::queue<atl_task_t *> DispatchedTasks;
 
 static atl_dep_sync_t g_dep_sync_type;
+static bool g_deprecated_hlc;
 static int g_max_signals;
 /* Stream specific globals */
 hsa_agent_t atl_cpu_agent;
@@ -130,8 +131,7 @@ int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 struct timespec context_init_time;
 static int context_init_time_init = 0;
 
-atmi_task_handle_t NULL_TASK = 0ull;
-//atmi_task_handle_t NULL_TASK = {0}; 
+atmi_task_handle_t NULL_TASK = ATMI_TASK_HANDLE(0);
 
 #define handle_error_en(en, msg) \
     do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
@@ -191,14 +191,22 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {
 }
 
 int get_task_handle_ID(atmi_task_handle_t t) {
+    #if 1
     return (int)(0xFFFFFFFF & t);
+    #else
+    return t.lo;
+    #endif
 }
 
 void set_task_handle_ID(atmi_task_handle_t *t, int ID) {
+    #if 1
     unsigned long int task_handle = *t;
     task_handle |= 0xFFFFFFFF;
     task_handle &= ID;
     *t = task_handle;
+    #else
+    t->lo = ID;
+    #endif
 }
 
 atl_task_t *get_task(atmi_task_handle_t t) {
@@ -471,7 +479,7 @@ void init_dag_scheduler() {
         AllTasks.reserve(500000);
         //PublicTaskMap.clear();
         KernelInfoTable.clear();
-        NULL_TASK = 0ull;
+        NULL_TASK = ATMI_TASK_HANDLE(0);
         atlc.g_mutex_dag_initialized = 1;
         DEBUG_PRINT("main tid = %lu\n", syscall(SYS_gettid));
     }
@@ -809,6 +817,13 @@ void init_hsa() {
     if(atlc.g_hsa_initialized == 0) {
         hsa_status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
+        char *deprecated_hlc = getenv("ATMI_WITH_DEPRECATED_HLC");
+        if(deprecated_hlc != NULL && strcmp(deprecated_hlc, "1") == 0) {
+            g_deprecated_hlc = true;
+        }
+        else {
+            g_deprecated_hlc = false;
+        }
         char * dep_sync_type = getenv("ATMI_DEPENDENCY_SYNC_TYPE");
         if(dep_sync_type == NULL || strcmp(dep_sync_type, "ATMI_SYNC_BARRIER_PKT") == 0) {
             g_dep_sync_type = ATL_SYNC_BARRIER_PKT;
@@ -1011,7 +1026,6 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME, name); 
         ErrorCheck(Symbol info extraction, err);
         name[name_length] = 0;
-
         atl_kernel_info_t info;
         /* Extract dispatch information from the symbol */
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &(info.kernel_object));
@@ -1141,7 +1155,7 @@ atmi_status_t atl_init_gpu_context() {
     /* Create queues and signals for each stream. */
     int stream_num;
     for ( stream_num = 0 ; stream_num < SNK_MAX_GPU_QUEUES ; stream_num++){
-       err=hsa_queue_create(atl_gpu_agent, queue_size, HSA_QUEUE_TYPE_SINGLE, NULL, NULL, UINT32_MAX, UINT32_MAX, &GPU_CommandQ[stream_num]);
+       err=hsa_queue_create(atl_gpu_agent, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, UINT32_MAX, UINT32_MAX, &GPU_CommandQ[stream_num]);
        ErrorCheck(Creating the Stream Command Q, err);
        err = hsa_amd_profiling_set_profiler_enabled( GPU_CommandQ[stream_num], 1); 
        ErrorCheck(Enabling profiling support, err); 
@@ -1252,13 +1266,25 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
 
 atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *impl) {
     const char *pif_name = (const char *)(atmi_kernel.handle);
-    std::string cl_pif_name("&__OpenCL_");
-    cl_pif_name += std::string(impl );
-    cl_pif_name += std::string("_kernel");
-    
+    std::string cl_pif_name;
+    if(g_deprecated_hlc) {
+        cl_pif_name = std::string("&__OpenCL_");
+        cl_pif_name += std::string(impl );
+        cl_pif_name += std::string("_kernel");
+    } else {
+        char *tmp_str = (char *)malloc(strlen(impl) + 1);
+        memcpy(tmp_str, impl, strlen(impl));
+        tmp_str[strlen(impl)] = 0;
+        cl_pif_name = std::string(tmp_str);
+        free(tmp_str);
+    }
     atl_kernel_impl_t *kernel_impl = new atl_kernel_impl_t;
     kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_GPU;
+    std::map<std::string, atl_kernel_info_t>::iterator it = KernelInfoTable.find(kernel_impl->kernel_name);
+    if(it == KernelInfoTable.end()) 
+        printf("Did NOT find kernel: %s\n", kernel_impl->kernel_name.c_str());
+
     atl_kernel_info_t info = KernelInfoTable[kernel_impl->kernel_name];
     kernel_impl->kernel_object = info.kernel_object;
     kernel_impl->group_segment_size = info.group_segment_size;
@@ -1721,23 +1747,28 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             ndim = 1;
 
         /* pass this task handle to the kernel as an argument */
-        #if 1
+        #if 0
         struct kernel_args_struct {
-            uint64_t arg0;
+            /*uint64_t arg0;
             uint64_t arg1;
             uint64_t arg2;
             uint64_t arg3;
             uint64_t arg4;
-            uint64_t arg5;
+            uint64_t arg5;*/
             atmi_task_handle_t arg6;
             /* other fields no needed to set task handle? */
         } __attribute__((aligned(16)));
         struct kernel_args_struct *kargs = (struct kernel_args_struct *)(task->kernarg_region);
-        kargs->arg6 = task->id;
+        #endif
+        char *kargs = (char *)(task->kernarg_region);
+        if(g_deprecated_hlc) {
+            kargs += (6 * sizeof(uint64_t));
+        }
+        *(atmi_task_handle_t *)kargs = task->id;
+        //kargs->arg6 = task->id;
         //kargs->arg6.node = (task->id.node);
         //kargs->arg6.lo = (task->id.lo);
         //kargs->arg6.hi = (task->id.hi);
-        #endif
         //void *tmp = &(task->id);
         //memcpy((char *)task->gpu_kernargptr + (6 * sizeof(uint64_t)), &tmp, sizeof(atmi_task_handle_t *));
         /*  Process lparm values */
@@ -1840,10 +1871,12 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
     if(thisKernargAddress == NULL) {
         fprintf(stderr, "Unable to allocate/find free kernarg segment\n");
     }
-    if(ret->devtype == ATMI_DEVTYPE_GPU) {
-        thisKernargAddress += (3 * sizeof(uint64_t));
-        *(uint64_t *)thisKernargAddress = (uint64_t)PifKlistMap[ret->kernel->pif_name];
-        thisKernargAddress += (3 * sizeof(uint64_t));
+    if(g_deprecated_hlc) {
+        if(ret->devtype == ATMI_DEVTYPE_GPU) {
+            thisKernargAddress += (3 * sizeof(uint64_t));
+            *(uint64_t *)thisKernargAddress = (uint64_t)PifKlistMap[ret->kernel->pif_name];
+            thisKernargAddress += (3 * sizeof(uint64_t));
+        }
     }
     thisKernargAddress += sizeof(atmi_task_handle_t);
     for(int i = 0; i < ret->kernel->num_args; i++) {
@@ -2408,18 +2441,31 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
     atmi_klist_curr->tasks = (void *)(*GlobalTaskPtr);
     /* get this stream's HSA queue (could be dynamically mapped or round robin
      * if it is an unordered stream */
+    #if 1
     hsa_queue_t* this_devQ = acquire_and_set_next_gpu_queue(stream_obj);
     if(!this_devQ) return;
 
     hsa_queue_t* this_softQ = acquire_and_set_next_cpu_queue(stream_obj);
     if(!this_softQ) return;
 
-    atmi_klist_curr->num_queues = 2;
-    //atmi_klist_curr->queues = (uint64_t *)malloc(sizeof(uint64_t) * atmi_klist_curr->num_queues);
-
     atmi_klist_curr->queues[device_queue] = (uint64_t)this_devQ; 
     atmi_klist_curr->queues[soft_queue] = (uint64_t)this_softQ; 
     atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ); 
+    #else
+    atmi_klist_curr->cpu_queue_offset = 0;
+    atmi_klist_curr->gpu_queue_offset = 0;
+    atmi_klist_curr->num_cpu_queues = SNK_MAX_CPU_QUEUES;
+    atmi_klist_curr->num_gpu_queues = SNK_MAX_GPU_QUEUES;
+    atmi_klist_curr->cpu_queues = (uint64_t *)malloc(sizeof(uint64_t) * atmi_klist_curr->num_cpu_queues);
+    atmi_klist_curr->gpu_queues = (uint64_t *)malloc(sizeof(uint64_t) * atmi_klist_curr->num_gpu_queues);
+
+    for(int qid = 0; qid < SNK_MAX_CPU_QUEUES; qid++) {
+        atmi_klist_curr->cpu_queues[qid] = (long unsigned int)get_cpu_queue(qid); 
+    }
+    for(int qid = 0; qid < SNK_MAX_GPU_QUEUES; qid++) {
+        atmi_klist_curr->gpu_queues[qid] = (long unsigned int)GPU_CommandQ[qid]; 
+    }
+    #endif
 
     uint64_t _KN__Kernel_Object;
     uint32_t _KN__Group_Segment_Size;

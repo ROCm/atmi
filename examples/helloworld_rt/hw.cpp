@@ -25,8 +25,13 @@ extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, void **args) {
 
 int main(int argc, char **argv) {
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_CPU | ATMI_DEVTYPE_GPU);
+    #if 0
+    const char *module = "hw.hsaco";
+    atmi_platform_type_t module_type = AMDGCN;
+    #else
     const char *module = "hw.brig";
     atmi_platform_type_t module_type = BRIG;
+    #endif
     err = atmi_module_register(&module, &module_type, 1);
 
     atmi_kernel_t kernel;

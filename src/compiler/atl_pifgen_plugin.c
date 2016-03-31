@@ -667,10 +667,10 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         int idx; \n\
         for(idx = 0; idx < num_impls; idx++) { \n\
             if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
-                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel); \n\
+                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel, idx); \n\
             }\n\
             else if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
-                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel));\n\
+                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel), idx);\n\
             }\n\
         } \n\
         %s_FK = 1; \n\
@@ -1266,10 +1266,10 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         int idx; \n\
         for(idx = 0; idx < num_impls; idx++) { \n\
             if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_GPU) { \n\
-                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel);\n\
+                atmi_kernel_add_gpu_impl(%s_kernel, %s_fn_table[idx].gpu_kernel, idx);\n\
             }\n\
             else if(%s_fn_table[idx].devtype == ATMI_DEVTYPE_CPU) {\n\
-                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel));\n\
+                atmi_kernel_add_cpu_impl(%s_kernel, (atmi_generic_fp)(%s_fn_table[idx].cpu_kernel), idx);\n\
             }\n\
         } \n\
         %s_FK = 1;\n\
@@ -1404,6 +1404,8 @@ void kernel_dispatch(const atmi_klparm_t *lparm, hsa_kernel_dispatch_packet_t *k
     atmi_klist_t *atmi_klist = (atmi_klist_t *)get_atmi_context();\n\
     //hsa_kernel_dispatch_packet_t *kernel_packet = (hsa_kernel_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
  \n\
+    //int q_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].gpu_queue_offset)), 1); \n\
+    //hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].gpu_queues[q_offset %% atmi_klist[pif_id].num_gpu_queues]; \n\
     hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[device_queue]; \n\
  \n\
     /* Find the queue index address to write the packet info into.  */ \n\
@@ -1466,6 +1468,8 @@ void agent_dispatch(const atmi_klparm_t *lparm, hsa_agent_dispatch_packet_t *ker
     //hsa_agent_dispatch_packet_t *kernel_packet = (hsa_agent_dispatch_packet_t *)(atmi_klist[pif_id].kernel_packets + k_id); \n\
     //hsa_agent_dispatch_packet_t *kernel_packet = this_packet; \n\
  \n\
+    //int q_offset = hsa_atomic_add_system((__global int *)(&(atmi_klist[pif_id].cpu_queue_offset)), 1); \n\
+    //hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].cpu_queues[q_offset %% atmi_klist[pif_id].num_cpu_queues]; \n\
     hsa_queue_t* this_Q = (hsa_queue_t *)atmi_klist[pif_id].queues[soft_queue]; \n\
     hsa_signal_t worker_sig = *((hsa_signal_t *)atmi_klist[pif_id].worker_sig); \n\
  \n\

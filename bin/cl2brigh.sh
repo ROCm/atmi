@@ -200,7 +200,7 @@ sdir=$(getdname $0)
 [ ! -L "$sdir/cl2brigh.sh" ] || sdir=$(getdname `readlink "$sdir/cl2brigh.sh"`)
 ATMI_PATH=${ATMI_PATH:-$sdir/..}
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
-
+HSA_HLC_BIN_PATH=${HSA_LLVM_PATH}/../../hlc3.2/bin
 #  Set Default values
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
@@ -290,7 +290,7 @@ if [ ! -d $TMPDIR ] && [ ! $DRYRUN ] ; then
    echo "ERROR:  Directory $TMPDIR does not exist or could not be created"
    exit $DEADRC
 fi 
-if [ ! -e $HSA_LLVM_PATH/HSAILasm ] ; then 
+if [ ! -e $HSA_HLC_BIN_PATH/$CMD_BRI ] ; then 
    echo "ERROR:  Missing HSAILasm in $HSA_LLVM_PATH"
    echo "        Set env variable HSA_LLVM_PATH or use -p option"
    exit $DEADRC
@@ -324,13 +324,14 @@ if [ $HSAIL_OPT_STEP2 ] ; then
    BRIGNAME=$FNAME.brig
    [ $VERBOSE ] && echo "#Step:  		hsail --> brig  ..."
    if [ $DRYRUN ] ; then
-      echo "$HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail"
+      echo "$HSA_HLC_BIN_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail"
    else
-      $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail
+      echo "$HSA_HLC_BIN_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail"
+      $HSA_HLC_BIN_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail
       rc=$?
       if [ $rc != 0 ] ; then 
          echo "ERROR:  The following command failed with return code $rc."
-         echo "        $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail"
+         echo "        $HSA_HLC_BIN_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $INDIR/$FNAME.hsail"
          do_err $rc
       fi
    fi
@@ -347,16 +348,16 @@ cp $INDIR/$CLNAME $TMPDIR/updated.cl
    fi
    [ $VERBOSE ] && echo "#Step:  cloc.sh		cl --> brig ..."
    if [ $DRYRUN ] ; then
-      echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts ""-I$INDIR -I$ATMI_PATH/include"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      echo "$HSA_LLVM_PATH/cloc.sh -brig -t $TMPDIR -k -clopts ""-I$INDIR -I$ATMI_PATH/include"" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
    else 
       [ $CLOCVERBOSE ] && echo " " && echo "#------ Start cloc.sh output ------"
-      [ $CLOCVERBOSE ] && echo "$HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
-      $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl
+      [ $CLOCVERBOSE ] && echo "$HSA_LLVM_PATH/cloc.sh -brig -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+      $HSA_LLVM_PATH/cloc.sh -brig -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl
       rc=$?
       [ $CLOCVERBOSE ] && echo "#------ End cloc.sh output ------" && echo " " 
       if [ $rc != 0 ] ; then 
          echo "ERROR:  cloc.sh failed with return code $rc.  Command was:"
-         echo "        $HSA_LLVM_PATH/cloc.sh -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
+         echo "        $HSA_LLVM_PATH/cloc.sh -brig -t $TMPDIR -k -clopts "-I$INDIR -I$ATMI_PATH/include" $OTHERCLOCFLAGS $TMPDIR/updated.cl"
          do_err $rc
       fi
    fi
@@ -369,9 +370,9 @@ if [ "$HSAILLIB" != "" ] ; then
    # disassemble brig $BRIGDIR/$BRIGNAME to composite.hsail
    [ $VERBOSE ] && echo "#Step:  Add HSAIL		brig --> hsail+hsaillib --> $BRIGHFILE ..."
    if [ $DRYRUN ] ; then
-      echo $HSA_LLVM_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
+      echo $HSA_HLC_BIN_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
    else
-      $HSA_LLVM_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
+      $HSA_HLC_BIN_PATH/$CMD_BRI -disassemble -o $TMPDIR/composite.hsail $BRIGDIR/$BRIGNAME
    fi
 
    # Inject ATMI_CONTEXT
@@ -403,15 +404,15 @@ alloc(agent) global_u64 &ATMI_CONTEXT = 0;\n\
 
    # assemble complete hsail file to brig $BRIGDIR/$BRIGNAME
    if [ $DRYRUN ] ; then
-      echo $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail
+      echo $HSA_HLC_BIN_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail
       rc=0
    else
-      $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail
+      $HSA_HLC_BIN_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail
       rc=$?
    fi
    if [ $rc != 0 ] ; then 
       echo "ERROR:  HSAIL assembly of HSAILLIB failed with return code $rc. Command was:"
-      echo "        $HSA_LLVM_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail"
+      echo "        $HSA_HLC_BIN_PATH/$CMD_BRI -o $BRIGDIR/$BRIGNAME $TMPDIR/composite.hsail"
       do_err $rc
    fi
 fi

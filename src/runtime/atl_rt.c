@@ -782,7 +782,7 @@ void init_tasks() {
     ErrorCheck(Creating a HSA signal, err);
     DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
     //GlobalTaskPtr = (atl_task_t ***)malloc(sizeof(atl_task_t**));
-    posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
+    int val = posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
     atlc.g_tasks_initialized = 1;
 }
 
@@ -1228,6 +1228,7 @@ atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num
     counter++;
     
     atl_kernel_t *kernel = new atl_kernel_t; 
+    kernel->id_map.clear();
     kernel->num_args = num_args;
     for(int i = 0; i < num_args; i++) {
         kernel->arg_sizes.push_back(arg_sizes[i]);
@@ -1241,6 +1242,7 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
     char *pif = (char *)(atmi_kernel.handle);
     
     atl_kernel_t *kernel = KernelImplMap[std::string(pif)];
+    //kernel->id_map.clear();
     clear_container(kernel->arg_sizes);
     for(std::vector<atl_kernel_impl_t *>::iterator it = kernel->impls.begin(); 
                         it != kernel->impls.end(); it++) {
@@ -1264,7 +1266,7 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *impl) {
+atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *impl, const unsigned int ID) {
     const char *pif_name = (const char *)(atmi_kernel.handle);
     std::string cl_pif_name;
     if(g_deprecated_hlc) {
@@ -1279,6 +1281,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
         free(tmp_str);
     }
     atl_kernel_impl_t *kernel_impl = new atl_kernel_impl_t;
+    kernel_impl->kernel_id = ID;
     kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_GPU;
     std::map<std::string, atl_kernel_info_t>::iterator it = KernelInfoTable.find(kernel_impl->kernel_name);
@@ -1303,12 +1306,17 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     pthread_mutex_init(&(kernel_impl->mutex), NULL);
     
     atl_kernel_t *kernel = KernelImplMap[std::string(pif_name)];
+    if(kernel->id_map.find(ID) != kernel->id_map.end()) {
+        fprintf(stderr, "Kernel ID %d already found\n", ID);
+        return ATMI_STATUS_ERROR;
+    }
+    kernel->id_map[ID] = kernel->impls.size();
 
     kernel->impls.push_back(kernel_impl);
     // rest of kernel impl fields will be populated at first kernel launch
 }
 
-atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_fp impl) {
+atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_fp impl, const unsigned int ID) {
     static int counter = 0;
     const char *pif_name = (const char *)(atmi_kernel.handle);
     std::string cl_pif_name("_x86_");
@@ -1318,11 +1326,17 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
     counter++;
 
     atl_kernel_impl_t *kernel_impl = new atl_kernel_impl_t;
+    kernel_impl->kernel_id = ID;
     kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_CPU;
     kernel_impl->function = impl;
     
     atl_kernel_t *kernel = KernelImplMap[std::string(pif_name)];
+    if(kernel->id_map.find(ID) != kernel->id_map.end()) {
+        fprintf(stderr, "Kernel ID %d already found\n", ID);
+        return ATMI_STATUS_ERROR;
+    }
+    kernel->id_map[ID] = kernel->impls.size();
     /* create kernarg memory */
     uint32_t kernarg_size = sizeof(atmi_task_handle_t);
     for(int i = 0; i < kernel->num_args; i++){
@@ -1337,6 +1351,37 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
     pthread_mutex_init(&(kernel_impl->mutex), NULL);
     kernel->impls.push_back(kernel_impl);
     // rest of kernel impl fields will be populated at first kernel launch
+}
+
+bool is_valid_kernel_id(atl_kernel_t *kernel, unsigned int kernel_id) {
+    std::map<unsigned int, unsigned int>::iterator it = kernel->id_map.find(kernel_id);
+    if(it == kernel->id_map.end()) {
+        fprintf(stderr, "Kernel ID %d not found\n", kernel_id);
+        return false;
+    }
+    int idx = it->second;
+    if(idx >= kernel->impls.size()) {
+        fprintf(stderr, "Kernel ID %d out of bounds (%lu)\n", kernel_id, kernel->impls.size());
+        return false;
+    }
+    return true;
+}
+
+int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id) {
+    if(!is_valid_kernel_id(kernel, kernel_id)) {
+        return -1;
+    }
+    return kernel->id_map[kernel_id];
+}
+
+atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id) {
+    int idx = get_kernel_index(kernel, kernel_id);
+    if(idx < 0) {
+        fprintf(stderr, "Incorrect Kernel ID %d\n", kernel_id);
+        return NULL;
+    }
+
+    return kernel->impls[idx];
 }
 
 atmi_status_t atl_get_gpu_kernel_info(
@@ -1423,7 +1468,7 @@ void handle_signal_callback(atl_task_t *task) {
     }
     // release the kernarg segment back to the kernarg pool
     atl_kernel_t *kernel = task->kernel;
-    atl_kernel_impl_t *kernel_impl = kernel->impls[task->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, task->kernel_id);
 
     std::vector<pthread_mutex_t *> mutexes;
     mutexes.push_back(&mutex_readyq_);
@@ -1451,7 +1496,7 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     atmi_lparm_t *l = &(task->lparm);
     // release the kernarg segment back to the kernarg pool
     atl_kernel_t *kernel = task->kernel;
-    atl_kernel_impl_t *kernel_impl = kernel->impls[task->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, task->kernel_id);
 
     std::vector<pthread_mutex_t *> mutexes;
     mutexes.push_back(&(task->mutex));
@@ -1713,7 +1758,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     /*  Obtain the current queue write index. increases with each call to kernel  */
     uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
 
-    atl_kernel_impl_t *kernel_impl = task->kernel->impls[task->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
     /*  Bind kernel argument buffer to the aql packet.  */
     char *thisKernargAddress = (char *)(task->kernarg_region);
     //printf("(Before) Task %p Region Index: %d\n", task, task->kernarg_region_index);
@@ -1820,7 +1865,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         /* Set the type and return args.*/
         // FIXME FIXME FIXME: Use the hierarchical pif-kernel table to
         // choose the best kernel. Don't use a flat table structure
-        this_aql->type = (uint16_t)task->kernel_id;
+        this_aql->type = (uint16_t)get_kernel_index(task->kernel, task->kernel_id);
         /* FIXME: We are considering only void return types for now.*/
         //this_aql->return_address = NULL;
         /* Set function args */
@@ -1852,7 +1897,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
 }
 
 void *try_grab_kernarg_region(atl_task_t *ret, int *free_idx) {
-    atl_kernel_impl_t *kernel_impl = ret->kernel->impls[ret->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
     uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size;
     /* acquire_kernarg_segment and copy args here before dispatch */
     void * ret_address = NULL;
@@ -1901,7 +1946,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     }
     req_mutexes.push_back((pthread_mutex_t *)&(ret->mutex));
     req_mutexes.push_back(&mutex_readyq_);
-    atl_kernel_impl_t *kernel_impl = ret->kernel->impls[ret->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
     req_mutexes.push_back(&(kernel_impl->mutex));
     pthread_mutex_t stream_mutex;
     atmi_task_group_table_t *stream_obj = ret->stream_obj;
@@ -2049,7 +2094,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     atmi_task_group_table_t *stream_obj = ret->stream_obj;
     get_stream_mutex(stream_obj, &stream_mutex);
     req_mutexes.push_back(&stream_mutex);
-    atl_kernel_impl_t *kernel_impl = ret->kernel->impls[ret->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
     req_mutexes.push_back(&(kernel_impl->mutex));
     lock_vec(req_mutexes);
    
@@ -2288,7 +2333,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     TryLaunchInitTimer.Stop();
     ret->kernel = kernel;
     ret->kernel_id = lparm->kernel_id;
-    atl_kernel_impl_t *kernel_impl = kernel->impls[ret->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, ret->kernel_id);
     ret->kernarg_region = NULL;
     ret->kernarg_region_size = kernel_impl->kernarg_segment_size; 
     ret->devtype = kernel_impl->devtype;
@@ -2390,17 +2435,12 @@ atmi_task_handle_t atmi_task_launch(atmi_kernel_t atmi_kernel, atmi_lparm_t *lpa
     kernel->pif_name = pif_name_str;
     int this_kernel_iter = 0;
     int num_args = kernel->num_args;
-    if(lparm->kernel_id < 0) {
-        fprintf(stderr, "ERROR: Kernel/PIF %s supports non-negative impl index\n", 
-                            pif_name);
-        return NULL_TASK;
-    }
-    if(lparm->kernel_id >= kernel->impls.size()) {
+    if(!is_valid_kernel_id(kernel, lparm->kernel_id)) {
         fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have %d implementations\n", 
                             pif_name, lparm->kernel_id + 1);
         return NULL_TASK;
     }
-    atl_kernel_impl_t *kernel_impl = kernel->impls[lparm->kernel_id];
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, lparm->kernel_id);
     if(kernel_impl->kernarg_region == NULL) {
         fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n", 
                             kernel_impl->kernel_name.c_str());

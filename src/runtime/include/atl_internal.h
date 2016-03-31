@@ -46,6 +46,9 @@ int process_packet(hsa_queue_t *queue, int id);
 
 // ---------------------- Kernel Start -------------
 typedef struct atl_kernel_impl_s {
+    // FIXME: would anyone need to reverse engineer the 
+    // user-specified ID from the impls index? 
+    unsigned int kernel_id;
     std::string kernel_name;
     atmi_devtype_t devtype;
 
@@ -69,6 +72,7 @@ typedef struct atl_kernel_s {
     int num_args;
     std::vector<size_t> arg_sizes;
     std::vector<atl_kernel_impl_t *> impls;
+    std::map<unsigned int, unsigned int> id_map;
 } atl_kernel_t;
 
 typedef struct atl_kernel_info_s {
@@ -198,6 +202,8 @@ atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_tabl
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
 void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype);
 
+atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id);
+int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_stream_id(atmi_task_group_table_t *stream_obj);
 hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj);
 hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj);

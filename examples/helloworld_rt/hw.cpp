@@ -11,6 +11,11 @@ using namespace std;
 #define _CPPSTRING_ 
 #endif 
 
+enum {
+    CPU_IMPL = 10565,
+    GPU_IMPL = 42
+};    
+
 #include "hw_structs.h"
 extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, void **args) {
     decode_args_t *cpu_args = *(decode_args_t **)args;
@@ -39,8 +44,8 @@ int main(int argc, char **argv) {
     size_t arg_sizes[num_args];
     arg_sizes[0] = sizeof(void *);
     atmi_kernel_create_empty(&kernel, num_args, arg_sizes);
-    atmi_kernel_add_cpu_impl(kernel, (atmi_generic_fp)decode_cpu);
-    atmi_kernel_add_gpu_impl(kernel, "decode_gpu");
+    atmi_kernel_add_cpu_impl(kernel, (atmi_generic_fp)decode_cpu, CPU_IMPL);
+    atmi_kernel_add_gpu_impl(kernel, "decode_gpu", GPU_IMPL);
 
 	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
 	size_t strlength = strlen(input);
@@ -61,11 +66,11 @@ int main(int argc, char **argv) {
     ATMI_LPARM_1D(lparm, strlength);
     lparm->synchronous = ATMI_TRUE;
 
-    lparm->kernel_id = 1;
+    lparm->kernel_id = GPU_IMPL;
     atmi_task_launch(kernel, lparm, gpu_args);
     output_gpu[strlength] = '\0';
 
-    lparm->kernel_id = 0;
+    lparm->kernel_id = CPU_IMPL;
     atmi_task_launch(kernel, lparm, cpu_args);
     output_cpu[strlength] = '\0';
    

@@ -602,7 +602,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
 
 extern void atmi_task_group_sync(atmi_task_group_t *stream) {
     atmi_task_group_t *str = (stream == NULL) ? &atl_default_stream_obj : stream;
-    atmi_task_group_table_t *stream_obj = StreamTable[stream->id];
+    atmi_task_group_table_t *stream_obj = StreamTable[str->id];
     atl_stream_sync(stream_obj);
 }
 

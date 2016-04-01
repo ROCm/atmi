@@ -1807,7 +1807,12 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         #endif
         char *kargs = (char *)(task->kernarg_region);
         if(g_deprecated_hlc) {
-            kargs += (6 * sizeof(uint64_t));
+            const int dummy_arg_count = 6;
+            /* zero out all the dummy arguments */
+            for(int dummy_idx = 0; dummy_idx < dummy_arg_count; dummy_idx++) {
+                *(uint64_t *)kargs = 0;
+                kargs += sizeof(uint64_t);
+            }
         }
         *(atmi_task_handle_t *)kargs = task->id;
         //kargs->arg6 = task->id;

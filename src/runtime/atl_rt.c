@@ -1808,11 +1808,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         char *kargs = (char *)(task->kernarg_region);
         if(g_deprecated_hlc) {
             const int dummy_arg_count = 6;
-            /* zero out all the dummy arguments */
-            for(int dummy_idx = 0; dummy_idx < dummy_arg_count; dummy_idx++) {
-                *(uint64_t *)kargs = 0;
-                kargs += sizeof(uint64_t);
-            }
+            kargs += (dummy_arg_count * sizeof(uint64_t));
         }
         *(atmi_task_handle_t *)kargs = task->id;
         //kargs->arg6 = task->id;
@@ -1923,9 +1919,17 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
     }
     if(g_deprecated_hlc) {
         if(ret->devtype == ATMI_DEVTYPE_GPU) {
-            thisKernargAddress += (3 * sizeof(uint64_t));
+            /* zero out all the dummy arguments */
+            for(int dummy_idx = 0; dummy_idx < 3; dummy_idx++) {
+                *(uint64_t *)thisKernargAddress = 0;
+                thisKernargAddress += sizeof(uint64_t);
+            }
             *(uint64_t *)thisKernargAddress = (uint64_t)PifKlistMap[ret->kernel->pif_name];
-            thisKernargAddress += (3 * sizeof(uint64_t));
+            thisKernargAddress += sizeof(uint64_t);
+            for(int dummy_idx = 0; dummy_idx < 2; dummy_idx++) {
+                *(uint64_t *)thisKernargAddress = 0;
+                thisKernargAddress += sizeof(uint64_t);
+            }
         }
     }
     thisKernargAddress += sizeof(atmi_task_handle_t);

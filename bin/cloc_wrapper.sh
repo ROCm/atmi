@@ -68,7 +68,7 @@ function usage(){
    Converts a CL file to the BRIG char array that can be later loaded in
    HSA modules.
 
-   Usage: cl2brigh.sh [ options ] filename.cl
+   Usage: cloc_wrapper.sh [ options ] filename.cl
 
    Options without values:
     -version  Display version of this tool and exit
@@ -84,23 +84,23 @@ function usage(){
     -t        <tempdir>      Default=/tmp/atmi_$$, Temp dir for files
     -s        <symbolname>   Default=filename 
     -p        <path>         $ATMI_PATH or <sdir> if ATMI_PATH not set
-                             <sdir> is actual directory of cl2brigh.sh
-    -cp       <path>         $HSA_LLVM_PATH or /opt/amd/cloc/bin
+                             <sdir> is actual directory of cloc_wrapper.sh
+    -cp       <path>         $HSA_LLVM_PATH or /usr/bin
     -rp       <HSA RT path>  Default=$HSA_RUNTIME_PATH or /opt/hsa
     -o        <outfilename>  Default=<file>_brig.h or <file>_hof.h
     -hsaillib <hsail file>   Add HSAIL library to kernel code 
     -clopts   <compiler opts>  Default="-cl-std=CL2.0"
 
    Examples:
-    cl2brigh.sh my.cl              /* create my_brig.h                  */
-    cl2brigh.sh -hof my.cl         /* create my_hof.h (finalized)       */
-    cl2brigh.sh -hsaillib mylib.hsail my.cl  
+    cloc_wrapper.sh my.cl              /* create my_brig.h                  */
+    cloc_wrapper.sh -hof my.cl         /* create my_hof.h (finalized)       */
+    cloc_wrapper.sh -hsaillib mylib.hsail my.cl  
                                    /* creates my_brig.h, a composition  *
                                     * of my.cl & mylib.hsail            */
-    cl2brigh.sh -hof -hsaillib mylib.hsail my.cl  
+    cloc_wrapper.sh -hof -hsaillib mylib.hsail my.cl  
                                    /* creates my_hof.h, a composition   *
                                     * of my.cl & mylib.hsail (finalized)*/
-    cl2brigh.sh -t /tmp/foo my.cl  /* will automatically set -k         */
+    cloc_wrapper.sh -t /tmp/foo my.cl  /* will automatically set -k         */
 
    You may set environment variables ATMI_PATH,HSA_LLVM_PATH, or HSA_RUNTIME_PATH, 
    instead of providing options -p, -cp, -rp.
@@ -197,10 +197,10 @@ if [ ! -z $1 ]; then
 fi
 
 sdir=$(getdname $0)
-[ ! -L "$sdir/cl2brigh.sh" ] || sdir=$(getdname `readlink "$sdir/cl2brigh.sh"`)
+[ ! -L "$sdir/cloc_wrapper.sh" ] || sdir=$(getdname `readlink "$sdir/cloc_wrapper.sh"`)
 ATMI_PATH=${ATMI_PATH:-$sdir/..}
-HSA_LLVM_PATH=${HSA_LLVM_PATH:-/opt/amd/cloc/bin}
-HSA_HLC_BIN_PATH=${HSA_LLVM_PATH}/../../hlc3.2/bin
+HSA_LLVM_PATH=${HSA_LLVM_PATH:-/usr/bin}
+HSA_HLC_BIN_PATH=/usr/local/bin
 #  Set Default values
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}
@@ -301,7 +301,7 @@ if [ ! -d $OUTDIR ] && [ ! $DRYRUN ]  ; then
 fi
 FULLOUTFILE=$OUTDIR/$OUTFILE
 
-[ $VERBOSE ] && echo "#Info:  Version:	cl2brigh.sh $PROGVERSION" 
+[ $VERBOSE ] && echo "#Info:  Version:	cloc_wrapper.sh $PROGVERSION" 
 [ $VERBOSE ] && echo "#Info:  Input Files:	"
 [ $VERBOSE ] && echo "#           File:	       $INDIR/$CLNAME"
 [ $VERBOSE ] && echo "#Info:  Output Files:"
@@ -421,43 +421,20 @@ fi
 if [ $HOF ] ; then 
     [ $VERBOSE ] && echo "#Step:  offline finalization of brig --> $OUTFILE ..."
     if [ $DRYRUN ] ; then
-        echo $ATMI_PATH/bin/atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
+        echo $ATMI_PATH/bin/hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
     else
-        echo $ATMI_PATH/bin/atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
-        $ATMI_PATH/bin/atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
-        #LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH atmi_hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
+        echo $ATMI_PATH/bin/hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
+        $ATMI_PATH/bin/hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
+        #LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$LD_LIBRARY_PATH hof -o $BRIGDIR/$FNAME.o -b $BRIGDIR/$BRIGNAME 
         rc=$?
         if [ $rc != 0 ] ; then 
             echo "ERROR:  The hof command failed with return code $rc."
             exit $rc
         fi
         cp $BRIGDIR/$FNAME.o $FULLOUTFILE
-        #echo "char ${SYMBOLNAME}_HSA_HofMem[] = {" > $FULLOUTFILE
-        #hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$FNAME.hof >> $FULLOUTFILE
-        #rc=$?
-        #if [ $rc != 0 ] ; then 
-        #    echo "ERROR:  The hexdump command failed with return code $rc."
-        #    exit $rc
-        #fi
-        #echo "};" >> $FULLOUTFILE
-        #echo "size_t ${SYMBOLNAME}_HSA_HofMemSz = sizeof(${SYMBOLNAME}_HSA_HofMem);" >> $FULLOUTFILE
     fi
 else 
     cp $BRIGDIR/$BRIGNAME $FULLOUTFILE
-    #[ $VERBOSE ] && echo "#Step:  hexdump		brig --> $BRIGHFILE ..."
-    #if [ $DRYRUN ] ; then
-    #    echo "hexdump -v -e '""0x"" 1/1 ""%02X"" "",""' $BRIGDIR/$BRIGNAME "
-    #else
-    #    echo "char ${SYMBOLNAME}_HSA_BrigMem[] = {" > $FULLOUTFILE
-    #    hexdump -v -e '"0x" 1/1 "%02X" ","' $BRIGDIR/$BRIGNAME >> $FULLOUTFILE
-    #    rc=$?
-    #    if [ $rc != 0 ] ; then 
-    #        echo "ERROR:  The hexdump command failed with return code $rc."
-    #        exit $rc
-    #    fi
-    #    echo "};" >> $FULLOUTFILE
-    #    echo "size_t ${SYMBOLNAME}_HSA_BrigMemSz = sizeof(${SYMBOLNAME}_HSA_BrigMem);" >> $FULLOUTFILE
-    #fi
 fi
 
 # cleanup

@@ -160,11 +160,11 @@ std::string exec(const char* cmd) {
 }
 
 void brig2brigh(const char *brigfilename, const char *cl_module_name) {
-    // FIXME: Ideally we should use cl2brigh.sh for this too
+    // FIXME: Ideally we should use cloc_wrapper.sh for this too
     std::string outfile(cl_module_name);
     if(g_hsa_offline_finalize == 1) {
-        // atmi_hof -o cl_module_name.o -b brigfile
-        std::string hof_cmd("atmi_hof -o ");
+        // hof -o cl_module_name.o -b brigfile
+        std::string hof_cmd("hof -o ");
         hof_cmd += (std::string(outfile) + ".hof -b " + std::string(brigfilename));
         std::string hof_str = exec(hof_cmd.c_str());
         if(hof_str == "" || hof_str == "ERROR") {
@@ -174,13 +174,13 @@ void brig2brigh(const char *brigfilename, const char *cl_module_name) {
     }
 }
 
-void cl2brigh(const char *clfilename, const char *symbolname) {
+void cloc_wrapper(const char *clfilename, const char *symbolname) {
     std::string cmd;
     cmd.clear();
-    cmd += exec("which cl2brigh.sh");
+    cmd += exec("which cloc_wrapper.sh");
 
     if(cmd == "" || cmd == "ERROR") {
-        fprintf(stderr, "cl2brigh.sh script not found in the PATH.\n");
+        fprintf(stderr, "cloc_wrapper.sh script not found in the PATH.\n");
         exit(-1);
     }
     char cmd_c[2048] = {0};
@@ -884,7 +884,7 @@ register_finish_unit (void *event_data, void *data) {
             exit(-1);
         }
         vector<string> tokens = split(it->c_str(), '.');
-        cl2brigh("tmp.cl", tokens[0].c_str());
+        cloc_wrapper("tmp.cl", tokens[0].c_str());
         //int ret_del = remove("tmp.cl");
         //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
@@ -1101,7 +1101,7 @@ int plugin_init(struct plugin_name_args *plugin_info,
             // Compile to brig at end of current compilation so that the PIF declarations can be 
             // embedded into the CL code. This is useful if GPU kernels need to invoke PIFs
             // in the same way as CPU code invokes PIFs
-            // cl2brigh(clfilename);
+            // cloc_wrapper(clfilename);
             g_cl_files.push_back(std::string(clfilename));
 
             /* remove .cl extension */

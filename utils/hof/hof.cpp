@@ -20,13 +20,13 @@ if (status != HSA_STATUS_SUCCESS) { \
 }
 
 const char *argp_program_version =
-"HSA Offline Finalizer for ATMI v0.1";
+"HSA Offline Finalizer";
 const char *argp_program_bug_address =
 "<ashwin.aji@amd.com>";
 
 /* Program documentation. */
 static char doc[] =
-"HSA Offline Finalizer -- a tool to finalize BRIG/HSAIL modules to machine binary. Primarily used for ATMI application writers.";
+"HSA Offline Finalizer -- a tool to finalize BRIG/HSAIL modules to machine binary.";
 
 /* A description of the arguments we accept. */
 static char args_doc[] = "";
@@ -216,12 +216,16 @@ main (int argc, char **argv)
     err = hsa_agent_get_info(agent, HSA_AGENT_INFO_NAME, name);
     ErrorCheck(Querying the agent name, err);
 
+        
+    hsa_profile_t device_profile;
+    err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &device_profile);
+    ErrorCheck(Querying the agent profile, err);
     /*
      * Create hsa program.
      */
     hsa_ext_program_t program;
     memset(&program,0,sizeof(hsa_ext_program_t));
-    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
+    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, device_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
     ErrorCheck(Create the program, err);
 
     /*

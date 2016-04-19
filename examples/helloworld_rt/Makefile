@@ -1,7 +1,7 @@
 #Set HSA Environment variables
 HSA_RUNTIME_PATH ?= /opt/hsa
 HSA_LIBHSAIL_PATH ?= /opt/hsa/lib
-HSA_LLVM_PATH ?= /opt/amd/cloc/bin
+CLOC_PATH ?= /usr/bin
 ATMI_RUNTIME_PATH ?= /opt/amd/atmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include
 
@@ -18,10 +18,10 @@ OBJS = hello
 
 all: $(OBJS)
 
-hello: hw.cpp hw.cl
-	cloc.sh -brig -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 hw.cl
+hello: hw.cpp hw.cl hw_structs.h
+	$(CLOC_PATH)/cloc.sh -brig -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 hw.cl
 	$(CC) -o $@ hw.cpp $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
-	rm -rf *.o *.brig $(OBJS)
+	rm -rf *.o *.brig *.hsaco $(OBJS)
 

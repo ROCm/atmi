@@ -23,6 +23,12 @@ typedef enum atmi_devtype_s {
     ATMI_DEVTYPE_DSP = (1 << 2)
 } atmi_devtype_t;
 
+typedef enum atmi_memtype_s {
+    ATMI_MEMTYPE_KERNARG        = (1 << 0),
+    ATMI_MEMTYPE_FINE_GRAINED   = (1 << 1),
+    ATMI_MEMTYPE_COARSE_GRAINED = (1 << 2) 
+} atmi_memtype_t;
+
 typedef enum atmi_state_s {
     ATMI_INITIALIZED = 0,
     ATMI_READY       = 1,
@@ -51,31 +57,34 @@ typedef struct atmi_tprofile_s {
    unsigned long int end_time;       /*                                       */
 } atmi_tprofile_t;
 
+#define ATMI_MAX_NODES  1024
+#define ATMI_MAX_CUS    64
+typedef struct atmi_place_s {
+    unsigned int node_id;           /* node_id = 0 for local computations     */
+    unsigned long cpu_set;          /* CPU (core) set.                        */
+    unsigned long gpu_set;          /* GPU (CU) set.                          */
+} atmi_place_t;
+
+#define ATMI_PLACE_ANY(node) {.node_id=node, .cpu_set=0xFFFFFFFFFFFFFFFF, .gpu_set=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .cpu_set=0xFFFFFFFFFFFFFFFF, .gpu_set=0x0} 
+#define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .cpu_set=0x0, .gpu_set=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .cpu_set=(1 << cpu_id), .gpu_set=0x0} 
+#define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .cpu_set=0x0, .gpu_set=(1 << gpu_id)} 
+#define ATMI_PLACE_GPU_MASK(node, gpu_mask) {.node_id=node, .cpu_set=0x0, .gpu_set=(0x0|gpu_mask)} 
+#define ATMI_PLACE_CPU_MASK(node, cpu_mask) {.node_id=node, .cpu_set=(0x0|cpu_mask), .gpu_set=0x0} 
+
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
-/* atmi_task_group_t  ATMI Stream Definition Data Structure                       */
+/* atmi_task_group_t  ATMI Task Group Data Structure                          */
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 typedef struct atmi_task_group_s {
    int                id;           /* Unique task group identifier           */
    boolean            ordered;      /*                                        */
-   int                maxsize;      /* Number of tasks allowed in group      */
+   atmi_place_t       place;        /* CUs to execute tasks; default: any     */
+   int                maxsize;      /* Number of tasks allowed in group       */
    atmi_full_policy_t full_policy;  /* What to do if maxsize reached          */
 } atmi_task_group_t;
-
-#define ATMI_MAX_NODES  1024
-#define ATMI_MAX_CUS    32
-typedef struct atmi_place_s {
-    unsigned int node_id;           /* node_id = 0 for local computations     */
-    unsigned long cpu_set;          /* CPU (core) set.                        */
-    unsigned long gpu_set;          /* GPU (CU) set. Today, all CUs are set   */
-} atmi_place_t;
-
-#define ATMI_PLACE_ANY(node) {.node_id=node, .cpu_set=0xFFFFFFFF, .gpu_set=0xFFFFFFFF} 
-#define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .cpu_set=0xFFFFFFFF, .gpu_set=0x0} 
-#define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .cpu_set=0x0, .gpu_set=0xFFFFFFFF} 
-#define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .cpu_set=(1 << cpu_id), .gpu_set=0x0} 
-#define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .cpu_set=0x0, .gpu_set=(1 << gpu_id)} 
 
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
@@ -120,7 +129,7 @@ typedef struct atmi_task_handle_s {
         unsigned long int all;
     };
 } atmi_task_handle_t;
-#define ATMI_TASK_HANDLE(low) {.all=low}
+//#define ATMI_TASK_HANDLE(low) (atmi_task_handle_t){.node=0,.hi=0,.lo=low}
 #else
 typedef unsigned long int atmi_task_handle_t;
 #define ATMI_TASK_HANDLE(low) (low)
@@ -173,11 +182,11 @@ typedef struct atmi_task_list_s {
     struct atmi_task_list_s *next;
 } atmi_task_list_t;
 
-typedef struct atmi_arg_info_s {
+typedef struct atmi_data_s {
     void *ptr;
     unsigned long long int size;
-    // atmi_place_t place;
-} atmi_arg_info_t;
+    atmi_place_t place;
+} atmi_data_t;
 
 #define WORKITEMS gridDim[0] 
 #define WORKITEMS2D gridDim[1] 

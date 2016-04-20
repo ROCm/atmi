@@ -1,6 +1,7 @@
 #ifndef __SNK_INTERNAL
 #define __SNK_INTERNAL
 #include "atl_rt.h"
+#include "ATLQueue.h"
 #include <pthread.h>
 #include <vector>
 #include <queue>
@@ -23,7 +24,7 @@ typedef struct agent_t
 {
   int num_queues;
   int id;
-  hsa_queue_t *queue;
+  ATLCPUQueue *queue;
   //hsa_agent_t cpu_agent;
   //hsa_region_t cpu_region;
 } agent_t;
@@ -39,7 +40,7 @@ void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
                 const size_t num_queues, const size_t capacity
                 );
 void agent_fini();
-hsa_queue_t* get_cpu_queue(int id);
+ATLCPUQueue* get_cpu_queue(int id);
 void signal_worker(hsa_queue_t *queue, int signal);
 void *agent_worker(void *agent_args);
 int process_packet(hsa_queue_t *queue, int id);
@@ -100,6 +101,7 @@ typedef struct atmi_task_group_table_s {
     hsa_queue_t *gpu_queue;
     hsa_queue_t *cpu_queue;
     atmi_devtype_t last_device_type;
+    atmi_place_t place;
     int next_gpu_qid;
     int next_cpu_qid;
     hsa_signal_t common_signal;
@@ -161,6 +163,8 @@ typedef struct atl_task_s {
     boolean is_continuation;
     atl_task_t *continuation_task;
 
+    atmi_place_t place;
+
     atl_task_s() : num_predecessors(0), num_successors(0), atmi_task(0)
     {
         and_successors.clear();
@@ -205,8 +209,8 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_co
 atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_stream_id(atmi_task_group_table_t *stream_obj);
-hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj);
-hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj);
+ATLQueue *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
+ATLQueue *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
 atmi_status_t clear_saved_tasks(atmi_task_group_table_t *stream_obj);
 atmi_status_t register_task(atmi_task_group_table_t *stream_obj, atl_task_t *task);
 atmi_status_t register_stream(atmi_task_group_table_t *stream_obj);

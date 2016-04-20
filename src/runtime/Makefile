@@ -1,7 +1,7 @@
 #Set HSA Environment variables
 #HSA_RUNTIME_PATH=/opt/hsa
 #HSA_RUNTIME_PATH=${HOME}/opt/hsa
-HSA_RUNTIME_PATH=/opt/hsa-nov15
+HSA_RUNTIME_PATH=/opt/hsa
 HSA_LLVM_PATH=/opt/amd/cloc/bin
 
 AR=ar
@@ -12,7 +12,7 @@ ATMILIB_RUNTIME_PATH=../..
 INC_FLAGS=-I${ATMILIB_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/include -I./include 
 LIB_FLAGS=-L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -Wl,--no-as-needed -Wl,-rpath=${HSA_RUNTIME_PATH}/lib
 
-OBJS=atl_bindthread.o atl_profile.o atl_rt.o atl_cputask.o atl_synckernel.o 
+OBJS=atl_bindthread.o atl_profile.o atl_rt.o atl_cputask.o atl_synckernel.o ATLQueue.o 
 
 LIB=libatmi_runtime.so
 LIBDIR=${ATMILIB_RUNTIME_PATH}/lib
@@ -36,6 +36,6 @@ $(LIBDIR)/$(LIB): $(OBJS)
 	$(CC) -g -shared $(LIB_FLAGS) -o $@ $^ 	
 #	$(AR) $(ARFLAGS) $@ $^
 
-%.o: %.c ${ATMILIB_RUNTIME_PATH}/include/*.h include/*.h
+%.o: %.c* ${ATMILIB_RUNTIME_PATH}/include/*.h include/*.h
 	$(CC) -o $@ $(INC_FLAGS) $(CFLAGS) $< $(LIB_FLAGS)
 

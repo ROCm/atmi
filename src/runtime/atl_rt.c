@@ -43,6 +43,7 @@
 /* This file is the ATMI library.  */
 #include "atl_internal.h"
 #include "atl_profile.h"
+#include "ATLQueue.h"
 #include <pthread.h>
 #include <time.h>
 #include <assert.h>
@@ -119,10 +120,13 @@ static int g_max_signals;
 hsa_agent_t atl_cpu_agent;
 hsa_ext_program_t atl_hsa_program;
 //hsa_executable_t atl_executable;
-hsa_region_t atl_gpu_KernargRegion;
-hsa_region_t atl_cpu_KernargRegion;
+hsa_region_t atl_hsa_primary_region;
+hsa_region_t atl_gpu_kernarg_region;
+hsa_region_t atl_cpu_kernarg_region;
 hsa_agent_t atl_gpu_agent;
-hsa_queue_t* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
+hsa_profile_t atl_gpu_agent_profile;
+
+ATLGPUQueue* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
 int          SNK_NextTaskId = 0 ;
 atmi_task_group_t atl_default_stream_obj = {0, ATMI_FALSE};
 int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
@@ -398,7 +402,125 @@ atmi_status_t queue_sync(hsa_queue_t *queue) {
 
     return ATMI_STATUS_SUCCESS;
 }
+#if 0
+hsa_status_t get_region_info(hsa_region_t region, void* data)
+{
+	int* p_int = reinterpret_cast<int*>(data);
+	(*p_int)++;
+	
+	hsa_status_t err;
+	
+	// Get region segment info
+	hsa_region_segment_t region_segment;
+	err = hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT, &region_segment);
+	ErrorCheck(err);
 
+	cout<<"  Region #"<<*p_int<<":"<<endl;
+	cout<<"    Region Segment:				";
+	switch(region_segment)
+	{
+		case HSA_REGION_SEGMENT_GLOBAL:
+			cout<<"GLOBAL"<<endl;
+			break;
+		case HSA_REGION_SEGMENT_READONLY:
+			cout<<"READONLY"<<endl;
+			break;	
+		case HSA_REGION_SEGMENT_PRIVATE:
+			cout<<"PRIVATE"<<endl;
+		case HSA_REGION_SEGMENT_GROUP:
+			cout<<"GROUP"<<endl;
+			break;
+		default:
+			cout<<"Not Supported"<<endl;
+			break;
+	}
+
+	// Check if the region is global
+	if(HSA_REGION_SEGMENT_GLOBAL == region_segment)
+	{
+		uint32_t global_flag = 0;
+		err = hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &global_flag);
+		ErrorCheck(err);
+ 
+		std::vector<std::string> flags;
+		cout<<"    Region Global Flag:				";
+		if(HSA_REGION_GLOBAL_FLAG_KERNARG & global_flag)
+			flags.push_back("KERNARG");
+		if(HSA_REGION_GLOBAL_FLAG_FINE_GRAINED & global_flag)
+			flags.push_back("FINE GRAINED");
+		if(HSA_REGION_GLOBAL_FLAG_COARSE_GRAINED & global_flag)
+			flags.push_back("COARSE GRAINED");
+		if(flags.size() > 0)
+		cout<<flags[0];
+		for(int i=1; i<flags.size(); i++)
+		{
+			cout<<", "<<flags[i];
+		}
+		cout<<endl;
+	}
+	
+	// Get the size of the region
+	size_t region_size = 0;
+ 	err = hsa_region_get_info(region, HSA_REGION_INFO_SIZE, &region_size);	
+	ErrorCheck(err);
+	cout<<"    Region Size:				"<<region_size/1024<<"KB"<<endl;
+
+	// Get region alloc max size
+	size_t region_alloc_max_size = 0;
+	err = hsa_region_get_info(region, HSA_REGION_INFO_ALLOC_MAX_SIZE, &region_alloc_max_size);
+	ErrorCheck(err);
+	cout<<"    Region Alloc Max Size:			"<<region_alloc_max_size/1024<<"KB"<<endl;
+
+	// Check if the region is allowed to allocate
+	bool alloc_allowed = false;
+	err = hsa_region_get_info(region, HSA_REGION_INFO_RUNTIME_ALLOC_ALLOWED, &alloc_allowed);
+	ErrorCheck(err);
+	cout<<"    Region Allocatable:				";
+	if(alloc_allowed)
+		cout<<"TRUE"<<endl;
+	else
+		cout<<"FALSE"<<endl;
+
+	// Get alloc granule
+	if(!alloc_allowed)
+		return HSA_STATUS_SUCCESS;
+
+	size_t alloc_granule = 0;
+	err = hsa_region_get_info(region, HSA_REGION_INFO_RUNTIME_ALLOC_GRANULE, &alloc_granule);
+	ErrorCheck(err);
+	cout<<"    Region Alloc Granule:			"<<alloc_granule/1024<<"KB"<<endl;
+
+	// Get alloc alignment
+	size_t region_alloc_alignment = 0;
+	err = hsa_region_get_info(region, HSA_REGION_INFO_RUNTIME_ALLOC_ALIGNMENT, &region_alloc_alignment);
+	ErrorCheck(err);
+	cout<<"    Region Alloc Alignment:			"<<region_alloc_alignment/1024<<"KB"<<endl;
+	return HSA_STATUS_SUCCESS;
+}
+
+static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
+    hsa_status_t status;
+    // Get profile supported by the agent
+    hsa_profile_t agent_profile;
+    err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
+    ErrorCheck(err);
+
+    hsa_device_type_t device_type;
+    status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
+    DEBUG_PRINT("Device Type = %d\n", device_type);
+    if (HSA_STATUS_SUCCESS == status && HSA_DEVICE_TYPE_GPU == device_type) {
+        uint32_t max_queues;
+        status = hsa_agent_get_info(agent, HSA_AGENT_INFO_QUEUES_MAX, &max_queues);
+        DEBUG_PRINT("GPU has max queues = %" PRIu32 "\n", max_queues);
+        hsa_agent_t* ret = (hsa_agent_t*)data;
+        *ret = agent;
+        return HSA_STATUS_INFO_BREAK;
+    }
+    err = hsa_agent_iterate_regions(agent, get_region_info, &region_number);
+    ErrorCheck(err, Iterate all regions);
+    return HSA_STATUS_SUCCESS;
+}
+#endif
 /* Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
    and sets the value of data to the agent handle if it is.
 */
@@ -606,7 +728,7 @@ extern void atmi_task_group_sync(atmi_task_group_t *stream) {
     atl_stream_sync(stream_obj);
 }
 
-hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj) {
+ATLQueue *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
     int ret_queue_id = stream_obj->next_cpu_qid;
     DEBUG_PRINT("Q ID: %d\n", ret_queue_id);
     /* use the same queue if the stream is ordered */
@@ -614,20 +736,22 @@ hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj)
     if(stream_obj->ordered == ATMI_FALSE) {
         stream_obj->next_cpu_qid = (ret_queue_id + 1) % SNK_MAX_CPU_QUEUES;
     }
-    hsa_queue_t *queue = get_cpu_queue(ret_queue_id);
-    stream_obj->cpu_queue = queue;
+    ATLCPUQueue *queue = get_cpu_queue(ret_queue_id);
+    queue->setPlace(place);
+    stream_obj->cpu_queue = queue->getQueue();
     return queue;
 }
 
-hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj) {
+ATLQueue *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
     int ret_queue_id = stream_obj->next_gpu_qid;
     /* use the same queue if the stream is ordered */
     /* otherwise, round robin the queue ID for unordered streams */
     if(stream_obj->ordered == ATMI_FALSE) {
         stream_obj->next_gpu_qid = (ret_queue_id + 1) % SNK_MAX_GPU_QUEUES;
     }
-    hsa_queue_t *queue = GPU_CommandQ[ret_queue_id];
-    stream_obj->gpu_queue = queue;
+    ATLGPUQueue *queue = GPU_CommandQ[ret_queue_id];
+    queue->setPlace(place);
+    stream_obj->gpu_queue = queue->getQueue();
     return queue;
 }
 
@@ -813,12 +937,45 @@ atmi_status_t atmi_init(int devtype) {
     return ATMI_STATUS_SUCCESS;
 }
 
+void init_comute_and_memory() {
+    /* Iterate over the agents and pick the gpu agent */
+    hsa_status_t err;
+    err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
+    
+    /* Query the name of the agent.  */
+    //char name[64] = { 0 };
+    //err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_NAME, name);
+    //ErrorCheck(Querying the agent name, err);
+    /* printf("The agent name is %s.\n", name); */
+    err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_PROFILE, &atl_gpu_agent_profile);
+    ErrorCheck(Query the agent profile, err);
+    DEBUG_PRINT("Agent Profile: %d\n", atl_gpu_agent_profile);
+
+    /* Find a memory region that supports kernel arguments.  */
+    atl_gpu_kernarg_region.handle=(uint64_t)-1;
+    hsa_agent_iterate_regions(atl_gpu_agent, get_kernarg_memory_region, &atl_gpu_kernarg_region);
+    err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    ErrorCheck(Finding a kernarg memory region, err);
+
+    err = hsa_iterate_agents(get_cpu_agent, &atl_cpu_agent);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
+
+    atl_cpu_kernarg_region.handle=(uint64_t)-1;
+    err = hsa_agent_iterate_regions(atl_cpu_agent, get_fine_grained_region, &atl_cpu_kernarg_region);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    err = (atl_cpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    ErrorCheck(Finding a CPU kernarg memory region handle, err);
+}
+
 void init_hsa() {
     if(atlc.g_hsa_initialized == 0) {
         hsa_status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
         char *deprecated_hlc = getenv("ATMI_WITH_DEPRECATED_HLC");
-        if(deprecated_hlc != NULL && strcmp(deprecated_hlc, "1") == 0) {
+        if(deprecated_hlc == NULL || (deprecated_hlc && strcmp(deprecated_hlc, "1")) == 0) {
             g_deprecated_hlc = true;
         }
         else {
@@ -835,9 +992,51 @@ void init_hsa() {
         g_max_signals = 24;
         if(max_signals != NULL)
             g_max_signals = atoi(max_signals);
+        init_comute_and_memory();
         init_dag_scheduler();
         atlc.g_hsa_initialized = 1;
     }
+}
+
+atmi_status_t atl_init_gpu_context() {
+
+    if(atlc.struct_initialized == 0) atmi_init_context_structs();
+    if(atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
+    
+    hsa_status_t err;
+
+    init_hsa();
+    
+    /* Query the maximum size of the queue.  */
+    uint32_t queue_size = 0;
+    err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+    ErrorCheck(Querying the agent maximum queue size, err);
+    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
+
+    /* Create queues and signals for each stream. */
+    int stream_num;
+    for ( stream_num = 0 ; stream_num < SNK_MAX_GPU_QUEUES ; stream_num++){
+       hsa_queue_t *this_Q;
+       err=hsa_queue_create(atl_gpu_agent, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, UINT32_MAX, UINT32_MAX, &this_Q);
+       GPU_CommandQ[stream_num] = new ATLGPUQueue(this_Q);
+       ErrorCheck(Creating the Stream Command Q, err);
+       err = hsa_amd_profiling_set_profiler_enabled( this_Q, 1); 
+       ErrorCheck(Enabling profiling support, err); 
+    }
+
+    for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
+        /* round robin streams to queues */
+        SNK_NextGPUQueueID[stream_num] = stream_num % SNK_MAX_GPU_QUEUES;
+    }
+
+    if(context_init_time_init == 0) {
+        clock_gettime(CLOCK_MONOTONIC_RAW,&context_init_time);
+        context_init_time_init = 1;
+    }
+
+    init_tasks();
+    atlc.g_gpu_initialized = 1;
+    return ATMI_STATUS_SUCCESS;
 }
 
 atmi_status_t atl_init_cpu_context() {
@@ -857,19 +1056,10 @@ atmi_status_t atl_init_cpu_context() {
 #if defined (ATMI_HAVE_PROFILE)
     atmi_profiling_init();
 #endif /*ATMI_HAVE_PROFILE */
-    err = hsa_iterate_agents(get_cpu_agent, &atl_cpu_agent);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    ErrorCheck(Getting a gpu agent, err);
-
-    atl_cpu_KernargRegion.handle=(uint64_t)-1;
-    err = hsa_agent_iterate_regions(atl_cpu_agent, get_fine_grained_region, &atl_cpu_KernargRegion);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    err = (atl_cpu_KernargRegion.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
-    ErrorCheck(Finding a CPU kernarg memory region handle, err);
 
     int num_queues = SNK_MAX_CPU_QUEUES;
     int queue_capacity = (1024 * 1024);
-    cpu_agent_init(atl_cpu_agent, atl_cpu_KernargRegion, num_queues, queue_capacity);
+    cpu_agent_init(atl_cpu_agent, atl_cpu_kernarg_region, num_queues, queue_capacity);
 
     int stream_num;
     for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
@@ -909,7 +1099,7 @@ atmi_status_t atl_gpu_create_program() {
     hsa_status_t err;
     /* Create hsa program.  */
     memset(&atl_hsa_program,0,sizeof(hsa_ext_program_t));
-    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
+    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, atl_gpu_agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
     ErrorCheck(Create the program, err);
     return ATMI_STATUS_SUCCESS;
 }
@@ -924,7 +1114,7 @@ atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]) {
 
 atmi_status_t atl_gpu_create_executable(hsa_executable_t *executable) {
     /* Create the empty executable.  */
-    hsa_status_t err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
+    hsa_status_t err = hsa_executable_create(atl_gpu_agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
     ErrorCheck(Create the executable, err);
     return ATMI_STATUS_SUCCESS;
 }
@@ -998,7 +1188,7 @@ atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable) {
     ErrorCheck(Destroying the program, err);
 
     /* Create the empty executable.  */
-    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
+    err = hsa_executable_create(atl_gpu_agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
     ErrorCheck(Create the executable, err);
 
     /* Load the code object.  */
@@ -1039,13 +1229,14 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &(info.kernel_segment_size));
         ErrorCheck(Extracting the kernarg segment size from the executable, err);
 
+        DEBUG_PRINT("Kernel %s --> %u bytes kernarg\n", name, info.kernel_segment_size);
         KernelInfoTable[std::string(name)] = info;
         free(name);
 
         /*
         void *thisKernargAddress = NULL;
         // create a memory segment for this kernel's arguments
-        err = hsa_memory_allocate(atl_gpu_KernargRegion, info.kernel_segment_size * MAX_NUM_KERNELS, &thisKernargAddress);
+        err = hsa_memory_allocate(atl_gpu_kernarg_region, info.kernel_segment_size * MAX_NUM_KERNELS, &thisKernargAddress);
         ErrorCheck(Allocating memory for the executable-kernel, err);
         */
     }
@@ -1056,9 +1247,10 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     hsa_executable_t executable; 
     hsa_status_t err;
 
+    // FIXME: build kernel objects for each kernel agent type! 
     std::vector<std::string> filenames_str;
     /* Create the empty executable.  */
-    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
+    err = hsa_executable_create(atl_gpu_agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
     ErrorCheck(Create the executable, err);
     
     for(int i = 0; i < num_modules; i++) {
@@ -1070,7 +1262,7 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
 
             /* Create hsa program.  */
             memset(&atl_hsa_program,0,sizeof(hsa_ext_program_t));
-            err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
+            err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, atl_gpu_agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
             ErrorCheck(Create the program, err);
 
             /* Add the BRIG module to hsa program.  */
@@ -1121,60 +1313,6 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atl_init_gpu_context() {
-
-    if(atlc.struct_initialized == 0) atmi_init_context_structs();
-    if(atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
-    
-    hsa_status_t err;
-
-    init_hsa();
-    /* Iterate over the agents and pick the gpu agent */
-    err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    ErrorCheck(Getting a gpu agent, err);
-    
-    /* Query the name of the agent.  */
-    char name[64] = { 0 };
-    err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_NAME, name);
-    ErrorCheck(Querying the agent name, err);
-    /* printf("The agent name is %s.\n", name); */
-
-    /* Find a memory region that supports kernel arguments.  */
-    atl_gpu_KernargRegion.handle=(uint64_t)-1;
-    hsa_agent_iterate_regions(atl_gpu_agent, get_kernarg_memory_region, &atl_gpu_KernargRegion);
-    err = (atl_gpu_KernargRegion.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
-    ErrorCheck(Finding a kernarg memory region, err);
-    
-    /* Query the maximum size of the queue.  */
-    uint32_t queue_size = 0;
-    err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
-    ErrorCheck(Querying the agent maximum queue size, err);
-    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
-
-    /* Create queues and signals for each stream. */
-    int stream_num;
-    for ( stream_num = 0 ; stream_num < SNK_MAX_GPU_QUEUES ; stream_num++){
-       err=hsa_queue_create(atl_gpu_agent, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, UINT32_MAX, UINT32_MAX, &GPU_CommandQ[stream_num]);
-       ErrorCheck(Creating the Stream Command Q, err);
-       err = hsa_amd_profiling_set_profiler_enabled( GPU_CommandQ[stream_num], 1); 
-       ErrorCheck(Enabling profiling support, err); 
-    }
-
-    for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
-        /* round robin streams to queues */
-        SNK_NextGPUQueueID[stream_num] = stream_num % SNK_MAX_GPU_QUEUES;
-    }
-
-    if(context_init_time_init == 0) {
-        clock_gettime(CLOCK_MONOTONIC_RAW,&context_init_time);
-        context_init_time_init = 1;
-    }
-
-    init_tasks();
-    atlc.g_gpu_initialized = 1;
-    return ATMI_STATUS_SUCCESS;
-}
 
 pthread_mutex_t sort_mutex_2(pthread_mutex_t *addr1, pthread_mutex_t *addr2, pthread_mutex_t **addr_low, pthread_mutex_t **addr_hi) {
     if((uint64_t)addr1 < (uint64_t)addr2) {
@@ -1296,7 +1434,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     
     /* create kernarg memory */
     kernel_impl->kernarg_region = NULL;
-    hsa_status_t err = hsa_memory_allocate(atl_gpu_KernargRegion, 
+    hsa_status_t err = hsa_memory_allocate(atl_gpu_kernarg_region, 
             kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
             &(kernel_impl->kernarg_region));
     ErrorCheck(Allocating memory for the executable-kernel, err);
@@ -1720,13 +1858,14 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     // FIXME: round robin for now, but may use some other load balancing algo
     // enqueue task's packet to that queue
 
-    hsa_queue_t* this_Q = NULL;
+    ATLQueue* this_AMQ = NULL;
     if(task->devtype == ATMI_DEVTYPE_GPU)
-        this_Q = acquire_and_set_next_gpu_queue(stream_obj);
+        this_AMQ = acquire_and_set_next_gpu_queue(stream_obj, task->place);
     else if(task->devtype == ATMI_DEVTYPE_CPU)
-        this_Q = acquire_and_set_next_cpu_queue(stream_obj);
-    if(!this_Q) return ATMI_STATUS_ERROR;
-
+        this_AMQ = acquire_and_set_next_cpu_queue(stream_obj, task->place);
+    if(!this_AMQ) return ATMI_STATUS_ERROR;
+   
+    hsa_queue_t *this_Q = this_AMQ->getQueue(); 
     /* if stream is ordered and the devtype changed for this task, 
      * enqueue a barrier to wait for previous device to complete */
     //check_change_in_device_type(task, stream_obj, this_Q, task->devtype);
@@ -1935,6 +2074,7 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
     thisKernargAddress += sizeof(atmi_task_handle_t);
     for(int i = 0; i < ret->kernel->num_args; i++) {
         memcpy(thisKernargAddress, args[i], ret->kernel->arg_sizes[i]);
+        //hsa_memory_register(thisKernargAddress, ???
         DEBUG_PRINT("Arg[%d] = %p\n", i, *(void **)thisKernargAddress);
         thisKernargAddress += ret->kernel->arg_sizes[i];
     }
@@ -2356,6 +2496,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 
     ret->lparm.group = stream;
     ret->stream_obj = stream_obj;
+    ret->place = lparm->place;
     DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.stream, lparm->stream);
     ret->num_predecessors = 0;
     ret->num_successors = 0;
@@ -2471,6 +2612,26 @@ atmi_task_handle_t atmi_task_launch(atmi_kernel_t atmi_kernel, atmi_lparm_t *lpa
     return ret;
 }
 
+atmi_status_t atmi_malloc(void **ptr, const unsigned int memory_region, const size_t bytes) {
+    atmi_status_t ret = ATMI_STATUS_SUCCESS;
+    // FIXME: alloc memory from the corresponding region/memory pool as
+    // memory_region
+    hsa_status_t err = hsa_memory_allocate(atl_gpu_kernarg_region, bytes, ptr);
+    ErrorCheck(atmi_malloc, err);
+    
+    if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
+    return ret;
+}
+
+atmi_status_t atmi_free(void *ptr) {
+    atmi_status_t ret = ATMI_STATUS_SUCCESS;
+    hsa_status_t err = hsa_memory_free(ptr);
+    ErrorCheck(atmi_free, err);
+    
+    if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
+    return ret;
+}
+
 enum queue_type{device_queue = 0, soft_queue}; 
 void atl_kl_init(atmi_klist_t *atmi_klist,
         atmi_kernel_t atmi_kernel,
@@ -2491,15 +2652,15 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
     /* get this stream's HSA queue (could be dynamically mapped or round robin
      * if it is an unordered stream */
     #if 1
-    hsa_queue_t* this_devQ = acquire_and_set_next_gpu_queue(stream_obj);
+    ATLQueue* this_devQ = acquire_and_set_next_gpu_queue(stream_obj, ATMI_PLACE_ANY(0));
     if(!this_devQ) return;
 
-    hsa_queue_t* this_softQ = acquire_and_set_next_cpu_queue(stream_obj);
+    ATLQueue* this_softQ = acquire_and_set_next_cpu_queue(stream_obj, ATMI_PLACE_ANY(0));
     if(!this_softQ) return;
 
-    atmi_klist_curr->queues[device_queue] = (uint64_t)this_devQ; 
-    atmi_klist_curr->queues[soft_queue] = (uint64_t)this_softQ; 
-    atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ); 
+    atmi_klist_curr->queues[device_queue] = (uint64_t)this_devQ->getQueue(); 
+    atmi_klist_curr->queues[soft_queue] = (uint64_t)this_softQ->getQueue(); 
+    atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ->getQueue()); 
     #else
     atmi_klist_curr->cpu_queue_offset = 0;
     atmi_klist_curr->gpu_queue_offset = 0;

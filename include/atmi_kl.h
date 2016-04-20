@@ -1,7 +1,7 @@
 #ifndef __ATMI_KL_H__
 #define __ATMI_KL_H__
 
-#define MAX_NUM_KERNELS 1024
+#define MAX_NUM_KERNELS (10240 * 8)
 typedef struct atmi_kernel_packet_s atmi_kernel_packet_t;
 struct atmi_kernel_packet_s {
     unsigned char resevered[64];
@@ -15,12 +15,23 @@ typedef struct atmi_task_impl_s {
 typedef struct atmi_klist_s atmi_klist_t;
 struct atmi_klist_s { 
     int num_kernel_packets;
-    int num_queues;
+    #if 1
+    #else
+    int num_cpu_queues;
+    int num_gpu_queues;
+    int cpu_queue_offset;
+    int gpu_queue_offset;
+    #endif
     void *cpu_kernarg_heap;
     int cpu_kernarg_offset;
     void *gpu_kernarg_heap;
     int gpu_kernarg_offset;
+    #if 1
     unsigned long int queues[2];
+    #else 
+    unsigned long int *cpu_queues;
+    unsigned long int *gpu_queues;
+    #endif
     unsigned long int worker_sig;
     atmi_kernel_packet_t *kernel_packets;
     atmi_kernel_packet_t *kernel_packets_heap;

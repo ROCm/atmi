@@ -200,7 +200,7 @@ sdir=$(getdname $0)
 [ ! -L "$sdir/cloc_wrapper.sh" ] || sdir=$(getdname `readlink "$sdir/cloc_wrapper.sh"`)
 ATMI_PATH=${ATMI_PATH:-$sdir/..}
 HSA_LLVM_PATH=${HSA_LLVM_PATH:-/usr/bin}
-HSA_HLC_BIN_PATH=/usr/local/bin
+HSA_HLC_BIN_PATH=/opt/rocm/hlc3.2/bin
 #  Set Default values
 LLVMOPT=${LLVMOPT:-2}
 HSA_RUNTIME_PATH=${HSA_RUNTIME_PATH:-/opt/hsa}

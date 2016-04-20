@@ -55,7 +55,7 @@ size_t numWorkers;
 
 extern struct timespec context_init_time;
 
-hsa_queue_t* get_cpu_queue(int id) {
+ATLCPUQueue* get_cpu_queue(int id) {
     return agent[id].queue;
 }
 
@@ -67,7 +67,7 @@ void signal_worker(hsa_queue_t *queue, int signal) {
     DEBUG_PRINT("Signaling work %d\n", signal);
     int id;
     for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
-        if(agent[id].queue == queue) break;
+        if(agent[id].queue->getQueue() == queue) break;
     }
     hsa_signal_store_release(worker_sig[id], signal);
 }
@@ -687,7 +687,7 @@ void *agent_worker(void *agent_args) {
 
         if (PROCESS_PKT == hsa_signal_cas_acq_rel(worker_sig[agent->id],
                     PROCESS_PKT, IDLE) ) {
-            hsa_queue_t *queue = agent->queue;
+            hsa_queue_t *queue = agent->queue->getQueue();
             if (!process_packet(queue, agent->id)) continue;
         }
         sig_value = IDLE;
@@ -718,11 +718,13 @@ cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region,
         err = hsa_signal_create(1, 0, NULL, &db_signal);
         check(Creating a HSA signal for agent dispatch db signal, err);
 
+        hsa_queue_t *this_Q;
         err = hsa_soft_queue_create(cpu_region, capacity, HSA_QUEUE_TYPE_SINGLE,
-                HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &(agent[i].queue));
+                HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &this_Q);
+        agent[i].queue = new ATLCPUQueue(this_Q);
         check(Creating an agent queue, err);
 
-        hsa_queue_t *q = agent[i].queue;
+        hsa_queue_t *q = this_Q;
         //err = hsa_ext_set_profiling( q, 1); 
         //check(Enabling CPU profiling support, err); 
         //profiling does not work for CPU queues
@@ -764,7 +766,7 @@ agent_fini()
         //hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
         hsa_signal_store_release(worker_sig[i], FINISH);
         pthread_join(agent_threads[i], NULL);
-        hsa_queue_destroy(agent[i].queue);
+        hsa_queue_destroy(agent[i].queue->getQueue());
     }
 
     DEBUG_PRINT("agent_fini completed\n");
@@ -773,7 +775,7 @@ agent_fini()
 hsa_signal_t *get_worker_sig(hsa_queue_t *queue) {
     int id;
     for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
-        if(agent[id].queue == queue) break;
+        if(agent[id].queue->getQueue() == queue) break;
 
     }
     return &(worker_sig[id]);

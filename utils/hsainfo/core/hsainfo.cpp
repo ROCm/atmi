@@ -78,16 +78,16 @@ int main()
 	ErrorCheck(err);
 
     cout << endl << "Agent-Memory Pool Access Matrix" << endl;
-    cout << setw(11) << "Agent/Pool#";
+    cout << left << setw(15) << "Agent/Pool#";
     for(int i = 0; i < g_memory_pools.size(); i++) {
-        cout << setw(11) << i; 
+        cout << right << setw(11) << "Pool# " + to_string(i); 
     }
     cout << endl;
     int i = 0;
     int j = 0;
     for(std::vector<hsa_agent_t>::iterator agent_it = g_agents.begin(); 
                             agent_it != g_agents.end(); agent_it++) {
-        cout << setw(11) << i;
+        cout << left << setw(15) << "Agent# " + to_string(i);
         j = 0;
         for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
                             mem_it != g_memory_pools.end(); mem_it++) {
@@ -97,7 +97,163 @@ int main()
                                     HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, 
                                     &access);
             std::string access_str = (access == 0) ? "NEVER" : (access == 1 ? "YES" : "NO");
-            cout << setw(11) << access_str;
+            cout << right << setw(11) << access_str;
+            j++;
+        }
+        cout << endl;
+        i++;
+    }
+
+    cout << endl << "Agent-Memory Pool Link-Info Matrix" << endl;
+    cout << left << setw(15) <<  "Agent/Pool#";
+    for(int i = 0; i < g_memory_pools.size(); i++) {
+        cout << right << setw(11) << "Pool# " + to_string(i); 
+    }
+    cout << endl;
+    i = 0;
+    j = 0;
+    for(std::vector<hsa_agent_t>::iterator agent_it = g_agents.begin(); 
+                            agent_it != g_agents.end(); agent_it++) {
+        cout << left << setw(10) << "Agent# " + to_string(i);
+        // num hops
+        cout << right << setw(5) << "Hops";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            uint32_t link;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_NUM_LINK_HOPS, 
+                                    &link);
+            cout << right << setw(11) << link;
+            j++;
+        }
+        cout << endl;
+
+        // Type
+        cout << right << setw(15) << "Type";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+
+            std::string link_info_str; 
+            switch(link_info.link_type) {
+                case 0: link_info_str = "HT"; break;
+                case 1: link_info_str = "QPI"; break;
+                case 2: link_info_str = "PCIE"; break;
+                case 3: link_info_str = "IB"; break;
+            }
+            cout << right << setw(11) << link_info_str;
+            j++;
+        }
+        cout << endl;
+        
+        // min latency
+        cout << right << setw(15) << "Min Latency";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+            cout << right << setw(11) << link_info.min_latency;
+            j++;
+        }
+        cout << endl;
+        
+        // max latency
+        cout << right << setw(15) << "Max Latency";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+            cout << right << setw(11) << link_info.max_latency;
+            j++;
+        }
+        cout << endl;
+        
+        // min bandwidth
+        cout << right << setw(15) << "Min B/W";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+            cout << right << setw(11) << link_info.min_bandwidth;
+            j++;
+        }
+        cout << endl;
+        
+        // max bandwidth
+        cout << right << setw(15) << "Max B/W";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+            cout << right << setw(11) << link_info.max_bandwidth;
+            j++;
+        }
+        cout << endl;
+        
+        // atomic-32
+        cout << right << setw(15) << "Atomic-32";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+            cout << right << setw(11) << link_info.atomic_support_32bit;
+            j++;
+        }
+        cout << endl;
+        
+        // atomic-64
+        cout << right << setw(15) << "Atomic-64";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+            cout << right << setw(11) << link_info.atomic_support_64bit;
+            j++;
+        }
+        cout << endl;
+        
+        // coherence
+        cout << right << setw(15) << "Coherence";
+        j = 0;
+        for(std::vector<hsa_amd_memory_pool_t>::iterator mem_it = g_memory_pools.begin(); 
+                            mem_it != g_memory_pools.end(); mem_it++) {
+            hsa_amd_memory_pool_link_info_t link_info;
+            hsa_amd_agent_memory_pool_get_info(*agent_it, 
+                                    *mem_it, 
+                                    HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, 
+                                    &link_info);
+            cout << right << setw(11) << link_info.coherent_support;
             j++;
         }
         cout << endl;

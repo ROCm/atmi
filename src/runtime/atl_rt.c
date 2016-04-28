@@ -82,10 +82,41 @@ atl_task_t ***GlobalTaskPtr;
 #include "hsa_ext_amd.h"
 
 /* -------------- Helper functions -------------------------- */
+const char *get_error_string(hsa_status_t err) {
+    switch(err) {
+        case HSA_STATUS_SUCCESS: return "HSA_STATUS_SUCCESS";
+        case HSA_STATUS_INFO_BREAK: return "HSA_STATUS_INFO_BREAK";
+        case HSA_STATUS_ERROR: return "HSA_STATUS_ERROR";
+        case HSA_STATUS_ERROR_INVALID_ARGUMENT: return "HSA_STATUS_ERROR_INVALID_ARGUMENT";
+        case HSA_STATUS_ERROR_INVALID_QUEUE_CREATION: return "HSA_STATUS_ERROR_INVALID_QUEUE_CREATION";
+        case HSA_STATUS_ERROR_INVALID_ALLOCATION: return "HSA_STATUS_ERROR_INVALID_ALLOCATION";
+        case HSA_STATUS_ERROR_INVALID_AGENT: return "HSA_STATUS_ERROR_INVALID_AGENT";
+        case HSA_STATUS_ERROR_INVALID_REGION: return "HSA_STATUS_ERROR_INVALID_REGION";
+        case HSA_STATUS_ERROR_INVALID_SIGNAL: return "HSA_STATUS_ERROR_INVALID_SIGNAL";
+        case HSA_STATUS_ERROR_INVALID_QUEUE: return "HSA_STATUS_ERROR_INVALID_QUEUE";
+        case HSA_STATUS_ERROR_OUT_OF_RESOURCES: return "HSA_STATUS_ERROR_OUT_OF_RESOURCES";
+        case HSA_STATUS_ERROR_INVALID_PACKET_FORMAT: return "HSA_STATUS_ERROR_INVALID_PACKET_FORMAT";
+        case HSA_STATUS_ERROR_RESOURCE_FREE: return "HSA_STATUS_ERROR_RESOURCE_FREE";
+        case HSA_STATUS_ERROR_NOT_INITIALIZED: return "HSA_STATUS_ERROR_NOT_INITIALIZED";
+        case HSA_STATUS_ERROR_REFCOUNT_OVERFLOW: return "HSA_STATUS_ERROR_REFCOUNT_OVERFLOW";
+        case HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS: return "HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS";
+        case HSA_STATUS_ERROR_INVALID_INDEX: return "HSA_STATUS_ERROR_INVALID_INDEX";
+        case HSA_STATUS_ERROR_INVALID_ISA: return "HSA_STATUS_ERROR_INVALID_ISA";
+        case HSA_STATUS_ERROR_INVALID_ISA_NAME: return "HSA_STATUS_ERROR_INVALID_ISA_NAME";
+        case HSA_STATUS_ERROR_INVALID_CODE_OBJECT: return "HSA_STATUS_ERROR_INVALID_CODE_OBJECT";
+        case HSA_STATUS_ERROR_INVALID_EXECUTABLE: return "HSA_STATUS_ERROR_INVALID_EXECUTABLE";
+        case HSA_STATUS_ERROR_FROZEN_EXECUTABLE: return "HSA_STATUS_ERROR_FROZEN_EXECUTABLE";
+        case HSA_STATUS_ERROR_INVALID_SYMBOL_NAME: return "HSA_STATUS_ERROR_INVALID_SYMBOL_NAME";
+        case HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED: return "HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED";
+        case HSA_STATUS_ERROR_VARIABLE_UNDEFINED: return "HSA_STATUS_ERROR_VARIABLE_UNDEFINED";
+        case HSA_STATUS_ERROR_EXCEPTION: return "HSA_STATUS_ERROR_EXCEPTION";
+    }
+}
+
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed. 0x%x\n", #msg, status); \
-    /*exit(1); */\
+    printf("%s failed: %s\n", #msg, get_error_string(status)); \
+    exit(1); \
 } else { \
  /*  printf("%s succeeded.\n", #msg);*/ \
 }
@@ -675,7 +706,26 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
         #if 1
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         hsa_signal_t signal = stream_obj->common_signal;
-        if(signal.handle != (uint64_t)-1) hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
+        if(signal.handle != (uint64_t)-1) {
+            hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
+            #if 0
+            // debugging atmi dp doorbell signaling. remove once that issue is resolved.
+            hsa_signal_value_t val;
+            do {
+                val = hsa_signal_load_relaxed(signal);
+                printf("Signal Value: %lu %lu\n", val, hsa_signal_load_relaxed(GPU_CommandQ[0]->getQueue()->doorbell_signal));
+                hsa_queue_t *this_Q = GPU_CommandQ[0]->getQueue();
+                const uint32_t queueMask = this_Q->size - 1;
+                printf("Headers: (%lu %lu) ", hsa_queue_load_read_index_relaxed(this_Q), hsa_queue_load_write_index_relaxed(this_Q));
+                for(uint64_t index = 0; index < 20; index++) {
+                    hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
+                    printf("%d ", (int)(0x00FF & this_aql->header)); 
+                }
+                printf("\n");
+                sleep(1);
+            } while (val != 0);
+            #endif
+        }
         for(std::vector<atl_task_t *>::iterator it = stream_obj->running_groupable_tasks.begin();
                     it != stream_obj->running_groupable_tasks.end(); it++) {
             set_task_state(*it, ATMI_COMPLETED);
@@ -906,7 +956,11 @@ void init_tasks() {
     ErrorCheck(Creating a HSA signal, err);
     DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
     //GlobalTaskPtr = (atl_task_t ***)malloc(sizeof(atl_task_t**));
-    int val = posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
+    //int val = posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
+    err = hsa_memory_allocate(atl_gpu_kernarg_region, 
+            sizeof(atl_task_t **),
+            (void **)&GlobalTaskPtr);
+    ErrorCheck(Creating the global task ptr, err);
     atlc.g_tasks_initialized = 1;
 }
 
@@ -2701,12 +2755,18 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
             DEBUG_PRINT("Kernel GPU memalloc. Kernel %s needs %" PRIu32" bytes for kernargs\n", (*it)->kernel_name.c_str(), (*it)->kernarg_segment_size); 
 
             atmi_klist_curr->num_kernel_packets++;
-            atmi_klist_curr->kernel_packets = 
+            if(atmi_klist_curr->kernel_packets) {
+                atmi_free(atmi_klist_curr->kernel_packets);
+            }
+            atmi_malloc((void **)&(atmi_klist_curr->kernel_packets), 0, 
+                    sizeof(atmi_kernel_packet_t) * 
+                    atmi_klist_curr->num_kernel_packets);
+            /*atmi_klist_curr->kernel_packets = 
                 (atmi_kernel_packet_t *)realloc(
                         atmi_klist_curr->kernel_packets, 
                         sizeof(atmi_kernel_packet_t) * 
                         atmi_klist_curr->num_kernel_packets);
-
+            */
             hsa_kernel_dispatch_packet_t *this_aql = 
                 (hsa_kernel_dispatch_packet_t *)(atmi_klist_curr
                         ->kernel_packets +
@@ -2724,12 +2784,18 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
         }
         else if((*it)->devtype == ATMI_DEVTYPE_CPU){
             atmi_klist_curr->num_kernel_packets++;
-            atmi_klist_curr->kernel_packets = 
+            if(atmi_klist_curr->kernel_packets) {
+                atmi_free(atmi_klist_curr->kernel_packets);
+            }
+            atmi_malloc((void **)&(atmi_klist_curr->kernel_packets), 0, 
+                    sizeof(atmi_kernel_packet_t) * 
+                    atmi_klist_curr->num_kernel_packets);
+            /*atmi_klist_curr->kernel_packets = 
                 (atmi_kernel_packet_t *)realloc(
                         atmi_klist_curr->kernel_packets, 
                         sizeof(atmi_kernel_packet_t) * 
                         atmi_klist_curr->num_kernel_packets);
-
+            */
             hsa_agent_dispatch_packet_t *this_aql = 
                 (hsa_agent_dispatch_packet_t *)(atmi_klist_curr
                         ->kernel_packets +

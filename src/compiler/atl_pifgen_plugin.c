@@ -107,8 +107,8 @@ fprintf(fp, "#ifdef __cplusplus \n\
 void write_globals(FILE *fp) {
 fprintf(fp, "\
 static int g_gpu_initialized = 0;\n\
-static int g_cpu_initialized = 0;\n\
-atmi_klist_t atmi_klist[1000];\n\n\
+static int g_cpu_initialized = 0;\n\n\
+atmi_klist_t *atmi_klist;\n\
 #define ErrorCheck(msg, status) \\\n\
 if (status != ATMI_STATUS_SUCCESS) { \\\n\
    printf(\"%%s failed.\\n\", #msg); \\\n\
@@ -885,8 +885,8 @@ register_finish_unit (void *event_data, void *data) {
         }
         vector<string> tokens = split(it->c_str(), '.');
         cloc_wrapper("tmp.cl", tokens[0].c_str());
-        //int ret_del = remove("tmp.cl");
-        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+        int ret_del = remove("tmp.cl");
+        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
 }
 
@@ -1224,7 +1224,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
     } cpu_args_struct_t; \n\
-    void *cpuKernargAddress = malloc(sizeof(cpu_args_struct_t) * MAX_NUM_KERNELS);\n\n");
+    void *cpuKernargAddress;\n\
+    atmi_malloc(&cpuKernargAddress, 0, sizeof(cpu_args_struct_t) * MAX_NUM_KERNELS); \n\n");
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1244,7 +1245,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
     } gpu_args_struct_t __attribute__ ((aligned (16))) ;\n\
-    void *gpuKernargAddress = malloc(sizeof(gpu_args_struct_t) * MAX_NUM_KERNELS);\n\n");
+    void *gpuKernargAddress; \n\
+    atmi_malloc(&gpuKernargAddress, 0, sizeof(gpu_args_struct_t) * MAX_NUM_KERNELS); \n\n");
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1292,7 +1294,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     atmi_klist[pif_id].cpu_kernarg_offset = 0;\n\
     atmi_klist[pif_id].gpu_kernarg_heap = gpuKernargAddress; \n\
     atmi_klist[pif_id].gpu_kernarg_offset = 0;\n\
-    atmi_klist[pif_id].kernel_packets_heap = (atmi_kernel_packet_t *)malloc(sizeof(atmi_kernel_packet_t) * MAX_NUM_KERNELS);\n\
+    atmi_klist[pif_id].kernel_packets_heap; \n\
+    atmi_malloc((void **)&(atmi_klist[pif_id].kernel_packets_heap), 0, sizeof(atmi_kernel_packet_t) * MAX_NUM_KERNELS); \n\
     atmi_klist[pif_id].kernel_packets_offset = 0;\n\n");
 
 #if 0
@@ -1665,7 +1668,8 @@ void append_kl_init_funs(FILE *pifFile)
 
     fprintf(pifFile, "%s", "\
 void kl_init() {\n");
-
+    fprintf(pifFile, "\
+    atmi_malloc((void **)&atmi_klist, 0, (sizeof(atmi_klist_t) * 1000));\n");
     fprintf(pifFile, "%s", kl_init_funs_text);
 
     fprintf(pifFile, "%s", "\

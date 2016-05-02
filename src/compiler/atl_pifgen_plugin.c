@@ -140,6 +140,49 @@ static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {\n\
 ");
 }
 
+void
+print_struct (tree type)
+{
+    tree decl_before (TYPE_NAME (type));
+    tree id_before (DECL_NAME (decl_before));
+    const char* name_before (IDENTIFIER_POINTER (id_before));
+    printf("%s at %s:%d\n", name_before, DECL_SOURCE_FILE (decl_before), DECL_SOURCE_LINE (decl_before));
+
+    type = TYPE_MAIN_VARIANT (type);
+    tree decl (TYPE_NAME (type));
+    tree id (DECL_NAME (decl));
+    const char* name (IDENTIFIER_POINTER (id));
+
+    printf("is typedef of struct %s at %s:%d\n", name, DECL_SOURCE_FILE (decl), DECL_SOURCE_LINE (decl));
+}
+
+void
+print_decl (tree decl)
+{
+    tree type (TREE_TYPE (decl));
+    int tc;
+    printf("--------------------------\n");
+    if (type)
+    {
+        tc = TREE_CODE (type);
+
+        if (tc == RECORD_TYPE)
+        {
+            // If DECL_ARTIFICIAL is true this is a class
+            // declaration. Otherwise this is a typedef.
+            //
+            //if (DECL_ARTIFICIAL (decl))
+            {
+                print_struct (type);
+                return;
+            }
+        }
+        else
+            printf("Not a type_decl and record_type\n");
+    }
+    else
+        printf("Not a type\n");
+}
 
 std::string exec(const char* cmd) {
     /* borrowed from the SO solution: 
@@ -519,6 +562,9 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
     arg_list.clear();
     FOREACH_FUNCTION_ARGS(fn_type, arg, args_iter)
     {
+        // TODO FIXME to debug more into the issue of typedefs being preceded
+        // by a "struct" keyword for some reason. Strange bug!
+        //print_decl(arg); 
         TREE_READONLY(arg) = 0;
     //for(idx = 0; idx < 32; idx++) {
      //DEBUG_PRINT("%s ", IDENTIFIER_POINTER(DECL_NAME(TYPE_IDENTIFIER(arg))));

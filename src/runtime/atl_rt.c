@@ -707,8 +707,9 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         hsa_signal_t signal = stream_obj->common_signal;
         if(signal.handle != (uint64_t)-1) {
+            #if 1
             hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
-            #if 0
+            #else
             // debugging atmi dp doorbell signaling. remove once that issue is resolved.
             hsa_signal_value_t val;
             do {
@@ -1026,6 +1027,7 @@ void init_comute_and_memory() {
 
 void init_hsa() {
     if(atlc.g_hsa_initialized == 0) {
+        DEBUG_PRINT("Initializing HSA...");
         hsa_status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
         char *deprecated_hlc = getenv("ATMI_WITH_DEPRECATED_HLC");
@@ -1049,6 +1051,7 @@ void init_hsa() {
         init_comute_and_memory();
         init_dag_scheduler();
         atlc.g_hsa_initialized = 1;
+        DEBUG_PRINT("done\n");
     }
 }
 
@@ -1301,6 +1304,8 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     hsa_executable_t executable; 
     hsa_status_t err;
 
+    DEBUG_PRINT("Registering module...");
+    //fflush(stdout);
     // FIXME: build kernel objects for each kernel agent type! 
     std::vector<std::string> filenames_str;
     /* Create the empty executable.  */
@@ -1363,6 +1368,7 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, NULL); 
     ErrorCheck(Iterating over symbols for execuatable, err);
     
+    DEBUG_PRINT("done\n");
     ModuleMap[executable.handle] = filenames_str;
     return ATMI_STATUS_SUCCESS;
 }
@@ -1949,7 +1955,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         }*/
     }
     /*  Obtain the current queue write index. increases with each call to kernel  */
-    uint64_t index = hsa_queue_load_write_index_relaxed(this_Q);
+    uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
 
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
     /*  Bind kernel argument buffer to the aql packet.  */
@@ -2040,7 +2046,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         /*  Prepare and set the packet header */ 
         this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE);
         /* Increment write index and ring doorbell to dispatch the kernel.  */
-        hsa_queue_store_write_index_relaxed(this_Q, index+1);
+        //hsa_queue_store_write_index_relaxed(this_Q, index+1);
         hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
     } 
     else if(task->devtype == ATMI_DEVTYPE_CPU) {
@@ -2081,7 +2087,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         if(task->profilable == ATMI_TRUE && task->atmi_task) 
             task->atmi_task->profile.dispatch_time = get_nanosecs(context_init_time, dispatch_time);
         /* Increment write index and ring doorbell to dispatch the kernel.  */
-        hsa_queue_store_write_index_relaxed(this_Q, index+1);
+        //hsa_queue_store_write_index_relaxed(this_Q, index+1);
         hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
         signal_worker(this_Q, PROCESS_PKT);
     }
@@ -2755,18 +2761,20 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
             DEBUG_PRINT("Kernel GPU memalloc. Kernel %s needs %" PRIu32" bytes for kernargs\n", (*it)->kernel_name.c_str(), (*it)->kernarg_segment_size); 
 
             atmi_klist_curr->num_kernel_packets++;
+            #if 0
             if(atmi_klist_curr->kernel_packets) {
                 atmi_free(atmi_klist_curr->kernel_packets);
             }
             atmi_malloc((void **)&(atmi_klist_curr->kernel_packets), 0, 
                     sizeof(atmi_kernel_packet_t) * 
                     atmi_klist_curr->num_kernel_packets);
-            /*atmi_klist_curr->kernel_packets = 
+            #else
+                atmi_klist_curr->kernel_packets = 
                 (atmi_kernel_packet_t *)realloc(
                         atmi_klist_curr->kernel_packets, 
                         sizeof(atmi_kernel_packet_t) * 
                         atmi_klist_curr->num_kernel_packets);
-            */
+            #endif
             hsa_kernel_dispatch_packet_t *this_aql = 
                 (hsa_kernel_dispatch_packet_t *)(atmi_klist_curr
                         ->kernel_packets +
@@ -2784,18 +2792,20 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
         }
         else if((*it)->devtype == ATMI_DEVTYPE_CPU){
             atmi_klist_curr->num_kernel_packets++;
+            #if 0
             if(atmi_klist_curr->kernel_packets) {
                 atmi_free(atmi_klist_curr->kernel_packets);
             }
             atmi_malloc((void **)&(atmi_klist_curr->kernel_packets), 0, 
                     sizeof(atmi_kernel_packet_t) * 
                     atmi_klist_curr->num_kernel_packets);
-            /*atmi_klist_curr->kernel_packets = 
+            #else
+                atmi_klist_curr->kernel_packets = 
                 (atmi_kernel_packet_t *)realloc(
                         atmi_klist_curr->kernel_packets, 
                         sizeof(atmi_kernel_packet_t) * 
                         atmi_klist_curr->num_kernel_packets);
-            */
+            #endif
             hsa_agent_dispatch_packet_t *this_aql = 
                 (hsa_agent_dispatch_packet_t *)(atmi_klist_curr
                         ->kernel_packets +

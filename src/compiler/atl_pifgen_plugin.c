@@ -67,14 +67,13 @@ static std::map<std::string, std::pair<int,int> > pif_table;
 typedef struct pif_printers_s {
    pretty_printer *pifdefs; 
    pretty_printer *fn_table; 
+   pretty_printer *kid_table; 
 } pif_printers_t;
 static std::vector<pif_printers_t> pif_printers;
 
 static pretty_printer pif_spawn;
 
 static pretty_printer kl_init_funs;
-
-static pretty_printer enum_kid;
 
 static pretty_printer g_kerneldecls;
 
@@ -106,8 +105,7 @@ fprintf(fp, "#ifdef __cplusplus \n\
 
 void write_globals(FILE *fp) {
 fprintf(fp, "\
-static int g_gpu_initialized = 0;\n\
-static int g_cpu_initialized = 0;\n\n\
+static int g_initialized = 0;\n\n\
 atmi_klist_t *atmi_klist;\n\
 #define ErrorCheck(msg, status) \\\n\
 if (status != ATMI_STATUS_SUCCESS) { \\\n\
@@ -422,8 +420,10 @@ void register_pif(const char *pif_name) {
         pif_printers_t pp;
         pp.pifdefs = new pretty_printer;
         pp.fn_table = new pretty_printer;
+        pp.kid_table = new pretty_printer;
         pp_needs_newline ((pp.pifdefs)) = true;
         pp_needs_newline ((pp.fn_table)) = true;
+        pp_needs_newline ((pp.kid_table)) = true;
         pif_printers.push_back(pp);
     }
     else {
@@ -590,64 +590,61 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         return null_task; \n\
     } \n\
     atmi_devtype_t devtype = %s_fn_table[k_id].devtype; \n\
-    if(devtype == ATMI_DEVTYPE_CPU) {\n\
-        if(g_cpu_initialized == 0) { \n\
-            atmi_init(ATMI_DEVTYPE_CPU); \n\
-            g_cpu_initialized = 1;\n\
-        }\n",
+    if(g_initialized == 0) { \n\
+        atmi_status_t err = atmi_init(ATMI_DEVTYPE_CPU",
         pif_name, pif_name,
         pif_name,
         pif_name);
-        pp_printf((pif_printers[pif_index].pifdefs), "\n\
-    } \n\
-    else if(devtype == ATMI_DEVTYPE_GPU) {\n\
-        if(g_gpu_initialized == 0) {\n\
-            atmi_status_t err;\n\
-            err = atmi_init(ATMI_DEVTYPE_GPU); \n\
-            ErrorCheck(ATMI Initializing, err); \n");
-        if(g_hsa_offline_finalize == 1) {
-            pp_printf((pif_printers[pif_index].pifdefs), "\n\
-            const char *modules[%lu];\n\
-            atmi_platform_type_t module_types[%lu]; \n",
-            g_cl_modules.size(),
-            g_cl_modules.size());
-        
-            for(int idx = 0; idx < g_cl_modules.size(); idx++) {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-            modules[%d] = \"%s.hof\"; \n\
-            module_types[%d] = AMDGCN; \n",
-                idx, g_cl_modules[idx].c_str(),
-                idx);
-            }
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-            err = atmi_module_register(modules, module_types, %lu);\n\
-            ErrorCheck(Building Executable, err); \n\
-            kl_init(); \n\
-            g_gpu_initialized = 1;\n\
-        }\n", g_cl_modules.size());
+        if(g_cl_modules.empty()) {
+            pp_printf((pif_printers[pif_index].pifdefs), "); \n\
+        ErrorCheck(ATMI Initializing, err); \n");
         }
         else {
-            pp_printf((pif_printers[pif_index].pifdefs), "\n\
-            const char *modules[%lu];\n\
-            atmi_platform_type_t module_types[%lu]; \n",
-            g_cl_modules.size(),
-            g_cl_modules.size());
+            pp_printf((pif_printers[pif_index].pifdefs), "|ATMI_DEVTYPE_GPU); \n\
+        ErrorCheck(ATMI Initializing, err); \n");
+            if(g_hsa_offline_finalize == 1) {
+                pp_printf((pif_printers[pif_index].pifdefs), "\n\
+        const char *modules[%lu];\n\
+        atmi_platform_type_t module_types[%lu]; \n",
+                g_cl_modules.size(),
+                g_cl_modules.size());
         
-            for(int idx = 0; idx < g_cl_modules.size(); idx++) {
+                for(int idx = 0; idx < g_cl_modules.size(); idx++) {
+                    pp_printf((pif_printers[pif_index].pifdefs), "\
+        modules[%d] = \"%s.hof\"; \n\
+        module_types[%d] = AMDGCN; \n",
+                    idx, g_cl_modules[idx].c_str(),
+                    idx);
+                }
                 pp_printf((pif_printers[pif_index].pifdefs), "\
-            modules[%d] = \"%s.brig\"; \n\
-            module_types[%d] = BRIG; \n",
-                idx, g_cl_modules[idx].c_str(),
-                idx);
+        err = atmi_module_register(modules, module_types, %lu);\n\
+        ErrorCheck(Building Executable, err); \n\
+        kl_init(); \n",
+                g_cl_modules.size());
             }
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-            err = atmi_module_register(modules, module_types, %lu);\n\
-            ErrorCheck(Building Executable, err); \n\
-            kl_init(); \n\
-            g_gpu_initialized = 1;\n\
-        }\n", g_cl_modules.size());
+            else {
+                pp_printf((pif_printers[pif_index].pifdefs), "\n\
+        const char *modules[%lu];\n\
+        atmi_platform_type_t module_types[%lu]; \n",
+                g_cl_modules.size(),
+                g_cl_modules.size());
+        
+                for(int idx = 0; idx < g_cl_modules.size(); idx++) {
+                    pp_printf((pif_printers[pif_index].pifdefs), "\
+        modules[%d] = \"%s.brig\"; \n\
+        module_types[%d] = BRIG; \n",
+                    idx, g_cl_modules[idx].c_str(),
+                    idx);
+                }
+                pp_printf((pif_printers[pif_index].pifdefs), "\
+        err = atmi_module_register(modules, module_types, %lu);\n\
+        ErrorCheck(Building Executable, err); \n\
+        kl_init(); \n",
+                g_cl_modules.size());
+            }
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
+        g_initialized = 1;\n\
     }\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
     if (%s_FK == 0 ) { \n\
@@ -707,10 +704,10 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
        
         /* add PIF function table definition */
         pp_printf((pif_printers[pif_index].fn_table), "\n%s_kernel_table_t %s_fn_table[] = {\n", main_input_filename_str.c_str(), pif_name);
-        pp_printf(&enum_kid, "K_ID_%s = 0, ", fn_name);
+        pp_printf((pif_printers[pif_index].kid_table), "K_ID_%s = 0, ", fn_name);
     }
     else {
-        pp_printf(&enum_kid, "K_ID_%s, ", fn_name);
+        pp_printf((pif_printers[pif_index].kid_table), "K_ID_%s, ", fn_name);
     }
     if(devtype == ATMI_DEVTYPE_CPU) {
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s\n", fn_decl);
@@ -885,8 +882,8 @@ register_finish_unit (void *event_data, void *data) {
         }
         vector<string> tokens = split(it->c_str(), '.');
         cloc_wrapper("tmp.cl", tokens[0].c_str());
-        int ret_del = remove("tmp.cl");
-        if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
+        //int ret_del = remove("tmp.cl");
+        //if(ret_del != 0) fprintf(stderr, "Unable to delete temp file: tmp.cl\n");
     }
 }
 
@@ -897,7 +894,6 @@ register_start_unit (void *event_data, void *data) {
     pp_needs_newline (&g_kerneldecls) = true;
     pp_needs_newline (&pif_spawn) = true;
     pp_needs_newline (&kl_init_funs) = true;
-    pp_needs_newline (&enum_kid) = true;
 
     /* Replace CL or other kernel-specific keywords with 
      * regular C/C++ keywords. 
@@ -1337,12 +1333,13 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     }\n\n");
         }
 #endif        
-        pp_printf((pif_printers[pif_index].pifdefs), "\
+#if 0
+    pp_printf((pif_printers[pif_index].pifdefs), "\
     if(g_cpu_initialized == 0) {\n\
         atmi_init(ATMI_DEVTYPE_CPU); \n\
         g_cpu_initialized = 1;\n\
     }\n\n");
-
+#endif
 #if 0
         pp_printf((pif_printers[pif_index].pifdefs), "\
     int i; \n\
@@ -1655,11 +1652,16 @@ atmi_task_handle_t %s(atmi_klparm_t *lparm ", pif_name);
 void write_pif_kl(FILE *clFile) {
     write_kernel_dispatch_routine(clFile);
     char *cl_text = (char *)pp_formatted_text(&pif_spawn);
-    char *enum_kid_text = (char *)pp_formatted_text(&enum_kid);
-    fprintf(clFile, "enum kid_klist{%s};\n", enum_kid_text);
+    typedef std::map<std::string, std::pair<int,int> > map_type;
+    for(map_type::iterator it = pif_table.begin(); it != pif_table.end(); it++) {
+        std::string pif_name = it->first;
+        int i = it->second.first;
+        char *enum_kid_text = (char *)pp_formatted_text(pif_printers[i].kid_table);
+        fprintf(clFile, "enum %s_kid_klist{%s};\n", pif_name.c_str(), enum_kid_text);
+        pp_clear_output_area(pif_printers[i].kid_table);
+    }
     fprintf(clFile, "%s", cl_text);
     pp_clear_output_area(&pif_spawn);
-    pp_clear_output_area(&enum_kid);
 }
 
 void append_kl_init_funs(FILE *pifFile)

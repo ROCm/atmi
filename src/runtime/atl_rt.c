@@ -44,6 +44,7 @@
 #include "atl_internal.h"
 #include "atl_profile.h"
 #include "ATLQueue.h"
+#include "ATLMachine.h"
 #include <pthread.h>
 #include <time.h>
 #include <assert.h>
@@ -121,6 +122,7 @@ if (status != HSA_STATUS_SUCCESS) { \
  /*  printf("%s succeeded.\n", #msg);*/ \
 }
 
+
 extern bool handle_signal(hsa_signal_value_t value, void *arg);
 
 void print_atl_kernel(const char * str, const int i);
@@ -141,8 +143,14 @@ std::map<uint64_t, std::vector<std::string> > ModuleMap;
 hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
 hsa_signal_t IdentityORSignal;
 hsa_signal_t IdentityANDSignal;
+hsa_signal_t IdentityCopySignal;
 static int StreamCommonSignalIdx = 0;
 std::queue<atl_task_t *> DispatchedTasks;
+
+static atmi_machine_t g_atmi_machine;
+ATLMachine g_atl_machine;
+static std::vector<hsa_amd_memory_pool_t> g_memory_pools;
+static std::vector<hsa_agent_t> g_agents;
 
 static atl_dep_sync_t g_dep_sync_type;
 static bool g_deprecated_hlc;
@@ -433,125 +441,73 @@ atmi_status_t queue_sync(hsa_queue_t *queue) {
 
     return ATMI_STATUS_SUCCESS;
 }
-#if 0
-hsa_status_t get_region_info(hsa_region_t region, void* data)
+#if 1
+
+// Implement memory_pool iteration function
+static hsa_status_t get_memory_pool_info(hsa_amd_memory_pool_t memory_pool, void* data)
 {
-	int* p_int = reinterpret_cast<int*>(data);
-	(*p_int)++;
-	
-	hsa_status_t err;
-	
-	// Get region segment info
-	hsa_region_segment_t region_segment;
-	err = hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT, &region_segment);
-	ErrorCheck(err);
-
-	cout<<"  Region #"<<*p_int<<":"<<endl;
-	cout<<"    Region Segment:				";
-	switch(region_segment)
-	{
-		case HSA_REGION_SEGMENT_GLOBAL:
-			cout<<"GLOBAL"<<endl;
-			break;
-		case HSA_REGION_SEGMENT_READONLY:
-			cout<<"READONLY"<<endl;
-			break;	
-		case HSA_REGION_SEGMENT_PRIVATE:
-			cout<<"PRIVATE"<<endl;
-		case HSA_REGION_SEGMENT_GROUP:
-			cout<<"GROUP"<<endl;
-			break;
-		default:
-			cout<<"Not Supported"<<endl;
-			break;
-	}
-
-	// Check if the region is global
-	if(HSA_REGION_SEGMENT_GLOBAL == region_segment)
-	{
-		uint32_t global_flag = 0;
-		err = hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &global_flag);
-		ErrorCheck(err);
- 
-		std::vector<std::string> flags;
-		cout<<"    Region Global Flag:				";
-		if(HSA_REGION_GLOBAL_FLAG_KERNARG & global_flag)
-			flags.push_back("KERNARG");
-		if(HSA_REGION_GLOBAL_FLAG_FINE_GRAINED & global_flag)
-			flags.push_back("FINE GRAINED");
-		if(HSA_REGION_GLOBAL_FLAG_COARSE_GRAINED & global_flag)
-			flags.push_back("COARSE GRAINED");
-		if(flags.size() > 0)
-		cout<<flags[0];
-		for(int i=1; i<flags.size(); i++)
-		{
-			cout<<", "<<flags[i];
-		}
-		cout<<endl;
-	}
-	
-	// Get the size of the region
-	size_t region_size = 0;
- 	err = hsa_region_get_info(region, HSA_REGION_INFO_SIZE, &region_size);	
-	ErrorCheck(err);
-	cout<<"    Region Size:				"<<region_size/1024<<"KB"<<endl;
-
-	// Get region alloc max size
-	size_t region_alloc_max_size = 0;
-	err = hsa_region_get_info(region, HSA_REGION_INFO_ALLOC_MAX_SIZE, &region_alloc_max_size);
-	ErrorCheck(err);
-	cout<<"    Region Alloc Max Size:			"<<region_alloc_max_size/1024<<"KB"<<endl;
-
-	// Check if the region is allowed to allocate
+	ATLProcessor* proc = reinterpret_cast<ATLProcessor*>(data);
+    hsa_status_t err;
+	// Check if the memory_pool is allowed to allocate, i.e. do not return group
+    // memory
 	bool alloc_allowed = false;
-	err = hsa_region_get_info(region, HSA_REGION_INFO_RUNTIME_ALLOC_ALLOWED, &alloc_allowed);
-	ErrorCheck(err);
-	cout<<"    Region Allocatable:				";
-	if(alloc_allowed)
-		cout<<"TRUE"<<endl;
-	else
-		cout<<"FALSE"<<endl;
-
-	// Get alloc granule
-	if(!alloc_allowed)
-		return HSA_STATUS_SUCCESS;
-
-	size_t alloc_granule = 0;
-	err = hsa_region_get_info(region, HSA_REGION_INFO_RUNTIME_ALLOC_GRANULE, &alloc_granule);
-	ErrorCheck(err);
-	cout<<"    Region Alloc Granule:			"<<alloc_granule/1024<<"KB"<<endl;
-
-	// Get alloc alignment
-	size_t region_alloc_alignment = 0;
-	err = hsa_region_get_info(region, HSA_REGION_INFO_RUNTIME_ALLOC_ALIGNMENT, &region_alloc_alignment);
-	ErrorCheck(err);
-	cout<<"    Region Alloc Alignment:			"<<region_alloc_alignment/1024<<"KB"<<endl;
+	err = hsa_amd_memory_pool_get_info(memory_pool, HSA_AMD_MEMORY_POOL_INFO_RUNTIME_ALLOC_ALLOWED, &alloc_allowed);
+	ErrorCheck(Alloc allowed in memory pool check, err);
+    if(alloc_allowed) {
+        uint32_t global_flag = 0;
+        err = hsa_amd_memory_pool_get_info(memory_pool, HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS, &global_flag);
+        ErrorCheck(Get memory pool info, err);
+        if(HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED & global_flag) {
+            ATLFineMemory new_mem(memory_pool, *proc);
+            proc->addMemory(new_mem);
+        }
+        else {
+            ATLCoarseMemory new_mem(memory_pool, *proc);
+            proc->addMemory(new_mem);
+        }
+    }
 	return HSA_STATUS_SUCCESS;
 }
 
-static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
-    hsa_status_t status;
-    // Get profile supported by the agent
-    hsa_profile_t agent_profile;
-    err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
-    ErrorCheck(err);
 
+static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
+    hsa_status_t err;
     hsa_device_type_t device_type;
-    status = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
-    DEBUG_PRINT("Device Type = %d\n", device_type);
-    if (HSA_STATUS_SUCCESS == status && HSA_DEVICE_TYPE_GPU == device_type) {
-        uint32_t max_queues;
-        status = hsa_agent_get_info(agent, HSA_AGENT_INFO_QUEUES_MAX, &max_queues);
-        DEBUG_PRINT("GPU has max queues = %" PRIu32 "\n", max_queues);
-        hsa_agent_t* ret = (hsa_agent_t*)data;
-        *ret = agent;
-        return HSA_STATUS_INFO_BREAK;
+    err = hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
+    ErrorCheck(Get device type info, err);
+    switch(device_type) {
+        case HSA_DEVICE_TYPE_CPU: 
+            {
+            ;
+            ATLCPUProcessor new_proc(agent);
+            err = hsa_amd_agent_iterate_memory_pools(agent, get_memory_pool_info, &new_proc);
+            ErrorCheck(Iterate all memory pools, err);
+            g_atl_machine.addProcessor(new_proc);
+            }
+            break;
+        case HSA_DEVICE_TYPE_GPU: 
+            {
+            ;
+            ATLGPUProcessor new_proc(agent);
+            err = hsa_amd_agent_iterate_memory_pools(agent, get_memory_pool_info, &new_proc);
+            ErrorCheck(Iterate all memory pools, err);
+            g_atl_machine.addProcessor(new_proc);
+            }
+            break;
+        case HSA_DEVICE_TYPE_DSP: 
+            {
+            ;
+            ATLDSPProcessor new_proc(agent);
+            err = hsa_amd_agent_iterate_memory_pools(agent, get_memory_pool_info, &new_proc);
+            ErrorCheck(Iterate all memory pools, err);
+            g_atl_machine.addProcessor(new_proc);
+            }
+            break;
     }
-    err = hsa_agent_iterate_regions(agent, get_region_info, &region_number);
-    ErrorCheck(err, Iterate all regions);
+
     return HSA_STATUS_SUCCESS;
 }
-#endif
+//#else
 /* Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
    and sets the value of data to the agent handle if it is.
 */
@@ -623,7 +579,7 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void* data) {
 
     return HSA_STATUS_SUCCESS;
 }
-
+#endif
 void init_dag_scheduler() {
     if(atlc.g_mutex_dag_initialized == 0) {
         pthread_mutex_init(&mutex_all_tasks_, NULL);
@@ -955,6 +911,8 @@ void init_tasks() {
     ErrorCheck(Creating a HSA signal, err);
     err=hsa_signal_create(0, 0, NULL, &IdentityANDSignal);
     ErrorCheck(Creating a HSA signal, err);
+    err=hsa_signal_create(0, 0, NULL, &IdentityCopySignal);
+    ErrorCheck(Creating a HSA signal, err);
     DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
     //GlobalTaskPtr = (atl_task_t ***)malloc(sizeof(atl_task_t**));
     //int val = posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
@@ -983,18 +941,55 @@ atmi_status_t atl_init_context() {
 }
 
 atmi_status_t atmi_init(int devtype) {
-    if(devtype & ATMI_DEVTYPE_GPU) 
+    if(devtype == ATMI_DEVTYPE_GPU || devtype == ATMI_DEVTYPE_ANY) 
         atl_init_gpu_context();
 
-    if(devtype & ATMI_DEVTYPE_CPU) 
+    if(devtype == ATMI_DEVTYPE_CPU || devtype == ATMI_DEVTYPE_ANY) 
         atl_init_cpu_context();
 
     return ATMI_STATUS_SUCCESS;
 }
 
 void init_comute_and_memory() {
-    /* Iterate over the agents and pick the gpu agent */
     hsa_status_t err;
+    #if 1
+    /* Iterate over the agents and pick the gpu agent */
+    err = hsa_iterate_agents(get_agent_info, NULL);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
+   
+    /* Init all devices or individual device types? */
+    std::vector<ATLCPUProcessor> cpu_procs = g_atl_machine.getProcessors<ATLCPUProcessor>(); 
+    std::vector<ATLGPUProcessor> gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
+    std::vector<ATLDSPProcessor> dsp_procs = g_atl_machine.getProcessors<ATLDSPProcessor>(); 
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU] = cpu_procs.size();
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU] = gpu_procs.size();
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_DSP] = dsp_procs.size();
+    size_t num_procs = cpu_procs.size() + gpu_procs.size() + dsp_procs.size();
+    g_atmi_machine.devices = (atmi_device_t *)malloc(num_procs * sizeof(atmi_device_t));
+    DEBUG_PRINT("CPU Agents: %lu\n", cpu_procs.size());
+    DEBUG_PRINT("GPU Agents: %lu\n", gpu_procs.size());
+    DEBUG_PRINT("DSP Agents: %lu\n", dsp_procs.size());
+    for(int i = 0; i < cpu_procs.size(); i++) {
+        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_CPU;
+        
+        std::vector<ATLFineMemory> fine_memories = cpu_procs[i].getMemories<ATLFineMemory>();
+        std::vector<ATLCoarseMemory> coarse_memories = cpu_procs[i].getMemories<ATLCoarseMemory>();
+        DEBUG_PRINT("CPU\tFine Memories : %lu\n", fine_memories.size());
+        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
+        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+    }
+    for(int i = cpu_procs.size(); i < cpu_procs.size() + gpu_procs.size(); i++) {
+        int index = i - cpu_procs.size();
+        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_GPU;
+        
+        std::vector<ATLFineMemory> fine_memories = gpu_procs[index].getMemories<ATLFineMemory>();
+        std::vector<ATLCoarseMemory> coarse_memories = gpu_procs[index].getMemories<ATLCoarseMemory>();
+        DEBUG_PRINT("GPU\tFine Memories : %lu\n", fine_memories.size());
+        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
+        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+    }
+    #endif 
     err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
@@ -1309,6 +1304,8 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     // FIXME: build kernel objects for each kernel agent type! 
     std::vector<std::string> filenames_str;
     /* Create the empty executable.  */
+    atl_gpu_agent_profile = HSA_PROFILE_FULL;
+    // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
     err = hsa_executable_create(atl_gpu_agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
     ErrorCheck(Create the executable, err);
     
@@ -2424,7 +2421,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
                  atl_kernel_t *kernel,
                  void **args) {
     TryLaunchInitTimer.Start();
-    DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
+    DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id, lparm->place.type, lparm->place.device_id, lparm->place.cu_set);
 #if 1
     static bool is_called = false;
     if(!is_called) {
@@ -2822,4 +2819,11 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
         }
         i++;
     }
+}
+
+/* Machine Info */
+atmi_status_t atmi_machine_get_info(atmi_machine_t **machine) {
+    if(!atlc.g_hsa_initialized) return ATMI_STATUS_ERROR;
+    if(!machine) return ATMI_STATUS_ERROR;
+    *machine = &g_atmi_machine;
 }

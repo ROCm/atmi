@@ -39,6 +39,7 @@ atmi_status_t atmi_finalize();
 atmi_status_t atmi_module_register(const char **filename, atmi_platform_type_t *type, const int num_modules);
 
 /* machine */
+atmi_status_t atmi_machine_get_info(atmi_machine_t **machine);
 //atmi_status_t atmi_machine_get_memory_info(atmi_machine_memory_t *m);
 //atmi_status_t atmi_machine_get_compute_info(atmi_machine_compute_t *c);
 
@@ -54,8 +55,11 @@ atmi_task_handle_t atmi_task_launch(atmi_kernel_t kernel, atmi_lparm_t *lparm, v
 atmi_status_t atmi_task_wait(atmi_task_handle_t task);
 
 /* memory/data */
-atmi_status_t atmi_malloc(void **ptr, const unsigned int memory_region, const size_t bytes);
-atmi_status_t atmi_free(void *ptr);
+atmi_status_t atmi_data_map(void *ptr, size_t size, atmi_mem_place_t place, atmi_data_t *data);
+atmi_status_t atmi_data_unmap(void *ptr, atmi_data_t *data);
+atmi_status_t atmi_data_copy(atmi_data_t *dest, const atmi_data_t *src);
+atmi_status_t atmi_data_create(atmi_data_t *data, size_t size, atmi_mem_place_t place);
+atmi_status_t atmi_data_destroy(atmi_data_t *data);
 
 #ifdef __cplusplus
 }

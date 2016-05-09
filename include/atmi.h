@@ -18,15 +18,18 @@
 #define ATMI_FALSE      0
 
 typedef enum atmi_devtype_s {
-    ATMI_DEVTYPE_CPU = (1 << 0),
-    ATMI_DEVTYPE_GPU = (1 << 1),
-    ATMI_DEVTYPE_DSP = (1 << 2)
+    ATMI_DEVTYPE_CPU = 0,
+    ATMI_DEVTYPE_GPU = 1,
+    ATMI_DEVTYPE_DSP = 2,
+    ATMI_DEVTYPE_ANY
 } atmi_devtype_t;
 
 typedef enum atmi_memtype_s {
-    ATMI_MEMTYPE_KERNARG        = (1 << 0),
-    ATMI_MEMTYPE_FINE_GRAINED   = (1 << 1),
-    ATMI_MEMTYPE_COARSE_GRAINED = (1 << 2) 
+    ATMI_MEMTYPE_FINE_GRAINED   = 0,
+    ATMI_MEMTYPE_COARSE_GRAINED = 1,
+    ATMI_MEMTYPE_ANY
+    // ATMI should not be concerned about kernarg region, which should 
+    // be handled by HSA and not by the end application user
 } atmi_memtype_t;
 
 typedef enum atmi_state_s {
@@ -61,10 +64,40 @@ typedef struct atmi_tprofile_s {
 #define ATMI_MAX_CUS    64
 typedef struct atmi_place_s {
     unsigned int node_id;           /* node_id = 0 for local computations     */
-    unsigned long cpu_set;          /* CPU (core) set.                        */
-    unsigned long gpu_set;          /* GPU (CU) set.                          */
+    atmi_devtype_t type;            /* CPU, GPU or DSP                        */
+    int device_id;                  /* Devices ordered by runtime; -1 for any */
+    unsigned long cu_mask;          /* Compute Unit Mask (advanced feature)   */
 } atmi_place_t;
 
+typedef struct atmi_mem_place_s {
+    unsigned int node_id;           /* node_id = 0 for local computations     */
+    atmi_devtype_t dev_type;        /* CPU, GPU or DSP                        */
+    int dev_id;                     /* Devices ordered by runtime; -1 for any */
+    //atmi_memtype_t mem_type;        /* Fine grained or Coarse grained         */
+    int mem_id;                     /* Memory spaces; -1 for any              */
+} atmi_mem_place_t;
+
+
+typedef struct atmi_device_s {
+    atmi_devtype_t type;
+    unsigned int memory_pool_count;
+} atmi_device_t;
+
+typedef struct atmi_machine_s {
+    unsigned int device_count_by_type[3];   /* CPU, GPU and DSP               */
+    atmi_device_t *devices;   
+} atmi_machine_t;
+
+#define ATMI_PLACE_ANY(node) {.node_id=node, .type=ATMI_DEVTYPE_ANY, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .type=ATMI_DEVTYPE_GPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=cpu_id, .cu_mask=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .type=ATMI_DEVTYPE_GPU, .device_id=gpu_id, .cu_mask=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_CPU_MASK(node, cpu_id, cpu_mask) {.node_id=node, .type=ATMI_DEVTYPE_CPU, device_id=cpu_id, .cu_mask=(0x0|cpu_mask)} 
+#define ATMI_PLACE_GPU_MASK(node, gpu_id, gpu_mask) {.node_id=node, .type=ATMI_DEVTYPE_GPU, device_id=gpu_id, .cu_mask=(0x0|gpu_mask)} 
+#define ATMI_PLACE(node, dev_type, dev_id, mask) {.node_id=node, .type=dev_type, .device_id=dev_id, .cu_mask=mask} 
+
+#if 0
 #define ATMI_PLACE_ANY(node) {.node_id=node, .cpu_set=0xFFFFFFFFFFFFFFFF, .gpu_set=0xFFFFFFFFFFFFFFFF} 
 #define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .cpu_set=0xFFFFFFFFFFFFFFFF, .gpu_set=0x0} 
 #define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .cpu_set=0x0, .gpu_set=0xFFFFFFFFFFFFFFFF} 
@@ -72,7 +105,8 @@ typedef struct atmi_place_s {
 #define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .cpu_set=0x0, .gpu_set=(1 << gpu_id)} 
 #define ATMI_PLACE_GPU_MASK(node, gpu_mask) {.node_id=node, .cpu_set=0x0, .gpu_set=(0x0|gpu_mask)} 
 #define ATMI_PLACE_CPU_MASK(node, cpu_mask) {.node_id=node, .cpu_set=(0x0|cpu_mask), .gpu_set=0x0} 
-
+#define ATMI_PLACE(node, cpu_id, gpu_id) {.node_id=node, .cpu_set=(1 << cpu_id), .gpu_set=(1 << gpu_id)} 
+#endif
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* atmi_task_group_t  ATMI Task Group Data Structure                          */
@@ -182,11 +216,21 @@ typedef struct atmi_task_list_s {
     struct atmi_task_list_s *next;
 } atmi_task_list_t;
 
+typedef enum atmi_data_type_s {
+    ATMI_DATA_IN = 0,
+    ATMI_DATA_WORK = 1,
+    ATMI_DATA_OUT
+} atmi_data_type_t;
+
 typedef struct atmi_data_s {
     void *ptr;
     unsigned long long int size;
-    atmi_place_t place;
+    atmi_mem_place_t place;
+    // TODO: what other information can be part of data?
+    //atmi_data_type_t type;
 } atmi_data_t;
+
+#define ATMI_DATA(X, PTR, SIZE, PLACE) atmi_data_t X; X.ptr=PTR; X.size=SIZE; X.place=PLACE;
 
 #define WORKITEMS gridDim[0] 
 #define WORKITEMS2D gridDim[1] 
@@ -243,6 +287,7 @@ extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t *lparm);
 { \
     ATMI_LPARM(__lparm_sync_kernel); \
     __lparm_sync_kernel->synchronous = ATMI_TRUE; \
+    __lparm_sync_kernel->groupable = ATMI_TRUE; \
     __lparm_sync_kernel->group = s; \
     __sync_kernel_pif(__lparm_sync_kernel); \
 }

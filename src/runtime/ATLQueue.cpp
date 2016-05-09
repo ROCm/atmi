@@ -4,7 +4,7 @@
 
 bool equalsPlace(const atmi_place_t &l, const atmi_place_t &r) {
     bool val = false;
-    if(l.node_id == r.node_id && l.cpu_set == r.cpu_set && l.gpu_set == r.gpu_set)
+    if(l.node_id == r.node_id && l.type == r.type && l.device_id == r.device_id && l.cu_mask == r.cu_mask)
         val = true;
     return val;
 }
@@ -13,7 +13,7 @@ hsa_status_t ATLGPUQueue::setPlace(atmi_place_t place) {
     hsa_status_t val = HSA_STATUS_SUCCESS;
     if(!equalsPlace(_place, place)) {
         _place = place;
-        val = hsa_amd_queue_cu_set_mask(_queue, 2, (uint32_t *)&(_place.gpu_set));
+        val = hsa_amd_queue_cu_set_mask(_queue, 2, (uint32_t *)&(_place.cu_mask));
     }
     return val;
 }

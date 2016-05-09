@@ -11,7 +11,7 @@ ATMILIB_RUNTIME_PATH=../..
 INC_FLAGS=-I${ATMILIB_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/include -I./include 
 LIB_FLAGS=-L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -Wl,--no-as-needed -Wl,-rpath=${HSA_RUNTIME_PATH}/lib
 
-OBJS=atl_bindthread.o atl_profile.o atl_rt.o atl_cputask.o atl_synckernel.o ATLQueue.o 
+OBJS=atl_bindthread.o atl_profile.o atl_rt.o atl_cputask.o atl_synckernel.o ATLQueue.o ATLMachine.o ATLData.o
 
 LIB=libatmi_runtime.so
 LIBDIR=${ATMILIB_RUNTIME_PATH}/lib

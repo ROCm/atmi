@@ -18,13 +18,13 @@ class ATLQueue {
 
 class ATLCPUQueue : public ATLQueue {
     public:
-        ATLCPUQueue(hsa_queue_t *q, atmi_place_t p = ATMI_PLACE_ANY(0)) : ATLQueue(q, p) {}
+        ATLCPUQueue(hsa_queue_t *q, atmi_place_t p = ATMI_PLACE_ANY_CPU(0)) : ATLQueue(q, p) {}
         hsa_status_t setPlace(atmi_place_t place);
 };
 
 class ATLGPUQueue : public ATLQueue {
     public:
-        ATLGPUQueue(hsa_queue_t *q, atmi_place_t p = ATMI_PLACE_ANY(0)) : ATLQueue(q, p) {}
+        ATLGPUQueue(hsa_queue_t *q, atmi_place_t p = ATMI_PLACE_ANY_GPU(0)) : ATLQueue(q, p) {}
         hsa_status_t setPlace(atmi_place_t place);
 };
 

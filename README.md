@@ -1,5 +1,4 @@
 #ATMI v0.3.0 (Asynchronous Task Management Interface)
-==============
 A simple declarative language and runtime for heterogeneous tasking. 
 
 Table of contents

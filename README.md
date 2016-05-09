@@ -1,14 +1,44 @@
-ATMI - V 0.2.0 
+ATMI - V 0.3.0 
 ==============
 
 ATMI:  Asynchronous Task Management Interface
-       A simple declarative language approach to heterogeneous tasking. 
+       A simple declarative language and runtime for heterogeneous tasking. 
 
 Table of contents
 -----------------
 
+- [What's New?](#Whatsnew)
 - [Copyright and Disclaimer](#Copyright)
 - [Software License Agreement](LICENSE.TXT)
+
+<A NAME="Whatsnew">
+# What's New?
+
+## ATMI v0.3
+- A comprehensive machine model for integrated GPU (APU) and discrete GPU (dGPU) systems
+- Data movement API 
+- Device supported: AMD Kaveri and AMD Carrizzo APUs, AMD Fiji dGPUs
+- Runtimes used: ROCm v1.0
+
+## ATMI v0.2
+- Efficient resource management
+    - Signaling among dependent tasks
+    - Kernel argument memory regions
+    - Reuse of task handles
+- Device supported: AMD Kaveri and AMD Carrizzo APUs
+- Runtimes used: ROCm v1.0
+
+## ATMI v0.1
+- ATMI runtime library to manage tasks
+- ATMI C language extension for denoting tasks
+- Asynchronous tasks
+    - CPU tasks
+    - GPU tasks
+- Task depenencies
+- Task groups
+- Recursive tasks
+- Device supported: AMD Kaveri and AMD Carrizzo APUs
+- Runtimes used: HSA 1.0F
 
 <A NAME="Copyright">
 # Copyright and Disclaimer

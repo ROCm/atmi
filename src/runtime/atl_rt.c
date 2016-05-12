@@ -941,10 +941,10 @@ atmi_status_t atl_init_context() {
 }
 
 atmi_status_t atmi_init(int devtype) {
-    if(devtype == ATMI_DEVTYPE_GPU || devtype == ATMI_DEVTYPE_ANY) 
+    if(devtype == ATMI_DEVTYPE_GPU || devtype == ATMI_DEVTYPE_ALL) 
         atl_init_gpu_context();
 
-    if(devtype == ATMI_DEVTYPE_CPU || devtype == ATMI_DEVTYPE_ANY) 
+    if(devtype == ATMI_DEVTYPE_CPU || devtype == ATMI_DEVTYPE_ALL) 
         atl_init_cpu_context();
 
     return ATMI_STATUS_SUCCESS;
@@ -1292,6 +1292,16 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         ErrorCheck(Allocating memory for the executable-kernel, err);
         */
     }
+    else {
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length); 
+        ErrorCheck(Symbol info extraction, err);
+        char *name = (char *)malloc(name_length + 1);
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME, name); 
+        ErrorCheck(Symbol info extraction, err);
+        name[name_length] = 0;
+
+        printf("Symbol name: %s\n", name);
+    }
     return HSA_STATUS_SUCCESS;
 }
 
@@ -1304,9 +1314,9 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     // FIXME: build kernel objects for each kernel agent type! 
     std::vector<std::string> filenames_str;
     /* Create the empty executable.  */
-    atl_gpu_agent_profile = HSA_PROFILE_FULL;
+    //atl_gpu_agent_profile = HSA_PROFILE_FULL;
     // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
-    err = hsa_executable_create(atl_gpu_agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
+    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
     ErrorCheck(Create the executable, err);
     
     for(int i = 0; i < num_modules; i++) {
@@ -1412,7 +1422,7 @@ void clear_container(T &q)
    std::swap(q, empty);
 }
       
-atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num_args, 
+atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num_args,
                                     const size_t *arg_sizes) {
     static int counter = 0;
     char *pif = (char *)malloc(256);
@@ -1960,6 +1970,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     //printf("(Before) Task %p Region Index: %d\n", task, task->kernarg_region_index);
     //fflush(stdout);
     if(task->devtype == ATMI_DEVTYPE_GPU) thisKernargAddress += (6 * sizeof(uint64_t));
+    // TODO: is the below loop necessary? we dont seem to be using it at all.
     clear_container(task->kernarg_region_ptrs);
     task->kernarg_region_ptrs.push_back((void *)thisKernargAddress);
     thisKernargAddress += sizeof(atmi_task_handle_t);
@@ -2669,26 +2680,6 @@ atmi_task_handle_t atmi_task_launch(atmi_kernel_t atmi_kernel, atmi_lparm_t *lpa
     return ret;
 }
 
-atmi_status_t atmi_malloc(void **ptr, const unsigned int memory_region, const size_t bytes) {
-    atmi_status_t ret = ATMI_STATUS_SUCCESS;
-    // FIXME: alloc memory from the corresponding region/memory pool as
-    // memory_region
-    hsa_status_t err = hsa_memory_allocate(atl_gpu_kernarg_region, bytes, ptr);
-    ErrorCheck(atmi_malloc, err);
-    
-    if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
-    return ret;
-}
-
-atmi_status_t atmi_free(void *ptr) {
-    atmi_status_t ret = ATMI_STATUS_SUCCESS;
-    hsa_status_t err = hsa_memory_free(ptr);
-    ErrorCheck(atmi_free, err);
-    
-    if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
-    return ret;
-}
-
 enum queue_type{device_queue = 0, soft_queue}; 
 void atl_kl_init(atmi_klist_t *atmi_klist,
         atmi_kernel_t atmi_kernel,
@@ -2822,8 +2813,7 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
 }
 
 /* Machine Info */
-atmi_status_t atmi_machine_get_info(atmi_machine_t **machine) {
-    if(!atlc.g_hsa_initialized) return ATMI_STATUS_ERROR;
-    if(!machine) return ATMI_STATUS_ERROR;
-    *machine = &g_atmi_machine;
+atmi_machine_t *atmi_machine_get_info() {
+    if(!atlc.g_hsa_initialized) return NULL;
+    return &g_atmi_machine;
 }

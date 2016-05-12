@@ -16,7 +16,7 @@ class ATLProcessor {
         // TODO: Do we need this or are we building the machine structure just once in the program? 
         // void removeMemory(ATLMemory &p); 
         template<typename T> std::vector<T> &getMemories();
-        virtual atmi_devtype_t getType() {return ATMI_DEVTYPE_ANY; }
+        virtual atmi_devtype_t getType() {return ATMI_DEVTYPE_ALL; }
     private:
         hsa_agent_t     _agent;
         std::vector<ATLFineMemory> _dram_memories;

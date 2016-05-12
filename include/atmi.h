@@ -21,7 +21,7 @@ typedef enum atmi_devtype_s {
     ATMI_DEVTYPE_CPU = 0,
     ATMI_DEVTYPE_GPU = 1,
     ATMI_DEVTYPE_DSP = 2,
-    ATMI_DEVTYPE_ANY
+    ATMI_DEVTYPE_ALL
 } atmi_devtype_t;
 
 typedef enum atmi_memtype_s {
@@ -88,7 +88,7 @@ typedef struct atmi_machine_s {
     atmi_device_t *devices;   
 } atmi_machine_t;
 
-#define ATMI_PLACE_ANY(node) {.node_id=node, .type=ATMI_DEVTYPE_ANY, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
+#define ATMI_PLACE_ANY(node) {.node_id=node, .type=ATMI_DEVTYPE_ALL, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
 #define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
 #define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .type=ATMI_DEVTYPE_GPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
 #define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=cpu_id, .cu_mask=0xFFFFFFFFFFFFFFFF} 
@@ -97,16 +97,17 @@ typedef struct atmi_machine_s {
 #define ATMI_PLACE_GPU_MASK(node, gpu_id, gpu_mask) {.node_id=node, .type=ATMI_DEVTYPE_GPU, device_id=gpu_id, .cu_mask=(0x0|gpu_mask)} 
 #define ATMI_PLACE(node, dev_type, dev_id, mask) {.node_id=node, .type=dev_type, .device_id=dev_id, .cu_mask=mask} 
 
-#if 0
-#define ATMI_PLACE_ANY(node) {.node_id=node, .cpu_set=0xFFFFFFFFFFFFFFFF, .gpu_set=0xFFFFFFFFFFFFFFFF} 
-#define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .cpu_set=0xFFFFFFFFFFFFFFFF, .gpu_set=0x0} 
-#define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .cpu_set=0x0, .gpu_set=0xFFFFFFFFFFFFFFFF} 
-#define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .cpu_set=(1 << cpu_id), .gpu_set=0x0} 
-#define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .cpu_set=0x0, .gpu_set=(1 << gpu_id)} 
-#define ATMI_PLACE_GPU_MASK(node, gpu_mask) {.node_id=node, .cpu_set=0x0, .gpu_set=(0x0|gpu_mask)} 
-#define ATMI_PLACE_CPU_MASK(node, cpu_mask) {.node_id=node, .cpu_set=(0x0|cpu_mask), .gpu_set=0x0} 
-#define ATMI_PLACE(node, cpu_id, gpu_id) {.node_id=node, .cpu_set=(1 << cpu_id), .gpu_set=(1 << gpu_id)} 
-#endif
+
+#define ATMI_MEM_PLACE_ANY(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_ALL, .dev_id=-1, .mem_id=-1} 
+#define ATMI_MEM_PLACE_ANY_CPU(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=-1, .mem_id=-1} 
+#define ATMI_MEM_PLACE_ANY_GPU(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=-1, .mem_id=-1} 
+#define ATMI_MEM_PLACE_CPU(node, cpu_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=cpu_id, .mem_id=-1} 
+#define ATMI_MEM_PLACE_GPU(node, gpu_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=gpu_id, .mem_id=-1} 
+#define ATMI_MEM_PLACE_CPU_MEM(node, cpu_id, cpu_mem_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=cpu_id, .mem_id=cpu_mem_id} 
+#define ATMI_MEM_PLACE_GPU_MEM(node, gpu_id, gpu_mem_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=gpu_id, .mem_id=gpu_mem_id} 
+#define ATMI_MEM_PLACE(node, d_type, d_id, m_id) {.node_id=node, .dev_type=d_type, .dev_id=d_id, .mem_id=m_id} 
+
+
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* atmi_task_group_t  ATMI Task Group Data Structure                          */
@@ -216,21 +217,36 @@ typedef struct atmi_task_list_s {
     struct atmi_task_list_s *next;
 } atmi_task_list_t;
 
+typedef enum atmi_arg_type_s {
+    ATMI_IN,
+    ATMI_OUT,
+    ATMI_IN_OUT
+} atmi_arg_type_t;    
+
 typedef enum atmi_data_type_s {
-    ATMI_DATA_IN = 0,
-    ATMI_DATA_WORK = 1,
-    ATMI_DATA_OUT
+    ATMI_CHAR,
+    ATMI_UNSIGNED_CHAR,
+    ATMI_INT,
+    ATMI_UNSIGNED_INT,
+    ATMI_LONG,
+    ATMI_UNSIGNED_LONG,
+    ATMI_LONG_LONG,
+    ATMI_UNSIGNED_LONG_LONG,
+    ATMI_FLOAT,
+    ATMI_DOUBLE,
+    ATMI_SIZE,
+    ATMI_PTR = (1 << 31)
 } atmi_data_type_t;
 
 typedef struct atmi_data_s {
     void *ptr;
-    unsigned long long int size;
+    //atmi_data_type_t type;
+    unsigned int size;
     atmi_mem_place_t place;
     // TODO: what other information can be part of data?
-    //atmi_data_type_t type;
 } atmi_data_t;
 
-#define ATMI_DATA(X, PTR, SIZE, PLACE) atmi_data_t X; X.ptr=PTR; X.size=SIZE; X.place=PLACE;
+#define ATMI_DATA(X, PTR, COUNT, PLACE) atmi_data_t X; X.ptr=PTR; X.size=COUNT; X.place=PLACE;
 
 #define WORKITEMS gridDim[0] 
 #define WORKITEMS2D gridDim[1] 

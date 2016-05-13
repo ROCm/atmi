@@ -18,7 +18,7 @@ OBJS = hello
 
 all: $(OBJS)
 
-hello: hw.cpp hw.cl hw_structs.h
+hello: hw.cpp hw.cl 
 	$(CLOC_PATH)/cloc.sh -brig -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2  hw.cl
 	$(CC) -o $@ hw.cpp $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 

@@ -74,20 +74,16 @@ int main(int argc, char **argv) {
 	void *d_input;
     atmi_malloc(&d_input, strlength+1, gpu0);
     atmi_copy_h2d(d_input, input, strlength+1, gpu0);
-    //atmi_data_map_sync((void *)input, strlength+1, gpu0, ATMI_IN, &input_gpu_data);
 
 	void *h_input;
     atmi_malloc(&h_input, strlength+1, cpu0);
     atmi_copy_h2d(h_input, input, strlength+1, cpu0);
-    //atmi_data_map_sync((void *)input, strlength+1, cpu0, ATMI_IN, &input_cpu_data);
 
 	void *d_output;
     atmi_malloc(&d_output, strlength+1, gpu0);
-    //atmi_data_map_sync(output_gpu, strlength+1, gpu0, ATMI_OUT, &output_gpu_data);
 
 	void *h_output;
     atmi_malloc(&h_output, strlength+1, cpu0);
-    //atmi_data_map_sync(output_cpu, strlength+1, cpu0, ATMI_OUT, &output_cpu_data);
 
     void *gpu_args[] = {&d_input, &d_output, &strlength};
     void *cpu_args[] = {&h_input, &h_output, &strlength};
@@ -99,26 +95,15 @@ int main(int argc, char **argv) {
     lparm->place = ATMI_PLACE_GPU(0, 0);
     atmi_task_launch(kernel, lparm, gpu_args);
     atmi_copy_d2h(output_gpu, d_output, strlength+1, gpu0);
-    //atmi_data_unmap_sync((void *)input, input_gpu_data);
-    //atmi_data_unmap_sync(output_gpu, output_gpu_data);
     output_gpu[strlength] = '\0';
 
     lparm->kernel_id = CPU_IMPL;
     lparm->place = ATMI_PLACE_CPU(0, 0);
     atmi_task_launch(kernel, lparm, cpu_args);
     atmi_copy_d2h(output_cpu, h_output, strlength+1, cpu0);
-    //atmi_data_unmap_sync((void *)input, input_cpu_data);
-    //atmi_data_unmap_sync(output_cpu, output_cpu_data);
     output_cpu[strlength] = '\0';
    
-    for(int i = 0; i < strlength; i++) {
-        printf("in[%d] = %d\n", i, input[i]);
-    }
     cout << "Output from the GPU: " << output_gpu << endl;
-    for(int i = 0; i < strlength; i++) {
-        printf("out[%d] = %d\n", i, output_gpu[i]);
-    }
-    //cout << "Output from the GPU.X: " << decode_gpu_args.x << endl;
     cout << "Output from the CPU: " << output_cpu << endl;
 	free(output_gpu);
 	free(output_cpu);

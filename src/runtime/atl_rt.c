@@ -1328,7 +1328,7 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
 
             /* Create hsa program.  */
             memset(&atl_hsa_program,0,sizeof(hsa_ext_program_t));
-            err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, atl_gpu_agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
+            err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
             ErrorCheck(Create the program, err);
 
             /* Add the BRIG module to hsa program.  */

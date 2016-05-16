@@ -36,7 +36,8 @@ atmi_status_t atmi_init(int type);
 atmi_status_t atmi_finalize();
 
 /* Module */
-atmi_status_t atmi_module_register(const char **filename, atmi_platform_type_t *type, const int num_modules);
+atmi_status_t atmi_module_register(const char **filename, atmi_platform_type_t *types, const int num_modules);
+atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules);
 
 /* machine */
 atmi_machine_t *atmi_machine_get_info();

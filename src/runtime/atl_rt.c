@@ -139,7 +139,7 @@ std::queue<hsa_signal_t> FreeSignalPool;
 std::map<std::string, atl_kernel_info_t> KernelInfoTable;
 std::map<std::string, atl_kernel_t *> KernelImplMap;
 std::map<std::string, atmi_klist_t *> PifKlistMap;
-std::map<uint64_t, std::vector<std::string> > ModuleMap;
+//std::map<uint64_t, std::vector<std::string> > ModuleMap;
 hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
 hsa_signal_t IdentityORSignal;
 hsa_signal_t IdentityANDSignal;
@@ -1300,19 +1300,19 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         ErrorCheck(Symbol info extraction, err);
         name[name_length] = 0;
 
-        printf("Symbol name: %s\n", name);
+        DEBUG_PRINT("Symbol name: %s\n", name);
     }
     return HSA_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t *types, const int num_modules) {
+atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
     hsa_executable_t executable; 
     hsa_status_t err;
 
     DEBUG_PRINT("Registering module...");
     //fflush(stdout);
     // FIXME: build kernel objects for each kernel agent type! 
-    std::vector<std::string> filenames_str;
+    std::vector<std::string> modules_str;
     /* Create the empty executable.  */
     //atl_gpu_agent_profile = HSA_PROFILE_FULL;
     // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
@@ -1320,9 +1320,9 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     ErrorCheck(Create the executable, err);
     
     for(int i = 0; i < num_modules; i++) {
-        filenames_str.push_back(std::string(filenames[i]));
-        size_t module_size;
-        void *module_bytes = atl_read_binary_from_file(filenames[i], &module_size); 
+        void *module_bytes = modules[i];
+        modules_str.push_back(std::string((char *)module_bytes));
+        size_t module_size = module_sizes[i];
         if(types[i] == BRIG) {
             hsa_ext_module_t module = (hsa_ext_module_t)module_bytes;
 
@@ -1376,8 +1376,22 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     ErrorCheck(Iterating over symbols for execuatable, err);
     
     DEBUG_PRINT("done\n");
-    ModuleMap[executable.handle] = filenames_str;
+    //ModuleMap[executable.handle] = modules_str;
     return ATMI_STATUS_SUCCESS;
+}
+
+atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t *types, const int num_modules) {
+    std::vector<void *> modules;
+    std::vector<size_t> module_sizes;
+    for(int i = 0; i < num_modules; i++) {
+        size_t module_size;
+        void *module_bytes = atl_read_binary_from_file(filenames[i], &module_size); 
+        if(!module_bytes) return ATMI_STATUS_ERROR;
+        modules.push_back(module_bytes);
+        module_sizes.push_back(module_size);
+    }
+
+    return atmi_module_register_from_memory(&modules[0], &module_sizes[0], types, num_modules);
 }
 
 

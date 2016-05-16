@@ -29,7 +29,7 @@ extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, void **args) {
 }
 
 int main(int argc, char **argv) {
-    atmi_status_t err = atmi_init(ATMI_DEVTYPE_ANY);
+    atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
     #if 0
     const char *module = "hw.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
     atmi_task_launch(kernel, lparm, gpu_args);
     output_gpu[strlength] = '\0';
 
+    lparm->WORKITEMS = 1;
     lparm->kernel_id = CPU_IMPL;
     atmi_task_launch(kernel, lparm, cpu_args);
     output_cpu[strlength] = '\0';

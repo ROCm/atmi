@@ -1,4 +1,3 @@
-#include "atmi.h"
 #include "atmi_runtime.h"
 #include <string.h>
 #include <stdlib.h>
@@ -30,31 +29,17 @@ extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, const char **in
 
 
 int main(int argc, char **argv) {
-    atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
-    #if 0
+    atmi_init(ATMI_DEVTYPE_ALL);
+    #if 1
     const char *module = "hw.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
     #else
     const char *module = "hw.brig";
     atmi_platform_type_t module_type = BRIG;
     #endif
-    err = atmi_module_register(&module, &module_type, 1);
+    atmi_module_register(&module, &module_type, 1);
 
     atmi_machine_t *machine = atmi_machine_get_info();
-
-    printf("Machine info...\n");
-    printf("CPU devices: %d, GPU devices: %d, DSP devices: %d\n", 
-            machine->device_count_by_type[ATMI_DEVTYPE_CPU],
-            machine->device_count_by_type[ATMI_DEVTYPE_GPU],
-            machine->device_count_by_type[ATMI_DEVTYPE_DSP]);
-
-    int total_devices = machine->device_count_by_type[ATMI_DEVTYPE_CPU] +
-            machine->device_count_by_type[ATMI_DEVTYPE_GPU] +
-            machine->device_count_by_type[ATMI_DEVTYPE_DSP];
-
-    for(int i = 0; i < total_devices; i++) {
-        printf("Device[%d]: %d, %u\n", i, machine->devices[i].type, machine->devices[i].memory_pool_count);
-    }
 
     atmi_kernel_t kernel;
     const unsigned int num_args = 3;
@@ -63,7 +48,7 @@ int main(int argc, char **argv) {
     atmi_kernel_add_cpu_impl(kernel, (atmi_generic_fp)decode_cpu, CPU_IMPL);
     atmi_kernel_add_gpu_impl(kernel, "decode_gpu", GPU_IMPL);
 
-	const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
+    const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
     size_t strlength = strlen(input);
     char *output_cpu = (char*) malloc(strlength + 1);
     char *output_gpu = (char*) malloc(strlength + 1);
@@ -94,19 +79,27 @@ int main(int argc, char **argv) {
     lparm->kernel_id = GPU_IMPL;
     lparm->place = ATMI_PLACE_GPU(0, 0);
     atmi_task_launch(kernel, lparm, gpu_args);
-    atmi_copy_d2h(output_gpu, d_output, strlength+1, gpu0);
-    output_gpu[strlength] = '\0';
 
     lparm->kernel_id = CPU_IMPL;
     lparm->place = ATMI_PLACE_CPU(0, 0);
     atmi_task_launch(kernel, lparm, cpu_args);
+
+    atmi_copy_d2h(output_gpu, d_output, strlength+1, gpu0);
+    output_gpu[strlength] = '\0';
     atmi_copy_d2h(output_cpu, h_output, strlength+1, cpu0);
     output_cpu[strlength] = '\0';
    
     cout << "Output from the GPU: " << output_gpu << endl;
     cout << "Output from the CPU: " << output_cpu << endl;
+
+    /* cleanup */
 	free(output_gpu);
 	free(output_cpu);
+    atmi_free(h_input);
+    atmi_free(h_output);
+    atmi_free(d_input);
+    atmi_free(d_output);
     atmi_kernel_release(kernel);
+    atmi_finalize();
     return 0;
 }

@@ -6,7 +6,7 @@ ATMI_RUNTIME_PATH ?= /opt/amd/atmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include
 
 CC=g++
-CFLAGS=-O3 -g
+CFLAGS=-O3 -g -std=c++11
 INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I. 
 
 LIBS=-latmi_runtime -lhsa-runtime64 -lelf

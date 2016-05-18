@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
 
     lparm->WORKITEMS = 1;
     lparm->kernel_id = CPU_IMPL;
+    lparm->place = ATMI_PLACE_CPU(0, 0);
     atmi_task_launch(kernel, lparm, cpu_args);
     output_cpu[strlength] = '\0';
    

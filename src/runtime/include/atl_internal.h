@@ -1,7 +1,6 @@
 #ifndef __SNK_INTERNAL
 #define __SNK_INTERNAL
 #include "atl_rt.h"
-#include "ATLQueue.h"
 #include <pthread.h>
 #include <vector>
 #include <queue>
@@ -22,11 +21,10 @@ typedef void* ARG_TYPE;
 #define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
 typedef struct agent_t
 {
-  int num_queues;
   int id;
-  ATLCPUQueue *queue;
-  //hsa_agent_t cpu_agent;
-  //hsa_region_t cpu_region;
+  hsa_signal_t worker_sig;
+  hsa_queue_t *queue;
+  pthread_t thread;
 } agent_t;
 
 enum {
@@ -35,12 +33,11 @@ enum {
     IDLE
 };
 
-agent_t get_cpu_q_agent(int id);
-void cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
-                const size_t num_queues, const size_t capacity
-                );
+agent_t *get_cpu_q_agent(int cpu_id, int id);
+void cpu_agent_init(int cpu_id, const size_t num_queues);
 void agent_fini();
-ATLCPUQueue* get_cpu_queue(int id);
+void signal_worker_id(int cpu_id, int tid, int signal);
+hsa_queue_t* get_cpu_queue(int cpu_id, int id);
 void signal_worker(hsa_queue_t *queue, int signal);
 void *agent_worker(void *agent_args);
 int process_packet(hsa_queue_t *queue, int id);
@@ -102,8 +99,8 @@ typedef struct atmi_task_group_table_s {
     hsa_queue_t *cpu_queue;
     atmi_devtype_t last_device_type;
     atmi_place_t place;
-    int next_gpu_qid;
-    int next_cpu_qid;
+//    int next_gpu_qid;
+//    int next_cpu_qid;
     hsa_signal_t common_signal;
     pthread_mutex_t mutex;
     std::vector<atl_task_t *> running_groupable_tasks;
@@ -128,7 +125,7 @@ typedef struct atl_task_s {
     // hsa_kernel_dispatch_packet_t *packet;
     atl_kernel_t *kernel;
     uint32_t kernel_id;
-    std::vector<void *> kernarg_region_ptrs;
+    std::vector<void *> kernarg_region_ptrs_;
     void *kernarg_region; // malloced or acquired from a pool
     size_t kernarg_region_size;
     int kernarg_region_index;
@@ -209,8 +206,8 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_co
 atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_stream_id(atmi_task_group_table_t *stream_obj);
-ATLQueue *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
-ATLQueue *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
+hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
+hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
 atmi_status_t clear_saved_tasks(atmi_task_group_table_t *stream_obj);
 atmi_status_t register_task(atmi_task_group_table_t *stream_obj, atl_task_t *task);
 atmi_status_t register_stream(atmi_task_group_table_t *stream_obj);
@@ -225,6 +222,17 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret);
 atl_task_t *get_task(atmi_task_handle_t t);
 bool try_dispatch_callback(atl_task_t *t, void **args);
 bool try_dispatch_barrier_pkt(atl_task_t *t, void **args);
+
+
+const char *get_error_string(hsa_status_t err);
+#define ErrorCheck(msg, status) \
+if (status != HSA_STATUS_SUCCESS) { \
+    printf("%s failed: %s\n", #msg, get_error_string(status)); \
+    exit(1); \
+} else { \
+ /*  printf("%s succeeded.\n", #msg);*/ \
+}
+
 #if 0
 #ifdef __cplusplus
 extern "C" {

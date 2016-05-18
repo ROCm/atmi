@@ -285,6 +285,10 @@ typedef struct atmi_data_s {
     }\
 }
 
+typedef enum atmi_scheduler_s {
+    ATMI_SCHED_NONE = 0,
+    ATMI_SCHED_RR
+} atmi_scheduler_t;
 /*----------------------------------------------------------------------------*/
 /* String macros that look like an API, but actually implement feature by     */
 /* calling a null kernel under specific conditions.                           */ 

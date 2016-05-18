@@ -114,15 +114,6 @@ const char *get_error_string(hsa_status_t err) {
     }
 }
 
-#define ErrorCheck(msg, status) \
-if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed: %s\n", #msg, get_error_string(status)); \
-    exit(1); \
-} else { \
- /*  printf("%s succeeded.\n", #msg);*/ \
-}
-
-
 extern bool handle_signal(hsa_signal_value_t value, void *arg);
 
 void print_atl_kernel(const char * str, const int i);
@@ -147,7 +138,7 @@ hsa_signal_t IdentityCopySignal;
 static int StreamCommonSignalIdx = 0;
 std::queue<atl_task_t *> DispatchedTasks;
 
-static atmi_machine_t g_atmi_machine;
+atmi_machine_t g_atmi_machine;
 ATLMachine g_atl_machine;
 static std::vector<hsa_amd_memory_pool_t> g_memory_pools;
 static std::vector<hsa_agent_t> g_agents;
@@ -161,15 +152,12 @@ hsa_ext_program_t atl_hsa_program;
 //hsa_executable_t atl_executable;
 hsa_region_t atl_hsa_primary_region;
 hsa_region_t atl_gpu_kernarg_region;
+hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
 hsa_region_t atl_cpu_kernarg_region;
 hsa_agent_t atl_gpu_agent;
 hsa_profile_t atl_gpu_agent_profile;
 
-ATLGPUQueue* GPU_CommandQ[SNK_MAX_GPU_QUEUES];
-int          SNK_NextTaskId = 0 ;
 atmi_task_group_t atl_default_stream_obj = {0, ATMI_FALSE};
-int          SNK_NextGPUQueueID[ATMI_MAX_STREAMS];
-int          SNK_NextCPUQueueID[ATMI_MAX_STREAMS];
 
 struct timespec context_init_time;
 static int context_init_time_init = 0;
@@ -460,6 +448,10 @@ static hsa_status_t get_memory_pool_info(hsa_amd_memory_pool_t memory_pool, void
         if(HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED & global_flag) {
             ATLFineMemory new_mem(memory_pool, *proc);
             proc->addMemory(new_mem);
+            if(HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_KERNARG_INIT & global_flag) {
+                DEBUG_PRINT("GPU kernel args pool handle: %lu\n", memory_pool.handle);
+                atl_gpu_kernarg_pool = memory_pool;
+            }
         }
         else {
             ATLCoarseMemory new_mem(memory_pool, *proc);
@@ -735,30 +727,19 @@ extern void atmi_task_group_sync(atmi_task_group_t *stream) {
     atl_stream_sync(stream_obj);
 }
 
-ATLQueue *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
-    int ret_queue_id = stream_obj->next_cpu_qid;
-    DEBUG_PRINT("Q ID: %d\n", ret_queue_id);
-    /* use the same queue if the stream is ordered */
-    /* otherwise, round robin the queue ID for unordered streams */
-    if(stream_obj->ordered == ATMI_FALSE) {
-        stream_obj->next_cpu_qid = (ret_queue_id + 1) % SNK_MAX_CPU_QUEUES;
-    }
-    ATLCPUQueue *queue = get_cpu_queue(ret_queue_id);
-    queue->setPlace(place);
-    stream_obj->cpu_queue = queue->getQueue();
+hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
+    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+    atmi_scheduler_t sched = stream_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
+    hsa_queue_t *queue = proc.getBestQueue(sched);
+    stream_obj->cpu_queue = queue;
     return queue;
 }
 
-ATLQueue *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
-    int ret_queue_id = stream_obj->next_gpu_qid;
-    /* use the same queue if the stream is ordered */
-    /* otherwise, round robin the queue ID for unordered streams */
-    if(stream_obj->ordered == ATMI_FALSE) {
-        stream_obj->next_gpu_qid = (ret_queue_id + 1) % SNK_MAX_GPU_QUEUES;
-    }
-    ATLGPUQueue *queue = GPU_CommandQ[ret_queue_id];
-    queue->setPlace(place);
-    stream_obj->gpu_queue = queue->getQueue();
+hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
+    ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
+    atmi_scheduler_t sched = stream_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
+    hsa_queue_t *queue = proc.getBestQueue(sched);
+    stream_obj->gpu_queue = queue;
     return queue;
 }
 
@@ -857,9 +838,6 @@ atmi_status_t register_stream(atmi_task_group_t *stream) {
         stream_entry->running_groupable_tasks.clear();
         stream_entry->cpu_queue = NULL;
         stream_entry->gpu_queue = NULL;
-        int stream_num = StreamTable.size();
-        stream_entry->next_cpu_qid = stream_num % SNK_MAX_CPU_QUEUES;
-        stream_entry->next_gpu_qid = stream_num % SNK_MAX_CPU_QUEUES;
         stream_entry->common_signal.handle = (uint64_t)-1;
         pthread_mutex_init(&(stream_entry->mutex), NULL);
         StreamTable[stream->id] = stream_entry;
@@ -916,9 +894,23 @@ void init_tasks() {
     DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
     //GlobalTaskPtr = (atl_task_t ***)malloc(sizeof(atl_task_t**));
     //int val = posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
+#ifdef MEMORY_REGION
     err = hsa_memory_allocate(atl_gpu_kernarg_region, 
             sizeof(atl_task_t **),
             (void **)&GlobalTaskPtr);
+#else    
+    err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
+            sizeof(atl_task_t **),
+            0,
+            (void **)&GlobalTaskPtr);
+    std::vector<hsa_agent_t> agents;
+    std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
+    for(int i = 0; i < gpu_procs.size(); i++) {
+        agents.push_back(gpu_procs[i].getAgent());
+    }
+    err = hsa_amd_agents_allow_access(agents.size(), &agents[0], NULL, GlobalTaskPtr);
+    ErrorCheck(Allow agents kernarg region access, err);
+#endif
     ErrorCheck(Creating the global task ptr, err);
     atlc.g_tasks_initialized = 1;
 }
@@ -950,46 +942,14 @@ atmi_status_t atmi_init(int devtype) {
     return ATMI_STATUS_SUCCESS;
 }
 
+atmi_status_t atmi_finalize() {
+    // TODO: Finalize all processors, queues, signals, kernarg memory regions
+    return ATMI_STATUS_SUCCESS;
+}
+
 void init_comute_and_memory() {
     hsa_status_t err;
-    #if 1
-    /* Iterate over the agents and pick the gpu agent */
-    err = hsa_iterate_agents(get_agent_info, NULL);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    ErrorCheck(Getting a gpu agent, err);
-   
-    /* Init all devices or individual device types? */
-    std::vector<ATLCPUProcessor> cpu_procs = g_atl_machine.getProcessors<ATLCPUProcessor>(); 
-    std::vector<ATLGPUProcessor> gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
-    std::vector<ATLDSPProcessor> dsp_procs = g_atl_machine.getProcessors<ATLDSPProcessor>(); 
-    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU] = cpu_procs.size();
-    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU] = gpu_procs.size();
-    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_DSP] = dsp_procs.size();
-    size_t num_procs = cpu_procs.size() + gpu_procs.size() + dsp_procs.size();
-    g_atmi_machine.devices = (atmi_device_t *)malloc(num_procs * sizeof(atmi_device_t));
-    DEBUG_PRINT("CPU Agents: %lu\n", cpu_procs.size());
-    DEBUG_PRINT("GPU Agents: %lu\n", gpu_procs.size());
-    DEBUG_PRINT("DSP Agents: %lu\n", dsp_procs.size());
-    for(int i = 0; i < cpu_procs.size(); i++) {
-        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_CPU;
-        
-        std::vector<ATLFineMemory> fine_memories = cpu_procs[i].getMemories<ATLFineMemory>();
-        std::vector<ATLCoarseMemory> coarse_memories = cpu_procs[i].getMemories<ATLCoarseMemory>();
-        DEBUG_PRINT("CPU\tFine Memories : %lu\n", fine_memories.size());
-        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
-        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
-    }
-    for(int i = cpu_procs.size(); i < cpu_procs.size() + gpu_procs.size(); i++) {
-        int index = i - cpu_procs.size();
-        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_GPU;
-        
-        std::vector<ATLFineMemory> fine_memories = gpu_procs[index].getMemories<ATLFineMemory>();
-        std::vector<ATLCoarseMemory> coarse_memories = gpu_procs[index].getMemories<ATLCoarseMemory>();
-        DEBUG_PRINT("GPU\tFine Memories : %lu\n", fine_memories.size());
-        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
-        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
-    }
-    #endif 
+#ifdef MEMORY_REGION
     err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
@@ -1018,6 +978,55 @@ void init_comute_and_memory() {
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     err = (atl_cpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
     ErrorCheck(Finding a CPU kernarg memory region handle, err);
+#else 
+    /* Iterate over the agents and pick the gpu agent */
+    err = hsa_iterate_agents(get_agent_info, NULL);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    ErrorCheck(Getting a gpu agent, err);
+
+    /* Init all devices or individual device types? */
+    std::vector<ATLCPUProcessor> &cpu_procs = g_atl_machine.getProcessors<ATLCPUProcessor>(); 
+    std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
+    std::vector<ATLDSPProcessor> &dsp_procs = g_atl_machine.getProcessors<ATLDSPProcessor>(); 
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU] = cpu_procs.size();
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU] = gpu_procs.size();
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_DSP] = dsp_procs.size();
+    size_t num_procs = cpu_procs.size() + gpu_procs.size() + dsp_procs.size();
+    g_atmi_machine.devices = (atmi_device_t *)malloc(num_procs * sizeof(atmi_device_t));
+    DEBUG_PRINT("CPU Agents: %lu\n", cpu_procs.size());
+    DEBUG_PRINT("GPU Agents: %lu\n", gpu_procs.size());
+    DEBUG_PRINT("DSP Agents: %lu\n", dsp_procs.size());
+    for(int i = 0; i < cpu_procs.size(); i++) {
+        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_CPU;
+        
+        std::vector<ATLFineMemory> fine_memories = cpu_procs[i].getMemories<ATLFineMemory>();
+        std::vector<ATLCoarseMemory> coarse_memories = cpu_procs[i].getMemories<ATLCoarseMemory>();
+        DEBUG_PRINT("CPU\tFine Memories : %lu\n", fine_memories.size());
+        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
+        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+    }
+    for(int i = cpu_procs.size(); i < cpu_procs.size() + gpu_procs.size(); i++) {
+        int index = i - cpu_procs.size();
+        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_GPU;
+        
+        std::vector<ATLFineMemory> fine_memories = gpu_procs[index].getMemories<ATLFineMemory>();
+        std::vector<ATLCoarseMemory> coarse_memories = gpu_procs[index].getMemories<ATLCoarseMemory>();
+        DEBUG_PRINT("GPU\tFine Memories : %lu\n", fine_memories.size());
+        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
+        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+    }
+    atl_cpu_kernarg_region.handle=(uint64_t)-1;
+    err = hsa_agent_iterate_regions(cpu_procs[0].getAgent(), get_fine_grained_region, &atl_cpu_kernarg_region);
+    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+    err = (atl_cpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    ErrorCheck(Finding a CPU kernarg memory region handle, err);
+
+    /* Find a memory region that supports kernel arguments.  */
+    atl_gpu_kernarg_region.handle=(uint64_t)-1;
+    hsa_agent_iterate_regions(gpu_procs[0].getAgent(), get_kernarg_memory_region, &atl_gpu_kernarg_region);
+    err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+    ErrorCheck(Finding a kernarg memory region, err);
+#endif 
 }
 
 void init_hsa() {
@@ -1055,32 +1064,16 @@ atmi_status_t atl_init_gpu_context() {
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
     if(atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
     
+    init_hsa();
     hsa_status_t err;
 
-    init_hsa();
+    int gpu_count = g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU];
+    for(int gpu = 0; gpu < gpu_count; gpu++) {
+        atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
+        ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
+        proc.createQueues(SNK_MAX_GPU_QUEUES);
+    }
     
-    /* Query the maximum size of the queue.  */
-    uint32_t queue_size = 0;
-    err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
-    ErrorCheck(Querying the agent maximum queue size, err);
-    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
-
-    /* Create queues and signals for each stream. */
-    int stream_num;
-    for ( stream_num = 0 ; stream_num < SNK_MAX_GPU_QUEUES ; stream_num++){
-       hsa_queue_t *this_Q;
-       err=hsa_queue_create(atl_gpu_agent, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, UINT32_MAX, UINT32_MAX, &this_Q);
-       GPU_CommandQ[stream_num] = new ATLGPUQueue(this_Q);
-       ErrorCheck(Creating the Stream Command Q, err);
-       err = hsa_amd_profiling_set_profiler_enabled( this_Q, 1); 
-       ErrorCheck(Enabling profiling support, err); 
-    }
-
-    for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
-        /* round robin streams to queues */
-        SNK_NextGPUQueueID[stream_num] = stream_num % SNK_MAX_GPU_QUEUES;
-    }
-
     if(context_init_time_init == 0) {
         clock_gettime(CLOCK_MONOTONIC_RAW,&context_init_time);
         context_init_time_init = 1;
@@ -1108,16 +1101,12 @@ atmi_status_t atl_init_cpu_context() {
 #if defined (ATMI_HAVE_PROFILE)
     atmi_profiling_init();
 #endif /*ATMI_HAVE_PROFILE */
-
-    int num_queues = SNK_MAX_CPU_QUEUES;
-    int queue_capacity = (1024 * 1024);
-    cpu_agent_init(atl_cpu_agent, atl_cpu_kernarg_region, num_queues, queue_capacity);
-
-    int stream_num;
-    for(stream_num = 0; stream_num < ATMI_MAX_STREAMS; stream_num++) {
-        /* round robin streams to queues */
-        SNK_NextCPUQueueID[stream_num] = stream_num % SNK_MAX_CPU_QUEUES;
+    int cpu_count = g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU];
+    for(int cpu = 0; cpu < cpu_count; cpu++) {
+        int num_queues = SNK_MAX_CPU_QUEUES;
+        cpu_agent_init(cpu, num_queues);
     }
+ 
 
     init_tasks();
     atlc.g_cpu_initialized = 1;
@@ -1255,6 +1244,7 @@ atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable) {
 }
 
 hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
+    int gpu_index = *(int *)data;
     hsa_symbol_kind_t type;
 
     uint32_t name_length;
@@ -1306,75 +1296,84 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
 }
 
 atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
-    hsa_executable_t executable; 
-    hsa_status_t err;
-
-    DEBUG_PRINT("Registering module...");
-    //fflush(stdout);
-    // FIXME: build kernel objects for each kernel agent type! 
     std::vector<std::string> modules_str;
-    /* Create the empty executable.  */
-    //atl_gpu_agent_profile = HSA_PROFILE_FULL;
-    // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
-    err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
-    ErrorCheck(Create the executable, err);
-    
     for(int i = 0; i < num_modules; i++) {
-        void *module_bytes = modules[i];
-        modules_str.push_back(std::string((char *)module_bytes));
-        size_t module_size = module_sizes[i];
-        if(types[i] == BRIG) {
-            hsa_ext_module_t module = (hsa_ext_module_t)module_bytes;
-
-            /* Create hsa program.  */
-            memset(&atl_hsa_program,0,sizeof(hsa_ext_program_t));
-            err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
-            ErrorCheck(Create the program, err);
-
-            /* Add the BRIG module to hsa program.  */
-            err = hsa_ext_program_add_module(atl_hsa_program, module);
-            ErrorCheck(Adding the brig module to the program, err);
-            /* Determine the agents ISA.  */
-            hsa_isa_t isa;
-            err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_ISA, &isa);
-            ErrorCheck(Query the agents isa, err);
-
-            /* * Finalize the program and extract the code object.  */
-            hsa_ext_control_directives_t control_directives;
-            memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
-            hsa_code_object_t code_object;
-            err = hsa_ext_program_finalize(atl_hsa_program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
-            ErrorCheck(Finalizing the program, err);
-
-            /* Destroy the program, it is no longer needed.  */
-            err=hsa_ext_program_destroy(atl_hsa_program);
-            ErrorCheck(Destroying the program, err);
-
-            /* Load the code object.  */
-            err = hsa_executable_load_code_object(executable, atl_gpu_agent, code_object, "");
-            ErrorCheck(Loading the code object, err);
-        }
-        else if (types[i] == AMDGCN) {
-            // Deserialize code object.
-            hsa_code_object_t code_object = {0};
-            hsa_status_t err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
-            ErrorCheck(Code Object Deserialization, err);
-            assert(0 != code_object.handle);
-
-            /* Load the code object.  */
-            err = hsa_executable_load_code_object(executable, atl_gpu_agent, code_object, "");
-            ErrorCheck(Loading the code object, err);
-        }
-        free(module_bytes);
+        modules_str.push_back(std::string((char *)modules[i]));
     }
+    
+    int gpu = 0;
+    // FIXME: build kernel objects for each kernel agent?
+    //for(gpu = 0; gpu < g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU]; gpu++) 
+    {
+        atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
+        ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
+        hsa_agent_t agent = proc.getAgent();
+        hsa_executable_t executable; 
+        hsa_status_t err;
 
-    /* Freeze the executable; it can now be queried for symbols.  */
-    err = hsa_executable_freeze(executable, "");
-    ErrorCheck(Freeze the executable, err);
-    
-    err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, NULL); 
-    ErrorCheck(Iterating over symbols for execuatable, err);
-    
+        DEBUG_PRINT("Registering module...");
+        /* Create the empty executable.  */
+        //atl_gpu_agent_profile = HSA_PROFILE_FULL;
+        // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
+        err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
+        ErrorCheck(Create the executable, err);
+
+        for(int i = 0; i < num_modules; i++) {
+            void *module_bytes = modules[i];
+            size_t module_size = module_sizes[i];
+            if(types[i] == BRIG) {
+                hsa_ext_module_t module = (hsa_ext_module_t)module_bytes;
+
+                hsa_ext_program_t program;
+                /* Create hsa program.  */
+                memset(&program,0,sizeof(hsa_ext_program_t));
+                err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
+                ErrorCheck(Create the program, err);
+
+                /* Add the BRIG module to hsa program.  */
+                err = hsa_ext_program_add_module(program, module);
+                ErrorCheck(Adding the brig module to the program, err);
+                /* Determine the agents ISA.  */
+                hsa_isa_t isa;
+                err = hsa_agent_get_info(agent, HSA_AGENT_INFO_ISA, &isa);
+                ErrorCheck(Query the agents isa, err);
+
+                /* * Finalize the program and extract the code object.  */
+                hsa_ext_control_directives_t control_directives;
+                memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
+                hsa_code_object_t code_object;
+                err = hsa_ext_program_finalize(program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
+                ErrorCheck(Finalizing the program, err);
+
+                /* Destroy the program, it is no longer needed.  */
+                err=hsa_ext_program_destroy(program);
+                ErrorCheck(Destroying the program, err);
+
+                /* Load the code object.  */
+                err = hsa_executable_load_code_object(executable, agent, code_object, "");
+                ErrorCheck(Loading the code object, err);
+            }
+            else if (types[i] == AMDGCN) {
+                // Deserialize code object.
+                hsa_code_object_t code_object = {0};
+                hsa_status_t err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
+                ErrorCheck(Code Object Deserialization, err);
+                assert(0 != code_object.handle);
+
+                /* Load the code object.  */
+                err = hsa_executable_load_code_object(executable, agent, code_object, "");
+                ErrorCheck(Loading the code object, err);
+            }
+            free(module_bytes);
+        }
+
+        /* Freeze the executable; it can now be queried for symbols.  */
+        err = hsa_executable_freeze(executable, "");
+        ErrorCheck(Freeze the executable, err);
+
+        err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu); 
+        ErrorCheck(Iterating over symbols for execuatable, err);
+    }
     DEBUG_PRINT("done\n");
     //ModuleMap[executable.handle] = modules_str;
     return ATMI_STATUS_SUCCESS;
@@ -1515,10 +1514,26 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     
     /* create kernarg memory */
     kernel_impl->kernarg_region = NULL;
+#ifdef MEMORY_REGION
     hsa_status_t err = hsa_memory_allocate(atl_gpu_kernarg_region, 
             kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
             &(kernel_impl->kernarg_region));
     ErrorCheck(Allocating memory for the executable-kernel, err);
+#else
+    hsa_status_t err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
+            kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
+            0,
+            &(kernel_impl->kernarg_region));
+    ErrorCheck(Allocating memory for the executable-kernel, err);
+    std::vector<hsa_agent_t> agents;
+    std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
+    for(int i = 0; i < gpu_procs.size(); i++) {
+        agents.push_back(gpu_procs[i].getAgent());
+    }
+    err = hsa_amd_agents_allow_access(agents.size(), &agents[0], NULL, kernel_impl->kernarg_region);
+    ErrorCheck(Allow agents kernarg region access, err);
+
+#endif
     for(int i = 0; i < MAX_NUM_KERNELS; i++) {
         kernel_impl->free_kernarg_segments.push(i);
     }
@@ -1939,14 +1954,13 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     // FIXME: round robin for now, but may use some other load balancing algo
     // enqueue task's packet to that queue
 
-    ATLQueue* this_AMQ = NULL;
+    hsa_queue_t* this_Q = NULL;
     if(task->devtype == ATMI_DEVTYPE_GPU)
-        this_AMQ = acquire_and_set_next_gpu_queue(stream_obj, task->place);
+        this_Q = acquire_and_set_next_gpu_queue(stream_obj, task->place);
     else if(task->devtype == ATMI_DEVTYPE_CPU)
-        this_AMQ = acquire_and_set_next_cpu_queue(stream_obj, task->place);
-    if(!this_AMQ) return ATMI_STATUS_ERROR;
+        this_Q = acquire_and_set_next_cpu_queue(stream_obj, task->place);
+    if(!this_Q) return ATMI_STATUS_ERROR;
    
-    hsa_queue_t *this_Q = this_AMQ->getQueue(); 
     /* if stream is ordered and the devtype changed for this task, 
      * enqueue a barrier to wait for previous device to complete */
     //check_change_in_device_type(task, stream_obj, this_Q, task->devtype);
@@ -1979,19 +1993,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
 
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
-    /*  Bind kernel argument buffer to the aql packet.  */
-    char *thisKernargAddress = (char *)(task->kernarg_region);
-    //printf("(Before) Task %p Region Index: %d\n", task, task->kernarg_region_index);
-    //fflush(stdout);
-    if(task->devtype == ATMI_DEVTYPE_GPU) thisKernargAddress += (6 * sizeof(uint64_t));
-    // TODO: is the below loop necessary? we dont seem to be using it at all.
-    clear_container(task->kernarg_region_ptrs);
-    task->kernarg_region_ptrs.push_back((void *)thisKernargAddress);
-    thisKernargAddress += sizeof(atmi_task_handle_t);
-    for(int i = 0; i < task->kernel->num_args; i++) {
-        task->kernarg_region_ptrs.push_back((void *)thisKernargAddress);
-        thisKernargAddress += task->kernel->arg_sizes[i];
-    }
  
     /* Find the queue index address to write the packet info into.  */
     const uint32_t queueMask = this_Q->size - 1;
@@ -2446,7 +2447,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
                  atl_kernel_t *kernel,
                  void **args) {
     TryLaunchInitTimer.Start();
-    DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id, lparm->place.type, lparm->place.device_id, lparm->place.cu_set);
+    DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id, lparm->place.type, lparm->place.device_id, lparm->place.cu_mask);
 #if 1
     static bool is_called = false;
     if(!is_called) {
@@ -2714,15 +2715,15 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
     /* get this stream's HSA queue (could be dynamically mapped or round robin
      * if it is an unordered stream */
     #if 1
-    ATLQueue* this_devQ = acquire_and_set_next_gpu_queue(stream_obj, ATMI_PLACE_ANY(0));
+    hsa_queue_t* this_devQ = acquire_and_set_next_gpu_queue(stream_obj, ATMI_PLACE_ANY(0));
     if(!this_devQ) return;
 
-    ATLQueue* this_softQ = acquire_and_set_next_cpu_queue(stream_obj, ATMI_PLACE_ANY(0));
+    hsa_queue_t* this_softQ = acquire_and_set_next_cpu_queue(stream_obj, ATMI_PLACE_ANY(0));
     if(!this_softQ) return;
 
-    atmi_klist_curr->queues[device_queue] = (uint64_t)this_devQ->getQueue(); 
-    atmi_klist_curr->queues[soft_queue] = (uint64_t)this_softQ->getQueue(); 
-    atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ->getQueue()); 
+    atmi_klist_curr->queues[device_queue] = (uint64_t)this_devQ; 
+    atmi_klist_curr->queues[soft_queue] = (uint64_t)this_softQ; 
+    atmi_klist_curr->worker_sig = (uint64_t)get_worker_sig(this_softQ); 
     #else
     atmi_klist_curr->cpu_queue_offset = 0;
     atmi_klist_curr->gpu_queue_offset = 0;
@@ -2815,12 +2816,10 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
             this_aql->header = 1;
             this_aql->type = (uint16_t)i;
             //const uint32_t num_params = kernel->num_args;
-            //ret = (atmi_task_t*) &(SNK_Tasks[SNK_NextTaskId]);
             //this_aql->arg[0] = (uint64_t) task;
             //this_aql->arg[1] = (uint64_t) task->kernarg_region;
             this_aql->arg[2] = (uint64_t) kernel;
             this_aql->arg[3] = UINT64_MAX; 
-            //SNK_NextTaskId++;
         }
         i++;
     }

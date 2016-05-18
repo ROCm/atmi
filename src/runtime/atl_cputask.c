@@ -45,36 +45,49 @@
 #include "atl_profile.h"
 #include <climits>
 #include <assert.h>
-agent_t agent[SNK_MAX_CPU_QUEUES];
-
-hsa_signal_t worker_sig[SNK_MAX_CPU_QUEUES];
-
-pthread_t agent_threads[SNK_MAX_CPU_QUEUES];
-
-size_t numWorkers;
+#include "ATLMachine.h"
 
 extern struct timespec context_init_time;
+extern atmi_machine_t g_atmi_machine;
 
-ATLCPUQueue* get_cpu_queue(int id) {
-    return agent[id].queue;
+hsa_queue_t* get_cpu_queue(int cpu_id, int tid) {
+    atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
+    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+    return proc.getQueue(tid); 
 }
 
-agent_t get_cpu_q_agent(int id) {
-    return agent[id];
+agent_t *get_cpu_q_agent(int cpu_id, int tid) {
+    atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
+    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+    return proc.getThreadAgent(tid); 
+}
+
+hsa_signal_t *get_worker_sig(hsa_queue_t *queue) {
+    hsa_signal_t *ret = NULL;
+    for(int cpu = 0; cpu < g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU]; cpu++) {
+        atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
+        ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+        ret = proc.get_worker_sig(queue);
+        if(ret != NULL) {
+            break;
+        }
+    }
+    return ret;
 }
 
 void signal_worker(hsa_queue_t *queue, int signal) {
     DEBUG_PRINT("Signaling work %d\n", signal);
-    int id;
-    for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
-        if(agent[id].queue->getQueue() == queue) break;
-    }
-    hsa_signal_store_release(worker_sig[id], signal);
+    hsa_signal_t *worker_sig = get_worker_sig(queue);
+    if(!worker_sig) DEBUG_PRINT("Signal is NULL!\n");
+    hsa_signal_store_release(*worker_sig, signal);
 }
 
-void signal_worker_id(int id, int signal) {
+void signal_worker_id(int cpu_id, int tid, int signal) {
     DEBUG_PRINT("Signaling work %d\n", signal);
-    hsa_signal_store_release(worker_sig[id], signal);
+    atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
+    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+    agent_t *agent = proc.getThreadAgent(tid);
+    hsa_signal_store_release(agent->worker_sig, signal);
 }
 
 int is_barrier(uint16_t header) {
@@ -676,7 +689,7 @@ void *agent_worker(void *agent_args) {
     hsa_signal_value_t sig_value = IDLE;
     while (sig_value == IDLE) {
         DEBUG_PRINT("Worker thread sleeping\n");
-        sig_value = hsa_signal_wait_acquire(worker_sig[agent->id], HSA_SIGNAL_CONDITION_LT, IDLE,
+        sig_value = hsa_signal_wait_acquire(agent->worker_sig, HSA_SIGNAL_CONDITION_LT, IDLE,
                 UINT64_MAX, HSA_WAIT_STATE_BLOCKED);
         DEBUG_PRINT("Worker thread waking up\n");
 
@@ -685,10 +698,9 @@ void *agent_worker(void *agent_args) {
             break;
         }
 
-        if (PROCESS_PKT == hsa_signal_cas_acq_rel(worker_sig[agent->id],
+        if (PROCESS_PKT == hsa_signal_cas_acq_rel(agent->worker_sig,
                     PROCESS_PKT, IDLE) ) {
-            hsa_queue_t *queue = agent->queue->getQueue();
-            if (!process_packet(queue, agent->id)) continue;
+            if (!process_packet(agent->queue, agent->id)) continue;
         }
         sig_value = IDLE;
     }
@@ -701,57 +713,12 @@ void *agent_worker(void *agent_args) {
 }
 #endif
 void
-cpu_agent_init(hsa_agent_t cpu_agent, hsa_region_t cpu_region, 
-                const size_t num_queues, const size_t capacity
-                ) {
+cpu_agent_init(int cpu_id, const size_t num_queues) {
     hsa_status_t err;
     uint32_t i;
-    #if 1
-    for (i = 0; i < num_queues; i++) {
-        agent[i].num_queues = num_queues;
-        agent[i].id = i;
-        // signal between the host thread and the CPU tasking queue thread
-        err = hsa_signal_create(IDLE, 0, NULL, &worker_sig[i]);
-        check(Creating a HSA signal for agent dispatch worker threads, err);
-
-        hsa_signal_t db_signal;
-        err = hsa_signal_create(1, 0, NULL, &db_signal);
-        check(Creating a HSA signal for agent dispatch db signal, err);
-
-        hsa_queue_t *this_Q;
-        err = hsa_soft_queue_create(cpu_region, capacity, HSA_QUEUE_TYPE_SINGLE,
-                HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &this_Q);
-        agent[i].queue = new ATLCPUQueue(this_Q);
-        check(Creating an agent queue, err);
-
-        hsa_queue_t *q = this_Q;
-        //err = hsa_ext_set_profiling( q, 1); 
-        //check(Enabling CPU profiling support, err); 
-        //profiling does not work for CPU queues
-        /* FIXME: Looks like a nasty HSA bug. The doorbell signal that we pass to the 
-         * soft queue creation API never seems to be set. Workaround is to 
-         * manually set it again like below.
-         */
-        q->doorbell_signal = db_signal;
-    }
-    #endif
-    numWorkers = num_queues;
-    DEBUG_PRINT("Spawning %zu CPU execution threads\n",
-                 numWorkers);
-
-    for (i = 0; i < numWorkers; i++) {
-#if 1
-        pthread_create(&agent_threads[i], NULL, agent_worker, (void *)&(agent[i]));
-#else
-        thread_args_t args;
-        args.tid = i;
-        args.num_queues = num_queues;
-        args.capacity = capacity;
-        args.cpu_agent = cpu_agent;
-        args.cpu_region = cpu_region;
-        pthread_create(&agent_threads[i], NULL, agent_worker, (void *)&args);
-#endif
-    }
+    atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
+    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+    proc.createQueues(num_queues);
 } 
 
 /* FIXME: When and who should call this cleanup funtion? */
@@ -761,23 +728,19 @@ agent_fini()
     DEBUG_PRINT("SIGNALING EXIT\n");
 
     /* wait for the other threads */
-    uint32_t i;
-    for (i = 0; i < numWorkers; i++) {
-        //hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
-        hsa_signal_store_release(worker_sig[i], FINISH);
-        pthread_join(agent_threads[i], NULL);
-        hsa_queue_destroy(agent[i].queue->getQueue());
+    for(int cpu = 0; cpu < g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU]; cpu++) {
+        atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
+        ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+        const std::vector<agent_t *> &agents = proc.getThreadAgents();
+        uint32_t i;
+        for (i = 0; i < agents.size(); i++) {
+            agent_t *agent = agents[i];
+            //hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
+            hsa_signal_store_release(agent->worker_sig, FINISH);
+            pthread_join(agent->thread, NULL);
+        }
     }
-
     DEBUG_PRINT("agent_fini completed\n");
 }
 
-hsa_signal_t *get_worker_sig(hsa_queue_t *queue) {
-    int id;
-    for(id = 0; id < SNK_MAX_CPU_QUEUES; id++) {
-        if(agent[id].queue->getQueue() == queue) break;
 
-    }
-    return &(worker_sig[id]);
-
-}

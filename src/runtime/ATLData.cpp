@@ -13,30 +13,9 @@ extern hsa_signal_t IdentityCopySignal;
 
 std::map<void *, ATLData *> MemoryMap;
 
-#define ErrorCheck(msg, status) \
-if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed: 0x%x\n", #msg, status); \
-    exit(1); \
-} else { \
- /*  printf("%s succeeded.\n", #msg);*/ \
-}
-
 using namespace std;
 
-hsa_amd_memory_pool_t get_memory_pool(ATLProcessor &proc, const int mem_id) {
-    hsa_amd_memory_pool_t pool;
-    vector<ATLFineMemory> f_mems = proc.getMemories<ATLFineMemory>();
-    vector<ATLCoarseMemory> c_mems = proc.getMemories<ATLCoarseMemory>();
-    if(mem_id < f_mems.size()) {
-        pool = f_mems[mem_id].getMemory(); 
-    }
-    else {
-        pool = c_mems[mem_id - f_mems.size()].getMemory(); 
-    }
-    return pool;
-}
-
-ATLProcessor get_processor(atmi_mem_place_t place) {
+ATLProcessor &get_processor_by_mem_place(atmi_mem_place_t place) {
     int dev_id = place.dev_id;
     switch(place.dev_type) {
         case ATMI_DEVTYPE_CPU:
@@ -49,11 +28,11 @@ ATLProcessor get_processor(atmi_mem_place_t place) {
 }
 
 hsa_agent_t get_agent(atmi_mem_place_t place) {
-    return get_processor(place).getAgent();
+    return get_processor_by_mem_place(place).getAgent();
 }
 
-hsa_amd_memory_pool_t get_memory_pool(atmi_mem_place_t place) {
-    ATLProcessor proc = get_processor(place);
+hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place) {
+    ATLProcessor &proc = get_processor_by_mem_place(place);
     return get_memory_pool(proc, place.mem_id);
 }
 #if 0
@@ -61,14 +40,14 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
     if(!mapped_ptr || !ptr) return ATMI_STATUS_ERROR; 
     hsa_status_t err;
     #if 1
-    hsa_amd_memory_pool_t dev_pool = get_memory_pool(place);
+    hsa_amd_memory_pool_t dev_pool = get_memory_pool_by_mem_place(place);
     err = hsa_amd_memory_pool_allocate(dev_pool, size, 0, mapped_ptr);
     ErrorCheck(Host staging buffer alloc, err);
 
     if(arg_type != ATMI_OUT) {
         atmi_mem_place_t cpu_place = {0, ATMI_DEVTYPE_CPU, 0, 0}; 
         void *host_ptr;
-        hsa_amd_memory_pool_t host_pool = get_memory_pool(cpu_place);
+        hsa_amd_memory_pool_t host_pool = get_memory_pool_by_mem_place(cpu_place);
         err = hsa_amd_memory_pool_allocate(host_pool, size, 0, &host_ptr);
         ErrorCheck(Host staging buffer alloc, err);
         memcpy(host_ptr, ptr, size);
@@ -122,7 +101,7 @@ atmi_status_t atmi_data_unmap_sync(void *ptr, void *mapped_ptr) {
         //
         void *host_ptr;
         atmi_mem_place_t cpu_place = {0, ATMI_DEVTYPE_CPU, 0, 0}; 
-        hsa_amd_memory_pool_t host_pool = get_memory_pool(cpu_place);
+        hsa_amd_memory_pool_t host_pool = get_memory_pool_by_mem_place(cpu_place);
         err = hsa_amd_memory_pool_allocate(host_pool, m->getSize(), 0, &host_ptr);
         ErrorCheck(Host staging buffer alloc, err);
 
@@ -192,7 +171,7 @@ atmi_status_t atmi_data_create_sync(atmi_data_t **data, void *host_ptr, size_t s
 
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     void *d_ptr;
-    hsa_amd_memory_pool_t pool = get_memory_pool(place);
+    hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
     hsa_status_t err = hsa_amd_memory_pool_allocate(pool, size, 0, &d_ptr);
     ErrorCheck(atmi_data_create_sync, err);
    
@@ -229,10 +208,10 @@ atmi_status_t atmi_data_destroy_sync(atmi_data_t *data) {
 
 atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
-    hsa_amd_memory_pool_t pool = get_memory_pool(place);
+    hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
     hsa_status_t err = hsa_amd_memory_pool_allocate(pool, size, 0, ptr);
     ErrorCheck(atmi_malloc, err);
-    
+    DEBUG_PRINT("Malloced %p\n", *ptr); 
     if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
     return ret;
 }
@@ -241,6 +220,7 @@ atmi_status_t atmi_free(void *ptr) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_status_t err = hsa_amd_memory_pool_free(ptr);
     ErrorCheck(atmi_free, err);
+    DEBUG_PRINT("Freed %p\n", ptr); 
     
     if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
     return ret;
@@ -251,9 +231,17 @@ atmi_status_t atmi_copy_d2h(void *dest, const void *src, size_t size, atmi_mem_p
     hsa_status_t err;
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_agent_t src_agent = get_agent(place);
+    #if 0
     err = hsa_amd_memory_lock(dest, size, &src_agent, 1, &agent_ptr);
     ErrorCheck(Locking the host ptr, err);
+    #else
+    ret = atmi_malloc(&agent_ptr, size, ATMI_MEM_PLACE_CPU_MEM(0, 0, 0));
+    err = hsa_amd_agents_allow_access(1, &src_agent, NULL, agent_ptr);
+    ErrorCheck(Allow access to ptr, err);
+    #endif
+    //hsa_signal_store_release(IdentityCopySignal, 1);
     hsa_signal_add_acq_rel(IdentityCopySignal, 1);
+    DEBUG_PRINT("D2H %p --> %p (%lu)\n", src, agent_ptr, size);
     err = hsa_amd_memory_async_copy(
                               agent_ptr, src_agent,
                               src, src_agent,
@@ -261,9 +249,15 @@ atmi_status_t atmi_copy_d2h(void *dest, const void *src, size_t size, atmi_mem_p
                               0, NULL, IdentityCopySignal);
 	ErrorCheck(Copy async between memory pools, err);
     hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
+    DEBUG_PRINT("Done D2H %p --> %p (%lu)\n", src, agent_ptr, size);
 
+    #if 0
     err = hsa_amd_memory_unlock(dest);
     ErrorCheck(Unlocking the host ptr, err);
+    #else
+    memcpy(dest, agent_ptr, size);
+    ret = atmi_free(agent_ptr);
+    #endif
     if(err != HSA_STATUS_SUCCESS || ret != ATMI_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
     return ret;
 }
@@ -273,7 +267,7 @@ atmi_status_t atmi_copy_h2d(void *dest, const void *src, size_t size, atmi_mem_p
     hsa_status_t err;
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_agent_t dest_agent = get_agent(place);
-    hsa_amd_memory_pool_t pool = get_memory_pool(place);
+    hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
     #if 1
     ret = atmi_malloc(&agent_ptr, size, ATMI_MEM_PLACE_CPU_MEM(0, 0, 0));
     memcpy(agent_ptr, src, size);
@@ -292,6 +286,7 @@ atmi_status_t atmi_copy_h2d(void *dest, const void *src, size_t size, atmi_mem_p
     ErrorCheck(Locking the host ptr, err);
     #endif
     hsa_signal_add_acq_rel(IdentityCopySignal, 1);
+    DEBUG_PRINT("H2D %p --> %p (%lu)\n", agent_ptr, dest, size);
     err = hsa_amd_memory_async_copy(dest, dest_agent,
                               agent_ptr, dest_agent,
                               size, 
@@ -300,7 +295,7 @@ atmi_status_t atmi_copy_h2d(void *dest, const void *src, size_t size, atmi_mem_p
     hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
 
     #if 1
-    atmi_free(agent_ptr);
+    ret = atmi_free(agent_ptr);
     #else
     err = hsa_amd_memory_unlock((void *)src);
     ErrorCheck(Unlocking the host ptr, err);

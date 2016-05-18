@@ -8,7 +8,7 @@
 using namespace std;
 
 bool is_null_task(atmi_task_handle_t t) {
-    if(t.all == 0ull) {
+    if(t == 0ull) {
         return true;
     }
     else {
@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
 
     atmi_task_handle_t root_sum_task;
     fib(N,&result,&root_sum_task);
-    SYNC_TASK(root_sum_task);
+    if(!is_null_task(root_sum_task)) SYNC_TASK(root_sum_task);
     cout << "Fib(" << N << ") = " << result << endl;    
     return 0;
 }

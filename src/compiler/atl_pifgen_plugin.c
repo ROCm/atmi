@@ -636,17 +636,18 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         return null_task; \n\
     } \n\
     atmi_devtype_t devtype = %s_fn_table[k_id].devtype; \n\
-    if(g_initialized == 0) { \n\
-        atmi_status_t err = atmi_init(ATMI_DEVTYPE_CPU",
+    if(g_initialized == 0) {\n",
         pif_name, pif_name,
         pif_name,
         pif_name);
         if(g_cl_modules.empty()) {
-            pp_printf((pif_printers[pif_index].pifdefs), "); \n\
+            pp_printf((pif_printers[pif_index].pifdefs), "\n\
+        atmi_status_t err = atmi_init(ATMI_DEVTYPE_CPU);\n\
         ErrorCheck(ATMI Initializing, err); \n");
         }
         else {
-            pp_printf((pif_printers[pif_index].pifdefs), "|ATMI_DEVTYPE_GPU); \n\
+            pp_printf((pif_printers[pif_index].pifdefs), "\n\
+        atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);\n\
         ErrorCheck(ATMI Initializing, err); \n");
             if(g_hsa_offline_finalize == 1) {
                 pp_printf((pif_printers[pif_index].pifdefs), "\n\
@@ -1267,7 +1268,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
     } cpu_args_struct_t; \n\
     void *cpuKernargAddress;\n\
-    atmi_malloc(&cpuKernargAddress, 0, sizeof(cpu_args_struct_t) * MAX_NUM_KERNELS); \n\n");
+    atmi_mem_place_t cpu_place = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0); \n\
+    atmi_malloc(&cpuKernargAddress, sizeof(cpu_args_struct_t) * MAX_NUM_KERNELS, cpu_place); \n\n");
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1288,7 +1290,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\
     } gpu_args_struct_t __attribute__ ((aligned (16))) ;\n\
     void *gpuKernargAddress; \n\
-    atmi_malloc(&gpuKernargAddress, 0, sizeof(gpu_args_struct_t) * MAX_NUM_KERNELS); \n\n");
+    atmi_mem_place_t gpu_place = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0); \n\
+    atmi_malloc(&gpuKernargAddress, sizeof(gpu_args_struct_t) * MAX_NUM_KERNELS, gpu_place); \n\n");
 
 
         pp_printf((pif_printers[pif_index].pifdefs), "\
@@ -1337,7 +1340,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     atmi_klist[pif_id].gpu_kernarg_heap = gpuKernargAddress; \n\
     atmi_klist[pif_id].gpu_kernarg_offset = 0;\n\
     atmi_klist[pif_id].kernel_packets_heap; \n\
-    atmi_malloc((void **)&(atmi_klist[pif_id].kernel_packets_heap), 0, sizeof(atmi_kernel_packet_t) * MAX_NUM_KERNELS); \n\
+    atmi_mem_place_t packets_place = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0); \n\
+    atmi_malloc((void **)&(atmi_klist[pif_id].kernel_packets_heap), sizeof(atmi_kernel_packet_t) * MAX_NUM_KERNELS, packets_place); \n\
     atmi_klist[pif_id].kernel_packets_offset = 0;\n\n");
 
 #if 0
@@ -1717,7 +1721,8 @@ void append_kl_init_funs(FILE *pifFile)
     fprintf(pifFile, "%s", "\
 void kl_init() {\n");
     fprintf(pifFile, "\
-    atmi_malloc((void **)&atmi_klist, 0, (sizeof(atmi_klist_t) * 1000));\n");
+    atmi_mem_place_t place = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0); \n\
+    atmi_malloc((void **)&atmi_klist, (sizeof(atmi_klist_t) * 1000), place);\n");
     fprintf(pifFile, "%s", kl_init_funs_text);
 
     fprintf(pifFile, "%s", "\

@@ -54,9 +54,9 @@ typedef struct atl_kernel_impl_s {
     atmi_generic_fp function;
 
     /* GPU kernel info */
-    uint64_t kernel_object;
-    uint32_t group_segment_size;
-    uint32_t private_segment_size;
+    uint64_t *kernel_objects;
+    uint32_t *group_segment_sizes;
+    uint32_t *private_segment_sizes;
     uint32_t kernarg_segment_size; // differs for CPU vs GPU
     
     /* Kernel argument map */

@@ -110,6 +110,7 @@ class ATLMachine {
         }
         template<typename T> void addProcessor(T &p);
         template<typename T> std::vector<T> &getProcessors();
+        template<typename T> size_t getProcessorCount(){return getProcessors<T>().size();}
     private:
         std::vector<ATLCPUProcessor> _cpu_processors;
         std::vector<ATLGPUProcessor> _gpu_processors;

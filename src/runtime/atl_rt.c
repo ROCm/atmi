@@ -127,7 +127,7 @@ std::vector<atl_task_t *> AllTasks;
 std::queue<atl_task_t *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
 
-std::map<std::string, atl_kernel_info_t> KernelInfoTable;
+std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
 std::map<std::string, atl_kernel_t *> KernelImplMap;
 std::map<std::string, atmi_klist_t *> PifKlistMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -140,8 +140,7 @@ std::queue<atl_task_t *> DispatchedTasks;
 
 atmi_machine_t g_atmi_machine;
 ATLMachine g_atl_machine;
-static std::vector<hsa_amd_memory_pool_t> g_memory_pools;
-static std::vector<hsa_agent_t> g_agents;
+static std::vector<hsa_executable_t> g_executables;
 
 static atl_dep_sync_t g_dep_sync_type;
 static bool g_deprecated_hlc;
@@ -149,7 +148,6 @@ static int g_max_signals;
 /* Stream specific globals */
 hsa_agent_t atl_cpu_agent;
 hsa_ext_program_t atl_hsa_program;
-//hsa_executable_t atl_executable;
 hsa_region_t atl_hsa_primary_region;
 hsa_region_t atl_gpu_kernarg_region;
 hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
@@ -579,6 +577,8 @@ void init_dag_scheduler() {
         AllTasks.clear();
         AllTasks.reserve(500000);
         //PublicTaskMap.clear();
+        for(int i = 0; i < KernelInfoTable.size(); i++) 
+            KernelInfoTable[i].clear();
         KernelInfoTable.clear();
         NULL_TASK = ATMI_TASK_HANDLE(0);
         atlc.g_mutex_dag_initialized = 1;
@@ -944,6 +944,11 @@ atmi_status_t atmi_init(int devtype) {
 
 atmi_status_t atmi_finalize() {
     // TODO: Finalize all processors, queues, signals, kernarg memory regions
+    hsa_status_t err;
+    for(int i = 0; i < g_executables.size(); i++) {
+        err = hsa_executable_destroy(g_executables[i]);
+        ErrorCheck(Destroying executable, err);
+    }
     return ATMI_STATUS_SUCCESS;
 }
 
@@ -1067,7 +1072,7 @@ atmi_status_t atl_init_gpu_context() {
     init_hsa();
     hsa_status_t err;
 
-    int gpu_count = g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU];
+    int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
     for(int gpu = 0; gpu < gpu_count; gpu++) {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
@@ -1101,7 +1106,7 @@ atmi_status_t atl_init_cpu_context() {
 #if defined (ATMI_HAVE_PROFILE)
     atmi_profiling_init();
 #endif /*ATMI_HAVE_PROFILE */
-    int cpu_count = g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU];
+    int cpu_count = g_atl_machine.getProcessorCount<ATLCPUProcessor>();
     for(int cpu = 0; cpu < cpu_count; cpu++) {
         int num_queues = SNK_MAX_CPU_QUEUES;
         cpu_agent_init(cpu, num_queues);
@@ -1244,7 +1249,7 @@ atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable) {
 }
 
 hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
-    int gpu_index = *(int *)data;
+    int gpu = *(int *)data;
     hsa_symbol_kind_t type;
 
     uint32_t name_length;
@@ -1271,8 +1276,12 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &(info.kernel_segment_size));
         ErrorCheck(Extracting the kernarg segment size from the executable, err);
 
-        DEBUG_PRINT("Kernel %s --> %u bytes kernarg\n", name, info.kernel_segment_size);
-        KernelInfoTable[std::string(name)] = info;
+        DEBUG_PRINT("Kernel %s --> %lx symbol %u group segsize %u pvt segsize %u bytes kernarg\n", name, 
+            info.kernel_object,
+            info.group_segment_size,
+            info.private_segment_size,
+            info.kernel_segment_size);
+        KernelInfoTable[gpu][std::string(name)] = info;
         free(name);
 
         /*
@@ -1301,21 +1310,24 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
         modules_str.push_back(std::string((char *)modules[i]));
     }
     
-    int gpu = 0;
-    // FIXME: build kernel objects for each kernel agent?
-    //for(gpu = 0; gpu < g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU]; gpu++) 
+    int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
+    KernelInfoTable.resize(gpu_count);
+    for(int gpu = 0; gpu < gpu_count; gpu++) 
     {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
         hsa_agent_t agent = proc.getAgent();
-        hsa_executable_t executable; 
+        hsa_executable_t executable = {0}; 
         hsa_status_t err;
+        hsa_profile_t agent_profile;
 
         DEBUG_PRINT("Registering module...");
-        /* Create the empty executable.  */
-        //atl_gpu_agent_profile = HSA_PROFILE_FULL;
+        err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
+        ErrorCheck(Query the agent profile, err);
         // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
-        err = hsa_executable_create(HSA_PROFILE_FULL, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
+        agent_profile = HSA_PROFILE_FULL;
+        /* Create the empty executable.  */
+        err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
         ErrorCheck(Create the executable, err);
 
         for(int i = 0; i < num_modules; i++) {
@@ -1327,7 +1339,7 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
                 hsa_ext_program_t program;
                 /* Create hsa program.  */
                 memset(&program,0,sizeof(hsa_ext_program_t));
-                err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, HSA_PROFILE_FULL, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
+                err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
                 ErrorCheck(Create the program, err);
 
                 /* Add the BRIG module to hsa program.  */
@@ -1356,15 +1368,14 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
             else if (types[i] == AMDGCN) {
                 // Deserialize code object.
                 hsa_code_object_t code_object = {0};
-                hsa_status_t err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
+                err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
                 ErrorCheck(Code Object Deserialization, err);
                 assert(0 != code_object.handle);
 
                 /* Load the code object.  */
-                err = hsa_executable_load_code_object(executable, agent, code_object, "");
+                err = hsa_executable_load_code_object(executable, agent, code_object, NULL);
                 ErrorCheck(Loading the code object, err);
             }
-            free(module_bytes);
         }
 
         /* Freeze the executable; it can now be queried for symbols.  */
@@ -1373,6 +1384,9 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
 
         err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu); 
         ErrorCheck(Iterating over symbols for execuatable, err);
+
+        // save the executable and destroy during finalize
+        g_executables.push_back(executable);
     }
     DEBUG_PRINT("done\n");
     //ModuleMap[executable.handle] = modules_str;
@@ -1391,6 +1405,9 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
     }
 
     return atmi_module_register_from_memory(&modules[0], &module_sizes[0], types, num_modules);
+    for(int i = 0; i < num_modules; i++) {
+        free(modules[i]);
+    }
 }
 
 
@@ -1467,6 +1484,9 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
         lock(&((*it)->mutex));
         if((*it)->devtype == ATMI_DEVTYPE_GPU) {
             hsa_memory_free((*it)->kernarg_region);
+            free((*it)->kernel_objects);
+            free((*it)->group_segment_sizes);
+            free((*it)->private_segment_sizes);
         }
         else if((*it)->devtype == ATMI_DEVTYPE_CPU) {
             free((*it)->kernarg_region);
@@ -1502,16 +1522,27 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     kernel_impl->kernel_id = ID;
     kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_GPU;
-    std::map<std::string, atl_kernel_info_t>::iterator it = KernelInfoTable.find(kernel_impl->kernel_name);
-    if(it == KernelInfoTable.end()) 
-        printf("Did NOT find kernel: %s\n", kernel_impl->kernel_name.c_str());
+   
+    std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
+    int gpu_count = gpu_procs.size();
+    kernel_impl->kernel_objects = (uint64_t *)malloc(sizeof(uint64_t) * gpu_count); 
+    kernel_impl->group_segment_sizes = (uint32_t *)malloc(sizeof(uint32_t) * gpu_count); 
+    kernel_impl->private_segment_sizes = (uint32_t *)malloc(sizeof(uint32_t) * gpu_count); 
+    int max_kernarg_segment_size = 0;
+    for(int gpu = 0; gpu < gpu_count; gpu++) {
+        if(KernelInfoTable[gpu].find(kernel_impl->kernel_name) == KernelInfoTable[gpu].end()) 
+            printf("Did NOT find kernel %s for GPU %d\n", 
+                    kernel_impl->kernel_name.c_str(),
+                    gpu);
 
-    atl_kernel_info_t info = KernelInfoTable[kernel_impl->kernel_name];
-    kernel_impl->kernel_object = info.kernel_object;
-    kernel_impl->group_segment_size = info.group_segment_size;
-    kernel_impl->private_segment_size = info.private_segment_size;
-    kernel_impl->kernarg_segment_size = info.kernel_segment_size;
-    
+        atl_kernel_info_t info = KernelInfoTable[gpu][kernel_impl->kernel_name];
+        kernel_impl->kernel_objects[gpu] = info.kernel_object;
+        kernel_impl->group_segment_sizes[gpu] = info.group_segment_size;
+        kernel_impl->private_segment_sizes[gpu] = info.private_segment_size;
+        if(max_kernarg_segment_size < info.kernel_segment_size)
+            max_kernarg_segment_size = info.kernel_segment_size;
+    }
+    kernel_impl->kernarg_segment_size = max_kernarg_segment_size;
     /* create kernarg memory */
     kernel_impl->kernarg_region = NULL;
 #ifdef MEMORY_REGION
@@ -1526,7 +1557,6 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
             &(kernel_impl->kernarg_region));
     ErrorCheck(Allocating memory for the executable-kernel, err);
     std::vector<hsa_agent_t> agents;
-    std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
     for(int i = 0; i < gpu_procs.size(); i++) {
         agents.push_back(gpu_procs[i].getAgent());
     }
@@ -1617,47 +1647,6 @@ atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id)
 
     return kernel->impls[idx];
 }
-
-atmi_status_t atl_get_gpu_kernel_info(
-                            hsa_executable_t executable,
-                            const char *kernel_symbol_name,
-                            uint64_t                         *_KN__Kernel_Object,
-                            uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size,
-                            uint32_t                         *_KN__Kernarg_Size
-                            ) {
-
-    hsa_status_t err;
-    atl_kernel_info_t info;
-    if(KernelInfoTable.find(std::string(kernel_symbol_name)) == KernelInfoTable.end()) {
-
-        hsa_executable_symbol_t symbol;
-        /* Extract the symbol from the executable.  */
-        //DEBUG_PRINT("Kernel name _KN__: Looking for symbol %s\n", kernel_symbol_name); 
-        err = hsa_executable_get_symbol(executable, NULL, kernel_symbol_name, atl_gpu_agent, 0, &symbol);
-        ErrorCheck(Extract the symbol from the executable, err);
-
-        /* Extract dispatch information from the symbol */
-        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &(info.kernel_object));
-        ErrorCheck(Extracting the symbol from the executable, err);
-        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE, &(info.group_segment_size));
-        ErrorCheck(Extracting the group segment size from the executable, err);
-        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, &(info.private_segment_size));
-        ErrorCheck(Extracting the private segment from the executable, err);
-
-        KernelInfoTable[std::string(kernel_symbol_name)] = info;
-    }
-    else {
-        info = KernelInfoTable[std::string(kernel_symbol_name)];
-    }
-    *_KN__Kernel_Object = info.kernel_object;
-    *_KN__Group_Segment_Size = info.group_segment_size;
-    *_KN__Private_Segment_Size = info.private_segment_size;
-    *_KN__Kernarg_Size = info.kernel_segment_size;
-
-    return ATMI_STATUS_SUCCESS;
-
-}                    
 
 void dispatch_all_tasks(std::vector<atl_task_t*>::iterator &start, 
         std::vector<atl_task_t*>::iterator &end) {
@@ -1954,13 +1943,14 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     // FIXME: round robin for now, but may use some other load balancing algo
     // enqueue task's packet to that queue
 
+    int proc_id = task->place.device_id;
     hsa_queue_t* this_Q = NULL;
     if(task->devtype == ATMI_DEVTYPE_GPU)
         this_Q = acquire_and_set_next_gpu_queue(stream_obj, task->place);
     else if(task->devtype == ATMI_DEVTYPE_CPU)
         this_Q = acquire_and_set_next_cpu_queue(stream_obj, task->place);
     if(!this_Q) return ATMI_STATUS_ERROR;
-   
+  
     /* if stream is ordered and the devtype changed for this task, 
      * enqueue a barrier to wait for previous device to complete */
     //check_change_in_device_type(task, stream_obj, this_Q, task->devtype);
@@ -2061,9 +2051,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
 
         /*  Bind kernel argument buffer to the aql packet.  */
         this_aql->kernarg_address = task->kernarg_region;
-        this_aql->kernel_object = kernel_impl->kernel_object;
-        this_aql->private_segment_size = kernel_impl->private_segment_size;
-        this_aql->group_segment_size = kernel_impl->group_segment_size;
+        this_aql->kernel_object = kernel_impl->kernel_objects[proc_id];
+        this_aql->private_segment_size = kernel_impl->private_segment_sizes[proc_id];
+        this_aql->group_segment_size = kernel_impl->group_segment_sizes[proc_id];
 
         set_task_state(task, ATMI_DISPATCHED);
         /*  Prepare and set the packet header */ 
@@ -2714,11 +2704,13 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
     atmi_klist_curr->tasks = (void *)(*GlobalTaskPtr);
     /* get this stream's HSA queue (could be dynamically mapped or round robin
      * if it is an unordered stream */
+    int gpu = 0;
+    int cpu = 0;
     #if 1
-    hsa_queue_t* this_devQ = acquire_and_set_next_gpu_queue(stream_obj, ATMI_PLACE_ANY(0));
+    hsa_queue_t* this_devQ = acquire_and_set_next_gpu_queue(stream_obj, ATMI_PLACE_GPU(0, gpu));
     if(!this_devQ) return;
 
-    hsa_queue_t* this_softQ = acquire_and_set_next_cpu_queue(stream_obj, ATMI_PLACE_ANY(0));
+    hsa_queue_t* this_softQ = acquire_and_set_next_cpu_queue(stream_obj, ATMI_PLACE_CPU(0, cpu));
     if(!this_softQ) return;
 
     atmi_klist_curr->queues[device_queue] = (uint64_t)this_devQ; 
@@ -2757,9 +2749,10 @@ void atl_kl_init(atmi_klist_t *atmi_klist,
                 PifKlistMap[std::string(pif_name)] = atmi_klist;
             }
 
-            _KN__Kernel_Object = (*it)->kernel_object;
-            _KN__Group_Segment_Size = (*it)->group_segment_size;
-            _KN__Private_Segment_Size = (*it)->private_segment_size;
+            // FIXME: change this to specific GPU ids for DP from different GPUs
+            _KN__Kernel_Object = (*it)->kernel_objects[gpu];
+            _KN__Group_Segment_Size = (*it)->group_segment_sizes[gpu];
+            _KN__Private_Segment_Size = (*it)->private_segment_sizes[gpu];
             _KN__Kernarg_Size = (*it)->kernarg_segment_size;
             DEBUG_PRINT("Kernel GPU memalloc. Kernel %s needs %" PRIu32" bytes for kernargs\n", (*it)->kernel_name.c_str(), (*it)->kernarg_segment_size); 
 

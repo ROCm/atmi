@@ -26,5 +26,5 @@ clean:
 	rm -rf *.o *.brig *.hsaco $(OBJS)
 
 test:
-	#ATMI_WITH_DEPRECATED_HLC=0 ./hello
-	./hello
+	ATMI_WITH_DEPRECATED_HLC=0 ./hello
+	#./hello

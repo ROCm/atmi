@@ -1,6 +1,5 @@
 #Set HSA Environment variables
-HSA_RUNTIME_PATH ?= /opt/hsa
-HSA_LIBHSAIL_PATH ?= /opt/hsa/lib
+HSA_RUNTIME_PATH ?= /opt/rocm/hsa
 CLOC_PATH ?= /usr/bin
 ATMI_RUNTIME_PATH ?= /opt/amd/atmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include

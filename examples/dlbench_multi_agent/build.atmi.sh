@@ -9,8 +9,8 @@ fi
 
 [ -z ${HSA_RUNTIME_PATH} ] && HSA_RUNTIME_PATH=/opt/rocm/hsa
 
-MAPIPATH=/home/apan/mapi
-
+ATMIPATH=/home/aaji/git/atmi
+CLOC_PATH=/home/aaji/git/CLOC/bin
 CC=/usr/bin/gcc
 CXX=g++
 SNK=snack.sh
@@ -82,11 +82,13 @@ fi
 
 # build from C source 
 if [ $mode = "build" ]; then
-	echo "cp $node.grayscale.brig grayscale.brig"
-	cp $node.grayscale.brig grayscale.brig
-	echo "${CC} -O3 -g -I${MAPIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c99"
-	${CC} -g -I${MAPIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c99
-	echo "${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${MAPIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -lmapi"
-	${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${MAPIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -lmapi
+	echo "${CLOC_PATH}/cloc.sh -brig -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMIPATH}/include" -opt 2 grayscale.cl"
+	${CLOC_PATH}/cloc.sh -brig -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
+	#echo "${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMIPATH}/include" -opt 2 grayscale.cl"
+	#${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
+	echo "${CC} -O3 -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c++11"
+	${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c++11
+	echo "${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64"
+	${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64 
 fi
 

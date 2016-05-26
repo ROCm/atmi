@@ -76,7 +76,7 @@ esac
 if [ $mode = "clean" ]; then
 	rm -rf *.o  *~ grayscale_hsaco.h kernel.[ch]
 	for l in AOS DA; do
-		rm -rf dlbench_${l}
+		rm -rf dlbench.atmi_${l}
 	done
 fi	
 
@@ -86,9 +86,9 @@ if [ $mode = "build" ]; then
 	${CLOC_PATH}/cloc.sh -brig -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
 	#echo "${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMIPATH}/include" -opt 2 grayscale.cl"
 	#${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
-	echo "${CC} -O3 -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c++11"
-	${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c++11
-	echo "${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64"
-	${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64 
+	echo "${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11"
+	${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11
+	echo "${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64"
+	${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64 
 fi
 

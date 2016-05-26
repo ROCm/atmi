@@ -76,7 +76,7 @@ esac
 if [ $mode = "clean" ]; then
 	rm -rf *.o  *~ grayscale_hsaco.h kernel.[ch]
 	for l in AOS DA; do
-		rm -rf dlbench_${l}
+		rm -rf dlbench.hsa_${l}
 	done
 fi	
 
@@ -84,9 +84,9 @@ fi
 if [ $mode = "build" ]; then
 	echo "cp $node.grayscale.brig grayscale.brig"
 	cp $node.grayscale.brig grayscale.brig
-	echo "${CC} -O3 -g -I${MAPIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c99"
-	${CC} -O3 -g -I${MAPIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.c -std=c99
-	echo "${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${MAPIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -lmapi"
-	${CXX} -o dlbench_${layout} dlbench.o ${LFLAGS} -L${MAPIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -lmapi
+	echo "${CC} -O3 -g -I${MAPIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.hsa.c -std=c99"
+	${CC} -O3 -g -I${MAPIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.hsa.c -std=c99
+	echo "${CXX} -o dlbench.hsa_${layout} dlbench.hsa.o ${LFLAGS} -L${MAPIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -lmapi"
+	${CXX} -o dlbench.hsa_${layout} dlbench.hsa.o ${LFLAGS} -L${MAPIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -lhsa-runtime64 -lmapi
 fi
 

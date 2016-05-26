@@ -55,20 +55,20 @@ int main(int argc, char **argv) {
 
     int gpu_id = 0;
     int cpu_id = 0;
-    if(argv[1] != NULL) 
-        gpu_id = (atoi(argv[1]) % machine->device_count_by_type[ATMI_DEVTYPE_GPU]);
-    printf("Choosing GPU %d/%d\n", gpu_id, 
-                machine->device_count_by_type[ATMI_DEVTYPE_GPU]);
+    int gpu_count = machine->device_count_by_type[ATMI_DEVTYPE_GPU];
+    if(argv[1] != NULL) gpu_id = (atoi(argv[1]) % gpu_count);
+    printf("Choosing GPU %d/%d\n", gpu_id, gpu_count);
+
     atmi_mem_place_t gpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_GPU, gpu_id, 0);
     atmi_mem_place_t cpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_CPU, cpu_id, 0);
 
 	void *d_input;
     atmi_malloc(&d_input, strlength+1, gpu);
-    atmi_copy_h2d(d_input, input, strlength+1, gpu);
+    atmi_memcpy(d_input, input, strlength+1);
 
 	void *h_input;
     atmi_malloc(&h_input, strlength+1, cpu);
-    atmi_copy_h2d(h_input, input, strlength+1, cpu);
+    atmi_memcpy(h_input, input, strlength+1);
 
 	void *d_output;
     atmi_malloc(&d_output, strlength+1, gpu);
@@ -81,19 +81,18 @@ int main(int argc, char **argv) {
    
     ATMI_LPARM_1D(lparm, strlength);
     lparm->synchronous = ATMI_TRUE;
-    lparm->groupable = ATMI_TRUE;
 
     lparm->kernel_id = GPU_IMPL;
     lparm->place = ATMI_PLACE_GPU(0, gpu_id);
     atmi_task_launch(kernel, lparm, gpu_args);
 
     lparm->kernel_id = CPU_IMPL;
-    lparm->place = ATMI_PLACE_CPU(0, 0);
+    lparm->place = ATMI_PLACE_CPU(0, cpu_id);
     atmi_task_launch(kernel, lparm, cpu_args);
 
-    atmi_copy_d2h(output_gpu, d_output, strlength+1, gpu);
+    atmi_memcpy(output_gpu, d_output, strlength+1);
     output_gpu[strlength] = '\0';
-    atmi_copy_d2h(output_cpu, h_output, strlength+1, cpu);
+    atmi_memcpy(output_cpu, h_output, strlength+1);
     output_cpu[strlength] = '\0';
    
     cout << "Output from the GPU: " << output_gpu << endl;

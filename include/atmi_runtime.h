@@ -66,6 +66,7 @@ atmi_status_t atmi_copy_d2h(void *dest, const void *src, size_t size, atmi_mem_p
 atmi_status_t atmi_copy_h2d(void *dest, const void *src, size_t size, atmi_mem_place_t place);
 atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place);
 atmi_status_t atmi_free(void *ptr);
+atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size);
 #ifdef __cplusplus
 }
 #endif

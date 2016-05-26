@@ -250,6 +250,17 @@ atl_task_t *get_continuation_task(atmi_task_handle_t t) {
     return NULL;
 }
 
+void allow_access_to_all_gpu_agents(void *ptr) {
+    hsa_status_t err;
+    std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
+    std::vector<hsa_agent_t> agents;
+    for(int i = 0; i < gpu_procs.size(); i++) {
+        agents.push_back(gpu_procs[i].getAgent());
+    }
+    err = hsa_amd_agents_allow_access(agents.size(), &agents[0], NULL, ptr);
+    ErrorCheck(Allow agents ptr access, err);
+}
+
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag) {
     /* This routine will enqueue a barrier packet for all dependent packets to complete
        irrespective of their stream
@@ -724,7 +735,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
 extern void atmi_task_group_sync(atmi_task_group_t *stream) {
     atmi_task_group_t *str = (stream == NULL) ? &atl_default_stream_obj : stream;
     atmi_task_group_table_t *stream_obj = StreamTable[str->id];
-    atl_stream_sync(stream_obj);
+    if(stream_obj) atl_stream_sync(stream_obj);
 }
 
 hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
@@ -903,13 +914,7 @@ void init_tasks() {
             sizeof(atl_task_t **),
             0,
             (void **)&GlobalTaskPtr);
-    std::vector<hsa_agent_t> agents;
-    std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
-    for(int i = 0; i < gpu_procs.size(); i++) {
-        agents.push_back(gpu_procs[i].getAgent());
-    }
-    err = hsa_amd_agents_allow_access(agents.size(), &agents[0], NULL, GlobalTaskPtr);
-    ErrorCheck(Allow agents kernarg region access, err);
+    allow_access_to_all_gpu_agents(GlobalTaskPtr);
 #endif
     ErrorCheck(Creating the global task ptr, err);
     atlc.g_tasks_initialized = 1;
@@ -1556,12 +1561,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
             0,
             &(kernel_impl->kernarg_region));
     ErrorCheck(Allocating memory for the executable-kernel, err);
-    std::vector<hsa_agent_t> agents;
-    for(int i = 0; i < gpu_procs.size(); i++) {
-        agents.push_back(gpu_procs[i].getAgent());
-    }
-    err = hsa_amd_agents_allow_access(agents.size(), &agents[0], NULL, kernel_impl->kernarg_region);
-    ErrorCheck(Allow agents kernarg region access, err);
+    allow_access_to_all_gpu_agents(kernel_impl->kernarg_region);
 
 #endif
     for(int i = 0; i < MAX_NUM_KERNELS; i++) {
@@ -2145,8 +2145,24 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
         }
     }
     thisKernargAddress += sizeof(atmi_task_handle_t);
+    // Argument references will be copied to a contiguous memory region here
+    // TODO: resolve all data affinities before copying, depending on
+    // atmi_data_affinity_policy_t: ATMI_COPY, ATMI_NOCOPY
+    atmi_place_t place = ret->place; 
     for(int i = 0; i < ret->kernel->num_args; i++) {
-        memcpy(thisKernargAddress, args[i], ret->kernel->arg_sizes[i]);
+        void *thisArgAddress = args[i];
+#if 0
+        void *thisArg = *(void **)thisArgAddress;
+        atl_ptr_info_t info = get_ptr_info(thisArg);
+        if(info.is_managed) {
+            if(ret->affinity_policy == ATMI_DATA_COPY) {
+                atmi_copy
+            }
+            else if(ret->affinity_policy == ATMI_DATA_NOCOPY) {
+            }
+        }
+#endif
+        memcpy(thisKernargAddress, thisArgAddress, ret->kernel->arg_sizes[i]);
         //hsa_memory_register(thisKernargAddress, ???
         DEBUG_PRINT("Arg[%d] = %p\n", i, *(void **)thisKernargAddress);
         thisKernargAddress += ret->kernel->arg_sizes[i];

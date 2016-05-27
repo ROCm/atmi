@@ -23,13 +23,16 @@ while [ $# -gt 0 ]; do
       layout="$2"
       shift # option has parameter
 			;;
-		-m|--mode)
+	-m|--mode)
 			mode="$2"
 			shift
 			;;
     -c|--copy)
       copy="COPY"
 			;;
+    -b|--brig)
+      module_type="MODULE_BRIG"
+            ;;
     -v|--verbose)
       verbose="VERBOSE"
 			;;
@@ -55,6 +58,7 @@ done
 [ "$copy" ] || { copy="NOCOPY";}
 [ "$alloc" ] || { alloc="FINE";}
 [ "$verbose" ] || { verbose="CURT";}
+[ "$module_type" ] || { module_type="MODULE_GCN";}
 
 host=`hostname`
 case $host in 
@@ -86,8 +90,8 @@ if [ $mode = "build" ]; then
 	${CLOC_PATH}/cloc.sh -brig -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
 	#echo "${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMIPATH}/include" -opt 2 grayscale.cl"
 	#${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
-	echo "${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11"
-	${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11
+	echo "${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${module_type} -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11"
+	${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${module_type} -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11
 	echo "${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64"
 	${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64 
 fi

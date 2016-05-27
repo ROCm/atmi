@@ -75,15 +75,16 @@ int main(int argc, char **argv) {
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
     check(Initializing the ATMI runtime, err);
     
-    #if 0
-    const char *module = "grayscale.hsaco";
-    atmi_platform_type_t module_type = AMDGCN;
-    #else
+#ifdef MODULE_BRIG
     const char *module = "grayscale.brig";
     atmi_platform_type_t module_type = BRIG;
-    #endif
-    atmi_module_register(&module, &module_type, 1);
-    
+#else
+    const char *module = "grayscale.hsaco";
+    atmi_platform_type_t module_type = AMDGCN;
+#endif
+    err = atmi_module_register(&module, &module_type, 1);
+    check(Registering modules, err);
+
     atmi_machine_t *machine = atmi_machine_get_info();
     /* Count available CPU and GPU agents */
     unsigned num_gpu_agents = machine->device_count_by_type[ATMI_DEVTYPE_GPU];

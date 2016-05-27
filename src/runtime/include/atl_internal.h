@@ -48,6 +48,7 @@ typedef struct atl_kernel_impl_s {
     // user-specified ID from the impls index? 
     unsigned int kernel_id;
     std::string kernel_name;
+    atmi_platform_type_t kernel_type;
     atmi_devtype_t devtype;
 
     /* CPU kernel info */

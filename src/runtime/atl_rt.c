@@ -143,7 +143,6 @@ ATLMachine g_atl_machine;
 static std::vector<hsa_executable_t> g_executables;
 
 static atl_dep_sync_t g_dep_sync_type;
-static bool g_deprecated_hlc;
 static int g_max_signals;
 /* Stream specific globals */
 hsa_agent_t atl_cpu_agent;
@@ -1044,13 +1043,6 @@ void init_hsa() {
         DEBUG_PRINT("Initializing HSA...");
         hsa_status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
-        char *deprecated_hlc = getenv("ATMI_WITH_DEPRECATED_HLC");
-        if(deprecated_hlc == NULL || (deprecated_hlc && strcmp(deprecated_hlc, "1")) == 0) {
-            g_deprecated_hlc = true;
-        }
-        else {
-            g_deprecated_hlc = false;
-        }
         char * dep_sync_type = getenv("ATMI_DEPENDENCY_SYNC_TYPE");
         if(dep_sync_type == NULL || strcmp(dep_sync_type, "ATMI_SYNC_BARRIER_PKT") == 0) {
             g_dep_sync_type = ATL_SYNC_BARRIER_PKT;
@@ -1126,7 +1118,10 @@ atmi_status_t atl_init_cpu_context() {
 void *atl_read_binary_from_file(const char *module, size_t *module_size) {
     // Open file.
     std::ifstream file(module, std::ios::in | std::ios::binary);
-    assert(file.is_open() && file.good());
+    if(!(file.is_open() && file.good())) {
+        fprintf(stderr, "File %s not found\n", module);
+        return NULL;
+    }
 
     // Find out file size.
     file.seekg(0, file.end);
@@ -1511,21 +1506,18 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
 
 atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *impl, const unsigned int ID) {
     const char *pif_name = (const char *)(atmi_kernel.handle);
-    std::string cl_pif_name;
-    if(g_deprecated_hlc) {
-        cl_pif_name = std::string("&__OpenCL_");
-        cl_pif_name += std::string(impl );
-        cl_pif_name += std::string("_kernel");
-    } else {
-        char *tmp_str = (char *)malloc(strlen(impl) + 1);
-        memcpy(tmp_str, impl, strlen(impl));
-        tmp_str[strlen(impl)] = 0;
-        cl_pif_name = std::string(tmp_str);
-        free(tmp_str);
+    atl_kernel_t *kernel = KernelImplMap[std::string(pif_name)];
+    if(kernel->id_map.find(ID) != kernel->id_map.end()) {
+        fprintf(stderr, "Kernel ID %d already found\n", ID);
+        return ATMI_STATUS_ERROR;
     }
+    std::string hsaco_name = std::string(impl );
+    std::string brig_name = std::string("&__OpenCL_");
+    brig_name += std::string(impl );
+    brig_name += std::string("_kernel");
+
     atl_kernel_impl_t *kernel_impl = new atl_kernel_impl_t;
     kernel_impl->kernel_id = ID;
-    kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_GPU;
    
     std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
@@ -1534,19 +1526,33 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     kernel_impl->group_segment_sizes = (uint32_t *)malloc(sizeof(uint32_t) * gpu_count); 
     kernel_impl->private_segment_sizes = (uint32_t *)malloc(sizeof(uint32_t) * gpu_count); 
     int max_kernarg_segment_size = 0;
+    std::string kernel_name; 
+    atmi_platform_type_t kernel_type;
     for(int gpu = 0; gpu < gpu_count; gpu++) {
-        if(KernelInfoTable[gpu].find(kernel_impl->kernel_name) == KernelInfoTable[gpu].end()) 
-            printf("Did NOT find kernel %s for GPU %d\n", 
-                    kernel_impl->kernel_name.c_str(),
+        if(KernelInfoTable[gpu].find(hsaco_name) != KernelInfoTable[gpu].end()) {
+            kernel_name = hsaco_name;
+            kernel_type = AMDGCN;
+        }
+        else if(KernelInfoTable[gpu].find(brig_name) != KernelInfoTable[gpu].end()) {
+            kernel_name = brig_name;
+            kernel_type = BRIG;
+        }
+        else {
+            printf("Did NOT find kernel %s or %s for GPU %d\n", 
+                    hsaco_name.c_str(),
+                    brig_name.c_str(),
                     gpu);
-
-        atl_kernel_info_t info = KernelInfoTable[gpu][kernel_impl->kernel_name];
+            return ATMI_STATUS_ERROR;
+        }
+        atl_kernel_info_t info = KernelInfoTable[gpu][kernel_name];
         kernel_impl->kernel_objects[gpu] = info.kernel_object;
         kernel_impl->group_segment_sizes[gpu] = info.group_segment_size;
         kernel_impl->private_segment_sizes[gpu] = info.private_segment_size;
         if(max_kernarg_segment_size < info.kernel_segment_size)
             max_kernarg_segment_size = info.kernel_segment_size;
     }
+    kernel_impl->kernel_name = kernel_name;
+    kernel_impl->kernel_type = kernel_type;
     kernel_impl->kernarg_segment_size = max_kernarg_segment_size;
     /* create kernarg memory */
     kernel_impl->kernarg_region = NULL;
@@ -1569,11 +1575,6 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     }
     pthread_mutex_init(&(kernel_impl->mutex), NULL);
     
-    atl_kernel_t *kernel = KernelImplMap[std::string(pif_name)];
-    if(kernel->id_map.find(ID) != kernel->id_map.end()) {
-        fprintf(stderr, "Kernel ID %d already found\n", ID);
-        return ATMI_STATUS_ERROR;
-    }
     kernel->id_map[ID] = kernel->impls.size();
 
     kernel->impls.push_back(kernel_impl);
@@ -2018,7 +2019,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         struct kernel_args_struct *kargs = (struct kernel_args_struct *)(task->kernarg_region);
         #endif
         char *kargs = (char *)(task->kernarg_region);
-        if(g_deprecated_hlc) {
+        if(kernel_impl->kernel_type == BRIG) {
             const int dummy_arg_count = 6;
             kargs += (dummy_arg_count * sizeof(uint64_t));
         }
@@ -2129,7 +2130,8 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
     if(thisKernargAddress == NULL) {
         fprintf(stderr, "Unable to allocate/find free kernarg segment\n");
     }
-    if(g_deprecated_hlc) {
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
+    if(kernel_impl->kernel_type == BRIG) {
         if(ret->devtype == ATMI_DEVTYPE_GPU) {
             /* zero out all the dummy arguments */
             for(int dummy_idx = 0; dummy_idx < 3; dummy_idx++) {

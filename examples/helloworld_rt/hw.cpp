@@ -30,13 +30,13 @@ extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, void **args) {
 
 int main(int argc, char **argv) {
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
-    #if 0
+#if 0
     const char *module = "hw.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
-    #else
+#else
     const char *module = "hw.brig";
     atmi_platform_type_t module_type = BRIG;
-    #endif
+#endif
     err = atmi_module_register(&module, &module_type, 1);
 
     atmi_kernel_t kernel;
@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
     lparm->synchronous = ATMI_TRUE;
 
     lparm->kernel_id = GPU_IMPL;
+    lparm->place = ATMI_PLACE_GPU(0, 0);
     atmi_task_launch(kernel, lparm, gpu_args);
     output_gpu[strlength] = '\0';
 

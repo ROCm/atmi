@@ -20,9 +20,9 @@
 #         HSAIL for GPU kernels. Snack is distributed with the 
 #         snack github repository.  
 #
-#  Written by Greg Rodgers  Gregory.Rodgers@amd.com
+#  Written by Ashwin Aji Ashwin.Aji@amd.com
 #
-PROGVERSION=0.1.1
+PROGVERSION=0.3.0
 #
 # Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  Patent pending.
 # 

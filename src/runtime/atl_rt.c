@@ -60,6 +60,7 @@
 #include <malloc.h>
 #include "RealTimerClass.h"
 using namespace Global;
+
 pthread_mutex_t mutex_all_tasks_;
 pthread_mutex_t mutex_readyq_;
 RealTimer SignalAddTimer;
@@ -488,7 +489,12 @@ static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
         case HSA_DEVICE_TYPE_GPU: 
             {
             ;
-            ATLGPUProcessor new_proc(agent);
+            hsa_profile_t profile;
+            err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &profile);
+            ErrorCheck(Query the agent profile, err);
+            atmi_devtype_t gpu_type; 
+            gpu_type = (profile == HSA_PROFILE_FULL) ? ATMI_DEVTYPE_iGPU : ATMI_DEVTYPE_dGPU;
+            ATLGPUProcessor new_proc(agent, gpu_type);
             err = hsa_amd_agent_iterate_memory_pools(agent, get_memory_pool_info, &new_proc);
             ErrorCheck(Iterate all memory pools, err);
             g_atl_machine.addProcessor(new_proc);
@@ -937,10 +943,10 @@ atmi_status_t atl_init_context() {
 }
 
 atmi_status_t atmi_init(int devtype) {
-    if(devtype == ATMI_DEVTYPE_GPU || devtype == ATMI_DEVTYPE_ALL) 
+    if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU) 
         atl_init_gpu_context();
 
-    if(devtype == ATMI_DEVTYPE_CPU || devtype == ATMI_DEVTYPE_ALL) 
+    if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_CPU) 
         atl_init_cpu_context();
 
     return ATMI_STATUS_SUCCESS;
@@ -1001,29 +1007,56 @@ void init_comute_and_memory() {
     g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU] = gpu_procs.size();
     g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_DSP] = dsp_procs.size();
     size_t num_procs = cpu_procs.size() + gpu_procs.size() + dsp_procs.size();
-    g_atmi_machine.devices = (atmi_device_t *)malloc(num_procs * sizeof(atmi_device_t));
+    //g_atmi_machine.devices = (atmi_device_t *)malloc(num_procs * sizeof(atmi_device_t));
+    atmi_device_t *all_devices = (atmi_device_t *)malloc(num_procs * sizeof(atmi_device_t));
+    int num_iGPUs = 0;
+    int num_dGPUs = 0; 
+    for(int i = 0; i < gpu_procs.size(); i++) {
+        if(gpu_procs[i].getType() == ATMI_DEVTYPE_iGPU) 
+            num_iGPUs++;
+        else
+            num_dGPUs++;
+    }
+    assert(num_iGPUs + num_dGPUs == gpu_procs.size() && "Number of dGPUs and iGPUs do not add up");
     DEBUG_PRINT("CPU Agents: %lu\n", cpu_procs.size());
+    DEBUG_PRINT("iGPU Agents: %lu\n", num_iGPUs);
+    DEBUG_PRINT("dGPU Agents: %lu\n", num_dGPUs);
     DEBUG_PRINT("GPU Agents: %lu\n", gpu_procs.size());
     DEBUG_PRINT("DSP Agents: %lu\n", dsp_procs.size());
-    for(int i = 0; i < cpu_procs.size(); i++) {
-        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_CPU;
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_iGPU] = num_iGPUs;
+    g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_dGPU] = num_dGPUs;
+
+    int cpus_begin = 0;
+    int cpus_end = cpu_procs.size();
+    int gpus_begin = cpu_procs.size();
+    int gpus_end = cpu_procs.size() + gpu_procs.size();
+    g_atmi_machine.devices_by_type[ATMI_DEVTYPE_CPU] = &all_devices[cpus_begin];
+    g_atmi_machine.devices_by_type[ATMI_DEVTYPE_GPU] = &all_devices[gpus_begin];
+    g_atmi_machine.devices_by_type[ATMI_DEVTYPE_iGPU] = &all_devices[gpus_begin];
+    g_atmi_machine.devices_by_type[ATMI_DEVTYPE_dGPU] = &all_devices[gpus_begin];
+    int proc_index = 0;
+    for(int i = cpus_begin; i < cpus_end; i++) {
+        all_devices[i].type = cpu_procs[proc_index].getType();
         
-        std::vector<ATLFineMemory> fine_memories = cpu_procs[i].getMemories<ATLFineMemory>();
-        std::vector<ATLCoarseMemory> coarse_memories = cpu_procs[i].getMemories<ATLCoarseMemory>();
+        std::vector<ATLFineMemory> fine_memories = cpu_procs[proc_index].getMemories<ATLFineMemory>();
+        std::vector<ATLCoarseMemory> coarse_memories = cpu_procs[proc_index].getMemories<ATLCoarseMemory>();
         DEBUG_PRINT("CPU\tFine Memories : %lu\n", fine_memories.size());
         DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
-        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+        all_devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+        proc_index++;
     }
-    for(int i = cpu_procs.size(); i < cpu_procs.size() + gpu_procs.size(); i++) {
-        int index = i - cpu_procs.size();
-        g_atmi_machine.devices[i].type = ATMI_DEVTYPE_GPU;
+    proc_index = 0;
+    for(int i = gpus_begin; i < gpus_end; i++) {
+        all_devices[i].type = gpu_procs[proc_index].getType();
         
-        std::vector<ATLFineMemory> fine_memories = gpu_procs[index].getMemories<ATLFineMemory>();
-        std::vector<ATLCoarseMemory> coarse_memories = gpu_procs[index].getMemories<ATLCoarseMemory>();
+        std::vector<ATLFineMemory> fine_memories = gpu_procs[proc_index].getMemories<ATLFineMemory>();
+        std::vector<ATLCoarseMemory> coarse_memories = gpu_procs[proc_index].getMemories<ATLCoarseMemory>();
         DEBUG_PRINT("GPU\tFine Memories : %lu\n", fine_memories.size());
         DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
-        g_atmi_machine.devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+        all_devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+        proc_index++;
     }
+    proc_index = 0;
     atl_cpu_kernarg_region.handle=(uint64_t)-1;
     err = hsa_agent_iterate_regions(cpu_procs[0].getAgent(), get_fine_grained_region, &atl_cpu_kernarg_region);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
@@ -1299,7 +1332,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         ErrorCheck(Symbol info extraction, err);
         name[name_length] = 0;
 
-        DEBUG_PRINT("Symbol name: %s\n", name);
+        printf("Symbol name: %s\n", name);
     }
     return HSA_STATUS_SUCCESS;
 }

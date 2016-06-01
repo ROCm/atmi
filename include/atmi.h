@@ -18,10 +18,12 @@
 #define ATMI_FALSE      0
 
 typedef enum atmi_devtype_s {
-    ATMI_DEVTYPE_CPU = 0,
-    ATMI_DEVTYPE_GPU = 1,
-    ATMI_DEVTYPE_DSP = 2,
-    ATMI_DEVTYPE_ALL
+    ATMI_DEVTYPE_CPU  = 0x0001,
+    ATMI_DEVTYPE_iGPU = 0x0010,
+    ATMI_DEVTYPE_dGPU = 0x0100,
+    ATMI_DEVTYPE_GPU  = ATMI_DEVTYPE_iGPU | ATMI_DEVTYPE_dGPU,
+    ATMI_DEVTYPE_DSP  = 0x1000,
+    ATMI_DEVTYPE_ALL  = 0x1111
 } atmi_devtype_t;
 
 typedef enum atmi_memtype_s {
@@ -84,8 +86,8 @@ typedef struct atmi_device_s {
 } atmi_device_t;
 
 typedef struct atmi_machine_s {
-    unsigned int device_count_by_type[3];   /* CPU, GPU and DSP               */
-    atmi_device_t *devices;   
+    unsigned int device_count_by_type[ATMI_DEVTYPE_ALL];   /* CPU, i/d GPU and DSP  */
+    atmi_device_t *devices_by_type[ATMI_DEVTYPE_ALL];   
 } atmi_machine_t;
 
 #define ATMI_PLACE_ANY(node) {.node_id=node, .type=ATMI_DEVTYPE_ALL, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 

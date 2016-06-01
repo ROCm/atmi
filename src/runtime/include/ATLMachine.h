@@ -57,9 +57,12 @@ class ATLCPUProcessor : public ATLProcessor {
 
 class ATLGPUProcessor : public ATLProcessor {
     public:
-        ATLGPUProcessor(hsa_agent_t agent) : ATLProcessor(agent) {}
-        atmi_devtype_t getType() const { return ATMI_DEVTYPE_GPU; }
+        ATLGPUProcessor(hsa_agent_t agent, atmi_devtype_t type = ATMI_DEVTYPE_dGPU) 
+                    : ATLProcessor(agent) {_type = type;}
+        atmi_devtype_t getType() const { return _type; }
         void createQueues(const int count);
+    private:
+        atmi_devtype_t _type;
 };
 
 class ATLDSPProcessor : public ATLProcessor {

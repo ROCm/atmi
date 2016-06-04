@@ -1636,7 +1636,7 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
     }
     kernel->id_map[ID] = kernel->impls.size();
     /* create kernarg memory */
-    uint32_t kernarg_size = sizeof(atmi_task_handle_t);
+    uint32_t kernarg_size = 0;
     for(int i = 0; i < kernel->num_args; i++){
         kernarg_size += kernel->arg_sizes[i];
     }
@@ -2046,7 +2046,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             uint64_t arg3;
             uint64_t arg4;
             uint64_t arg5;*/
-            atmi_task_handle_t arg6;
             /* other fields no needed to set task handle? */
         } __attribute__((aligned(16)));
         struct kernel_args_struct *kargs = (struct kernel_args_struct *)(task->kernarg_region);
@@ -2056,13 +2055,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             const int dummy_arg_count = 6;
             kargs += (dummy_arg_count * sizeof(uint64_t));
         }
-        *(atmi_task_handle_t *)kargs = task->id;
-        //kargs->arg6 = task->id;
-        //kargs->arg6.node = (task->id.node);
-        //kargs->arg6.lo = (task->id.lo);
-        //kargs->arg6.hi = (task->id.hi);
-        //void *tmp = &(task->id);
-        //memcpy((char *)task->gpu_kernargptr + (6 * sizeof(uint64_t)), &tmp, sizeof(atmi_task_handle_t *));
         /*  Process lparm values */
         /*  this_aql.dimensions=(uint16_t) ndim; */
         this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
@@ -2089,6 +2081,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         this_aql->private_segment_size = kernel_impl->private_segment_sizes[proc_id];
         this_aql->group_segment_size = kernel_impl->group_segment_sizes[proc_id];
 
+        this_aql->reserved2 = task->id;
         set_task_state(task, ATMI_DISPATCHED);
         /*  Prepare and set the packet header */ 
         this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE);
@@ -2179,7 +2172,6 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
             }
         }
     }
-    thisKernargAddress += sizeof(atmi_task_handle_t);
     // Argument references will be copied to a contiguous memory region here
     // TODO: resolve all data affinities before copying, depending on
     // atmi_data_affinity_policy_t: ATMI_COPY, ATMI_NOCOPY
@@ -2874,3 +2866,5 @@ atmi_machine_t *atmi_machine_get_info() {
     if(!atlc.g_hsa_initialized) return NULL;
     return &g_atmi_machine;
 }
+
+

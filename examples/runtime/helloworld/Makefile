@@ -3,6 +3,12 @@ HSA_RUNTIME_PATH ?= /opt/rocm/hsa
 CLOC_PATH ?= /usr/bin
 ATMI_RUNTIME_PATH ?= /opt/amd/atmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include
+BRIG ?= 0
+
+ifeq ($(BRIG),1)
+	BRIGCLOPTS=-brig
+	BRIGCPPOPTS=-DUSE_BRIG
+endif
 
 CC=g++
 CFLAGS=-O3 -g -std=c++11
@@ -18,8 +24,8 @@ OBJS = hello
 all: $(OBJS)
 
 hello: hw.cpp hw.cl hw_structs.h
-	$(CLOC_PATH)/cloc.sh -brig -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 hw.cl
-	$(CC) -o $@ hw.cpp $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
+	$(CLOC_PATH)/cloc.sh ${BRIGCLOPTS} -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 hw.cl
+	$(CC) -o $@ hw.cpp $(BRIGCPPOPTS) $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
 	rm -rf *.o *.brig *.hsaco $(OBJS)

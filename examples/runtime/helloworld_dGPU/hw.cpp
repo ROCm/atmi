@@ -16,15 +16,15 @@ enum {
     GPU_IMPL = 42
 };    
 
-extern _CPPSTRING_ void decode_cpu_fn(atmi_task_handle_t thisTask, const char *in, char *out, size_t strlength) {
+extern _CPPSTRING_ void decode_cpu_fn(const char *in, char *out, size_t strlength) {
     int num;
     for (num = 0; num < strlength; num++) {
         out[num] = in[num] + 1;
     }
 }
 
-extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, const char **in, char **out, size_t *strlength) {
-    decode_cpu_fn(*thisTask, *in, *out, *strlength);
+extern _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlength) {
+    decode_cpu_fn(*in, *out, *strlength);
 }
 
 

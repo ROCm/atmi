@@ -54,6 +54,9 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t kernel);
 atmi_task_handle_t atmi_task_launch(atmi_kernel_t kernel, atmi_lparm_t *lparm, void **args);
 atmi_status_t atmi_task_wait(atmi_task_handle_t task);
 
+/* CPU task runtime (valid within CPU tasks) */
+atmi_task_handle_t get_atmi_task_handle(); 
+
 /* memory/data */
 #if 0
 atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place, atmi_arg_type_t arg_type, void **data);

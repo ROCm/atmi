@@ -50,6 +50,46 @@
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;
 
+struct pthreadComparator {
+    typedef union {
+        pthread_t   pth;
+        unsigned char b[sizeof(pthread_t)];
+    } pthcmp_t;
+
+    bool operator()(const pthread_t& left, const pthread_t& right) const {
+        /*
+         * Compare two pthread handles in a way that imposes a repeatable but
+         * arbitrary ordering on them.
+         * I.e. given the same set of pthread_t handles the ordering should be the
+         * same each time but the order has no particular meaning other than that. E.g.
+         * the ordering does not imply the thread start sequence, or any other
+         * relationship between threads.
+         * 
+         * Return values are:
+         * false: left is greater than right
+         * true: left is less than or equal to right
+         */
+        DEBUG_PRINT("Comparing %lu %lu\n", left, right);
+        int i;
+        pthcmp_t L, R;
+        L.pth = left;
+        R.pth = right;
+        for (i = 0; i < sizeof(pthread_t); i++)
+        {
+            if (L.b[i] > R.b[i]) {
+                DEBUG_PRINT("False because %d > %d\n", L.b[i], R.b[i]);
+                return false;
+            }
+            else if (L.b[i] < R.b[i]) {
+                DEBUG_PRINT("True because %d > %d\n", L.b[i], R.b[i]);
+                return true;
+            }
+        }
+        return false;
+    }
+};
+static std::map<pthread_t, hsa_agent_dispatch_packet_t *, pthreadComparator> TaskPacketMap;
+
 hsa_queue_t* get_cpu_queue(int cpu_id, int tid) {
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
     ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
@@ -126,6 +166,9 @@ int process_packet(hsa_queue_t *queue, int id)
 #endif /* ATMI_HAVE_PROFILE */
         hsa_agent_dispatch_packet_t* packets = (hsa_agent_dispatch_packet_t*) queue->base_address;
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
+
+        DEBUG_PRINT("%lu --> %p\n", pthread_self(), packet);
+        TaskPacketMap[pthread_self()] = packet;
         int i;
         DEBUG_PRINT("Processing CPU task with header: %d\n", get_packet_type(packet->header));
         //wait til the packet is ready to be dispatched
@@ -177,10 +220,8 @@ int process_packet(hsa_queue_t *queue, int id)
                 std::vector<void *> kernel_args;
                 void *kernel_args_region = (void *)(packet->arg[1]);
                 kernel_name = (char *)kernel_impl->kernel_name.c_str();
-                uint64_t num_params = kernel->num_args + 1;
+                uint64_t num_params = kernel->num_args;
                 char *thisKernargAddress = (char *)(kernel_args_region);
-                kernel_args.push_back((void *)&(task->id));
-                thisKernargAddress += sizeof(atmi_task_handle_t);
                 for(int i = 0; i < kernel->num_args; i++) {
                     kernel_args.push_back((void *)thisKernargAddress);
                     thisKernargAddress += kernel->arg_sizes[i];
@@ -743,4 +784,9 @@ agent_fini()
     DEBUG_PRINT("agent_fini completed\n");
 }
 
-
+atmi_task_handle_t get_atmi_task_handle() {
+    hsa_agent_dispatch_packet_t *packet = TaskPacketMap[pthread_self()];
+    DEBUG_PRINT("(Get) %lu --> %p\n", pthread_self(), packet);
+    atl_task_t *task = (atl_task_t *)(packet->arg[0]);
+    return task->id;
+}

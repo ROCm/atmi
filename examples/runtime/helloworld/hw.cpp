@@ -17,7 +17,7 @@ enum {
 };    
 
 #include "hw_structs.h"
-extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, void **args) {
+extern _CPPSTRING_ void decode_cpu(void **args) {
     decode_args_t *cpu_args = *(decode_args_t **)args;
     size_t strlength = cpu_args->strlength; 
     const char *in = cpu_args->in;
@@ -30,7 +30,7 @@ extern _CPPSTRING_ void decode_cpu(atmi_task_handle_t *thisTask, void **args) {
 
 int main(int argc, char **argv) {
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
-#if 0
+#ifndef USE_BRIG
     const char *module = "hw.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
 #else
@@ -66,6 +66,7 @@ int main(int argc, char **argv) {
     ATMI_LPARM_1D(lparm, strlength);
     lparm->synchronous = ATMI_TRUE;
 
+    lparm->WORKITEMS = strlength;
     lparm->kernel_id = GPU_IMPL;
     lparm->place = ATMI_PLACE_GPU(0, 0);
     atmi_task_launch(kernel, lparm, gpu_args);
@@ -79,8 +80,8 @@ int main(int argc, char **argv) {
    
     cout << "Output from the GPU: " << output_gpu << endl;
     cout << "Output from the CPU: " << output_cpu << endl;
-	free(output_cpu);
-	free(output_gpu);
+    free(output_cpu);
+    free(output_gpu);
 
     atmi_kernel_release(kernel);
     return 0;

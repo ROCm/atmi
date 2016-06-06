@@ -9,8 +9,8 @@
 #ifndef __cplusplus
 #define _CPPSTRING_ 
 #endif
-extern _CPPSTRING_ void __sync_kernel(atmi_task_handle_t thisTask) {}
-extern _CPPSTRING_ void __sync_kernel_wrapper(atmi_task_handle_t *thisTaskPtr) {__sync_kernel(*thisTaskPtr);}
+extern _CPPSTRING_ void __sync_kernel() {}
+extern _CPPSTRING_ void __sync_kernel_wrapper() {__sync_kernel();}
 static int cpu_initalized = 0;
 
 typedef struct pif_kernel_table_s {
@@ -35,8 +35,9 @@ extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t * lparm) {
 
       /* Kernel initialization has to be done before kernel arguments are set/inspected */ 
       const char *kernel_name = "__sync_kernel"; 
+      const int num_args = 0; 
       if (__sync_kernel_CPU_FK == 0 ) { 
-          atmi_kernel_create_empty(&__sync_kernel_obj, 0, NULL);
+          atmi_kernel_create_empty(&__sync_kernel_obj, num_args, NULL);
           atmi_kernel_add_cpu_impl(__sync_kernel_obj, (atmi_generic_fp)(__sync_kernel_pif_fn_table[0].cpu_kernel), 0);
           __sync_kernel_CPU_FK = 1; 
       }
@@ -44,7 +45,6 @@ extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t * lparm) {
           atmi_init(ATMI_DEVTYPE_CPU);
           cpu_initalized = 1;
       }
-      const int num_args = 0; 
       return atmi_task_launch(__sync_kernel_obj, lparm, NULL); 
   } 
 } 

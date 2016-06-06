@@ -16,9 +16,9 @@ bool is_null_task(atmi_task_handle_t t) {
     }
 }
 
-extern "C" void sum_cpu(atmi_task_handle_t t, int *a, int *b, int *c) __attribute__((atmi_kernel("sum", "CPU")));
+extern "C" void sum_cpu(int *a, int *b, int *c) __attribute__((atmi_kernel("sum", "CPU")));
 
-extern "C" void sum_cpu(atmi_task_handle_t t, int *a, int *b, int *c) { 
+extern "C" void sum_cpu(int *a, int *b, int *c) { 
     *c = *a + *b;
     delete a;
     delete b;

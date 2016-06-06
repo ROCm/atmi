@@ -5,12 +5,12 @@ using namespace std;
 #include "atmi.h"
 
 // Declare decode as the PIF for the CPU kernel decode_cpu
-extern "C" void decode_cpu(atmi_task_handle_t thisTask, const char* in, char* out, const size_t strlength) __attribute__((atmi_kernel("decode", "cpu")));
+extern "C" void decode_cpu(const char* in, char* out, const size_t strlength) __attribute__((atmi_kernel("decode", "cpu")));
 
 // Declare decode as the PIF for the GPU kernel decode_gpu
-__kernel void decode_gpu(__global atmi_task_handle_t thisTask, __global const char* in, __global char *out, const size_t strlength) __attribute__((atmi_kernel("decode", "gpu")));
+__kernel void decode_gpu(__global const char* in, __global char *out, const size_t strlength) __attribute__((atmi_kernel("decode", "gpu")));
 
-extern "C" void decode_cpu(atmi_task_handle_t thisTask, const char* in, char* out, const size_t strlength) {
+extern "C" void decode_cpu(const char* in, char* out, const size_t strlength) {
     int num;
     for (num = 0; num < strlength; num++) {
         out[num] = in[num] + 1;
@@ -31,6 +31,7 @@ int main(int argc, char* argv[]) {
     output_gpu[strlength] = '\0';
 
     lparm->kernel_id = K_ID_decode_cpu;
+    lparm->WORKITEMS = 1;
     decode(lparm, input, output_cpu, strlength);
     output_cpu[strlength] = '\0';
 

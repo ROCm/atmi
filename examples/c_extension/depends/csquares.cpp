@@ -25,25 +25,25 @@ static const int N = 16; /* multiple of 4 for demo */
 
 /* ---------------- Kernel declarations -------------*/
 // Declare init_kernel as the PIF for the init_kernel_cpu subroutine
-extern "C" void init_kernel_cpu(atmi_task_handle_t thisTask, int *in) __attribute__((atmi_kernel("init_kernel", "cpu")));
-__kernel void init_kernel_gpu(__global atmi_task_handle_t thisTask, __global int *in) __attribute__((atmi_kernel("init_kernel", "gpu")));
+extern "C" void init_kernel_cpu(int *in) __attribute__((atmi_kernel("init_kernel", "cpu")));
+__kernel void init_kernel_gpu(__global int *in) __attribute__((atmi_kernel("init_kernel", "gpu")));
 
 
 // Declare even_squares_kernel as the PIF for the even_squares_kernel_cpu subroutine
-extern "C" void even_squares_kernel_cpu(atmi_task_handle_t thisTask, 
+extern "C" void even_squares_kernel_cpu(
    const int *in , int *out) __attribute__((atmi_kernel("even_squares_kernel", "cpu")));
-__kernel void even_squares_kernel_gpu(__global atmi_task_handle_t thisTask, 
+__kernel void even_squares_kernel_gpu(
    __global const int *in , __global int *out) __attribute__((atmi_kernel("even_squares_kernel", "gpu")));
 
 
 // Declare odd_squares_kernel as the PIF for the odd_squares_kernel_cpu subroutine
-extern "C" void odd_squares_kernel_cpu(atmi_task_handle_t thisTask, int *out) __attribute__((atmi_kernel("odd_squares_kernel", "cpu")));
-__kernel void odd_squares_kernel_gpu(__global atmi_task_handle_t thisTask, __global int *out) __attribute__((atmi_kernel("odd_squares_kernel", "gpu")));
+extern "C" void odd_squares_kernel_cpu(int *out) __attribute__((atmi_kernel("odd_squares_kernel", "cpu")));
+__kernel void odd_squares_kernel_gpu(__global int *out) __attribute__((atmi_kernel("odd_squares_kernel", "gpu")));
 
 
 
 /* ---------------- Kernel definitions -------------*/
-extern "C" void init_kernel_cpu(atmi_task_handle_t thisTask, int *in) {
+extern "C" void init_kernel_cpu(int *in) {
 	int i;
     for(i = 0; i < N; i++) {
 	    in[i] = (int)  i;
@@ -51,8 +51,7 @@ extern "C" void init_kernel_cpu(atmi_task_handle_t thisTask, int *in) {
 }
 
 /*  Middle children calculate squares for even numbers */
-extern "C" void even_squares_kernel_cpu(atmi_task_handle_t thisTask, 
-   const int *in , int *out) 
+extern "C" void even_squares_kernel_cpu(const int *in , int *out) 
 {
     int ctr;
     for(ctr = 0; ctr < N/4; ctr++) {
@@ -66,7 +65,7 @@ extern "C" void even_squares_kernel_cpu(atmi_task_handle_t thisTask,
         (X-1)**2 = X**2 - 2X + 1 
     so  X**2 = ((X-1)**2) + 2X - 1
 */
-extern "C" void odd_squares_kernel_cpu(atmi_task_handle_t thisTask, int *out) 
+extern "C" void odd_squares_kernel_cpu(int *out) 
 {
     int ctr;
     for(ctr = 0; ctr < N/2; ctr++) {
@@ -94,6 +93,7 @@ int main(int argc, char *argv[]) {
    // Dispatch init_kernel and set even_lp to require init to complete
    init_lp->kernel_id = K_ID_init_kernel_cpu;
    init_tasks[0] = init_kernel(init_lp, inArray);
+
    even_lp->num_required = 1;
    even_lp->requires = init_tasks;
    // Dispatch 2 even_squares kernels and build dependency list for odd_squares.

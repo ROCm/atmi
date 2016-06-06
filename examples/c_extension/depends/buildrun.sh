@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 #  Set HSA Environment variables
-[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/hsa
-[ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/hsa/lib
-[ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/opt/amd/cloc/bin
+[ -z $HSA_RUNTIME_PATH ] && HSA_RUNTIME_PATH=/opt/rocm/hsa
+[ -z $HSA_LIBHSAIL_PATH ] && HSA_LIBHSAIL_PATH=/opt/rocm/hsa/lib
+[ -z $HSA_LLVM_PATH ] && HSA_LLVM_PATH=/usr/bin
 [ -z $ATMI_RUNTIME_PATH ] && ATMI_RUNTIME_PATH=/opt/amd/atmi
 ATMI_INC=$ATMI_RUNTIME_PATH/include
 
@@ -20,10 +20,10 @@ echo
 echo 
 if [ -f csquares ] ; then rm csquares ; fi
 echo g++ -o csquares.o -c csquares.cpp -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=csquares_kernels.cl -I$ATMI_INC 
-g++ -o csquares.o -c csquares.cpp -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=csquares_kernels.cl -I$ATMI_INC 
+g++ -o csquares.o -c csquares.cpp -std=c++11 -fplugin=atmi_pifgen.so -fplugin-arg-atmi_pifgen-clfile=csquares_kernels.cl -I$ATMI_INC 
 
 echo g++ -o csquares csquares.o csquares.cpp.pifdefs.c -latmi_runtime -L$ATMI_RUNTIME_PATH/lib -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -lelf -I$ATMI_INC -I$HSA_RUNTIME_PATH/include 
-g++ -o csquares csquares.o csquares.cpp.pifdefs.c -latmi_runtime -L$ATMI_RUNTIME_PATH/lib -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -lelf -I$ATMI_INC -I$HSA_RUNTIME_PATH/include 
+g++ -o csquares csquares.o csquares.cpp.pifdefs.c -std=c++11 -latmi_runtime -L$ATMI_RUNTIME_PATH/lib -L$HSA_RUNTIME_PATH/lib -lhsa-runtime64 -lelf -I$ATMI_INC -I$HSA_RUNTIME_PATH/include 
 
 #  Execute
 echo

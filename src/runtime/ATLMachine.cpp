@@ -89,7 +89,7 @@ void ATLGPUProcessor::createQueues(const int count) {
     uint32_t queue_size = 0;
     err = hsa_agent_get_info(_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
     ErrorCheck(Querying the agent maximum queue size, err);
-    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size); */
+    /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size);  */
 
     /* Create queues for each device. */
     int qid;
@@ -100,6 +100,7 @@ void ATLGPUProcessor::createQueues(const int count) {
         err = hsa_amd_profiling_set_profiler_enabled(this_Q, 1); 
         ErrorCheck(Enabling profiling support, err);
         _queues.push_back(this_Q);
+        DEBUG_PRINT("Queue[%d]: %p\n", qid, this_Q);
     }
 }
 

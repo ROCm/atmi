@@ -277,19 +277,19 @@ void generate_task_wrapper(char *text, const char *fn_name, const int num_params
     strcat(fn_decl, "_wrapper");
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    if(num_params == 1) {
-        strcat(fn_decl, "(atmi_task_handle_t *var0)");
+    if(num_params == 0) {
+        strcat(fn_decl, "()");
     }
-    else if(num_params > 1) {
-        strcat(fn_decl, "(atmi_task_handle_t *var0, ");
+    else if(num_params > 0) {
+        strcat(fn_decl, "(");
     }
     
     int var_idx = 0;
-    pch = strtok (NULL, ",)");
+    //pch = strtok (NULL, ",)");
     //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
-    for(var_idx = 1; var_idx < num_params; var_idx++) {
+    for(var_idx = 0; var_idx < num_params; var_idx++) {
         pch = strtok (NULL, ",)");
-    //    DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        DEBUG_PRINT("Parsing this string now: %s\n", pch);
         strcat(fn_decl, pch);
         char var_decl[64] = {0}; 
         sprintf(var_decl, "* var%d", var_idx);
@@ -308,19 +308,19 @@ void generate_task(char *text, const char *fn_name, const int num_params, char *
     strcat(fn_decl, fn_name);
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
-    if(num_params == 1) {
-        strcat(fn_decl, "(atmi_task_handle_t var0)");
+    if(num_params == 0) {
+        strcat(fn_decl, "()");
     }
-    else if(num_params > 1) {
-        strcat(fn_decl, "(atmi_task_handle_t var0, ");
+    else if(num_params > 0) {
+        strcat(fn_decl, "(");
     }
     
     int var_idx = 0;
-    pch = strtok (NULL, ",)");
+    //pch = strtok (NULL, ",)");
     //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
-    for(var_idx = 1; var_idx < num_params; var_idx++) {
+    for(var_idx = 0; var_idx < num_params; var_idx++) {
         pch = strtok (NULL, ",)");
-    //    DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        DEBUG_PRINT("Parsing this string now: %s\n", pch);
         strcat(fn_decl, pch);
         char var_decl[64] = {0}; 
         sprintf(var_decl, " var%d", var_idx);
@@ -342,19 +342,21 @@ void generate_pif(char *text, const char *fn_name, const int num_params, char *f
     pch = strtok (NULL, "(");
     if(pch != NULL) strcat(fn_decl, pch);
    
-    if(num_params == 1) {
+    if(num_params == 0) {
         strcat(fn_decl, "(atmi_lparm_t *lparm)");
     }
-    else if(num_params > 1) {
+    else if(num_params > 0) {
         strcat(fn_decl, "(atmi_lparm_t *lparm, ");
     }
 
     int var_idx = 0;
-    pch = strtok (NULL, ",)");
+    //pch = strtok (NULL, ",)");
+    //do not ignore the first argument because we got rid of the atmi_task_hande_t 
+    //requirement as the first argument
     //DEBUG_PRINT("Parsing but ignoring this string now: %s\n", pch);
-    for(var_idx = 1; var_idx < num_params; var_idx++) {
+    for(var_idx = 0; var_idx < num_params; var_idx++) {
         pch = strtok (NULL, ",)");
-        //DEBUG_PRINT("Parsing this string now: %s\n", pch);
+        DEBUG_PRINT("Parsing this string now: %s\n", pch);
         strcat(fn_decl, pch);
         char var_decl[64] = {0}; 
         sprintf(var_decl, " var%d", var_idx);
@@ -379,26 +381,20 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
     function_args_iterator args_iter;
     tree new_fn_type = NULL_TREE;
     tree new_fn_arglist = NULL_TREE;
-    int iter = 0;
     tree new_ret_type = NULL_TREE;
+    // ADD a new arg atmi_lparm_t for the PIF
+    tree type_decl = lookup_name(get_identifier("atmi_lparm_t"));
+    tree new_arg = build_pointer_type(TREE_TYPE(type_decl));
+    new_fn_arglist = tree_cons(NULL_TREE, new_arg, new_fn_arglist);
+    int iter = 0;
     FOREACH_FUNCTION_ARGS(fn_type, arg, args_iter)
     {
-        //print_generic_stmt(stdout, arg, TDF_RAW);
-        if(iter == 0) {
-            // replace atmi_task_t of the task with atmi_lparm_t for the PIF
-            //new_ret_type = arg;
-            tree type_decl = lookup_name(get_identifier("atmi_lparm_t"));
-            tree new_arg = build_pointer_type(TREE_TYPE(type_decl));
-            //arg = ptr_type_node;
-            new_fn_arglist = tree_cons(NULL_TREE, new_arg, new_fn_arglist);
-        }
-        else if(iter >= num_params)
-            break;
-        else
+        if(iter < num_params) {
+            //print_generic_stmt(stdout, arg, TDF_RAW);
             new_fn_arglist = tree_cons(NULL_TREE, arg, new_fn_arglist);
-
-        iter++;
-        //debug_tree_chain(arg);
+            //debug_tree_chain(arg);
+            iter++;
+        }
     }
     // return atmi_task_t *
     tree ret_type_decl = lookup_name(get_identifier("atmi_task_handle_t"));
@@ -626,7 +622,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf((pif_printers[pif_index].pifdefs), "    /* launcher code (PIF definition) */\n");
         pp_printf((pif_printers[pif_index].pifdefs), "\
     const int num_args = %d; \n",
-        num_params - 1
+        num_params
         );
         pp_printf((pif_printers[pif_index].pifdefs), "\
     int k_id = lparm->kernel_id; \n\
@@ -699,14 +695,14 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pif_name
         );
         int arg_idx;
-        for(arg_idx = 0; arg_idx < num_params - 1; arg_idx++) {
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
         arg_sizes[%d] = sizeof(%s);\n",
-            arg_idx, arg_list[arg_idx + 1].c_str()
+            arg_idx, arg_list[arg_idx].c_str()
         );
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        atmi_kernel_create_empty(&%s_kernel, %d, arg_sizes); \n\
+        atmi_kernel_create_empty(&%s_kernel, num_args, arg_sizes); \n\
         int num_impls = sizeof(%s_fn_table)/sizeof(%s_fn_table[0]);\n\
         int idx; \n\
         for(idx = 0; idx < num_impls; idx++) { \n\
@@ -719,7 +715,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         } \n\
         %s_FK = 1; \n\
     }\n",
-                pif_name, num_params - 1,
+                pif_name, 
                 pif_name, pif_name,
                 pif_name,
                 pif_name, pif_name,
@@ -728,10 +724,10 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
                 pif_name);
     pp_printf((pif_printers[pif_index].pifdefs), "\
     void *args[num_args]; \n");
-        for(arg_idx = 0; arg_idx < num_params - 1; arg_idx++) {
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
     args[%d] = &var%d; \n",
-            arg_idx, arg_idx + 1
+            arg_idx, arg_idx
         );
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
@@ -761,10 +757,11 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         pp_printf(&g_kerneldecls, "extern _CPPSTRING_ %s {\n", fn_cpu_wrapper_decl);
         int arg_idx;
         pp_printf(&g_kerneldecls, "\
-    %s(*var0",
+    %s(",
         fn_name);
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
-            pp_printf(&g_kerneldecls, ", *var%d", arg_idx);
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
+            pp_printf(&g_kerneldecls, "*var%d", arg_idx);
+            if(arg_idx < num_params - 1) pp_printf(&g_kerneldecls, ", ");
         }
         pp_printf(&g_kerneldecls, ");\n}\n");
         pp_printf((pif_printers[pif_index].fn_table), "\
@@ -1257,10 +1254,9 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     }\n\n", pif_name, pif_name);
 
            pp_printf((pif_printers[pif_index].pifdefs), "\
-    typedef struct cpu_args_struct_s {\n\
-        atmi_task_handle_t arg0;\n");
+    typedef struct cpu_args_struct_s {\n");
         int arg_idx;
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
         %s arg%d;\n",
             arg_list[arg_idx].c_str(), arg_idx);
@@ -1279,9 +1275,8 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         uint64_t arg2; \n\
         uint64_t arg3; \n\
         uint64_t arg4; \n\
-        uint64_t arg5; \n\
-        atmi_task_handle_t arg6;\n");
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+        uint64_t arg5; \n");
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
         %s arg%d;\n", 
             arg_list[arg_idx].c_str(), arg_idx + 6);
@@ -1298,17 +1293,17 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     const int num_args = %d; \n\
     if (%s_FK == 0 ) { \n\
         size_t arg_sizes[num_args]; \n",
-        num_params - 1,
+        num_params,
         pif_name
         );
-        for(arg_idx = 0; arg_idx < num_params - 1; arg_idx++) {
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
             pp_printf((pif_printers[pif_index].pifdefs), "\
         arg_sizes[%d] = sizeof(%s);\n",
-            arg_idx, arg_list[arg_idx + 1].c_str()
+            arg_idx, arg_list[arg_idx].c_str()
         );
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
-        atmi_kernel_create_empty(&%s_kernel, %d, arg_sizes); \n\
+        atmi_kernel_create_empty(&%s_kernel, num_args, arg_sizes); \n\
         int num_impls = sizeof(%s_fn_table)/sizeof(%s_fn_table[0]);\n\
         int idx; \n\
         for(idx = 0; idx < num_impls; idx++) { \n\
@@ -1321,7 +1316,7 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
         } \n\
         %s_FK = 1;\n\
     }\n\n",
-                pif_name, num_params - 1,
+                pif_name, 
                 pif_name, pif_name,
                 pif_name,
                 pif_name, pif_name,
@@ -1559,7 +1554,7 @@ void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::
     pp_printf(&pif_spawn, "\
 atmi_task_handle_t %s(atmi_klparm_t *lparm ", pif_name);
     
-    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+    for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
         pp_printf(&pif_spawn, ", %s var%d", arg_list[arg_idx].c_str(), arg_idx);
     }
 
@@ -1584,9 +1579,8 @@ atmi_task_handle_t %s(atmi_klparm_t *lparm ", pif_name);
             uint64_t arg2; \n\
             uint64_t arg3; \n\
             uint64_t arg4; \n\
-            uint64_t arg5; \n\
-            atmi_task_handle_t arg6;\n");
-        for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            uint64_t arg5; \n");
+        for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
             pp_printf(&pif_spawn, "\
             %s arg%d;\n", 
             arg_list[arg_idx].c_str(), arg_idx + 6);
@@ -1615,10 +1609,7 @@ atmi_task_handle_t %s(atmi_klparm_t *lparm ", pif_name);
         gpu_args->arg4=0;\n\
         gpu_args->arg5=0;\n");
 
-    pp_printf(&pif_spawn, "\
-        gpu_args->arg6 = lparm->prevTask; \n");
-       
-    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+    for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
         pp_printf((&pif_spawn), "\
         gpu_args->arg%d = var%d;\n", arg_idx + 6, arg_idx);
     }
@@ -1634,8 +1625,8 @@ atmi_task_handle_t %s(atmi_klparm_t *lparm ", pif_name);
 
     pp_printf(&pif_spawn, "\
         struct cpu_args_struct {\n\
-            atmi_task_handle_t arg0;\n");
-    for(arg_idx = 1; arg_idx < num_params; arg_idx++) {
+            ");
+    for(arg_idx = 0; arg_idx < num_params; arg_idx++) {
         if(arg_list[arg_idx].c_str()[arg_list[arg_idx].size() - 1] == '*')
         {
             pp_printf(&pif_spawn, "\

@@ -17,7 +17,7 @@ static int TDEGREE = 2;
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
 
-__kernel void nullKernel_impl(atmi_task_handle_t thisTask, int i) __attribute__((atmi_kernel("nullKernel", "GPU")));
+__kernel void nullKernel_impl(int i) __attribute__((atmi_kernel("nullKernel", "GPU")));
 
 //extern "C" void nullKernel_impl(atmi_task_handle_t thisTask) __attribute__((atmi_kernel("nullKernel", "CPU")));
 

@@ -404,6 +404,7 @@ extern void atl_task_wait(atl_task_t *task) {
 }
 
 extern atmi_status_t atmi_task_wait(atmi_task_handle_t task) {
+    DEBUG_PRINT("Waiting for task ID: %lu\n", task);
     atl_task_wait(get_task(task));
     return ATMI_STATUS_SUCCESS;
 }
@@ -756,6 +757,7 @@ hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj,
     atmi_scheduler_t sched = stream_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
     hsa_queue_t *queue = proc.getBestQueue(sched);
     stream_obj->gpu_queue = queue;
+    DEBUG_PRINT("Returned Queue: %p\n", queue);
     return queue;
 }
 
@@ -1332,7 +1334,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         ErrorCheck(Symbol info extraction, err);
         name[name_length] = 0;
 
-        printf("Symbol name: %s\n", name);
+        DEBUG_PRINT("Symbol name: %s\n", name);
     }
     return HSA_STATUS_SUCCESS;
 }
@@ -1641,7 +1643,9 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
         kernarg_size += kernel->arg_sizes[i];
     }
     kernel_impl->kernarg_segment_size = kernarg_size;
-    kernel_impl->kernarg_region = malloc(kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS);
+    kernel_impl->kernarg_region = NULL;
+    if(kernarg_size) 
+        kernel_impl->kernarg_region = malloc(kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS);
     for(int i = 0; i < MAX_NUM_KERNELS; i++) {
         kernel_impl->free_kernarg_segments.push(i);
     }
@@ -1751,6 +1755,8 @@ void handle_signal_callback(atl_task_t *task) {
 
 void handle_signal_barrier_pkt(atl_task_t *task) {
     atmi_lparm_t *l = &(task->lparm);
+    // tasks without atmi_task handle should not be added to callbacks anyway
+    assert(task->groupable != ATMI_TRUE);
     // release the kernarg segment back to the kernarg pool
     atl_kernel_t *kernel = task->kernel;
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, task->kernel_id);
@@ -1978,6 +1984,11 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     // enqueue task's packet to that queue
 
     int proc_id = task->place.device_id;
+    if(proc_id == -1) {
+        // user is asking runtime to pick a device
+        // TODO: best device of this type? pick 0 for now
+        proc_id = 0;
+    }
     hsa_queue_t* this_Q = NULL;
     if(task->devtype == ATMI_DEVTYPE_GPU)
         this_Q = acquire_and_set_next_gpu_queue(stream_obj, task->place);
@@ -2153,7 +2164,7 @@ void *try_grab_kernarg_region(atl_task_t *ret, int *free_idx) {
 
 void set_kernarg_region(atl_task_t *ret, void **args) {
     char *thisKernargAddress = (char *)(ret->kernarg_region);
-    if(thisKernargAddress == NULL) {
+    if(ret->kernel->num_args && thisKernargAddress == NULL) {
         fprintf(stderr, "Unable to allocate/find free kernarg segment\n");
     }
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
@@ -2608,17 +2619,17 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     //memcpy(&(ret->lparm), lparm, sizeof(atmi_lparm_t));
     ret->lparm = *lparm;
     DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires, lparm->requires);
-    DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task, lparm->task);
+    DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task_info, lparm->task_info);
 
     ret->lparm.group = stream;
     ret->stream_obj = stream_obj;
     ret->place = lparm->place;
-    DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.stream, lparm->stream);
+    DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);
     ret->num_predecessors = 0;
     ret->num_successors = 0;
 
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
-    DEBUG_PRINT("Pif %s requires %d task\n", kernel_name, lparm->num_required);
+    DEBUG_PRINT("Pif %s requires %d task\n", kernel_impl->kernel_name.c_str(), lparm->num_required);
 
     ShouldDispatchTimer.Start();
     ret->predecessors.clear();
@@ -2661,7 +2672,6 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         RegisterCallbackTimer.Stop();
         }
     }
-
     if ( lparm->synchronous == ATMI_TRUE ) { /*  Sychronous execution */
         /* For default synchrnous execution, wait til kernel is finished.  */
     //    TaskWaitTimer.Start();
@@ -2707,7 +2717,7 @@ atmi_task_handle_t atmi_task_launch(atmi_kernel_t atmi_kernel, atmi_lparm_t *lpa
         return NULL_TASK;
     }
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, lparm->kernel_id);
-    if(kernel_impl->kernarg_region == NULL) {
+    if(kernel->num_args && kernel_impl->kernarg_region == NULL) {
         fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n", 
                             kernel_impl->kernel_name.c_str());
         return NULL_TASK;
@@ -2724,7 +2734,7 @@ atmi_task_handle_t atmi_task_launch(atmi_kernel_t atmi_kernel, atmi_lparm_t *lpa
     TryLaunchTimer.Start();
     ret = atl_trylaunch_kernel(lparm, kernel, args);
     TryLaunchTimer.Stop();
-    DEBUG_PRINT("[Returned Task: %lu]\n", ret.lo);
+    DEBUG_PRINT("[Returned Task: %lu]\n", ret);
     return ret;
 }
 

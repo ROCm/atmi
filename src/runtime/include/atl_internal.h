@@ -133,11 +133,12 @@ typedef struct atl_task_s {
     bool kernarg_region_copied;
 
     // list of dependents
-    uint32_t num_predecessors; // cant we get this from lparm?
-    uint32_t num_successors; // cant we get this from lparm?
+    uint32_t num_predecessors; 
+    uint32_t num_successors; 
     atl_dep_sync_t dep_sync_type;
 
     atmi_task_group_table_t *stream_obj;
+    atmi_task_group_t *group;
     boolean groupable;
 
     // other miscellaneous flags
@@ -148,8 +149,8 @@ typedef struct atl_task_s {
     // per task mutex to reduce contention
     pthread_mutex_t mutex;
 
-    // lparm to control some of the execution flow (synchronous, requires, etc)
-    atmi_lparm_t lparm;
+    unsigned long    gridDim[3];     /* # of global threads for each dimension */
+    unsigned long    groupDim[3];    /* Thread group size for each dimension   */
     // FIXME: queue or vector?
     atl_task_vector_t and_successors;
     atl_task_vector_t and_predecessors;
@@ -167,7 +168,6 @@ typedef struct atl_task_s {
     {
         and_successors.clear();
         and_predecessors.clear();
-        memset(&lparm, 0, sizeof(atmi_lparm_t));
     }
 
 #if 1

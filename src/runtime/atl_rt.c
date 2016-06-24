@@ -1694,11 +1694,9 @@ void dispatch_all_tasks(std::vector<atl_task_t*>::iterator &start,
 }
 
 void handle_signal_callback(atl_task_t *task) {
-    atmi_lparm_t *l = NULL;
     // tasks without atmi_task handle should not be added to callbacks anyway
     assert(task->groupable != ATMI_TRUE);
     lock(&(task->mutex));
-    l = &(task->lparm);
     set_task_state(task, ATMI_COMPLETED);
     set_task_metrics(task);
     unlock(&(task->mutex));
@@ -1754,7 +1752,6 @@ void handle_signal_callback(atl_task_t *task) {
 }
 
 void handle_signal_barrier_pkt(atl_task_t *task) {
-    atmi_lparm_t *l = &(task->lparm);
     // tasks without atmi_task handle should not be added to callbacks anyway
     assert(task->groupable != ATMI_TRUE);
     // release the kernarg segment back to the kernarg pool
@@ -1776,7 +1773,6 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     kernel_impl->free_kernarg_segments.push(task->kernarg_region_index);
 
     DEBUG_PRINT("{%d}\n", task->id);
-    l = &(task->lparm);
     set_task_state(task, ATMI_COMPLETED);
     set_task_metrics(task);
 
@@ -1973,7 +1969,6 @@ void *acquire_kernarg_segment(atl_kernel_impl_t *impl, int *segment_id) {
 }
 
 atmi_status_t dispatch_task(atl_task_t *task) {
-    atmi_lparm_t *lparm = &(task->lparm);
     //DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
 
     TryDispatchTimer.Start();
@@ -2002,7 +1997,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
 
     if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
         /* For dependent child tasks, add dependent parent kernels to barriers.  */
-        DEBUG_PRINT("Pif requires %d tasks\n", lparm->num_required);
+        DEBUG_PRINT("Pif requires %d tasks\n", lparm->predecessor.size());
         if ( task->and_predecessors.size() > 0) {
             int val = 0;
             DEBUG_PRINT("(");
@@ -2041,9 +2036,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         //SignalAddTimer.Stop();
         this_aql->completion_signal = task->signal;
         int ndim = -1; 
-        if(lparm->gridDim[2] > 1) 
+        if(task->gridDim[2] > 1) 
             ndim = 3;
-        else if(lparm->gridDim[1] > 1) 
+        else if(task->gridDim[1] > 1) 
             ndim = 2;
         else
             ndim = 1;
@@ -2066,21 +2061,21 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             const int dummy_arg_count = 6;
             kargs += (dummy_arg_count * sizeof(uint64_t));
         }
-        /*  Process lparm values */
+        /*  Process task values */
         /*  this_aql.dimensions=(uint16_t) ndim; */
         this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
-        this_aql->grid_size_x=lparm->gridDim[0];
-        this_aql->workgroup_size_x=lparm->groupDim[0];
+        this_aql->grid_size_x=task->gridDim[0];
+        this_aql->workgroup_size_x=task->groupDim[0];
         if (ndim>1) {
-            this_aql->grid_size_y=lparm->gridDim[1];
-            this_aql->workgroup_size_y=lparm->groupDim[1];
+            this_aql->grid_size_y=task->gridDim[1];
+            this_aql->workgroup_size_y=task->groupDim[1];
         } else {
             this_aql->grid_size_y=1;
             this_aql->workgroup_size_y=1;
         }
         if (ndim>2) {
-            this_aql->grid_size_z=lparm->gridDim[2];
-            this_aql->workgroup_size_z=lparm->groupDim[2];
+            this_aql->grid_size_z=task->gridDim[2];
+            this_aql->workgroup_size_z=task->groupDim[2];
         } else {
             this_aql->grid_size_z=1;
             this_aql->workgroup_size_z=1;
@@ -2210,13 +2205,12 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
 bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     bool resources_available = true;
     bool should_dispatch = true;
-    atmi_lparm_t *lparm = &(ret->lparm);
     hsa_signal_t new_signal;
 
     std::vector<pthread_mutex_t *> req_mutexes;
     std::vector<atl_task_t *> &temp_vecs = ret->predecessors;
     req_mutexes.clear();
-    for(int idx = 0; idx < lparm->num_required; idx++) {
+    for(int idx = 0; idx < ret->predecessors.size(); idx++) {
         atl_task_t *pred_task = temp_vecs[idx];
         req_mutexes.push_back((pthread_mutex_t *)&(pred_task->mutex));
     }
@@ -2231,7 +2225,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     lock_vec(req_mutexes);
     //std::cout << "[" << ret->id << "]Signals Before: " << FreeSignalPool.size() << std::endl;
     int dep_count = 0;
-    for(int idx = 0; idx < lparm->num_required; idx++) {
+    for(int idx = 0; idx < ret->predecessors.size(); idx++) {
         atl_task_t *pred_task = temp_vecs[idx]; 
         DEBUG_PRINT("Task %d depends on %d as %d th predecessor ",
                 ret->id, pred_task->id, idx);
@@ -2246,7 +2240,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         }
     }
     int required_tasks = 0;
-    for(int idx = 0; idx < lparm->num_required; idx++) {
+    for(int idx = 0; idx < ret->predecessors.size(); idx++) {
         atl_task_t *pred_task = temp_vecs[idx]; 
         if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
             required_tasks++;
@@ -2320,7 +2314,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
             set_kernarg_region(ret, args);
         }
 
-        for(int idx = 0; idx < lparm->num_required; idx++) {
+        for(int idx = 0; idx < ret->predecessors.size(); idx++) {
             atl_task_t *pred_task = temp_vecs[idx]; 
             if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
                 pred_task->num_successors++;
@@ -2355,7 +2349,6 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     bool resources_available = true;
     bool predecessors_complete = true;
     bool should_dispatch = false;
-    atmi_lparm_t *lparm = &(ret->lparm);
 
     std::vector<pthread_mutex_t *> req_mutexes;
     std::vector<atl_task_t *> &temp_vecs = ret->predecessors;
@@ -2616,12 +2609,16 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     ret->profilable = lparm->profilable;
     ret->groupable = lparm->groupable;
     ret->atmi_task = lparm->task_info;
-    //memcpy(&(ret->lparm), lparm, sizeof(atmi_lparm_t));
-    ret->lparm = *lparm;
+
+    // fill in from lparm
+    for(int i = 0; i < 3 /* 3dims */; i++) {
+        ret->gridDim[i] = lparm->gridDim[i];
+        ret->groupDim[i] = lparm->groupDim[i];
+    }
     DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires, lparm->requires);
     DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task_info, lparm->task_info);
 
-    ret->lparm.group = stream;
+    ret->group = stream;
     ret->stream_obj = stream_obj;
     ret->place = lparm->place;
     DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);

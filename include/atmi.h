@@ -172,15 +172,9 @@ typedef unsigned long int atmi_task_handle_t;
 #define ATMI_TASK_HANDLE(low) (low)
 #endif
 extern atmi_task_handle_t NULL_TASK;
+
 /*----------------------------------------------------------------------------*/
-/*                                                                            */
 /* atmi_lparm_t  ATMI Launch Parameter Data Structure                         */
-/*                                                                            */
-/* atmi_lparm_t is the key data structure for ATMI.  It defines the task      */ 
-/* launch parameters.  The Platform Interface Function PIF will act on        */
-/* information provided by this data structure. The last argument of every    */
-/* PIF is an lparm structure.                                                 */
-/*                                                                            */
 /*----------------------------------------------------------------------------*/
 typedef struct atmi_lparm_s {
 #if 0
@@ -212,7 +206,19 @@ typedef struct atmi_lparm_s {
     atmi_task_t*     task_info;
     atmi_task_handle_t     continuation_task;
 } atmi_lparm_t ;
+
 /*----------------------------------------------------------------------------*/
+/* atmi_cparm_t  ATMI Data Copy Parameter Data Structure                         */
+/*----------------------------------------------------------------------------*/
+typedef struct atmi_cparm_s {
+    atmi_task_group_t*   group;      /* Group for this task, Default= NULL     */
+    boolean          groupable;      /* Create signal for task, default = F    */
+    boolean          profilable;     /* Points to tprofile if metrics desired  */ 
+    boolean          synchronous;    /* Async or Sync,  default = F (async)    */
+    int                 num_required;
+    atmi_task_handle_t* requires;
+    atmi_task_t*     task_info;
+} atmi_cparm_t;
 
 typedef struct atmi_task_list_s {
     atmi_task_t *task;
@@ -255,6 +261,8 @@ typedef struct atmi_data_s {
 #define WORKITEMS3D gridDim[2] 
 
 /* String macros to initialize popular default launch parameters.             */ 
+#define ATMI_CPARM(X) atmi_cparm_t * X ; atmi_cparm_t  _ ## X ={.group=NULL,.groupable=ATMI_FALSE,.profilable=ATMI_FALSE,.synchronous=ATMI_FALSE,.num_required=0,.requires=NULL,.task_info=NULL} ; X = &_ ## X ;
+
 #define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
 #define ATMI_LPARM_STREAM(X,Y) atmi_task_group_t * Y; atmi_task_group_t _ ## Y ={.id=0,.ordered=ATMI_TRUE} ; Y = &_ ## Y ; atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.group=Y,.groupable=ATMI_TRUE,.synchronous=ATMI_FALSE,.acquire_scope=2,.release_scope=2,.num_required=0,.requires=NULL,.num_needs_any=0,.needs_any=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=0,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;

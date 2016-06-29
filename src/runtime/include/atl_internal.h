@@ -107,6 +107,11 @@ typedef struct atmi_task_group_table_s {
     std::vector<atl_task_t *> running_groupable_tasks;
 }atmi_task_group_table_t;
 
+typedef enum atl_task_type_s {
+    ATL_KERNEL_EXECUTION    = 0,
+    ATL_DATA_MOVEMENT       = 1
+} atl_task_type_t;
+
 typedef enum atl_dep_sync_s {
     ATL_SYNC_BARRIER_PKT    = 0,
     ATL_SYNC_CALLBACK       = 1
@@ -115,6 +120,7 @@ typedef enum atl_dep_sync_s {
 extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
+extern atmi_task_group_t atl_default_stream_obj;
 typedef std::vector<atl_task_t *> atl_task_vector_t;
 
 typedef struct atl_task_s {
@@ -135,8 +141,12 @@ typedef struct atl_task_s {
     // list of dependents
     uint32_t num_predecessors; 
     uint32_t num_successors; 
-    atl_dep_sync_t dep_sync_type;
+    atl_task_type_t type; 
 
+    void *data_src_ptr;
+    void *data_dest_ptr;
+    size_t data_size;
+    
     atmi_task_group_table_t *stream_obj;
     atmi_task_group_t *group;
     boolean groupable;
@@ -193,6 +203,10 @@ typedef struct atmi_task_table_s {
 } atmi_task_table_t;
 */
 extern int           SNK_NextTaskId;
+extern atl_dep_sync_t g_dep_sync_type;
+
+extern void atl_task_wait(atl_task_t *task);
+extern void atl_stream_sync(atmi_task_group_table_t *stream_obj);
 
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
@@ -200,6 +214,7 @@ bool handle_signal(hsa_signal_value_t value, void *arg);
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);
+atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest, const void *src, const size_t size);
 atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
 void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype);
@@ -211,7 +226,7 @@ hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj,
 hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
 atmi_status_t clear_saved_tasks(atmi_task_group_table_t *stream_obj);
 atmi_status_t register_task(atmi_task_group_table_t *stream_obj, atl_task_t *task);
-atmi_status_t register_stream(atmi_task_group_table_t *stream_obj);
+atmi_status_t register_stream(atmi_task_group_t *stream_obj);
 void set_task_state(atl_task_t *t, atmi_state_t state);
 void set_task_metrics(atl_task_t *task);
 
@@ -223,12 +238,16 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret);
 atl_task_t *get_task(atmi_task_handle_t t);
 bool try_dispatch_callback(atl_task_t *t, void **args);
 bool try_dispatch_barrier_pkt(atl_task_t *t, void **args);
+void set_task_handle_ID(atmi_task_handle_t *t, int ID);
+void lock(pthread_mutex_t *m);
+void unlock(pthread_mutex_t *m);
 
-
+void try_dispatch(atl_task_t *ret, void **args, bool synchronous);
+atl_task_t *get_new_task();
 const char *get_error_string(hsa_status_t err);
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
-    printf("%s failed: %s\n", #msg, get_error_string(status)); \
+    printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_error_string(status)); \
     exit(1); \
 } else { \
  /*  printf("%s succeeded.\n", #msg);*/ \

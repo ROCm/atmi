@@ -10,7 +10,7 @@ fi
 [ -z ${HSA_RUNTIME_PATH} ] && HSA_RUNTIME_PATH=/opt/rocm/hsa
 
 ATMIPATH=/home/aaji/git/atmi
-CLOC_PATH=/home/aaji/git/CLOC/bin
+CLOC_PATH=/usr/bin
 CC=/usr/bin/gcc
 CXX=g++
 SNK=snack.sh
@@ -86,10 +86,8 @@ fi
 
 # build from C source 
 if [ $mode = "build" ]; then
-	echo "${CLOC_PATH}/cloc.sh -brig -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMIPATH}/include" -opt 2 grayscale.cl"
-	${CLOC_PATH}/cloc.sh -brig -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
-	#echo "${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMIPATH}/include" -opt 2 grayscale.cl"
-	#${CLOC_PATH}/cloc.sh -mcpu fiji -libgcn ${HOME}/opt/amd/libamdgcn -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 grayscale.cl
+	echo "${CLOC_PATH}/cloc.sh -mcpu fiji -opt 2 grayscale.cl"
+	${CLOC_PATH}/cloc.sh -mcpu fiji -opt 2 grayscale.cl
 	echo "${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${module_type} -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11"
 	${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${module_type} -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11
 	echo "${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64"

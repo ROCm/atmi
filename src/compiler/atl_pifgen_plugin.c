@@ -90,8 +90,9 @@ void write_spawn_function(const char *pif_name, int pif_index, std::vector<std::
 void write_headers(FILE *fp) {
     fprintf(fp, "\
 #include \"atmi.h\"\n\
-#include \"atmi_kl.h\"\n\
-#include \"atl_rt.h\"\n\n");
+#include \"atmi_runtime.h\"\n\
+#include <stdio.h>\n\
+#include \"atmi_kl.h\"\n\n");
 }
 
 void write_cpp_warning_header(FILE *fp) {
@@ -111,6 +112,7 @@ atmi_klist_t *atmi_klist;\n\
 if (status != ATMI_STATUS_SUCCESS) { \\\n\
    printf(\"%%s failed.\\n\", #msg); \\\n\
 } \n\n\
+extern _CPPSTRING_ void atl_kl_init(atmi_klist_t *atmi_klist, atmi_kernel_t kernel, const int pif_id); \n\
 void kl_init(); \n\n\
 ");
 fprintf(fp, "\
@@ -731,7 +733,7 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         );
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\n\
-    return atmi_task_launch(%s_kernel, lparm, \n\
+    return atmi_task_launch(lparm, %s_kernel, \n\
             args);\n",
             pif_name);
         pp_printf((pif_printers[pif_index].pifdefs), "\

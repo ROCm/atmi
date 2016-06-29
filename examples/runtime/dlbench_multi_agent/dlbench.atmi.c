@@ -365,7 +365,7 @@ int main(int argc, char **argv) {
     //lparm->synchronous = ATMI_TRUE;
     for (i = 0; i < gpu_agents_used; i++) {
       lparm->place = ATMI_PLACE_GPU(0, i);
-      atmi_task_launch(kernel, lparm, args[i]);
+      atmi_task_launch(lparm, kernel, args[i]);
     }
 
     double t = mysecond();
@@ -444,8 +444,10 @@ int main(int argc, char **argv) {
 #ifdef AOS
     atmi_free(src_images[i]);
     atmi_free(dst_images[i]);
+#ifdef DEVMEM
     atmi_free(dev_src_images[i]);
     atmi_free(dev_dst_images[i]);
+#endif
 #endif
 
 #ifdef DA

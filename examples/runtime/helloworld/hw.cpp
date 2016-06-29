@@ -69,13 +69,13 @@ int main(int argc, char **argv) {
     lparm->WORKITEMS = strlength;
     lparm->kernel_id = GPU_IMPL;
     lparm->place = ATMI_PLACE_GPU(0, 0);
-    atmi_task_launch(kernel, lparm, gpu_args);
+    atmi_task_launch(lparm, kernel, gpu_args);
     output_gpu[strlength] = '\0';
 
     lparm->WORKITEMS = 1;
     lparm->kernel_id = CPU_IMPL;
     lparm->place = ATMI_PLACE_CPU(0, 0);
-    atmi_task_launch(kernel, lparm, cpu_args);
+    atmi_task_launch(lparm, kernel, cpu_args);
     output_cpu[strlength] = '\0';
    
     cout << "Output from the GPU: " << output_gpu << endl;

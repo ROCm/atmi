@@ -45,7 +45,7 @@ extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t * lparm) {
           atmi_init(ATMI_DEVTYPE_CPU);
           cpu_initalized = 1;
       }
-      return atmi_task_launch(__sync_kernel_obj, lparm, NULL); 
+      return atmi_task_launch(lparm, __sync_kernel_obj, NULL); 
   } 
 } 
 

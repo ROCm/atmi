@@ -27,6 +27,7 @@ extern _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlengt
     decode_cpu_fn(*in, *out, *strlength);
 }
 
+#define TEST
 
 int main(int argc, char **argv) {
     atmi_init(ATMI_DEVTYPE_ALL);
@@ -38,8 +39,6 @@ int main(int argc, char **argv) {
     atmi_platform_type_t module_type = BRIG;
     #endif
     atmi_module_register(&module, &module_type, 1);
-
-    atmi_machine_t *machine = atmi_machine_get_info();
 
     atmi_kernel_t kernel;
     const unsigned int num_args = 3;
@@ -55,47 +54,58 @@ int main(int argc, char **argv) {
 
     int gpu_id = 0;
     int cpu_id = 0;
+    atmi_machine_t *machine = atmi_machine_get_info();
     int gpu_count = machine->device_count_by_type[ATMI_DEVTYPE_GPU];
     if(argv[1] != NULL) gpu_id = (atoi(argv[1]) % gpu_count);
     printf("Choosing GPU %d/%d\n", gpu_id, gpu_count);
 
+    /* Run HelloWorld on GPU */
     atmi_mem_place_t gpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_GPU, gpu_id, 0);
-    atmi_mem_place_t cpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_CPU, cpu_id, 0);
-
-	void *d_input;
+    void *d_input, *d_output;
     atmi_malloc(&d_input, strlength+1, gpu);
-    atmi_memcpy(d_input, input, strlength+1);
-
-	void *h_input;
-    atmi_malloc(&h_input, strlength+1, cpu);
-    atmi_memcpy(h_input, input, strlength+1);
-
-	void *d_output;
     atmi_malloc(&d_output, strlength+1, gpu);
 
-	void *h_output;
-    atmi_malloc(&h_output, strlength+1, cpu);
+    ATMI_CPARM(cparm_gpu);
+    atmi_task_handle_t h2d_gpu = atmi_memcpy_async(cparm_gpu, d_input, input, strlength+1);
 
-    void *gpu_args[] = {&d_input, &d_output, &strlength};
-    void *cpu_args[] = {&h_input, &h_output, &strlength};
-   
     ATMI_LPARM_1D(lparm, strlength);
-    lparm->synchronous = ATMI_TRUE;
-
     lparm->kernel_id = GPU_IMPL;
     lparm->place = ATMI_PLACE_GPU(0, gpu_id);
-    atmi_task_launch(lparm, kernel, gpu_args);
+    lparm->num_required = 1;
+    lparm->requires = &h2d_gpu; 
+    void *gpu_args[] = {&d_input, &d_output, &strlength};
+    atmi_task_handle_t k_gpu = atmi_task_launch(lparm, kernel, gpu_args);
+
+    cparm_gpu->num_required = 1;
+    cparm_gpu->requires = &k_gpu;
+    atmi_task_handle_t d2h_gpu = atmi_memcpy_async(cparm_gpu, output_gpu, d_output, strlength+1);
+
+    atmi_task_wait(d2h_gpu);
+    output_gpu[strlength] = '\0';
+    cout << "Output from the GPU: " << output_gpu << endl;
+
+    /* Run HelloWorld on CPU */
+    atmi_mem_place_t cpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_CPU, cpu_id, 0);
+	void *h_input, *h_output;
+    atmi_malloc(&h_input, strlength+1, cpu);
+    atmi_malloc(&h_output, strlength+1, cpu);
+
+	ATMI_CPARM(cparm_cpu);
+    atmi_task_handle_t h2d_cpu = atmi_memcpy_async(cparm_cpu, h_input, input, strlength+1);
 
     lparm->kernel_id = CPU_IMPL;
     lparm->place = ATMI_PLACE_CPU(0, cpu_id);
-    atmi_task_launch(lparm, kernel, cpu_args);
+    lparm->num_required = 1;
+    lparm->requires = &h2d_cpu; 
+    void *cpu_args[] = {&h_input, &h_output, &strlength};
+    atmi_task_handle_t k_cpu = atmi_task_launch(lparm, kernel, cpu_args);
 
-    atmi_memcpy(output_gpu, d_output, strlength+1);
-    output_gpu[strlength] = '\0';
-    atmi_memcpy(output_cpu, h_output, strlength+1);
+    cparm_cpu->num_required = 1;
+    cparm_cpu->requires = &k_cpu;
+    atmi_task_handle_t d2h_cpu = atmi_memcpy_async(cparm_cpu, output_cpu, h_output, strlength+1);
+    
+    atmi_task_wait(d2h_cpu);
     output_cpu[strlength] = '\0';
-   
-    cout << "Output from the GPU: " << output_gpu << endl;
     cout << "Output from the CPU: " << output_cpu << endl;
 
     /* cleanup */

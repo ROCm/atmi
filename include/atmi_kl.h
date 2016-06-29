@@ -9,7 +9,7 @@ struct atmi_kernel_packet_s {
 
 typedef struct atmi_task_impl_s {
     unsigned long int signal;
-    unsigned char reserved[352];
+    unsigned char reserved[376];
 } atmi_task_impl_t;
 
 typedef struct atmi_klist_s atmi_klist_t;

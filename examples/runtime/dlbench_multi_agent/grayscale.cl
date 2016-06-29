@@ -1,7 +1,6 @@
-#include "atmi.h"
 #include "dlbench.h"
 
-__kernel void grayscale_aos(atmi_task_handle_t thisTask, __global pixel *src_images, __global pixel *dst_images, int num_imgs) {
+__kernel void grayscale_aos(__global pixel *src_images, __global pixel *dst_images, int num_imgs) {
   int i = get_global_id(0);
   DATA_ITEM_TYPE gs;
   for (int k = 0; k < ITERS; k++) {
@@ -18,7 +17,7 @@ __kernel void grayscale_aos(atmi_task_handle_t thisTask, __global pixel *src_ima
 }
 
 
-__kernel void grayscale_da(atmi_task_handle_t thisTask, __global DATA_ITEM_TYPE *r, __global DATA_ITEM_TYPE *g, 
+__kernel void grayscale_da(__global DATA_ITEM_TYPE *r, __global DATA_ITEM_TYPE *g, 
 			   __global DATA_ITEM_TYPE *b, __global DATA_ITEM_TYPE *x, __global DATA_ITEM_TYPE *d_r, 
 			   __global DATA_ITEM_TYPE *d_g, __global
 			   DATA_ITEM_TYPE *d_b, __global DATA_ITEM_TYPE *d_x,

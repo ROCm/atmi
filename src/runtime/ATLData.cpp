@@ -8,6 +8,8 @@
 #include <iostream>
 #include "atmi_runtime.h"
 #include "atl_internal.h"
+#include <cassert>
+#include <thread>
 
 using namespace std;
 
@@ -284,6 +286,186 @@ atmi_status_t atmi_free(void *ptr) {
     return ret;
 }
 
+atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void *src, size_t size) {
+    atmi_task_group_t *stream = NULL;
+    if(lparm->group == NULL) {
+        stream = &atl_default_stream_obj;
+    } else {
+        stream = lparm->group;
+    }
+    /* Add row to stream table for purposes of future synchronizations */
+    register_stream(stream);
+    atmi_task_group_table_t *stream_obj = StreamTable[stream->id];
+
+    atl_task_t *ret = get_new_task();
+
+    ret->data_dest_ptr = dest;
+    ret->data_src_ptr = (void *)src;
+    ret->data_size = size;
+
+    ret->profilable = lparm->profilable;
+    ret->groupable = lparm->groupable;
+    ret->atmi_task = lparm->task_info;
+    ret->type = ATL_DATA_MOVEMENT;
+    ret->group = stream;
+    ret->stream_obj = stream_obj;
+
+    // TODO: performance fix if there are more CPU agents to improve locality
+    ret->place = ATMI_PLACE_CPU(0, 0);
+    
+    ret->num_predecessors = 0;
+    ret->num_successors = 0;
+
+    ret->devtype = ATMI_DEVTYPE_CPU;
+    ret->kernel = NULL;
+
+    ret->predecessors.clear();
+    ret->predecessors.resize(lparm->num_required);
+    for(int idx = 0; idx < lparm->num_required; idx++) {
+        atl_task_t *pred_task = get_task(lparm->requires[idx]);
+        assert(pred_task != NULL);
+        ret->predecessors[idx] = pred_task;
+    }
+
+    try_dispatch(ret, NULL, lparm->synchronous);
+
+    return ret->id;
+}
+
+atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest, 
+        const void *src, const size_t size) {
+
+    atmi_status_t ret;
+    hsa_status_t err; 
+
+    if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+        atmi_task_group_table_t *stream_obj = task->stream_obj;
+        /* get this stream's HSA queue (could be dynamically mapped or round robin
+         * if it is an unordered stream */
+        // FIXME: round robin for now, but may use some other load balancing algo
+        // enqueue task's packet to that queue
+
+        hsa_queue_t* this_Q = acquire_and_set_next_cpu_queue(stream_obj, task->place);
+        if(!this_Q) return ATMI_STATUS_ERROR;
+
+        /* if stream is ordered and the devtype changed for this task, 
+         * enqueue a barrier to wait for previous device to complete */
+        //check_change_in_device_type(task, stream_obj, this_Q, task->devtype);
+
+        /* For dependent child tasks, add dependent parent kernels to barriers.  */
+        DEBUG_PRINT("Pif requires %d tasks\n", lparm->predecessor.size());
+        if ( task->and_predecessors.size() > 0) {
+            int val = 0;
+            DEBUG_PRINT("(");
+            for(size_t count = 0; count < task->and_predecessors.size(); count++) {
+                if(task->and_predecessors[count]->state < ATMI_DISPATCHED) val++;
+                assert(task->and_predecessors[count]->state >= ATMI_DISPATCHED);
+                DEBUG_PRINT("%d ", task->and_predecessors[count]->id);
+            }
+            DEBUG_PRINT(")\n");
+            if(val > 0) DEBUG_PRINT("Task[%d] has %d not-dispatched predecessor tasks\n", task->id, val);
+            enqueue_barrier(task, this_Q, task->and_predecessors.size(), &(task->and_predecessors[0]), SNK_WAIT, SNK_AND, task->devtype);
+        }
+        DEBUG_PRINT("%d\n", task->id);
+    }
+
+    ATLData * volatile src_data = g_data_map.find(src);
+    ATLData * volatile dest_data = g_data_map.find(dest);
+    bool is_src_host = (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+    bool is_dest_host = (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+    atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
+    hsa_agent_t cpu_agent = get_agent(cpu);
+    hsa_agent_t src_agent;
+    hsa_agent_t dest_agent;
+    void *temp_host_ptr; 
+    const void *src_ptr = src;
+    void *dest_ptr = dest;
+    volatile unsigned type;
+    if(is_src_host && is_dest_host) {
+        type = ATMI_H2H;
+        src_agent = cpu_agent;
+        dest_agent = cpu_agent; 
+        src_ptr = src;
+        dest_ptr = dest;
+    }
+    else if(src_data && !dest_data) {
+        type = ATMI_D2H;
+        src_agent = get_agent(src_data->getPlace());
+        dest_agent = src_agent; 
+        src_ptr = src;
+        dest_ptr = dest;
+    }
+    else if(!src_data && dest_data) {
+        type = ATMI_H2D;
+        dest_agent = get_agent(dest_data->getPlace());
+        src_agent = dest_agent;
+        src_ptr = src;
+        dest_ptr = dest;
+    }
+    else {
+        type = ATMI_D2D;
+        src_agent = get_agent(src_data->getPlace());
+        dest_agent = get_agent(dest_data->getPlace());
+        src_ptr = src;
+        dest_ptr = dest;
+    }
+    DEBUG_PRINT("Memcpy source agent: %lu\n", src_agent.handle);
+    DEBUG_PRINT("Memcpy dest agent: %lu\n", dest_agent.handle);
+    
+    if(type == ATMI_H2D || type == ATMI_D2H) {
+        hsa_signal_store_release(task->signal, 2);
+        //hsa_signal_add_acq_rel(task->signal, 1);
+        // For malloc'ed buffers, additional atmi_malloc/memcpy/free
+        // steps are needed. So, fire and forget a copy thread with 
+        // signal count = 2 (one for actual host-device copy and another
+        // for H2H copy to setup the device copy.
+        std::thread([](void* dst, const void* src, size_t size, hsa_agent_t agent,
+                    unsigned type, atmi_mem_place_t cpu, hsa_signal_t signal) {
+            atmi_status_t ret;
+            hsa_status_t err; 
+            void *temp_host_ptr;
+            const void *src_ptr = src;
+            void *dest_ptr = dst;
+            ret = atmi_malloc(&temp_host_ptr, size, cpu);
+            if(type == ATMI_H2D) {
+                memcpy(temp_host_ptr, src, size);
+                src_ptr = (const void *)temp_host_ptr;
+                dest_ptr = dst;
+            }
+            else {
+                src_ptr = src;
+                dest_ptr = temp_host_ptr;
+            }
+
+            err = hsa_amd_memory_async_copy(
+                dest_ptr, agent,
+                src_ptr, agent,
+                size, 
+                0, NULL, signal);
+            ErrorCheck(Copy async between memory pools, err);
+            hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 1, UINT64_MAX, ATMI_WAIT_STATE);
+            // cleanup for D2H and H2D
+            if(type == ATMI_D2H) {
+                memcpy(dst, temp_host_ptr, size);
+            }
+            atmi_free(temp_host_ptr);
+            hsa_signal_subtract_acq_rel(signal, 1);
+        },
+        dest, src, size, src_agent, type, cpu, task->signal).detach();
+    }
+    else {
+        hsa_signal_store_release(task->signal, 1);
+        //hsa_signal_add_acq_rel(task->signal, 1);
+        err = hsa_amd_memory_async_copy(
+                dest_ptr, dest_agent,
+                src_ptr, src_agent,
+                size, 
+                0, NULL, task->signal);
+        ErrorCheck(Copy async between memory pools, err);
+    }
+    return ATMI_STATUS_SUCCESS;
+}
+
 atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
     atmi_status_t ret;
     hsa_status_t err; 
@@ -360,82 +542,4 @@ atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
     if(err != HSA_STATUS_SUCCESS || ret != ATMI_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
     return ret;
 }
-
-atmi_status_t atmi_copy_d2h(void *dest, const void *src, size_t size, atmi_mem_place_t place) {
-    void *agent_ptr; 
-    hsa_status_t err;
-    atmi_status_t ret = ATMI_STATUS_SUCCESS;
-    hsa_agent_t src_agent = get_agent(place);
-    #if 0
-    err = hsa_amd_memory_lock(dest, size, &src_agent, 1, &agent_ptr);
-    ErrorCheck(Locking the host ptr, err);
-    #else
-    ret = atmi_malloc(&agent_ptr, size, ATMI_MEM_PLACE_CPU_MEM(0, 0, 0));
-    err = hsa_amd_agents_allow_access(1, &src_agent, NULL, agent_ptr);
-    ErrorCheck(Allow access to ptr, err);
-    #endif
-    //hsa_signal_store_release(IdentityCopySignal, 1);
-    hsa_signal_add_acq_rel(IdentityCopySignal, 1);
-    DEBUG_PRINT("D2H %p --> %p (%lu)\n", src, agent_ptr, size);
-    err = hsa_amd_memory_async_copy(
-                              agent_ptr, src_agent,
-                              src, src_agent,
-                              size, 
-                              0, NULL, IdentityCopySignal);
-	ErrorCheck(Copy async between memory pools, err);
-    hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
-    DEBUG_PRINT("Done D2H %p --> %p (%lu)\n", src, agent_ptr, size);
-
-    #if 0
-    err = hsa_amd_memory_unlock(dest);
-    ErrorCheck(Unlocking the host ptr, err);
-    #else
-    memcpy(dest, agent_ptr, size);
-    ret = atmi_free(agent_ptr);
-    #endif
-    if(err != HSA_STATUS_SUCCESS || ret != ATMI_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
-    return ret;
-}
-
-atmi_status_t atmi_copy_h2d(void *dest, const void *src, size_t size, atmi_mem_place_t place) {
-   void *agent_ptr; 
-    hsa_status_t err;
-    atmi_status_t ret = ATMI_STATUS_SUCCESS;
-    hsa_agent_t dest_agent = get_agent(place);
-    #if 1
-    ret = atmi_malloc(&agent_ptr, size, ATMI_MEM_PLACE_CPU_MEM(0, 0, 0));
-    memcpy(agent_ptr, src, size);
-
-    // FIXME: ideally lock would be the better approach, but we need to try to
-    // understand why the h2d copy segfaults if we dont have the below lines
-    err = hsa_amd_agents_allow_access(1, &dest_agent, NULL, agent_ptr);
-    ErrorCheck(Allow access to ptr, err);
-    #else
-    /*void *foo_ptr;
-    ret = atmi_malloc(&foo_ptr, 1, ATMI_MEM_PLACE_CPU_MEM(0, 0, 0));
-    err = hsa_amd_agents_allow_access(1, &dest_agent, NULL, foo_ptr);
-    atmi_free(foo_ptr);
-    */
-    err = hsa_amd_memory_lock((void *)src, size, &dest_agent, 1, &agent_ptr);
-    ErrorCheck(Locking the host ptr, err);
-    #endif
-    hsa_signal_add_acq_rel(IdentityCopySignal, 1);
-    DEBUG_PRINT("H2D %p --> %p (%lu)\n", agent_ptr, dest, size);
-    err = hsa_amd_memory_async_copy(dest, dest_agent,
-                              agent_ptr, dest_agent,
-                              size, 
-                              0, NULL, IdentityCopySignal);
-	ErrorCheck(Copy async between memory pools, err);
-    hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
-
-    #if 1
-    ret = atmi_free(agent_ptr);
-    #else
-    err = hsa_amd_memory_unlock((void *)src);
-    ErrorCheck(Unlocking the host ptr, err);
-    #endif
-    if(err != HSA_STATUS_SUCCESS || ret != ATMI_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
-    return ret;
-}
-
 

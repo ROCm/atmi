@@ -51,7 +51,7 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
 atmi_status_t atmi_kernel_release(atmi_kernel_t kernel);
 
 /* Task (kernel invocation) */
-atmi_task_handle_t atmi_task_launch(atmi_kernel_t kernel, atmi_lparm_t *lparm, void **args);
+atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t kernel, void **args);
 atmi_status_t atmi_task_wait(atmi_task_handle_t task);
 
 /* CPU task runtime (valid within CPU tasks) */
@@ -65,11 +65,10 @@ atmi_status_t atmi_data_copy_sync(atmi_data_t *dest, const atmi_data_t *src);
 atmi_status_t atmi_data_create_sync(atmi_data_t *data, size_t size, atmi_mem_place_t place);
 atmi_status_t atmi_data_destroy_sync(atmi_data_t *data);
 #endif
-atmi_status_t atmi_copy_d2h(void *dest, const void *src, size_t size, atmi_mem_place_t place);
-atmi_status_t atmi_copy_h2d(void *dest, const void *src, size_t size, atmi_mem_place_t place);
 atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place);
 atmi_status_t atmi_free(void *ptr);
 atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size);
+atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *cparm, void *dest, const void *src, size_t size);
 #ifdef __cplusplus
 }
 #endif

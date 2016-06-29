@@ -7,7 +7,7 @@ ATMI_INC=${ATMI_RUNTIME_PATH}/include
 PLUGIN_LIB  = ${ATMI_RUNTIME_PATH}/lib/atmi_pifgen.so
 
 CC=g++
-CFLAGS=-O3 -g
+CFLAGS=-O3 -g -std=c++11
 INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I. 
 
 LIBS=-latmi_runtime -lhsa-runtime64 -lelf

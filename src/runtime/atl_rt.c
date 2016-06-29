@@ -2582,6 +2582,7 @@ void try_dispatch(atl_task_t *ret, void **args, bool synchronous) {
 
 atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
                  atl_kernel_t *kernel,
+                 unsigned int kernel_id,
                  void **args) {
     TryLaunchInitTimer.Start();
     DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id, lparm->place.type, lparm->place.device_id, lparm->place.cu_mask);
@@ -2672,7 +2673,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 #endif
     TryLaunchInitTimer.Stop();
     ret->kernel = kernel;
-    ret->kernel_id = lparm->kernel_id;
+    ret->kernel_id = kernel_id;
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, ret->kernel_id);
     ret->kernarg_region = NULL;
     ret->kernarg_region_size = kernel_impl->kernarg_segment_size; 
@@ -2735,12 +2736,31 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
     kernel->pif_name = pif_name_str;
     int this_kernel_iter = 0;
     int num_args = kernel->num_args;
-    if(!is_valid_kernel_id(kernel, lparm->kernel_id)) {
-        fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have %d implementations\n", 
-                            pif_name, lparm->kernel_id + 1);
-        return NULL_TASK;
+    int kernel_id = lparm->kernel_id;
+    if(kernel_id == -1) {
+        // choose the first available kernel for the given devtype
+        atmi_devtype_t type = lparm->place.type;
+        for(std::vector<atl_kernel_impl_t *>::iterator it = kernel->impls.begin(); 
+            it != kernel->impls.end(); it++) {
+            if((*it)->devtype == type) {
+                kernel_id = (*it)->kernel_id;
+                break;
+            }
+        }
+        if(kernel_id == -1) {
+            fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have any implementations\n", 
+                    pif_name);
+            return NULL_TASK;
+        }
     }
-    atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, lparm->kernel_id);
+    else {
+        if(!is_valid_kernel_id(kernel, kernel_id)) {
+            fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have %d implementations\n", 
+                    pif_name, kernel_id + 1);
+            return NULL_TASK;
+        }
+    }
+    atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, kernel_id);
     if(kernel->num_args && kernel_impl->kernarg_region == NULL) {
         fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n", 
                             kernel_impl->kernel_name.c_str());
@@ -2756,7 +2776,7 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
     */
     ParamsInitTimer.Stop();
     TryLaunchTimer.Start();
-    ret = atl_trylaunch_kernel(lparm, kernel, args);
+    ret = atl_trylaunch_kernel(lparm, kernel, kernel_id, args);
     TryLaunchTimer.Stop();
     DEBUG_PRINT("[Returned Task: %lu]\n", ret);
     return ret;

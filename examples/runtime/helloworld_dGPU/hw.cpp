@@ -59,8 +59,8 @@ int main(int argc, char **argv) {
     if(argv[1] != NULL) gpu_id = (atoi(argv[1]) % gpu_count);
     printf("Choosing GPU %d/%d\n", gpu_id, gpu_count);
 
-    atmi_mem_place_t gpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_GPU, gpu_id, 0);
-    atmi_mem_place_t cpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_CPU, cpu_id, 0);
+    atmi_mem_place_t gpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, gpu_id, 0);
+    atmi_mem_place_t cpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_CPU, cpu_id, 0);
 
 	void *d_input;
     atmi_malloc(&d_input, strlength+1, gpu);

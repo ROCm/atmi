@@ -97,21 +97,7 @@ atmi_status_t atl_get_gpu_kernel_info(
                             uint32_t                         *_KN__Kernarg_Size
                             );
 
-#if 0
-atmi_task_t *atl_trylaunch_pif(const atmi_lparm_t *lparm,
-                 hsa_executable_t *executable,
-                 const char *pif_name,
-                 void *thisKernargAddress);
 
-atmi_task_t *atl_gpu_kernel(const atmi_lparm_t *lparm,
-                 hsa_executable_t executable,
-                 const char *pif_name,
-                 void *thisKernargAddress);
-
-atmi_task_t *atl_cpu_kernel(const atmi_lparm_t *lparm, 
-                 const char *pif_name,
-                 void *kernel_args);
-#endif
 /*  All global values go in this global structure */
 typedef struct atl_context_s {
    int struct_initialized;

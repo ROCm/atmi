@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     printf("Choosing GPU %d/%d\n", gpu_id, gpu_count);
 
     /* Run HelloWorld on GPU */
-    atmi_mem_place_t gpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_GPU, gpu_id, 0);
+    atmi_mem_place_t gpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, gpu_id, 0);
     void *d_input, *d_output;
     atmi_malloc(&d_input, strlength+1, gpu);
     atmi_malloc(&d_output, strlength+1, gpu);
@@ -68,16 +68,12 @@ int main(int argc, char **argv) {
     ATMI_CPARM(cparm_gpu);
     atmi_task_handle_t h2d_gpu = atmi_memcpy_async(cparm_gpu, d_input, input, strlength+1);
 
-    ATMI_LPARM_1D(lparm, strlength);
-    lparm->kernel_id = GPU_IMPL;
-    lparm->place = ATMI_PLACE_GPU(0, gpu_id);
-    lparm->num_required = 1;
-    lparm->requires = &h2d_gpu; 
+    ATMI_LPARM_GPU_1D(lparm_gpu, gpu_id, strlength);
+    ATMI_PARM_SET_DEPENDENCIES(lparm_gpu, h2d_gpu);
     void *gpu_args[] = {&d_input, &d_output, &strlength};
-    atmi_task_handle_t k_gpu = atmi_task_launch(lparm, kernel, gpu_args);
+    atmi_task_handle_t k_gpu = atmi_task_launch(lparm_gpu, kernel, gpu_args);
 
-    cparm_gpu->num_required = 1;
-    cparm_gpu->requires = &k_gpu;
+    ATMI_PARM_SET_DEPENDENCIES(cparm_gpu, k_gpu);
     atmi_task_handle_t d2h_gpu = atmi_memcpy_async(cparm_gpu, output_gpu, d_output, strlength+1);
 
     atmi_task_wait(d2h_gpu);
@@ -85,7 +81,7 @@ int main(int argc, char **argv) {
     cout << "Output from the GPU: " << output_gpu << endl;
 
     /* Run HelloWorld on CPU */
-    atmi_mem_place_t cpu = ATMI_MEM_PLACE(0, ATMI_DEVTYPE_CPU, cpu_id, 0);
+    atmi_mem_place_t cpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_CPU, cpu_id, 0);
 	void *h_input, *h_output;
     atmi_malloc(&h_input, strlength+1, cpu);
     atmi_malloc(&h_output, strlength+1, cpu);
@@ -93,15 +89,12 @@ int main(int argc, char **argv) {
 	ATMI_CPARM(cparm_cpu);
     atmi_task_handle_t h2d_cpu = atmi_memcpy_async(cparm_cpu, h_input, input, strlength+1);
 
-    lparm->kernel_id = CPU_IMPL;
-    lparm->place = ATMI_PLACE_CPU(0, cpu_id);
-    lparm->num_required = 1;
-    lparm->requires = &h2d_cpu; 
+    ATMI_LPARM_CPU(lparm_cpu, cpu_id);
+    ATMI_PARM_SET_DEPENDENCIES(lparm_cpu, h2d_cpu);
     void *cpu_args[] = {&h_input, &h_output, &strlength};
-    atmi_task_handle_t k_cpu = atmi_task_launch(lparm, kernel, cpu_args);
+    atmi_task_handle_t k_cpu = atmi_task_launch(lparm_cpu, kernel, cpu_args);
 
-    cparm_cpu->num_required = 1;
-    cparm_cpu->requires = &k_cpu;
+    ATMI_PARM_SET_DEPENDENCIES(cparm_cpu, k_cpu);
     atmi_task_handle_t d2h_cpu = atmi_memcpy_async(cparm_cpu, output_cpu, h_output, strlength+1);
     
     atmi_task_wait(d2h_cpu);

@@ -24,7 +24,7 @@ OBJS = hello
 all: $(OBJS)
 
 hello: hw.cpp hw.cl hw_structs.h
-	$(CLOC_PATH)/cloc.sh ${BRIGCLOPTS} -clopts "-I. -I${ATMI_RUNTIME_PATH}/include" -opt 2 hw.cl
+	$(CLOC_PATH)/cloc.sh ${BRIGCLOPTS} -clopts "-x cl -Xclang -cl-std=CL2.0" -opt 2 hw.cl
 	$(CC) -o $@ hw.cpp $(BRIGCPPOPTS) $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:

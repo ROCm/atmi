@@ -694,6 +694,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
         }
         for(std::vector<atl_task_t *>::iterator it = stream_obj->running_groupable_tasks.begin();
                     it != stream_obj->running_groupable_tasks.end(); it++) {
+            // atl_task_wait(task_head->task); 
             set_task_state(*it, ATMI_COMPLETED);
             set_task_metrics(*it);
         }
@@ -738,10 +739,12 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
     clear_saved_tasks(stream_obj);
 }
 
-extern void atmi_task_group_sync(atmi_task_group_t *stream) {
+atmi_status_t atmi_task_group_sync(atmi_task_group_t *stream) {
     atmi_task_group_t *str = (stream == NULL) ? &atl_default_stream_obj : stream;
     atmi_task_group_table_t *stream_obj = StreamTable[str->id];
     if(stream_obj) atl_stream_sync(stream_obj);
+
+    return ATMI_STATUS_SUCCESS;
 }
 
 hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
@@ -944,7 +947,7 @@ atmi_status_t atl_init_context() {
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_init(int devtype) {
+atmi_status_t atmi_init(atmi_devtype_t devtype) {
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU) 
         atl_init_gpu_context();
 

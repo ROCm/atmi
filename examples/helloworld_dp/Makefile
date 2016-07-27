@@ -1,6 +1,6 @@
 #Set HSA Environment variables
-HSA_RUNTIME_PATH ?= /opt/hsa
-HSA_TEST_RUNTIME_PATH ?= /opt/hsa.1_1T
+HSA_RUNTIME_PATH = /opt/hsa-nov15
+HSA_TEST_RUNTIME_PATH ?= /opt/hsa-nov15
 HSA_LIBHSAIL_PATH ?= ${HSA_TEST_RUNTIME_PATH}/lib
 HSA_LLVM_PATH ?= /opt/amd/cloc/bin
 ATMI_RUNTIME_PATH ?= /opt/amd/atmi
@@ -20,7 +20,7 @@ OBJS = hello
 
 all: $(OBJS)
 
-hello: HelloWorld.cpp
+hello: HelloWorld.cpp hw.cl
 	$(CC) -c -o HelloWorld.o $^ -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-clfile=hw.cl -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.cpp $(CFLAGS) $(INC_FLAGS)
 	$(CC) -o $@ HelloWorld.o pifdefs.cpp $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 

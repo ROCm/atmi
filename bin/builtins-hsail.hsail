@@ -29,6 +29,17 @@ prog function &hsa_queue_store_write_index_relaxed()(
    ret;
 };
 
+prog function &hsa_signal_store_release()(
+	arg_u64 %arg_p0,
+	arg_u64 %arg_p1)
+{
+   @hsa_signal_store_release_entry:
+   ld_arg_align(8)_u64	$d0, [%arg_p0];                     // d0 has signal handle 
+   ld_arg_align(8)_u64	$d1, [%arg_p1];                     // d2 has value 
+   signalnoret_st_screl_b64_sig64 $d0, $d1;                   // store value d1 to signal handle d0
+   ret;
+};
+
 prog function &hsa_signal_store_relaxed()(
 	arg_u64 %arg_p0,
 	arg_u64 %arg_p1)

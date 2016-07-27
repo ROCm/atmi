@@ -24,4 +24,4 @@ function getdname(){
 
 cdir=$(getdname $0)
 [ ! -L "$cdir/atmi_version" ] || cdir=$(getdname `readlink "$cdir/atmi_version"`)
-$cdir/cl2brigh.sh --version
+$cdir/cloc_wrapper.sh --version

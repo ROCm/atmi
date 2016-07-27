@@ -26,7 +26,7 @@ typedef struct atmi_profiling_agent_s {
     uint64_t						total_nb_tasks;
 } atmi_profiling_agent_t;
 
-extern atmi_profiling_agent_t* atmi_profiling_agent_list[SNK_MAX_CPU_QUEUES + SNK_MAX_GPU_QUEUES];
+extern atmi_profiling_agent_t* atmi_profiling_agent_list[128];
 
 extern char profiling_fname[32];
 

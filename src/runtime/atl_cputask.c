@@ -167,8 +167,6 @@ int process_packet(hsa_queue_t *queue, int id)
         hsa_agent_dispatch_packet_t* packets = (hsa_agent_dispatch_packet_t*) queue->base_address;
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
 
-        DEBUG_PRINT("%lu --> %p\n", pthread_self(), packet);
-        TaskPacketMap[pthread_self()] = packet;
         int i;
         DEBUG_PRINT("Processing CPU task with header: %d\n", get_packet_type(packet->header));
         //wait til the packet is ready to be dispatched
@@ -213,6 +211,9 @@ int process_packet(hsa_queue_t *queue, int id)
             case HSA_PACKET_TYPE_AGENT_DISPATCH: 
                 {
                 ;
+                DEBUG_PRINT("%lu --> %p\n", pthread_self(), packet);
+                TaskPacketMap[pthread_self()] = packet;
+
                 atl_task_t *task = (atl_task_t *)(packet->arg[0]);
                 atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
                 int kernel_id = packet->type;
@@ -647,6 +648,10 @@ int process_packet(hsa_queue_t *queue, int id)
                              check(Too many function arguments, HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS);
                              break;
                 }
+                // reset task packet map so that other tasks will not be able to query for 
+                // thread IDs and sizes
+                TaskPacketMap[pthread_self()] = NULL;
+
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
                 kernel_args.clear();
@@ -784,9 +789,87 @@ agent_fini()
     DEBUG_PRINT("agent_fini completed\n");
 }
 
-atmi_task_handle_t get_atmi_task_handle() {
+atl_task_t *get_cur_thread_task_impl() {
     hsa_agent_dispatch_packet_t *packet = TaskPacketMap[pthread_self()];
+    if(!packet) {
+        fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
+    }
     DEBUG_PRINT("(Get) %lu --> %p\n", pthread_self(), packet);
-    atl_task_t *task = (atl_task_t *)(packet->arg[0]);
+    atl_task_t *task = NULL;
+    if(packet) 
+        task = (atl_task_t *)(packet->arg[0]);
+    return task;
+}
+
+atmi_task_handle_t get_atmi_task_handle() {
+    atl_task_t *task = get_cur_thread_task_impl();
     return task->id;
+}
+
+unsigned long get_global_size(unsigned int dim) {
+    atl_task_t *task = get_cur_thread_task_impl();
+    if(dim >=0 && dim < 3)
+        return task->gridDim[dim];
+    else
+        return 1;
+}
+
+unsigned long get_local_size(unsigned int dim) {
+    /*atl_task_t *task = get_cur_thread_task_impl();
+    if(dim >=0 && dim < 3)
+        return task->groupDim[dim];
+    else
+    */
+    // TODO: Current CPU task model is to have a single thread per "workgroup"
+    // because i clearly do not see the necessity to have a tree based hierarchy
+    // per CPU socket. Should revisit if we get a compelling case otherwise. 
+        return 1;
+}
+
+unsigned long get_num_groups(unsigned int dim) {
+    //return ((get_global_size(dim)-1)/(dim)*get_local_size(dim))+1;
+    // TODO: simplify return because local dims are hardcoded to 1
+    return get_global_size(dim);
+}
+
+unsigned long get_local_id(unsigned int dim) {
+    // TODO: Current CPU task model is to have a single thread per "workgroup"
+    // because i clearly do not see the necessity to have a tree based hierarchy
+    // per CPU socket. Should revisit if we get a compelling case otherwise. 
+    return 0;
+}
+
+unsigned long get_global_id(unsigned int dim) {
+    hsa_agent_dispatch_packet_t *packet = TaskPacketMap[pthread_self()];
+    if(!packet) {
+        fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
+    }
+
+    DEBUG_PRINT("(Get) %lu --> %p\n", pthread_self(), packet);
+    if(packet && dim >=0 && dim < 3) {
+        unsigned long flat_id = packet->arg[3];
+        unsigned long x_dim = get_global_size(0);
+        unsigned long y_dim = get_global_size(1);
+        unsigned long id = 0;
+        unsigned long rel_id = 0;
+        if(dim == 0) {
+            //rel_id = flat_id % (x_dim * y_dim);
+            //id = rel_id / y_dim;
+            rel_id = flat_id / y_dim;
+            id = rel_id % x_dim;
+        }
+        else if(dim == 1) {
+            id = flat_id % y_dim;
+        }
+        else if(dim == 2) {
+            id = flat_id / (x_dim * y_dim);
+        }
+        return id;
+    }
+    else
+        return 0;
+}
+
+unsigned long get_group_id(unsigned int dim) {
+    return get_global_id(dim);
 }

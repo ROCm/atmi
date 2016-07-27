@@ -4,7 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-atmi_profiling_agent_t* atmi_profiling_agent_list[SNK_MAX_CPU_QUEUES + SNK_MAX_GPU_QUEUES];
+// FIXME: How many profiling agents in total do we need to support? 
+// There should be one profiling agent per device queue. 
+// 128 should be large enough for single GPU systems.
+atmi_profiling_agent_t* atmi_profiling_agent_list[128];
 
 char profiling_fname[32] = {'\0'};
 
@@ -75,7 +78,7 @@ int atmi_profiling_output(int tid)
     sprintf(tbuffer, "%d", tid);
     strcat(tfname, tbuffer);
     pFile = fopen(tfname, "w");
-    fprintf(pFile, "%d\t%d\n", tid, SNK_MAX_CPU_QUEUES);
+    fprintf(pFile, "%d\n", tid);
     while (buffer != NULL) {
         for (i = 0; i < buffer->nb_tasks; i++) {
             fprintf(pFile, "%s\t%lu\t%lu\n", buffer->tasks[i].name, buffer->tasks[i].profile_info->start_time, buffer->tasks[i].profile_info->end_time);

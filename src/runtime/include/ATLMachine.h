@@ -27,8 +27,9 @@ class ATLProcessor {
         virtual void createQueues(const int count) {}
         virtual void destroyQueues();
         virtual hsa_queue_t *getQueue(const int index);
-        //std::vector<hsa_queue_t *> getQueues() {return _queues; }
+        std::vector<hsa_queue_t *> getQueues() const {return _queues; }
         virtual hsa_queue_t *getBestQueue(atmi_scheduler_t sched);
+        int getNumCUs() const;
     protected:
         hsa_agent_t     _agent;
         std::vector<hsa_queue_t *> _queues;

@@ -17,10 +17,9 @@ enum {
 };    
 
 extern _CPPSTRING_ void decode_cpu_fn(const char *in, char *out, size_t strlength) {
-    int num;
-    for (num = 0; num < strlength; num++) {
+    int num = get_global_id(0);
+    if(num < strlength) 
         out[num] = in[num] + 1;
-    }
 }
 
 extern _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlength) {
@@ -30,13 +29,13 @@ extern _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlengt
 
 int main(int argc, char **argv) {
     atmi_init(ATMI_DEVTYPE_ALL);
-    #if 1
+#ifndef USE_BRIG
     const char *module = "hw.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
-    #else
+#else
     const char *module = "hw.brig";
     atmi_platform_type_t module_type = BRIG;
-    #endif
+#endif
     atmi_module_register(&module, &module_type, 1);
 
     atmi_machine_t *machine = atmi_machine_get_info();

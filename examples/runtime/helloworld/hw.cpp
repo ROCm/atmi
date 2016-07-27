@@ -22,10 +22,9 @@ extern _CPPSTRING_ void decode_cpu(void **args) {
     size_t strlength = cpu_args->strlength; 
     const char *in = cpu_args->in;
     char *out = cpu_args->out;
-    int num;
-    for (num = 0; num < strlength; num++) {
+    int num = get_global_id(0);
+    if(num < strlength)
         out[num] = in[num] + 1;
-    }
 }
 
 int main(int argc, char **argv) {
@@ -72,7 +71,6 @@ int main(int argc, char **argv) {
     atmi_task_launch(lparm, kernel, gpu_args);
     output_gpu[strlength] = '\0';
 
-    lparm->WORKITEMS = 1;
     lparm->kernel_id = CPU_IMPL;
     lparm->place = ATMI_PLACE_CPU(0, 0);
     atmi_task_launch(lparm, kernel, cpu_args);

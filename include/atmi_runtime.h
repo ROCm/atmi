@@ -423,10 +423,97 @@ atmi_task_handle_t atmi_memcpy_async(
  * the currently running task. This function is valid 
  * only within the body of a CPU task. 
  *
- * @return A handle to the ATMI task. 
+ * @return A handle to the ATMI CPU task. 
  *
  */
 atmi_task_handle_t get_atmi_task_handle(); 
+
+/**
+ * @brief Retrieve the global thread ID of 
+ * the currently running task. This function is valid 
+ * only within the body of a CPU task. 
+ *
+ * @param[in] dim The dimension of the CPU task. Valid
+ * dimensions are 0, 1 and 2.
+ *
+ * @return The global thread ID of the ATMI CPU task. 
+ *
+ */
+unsigned long get_global_id(unsigned int dim);
+
+/**
+ * @brief Retrieve the global thread count of 
+ * the currently running task. This function is valid 
+ * only within the body of a CPU task. 
+ *
+ * @param[in] dim The dimension of the CPU task. Valid
+ * dimensions are 0, 1 and 2.
+ *
+ * @return The global thread count of the ATMI CPU task. 
+ *
+ */
+unsigned long get_global_size(unsigned int dim);
+
+/**
+ * @brief Retrieve the local thread ID of 
+ * the currently running task. This function is valid 
+ * only within the body of a CPU task.
+ *
+ * @param[in] dim The dimension of the CPU task. Valid
+ * dimensions are 0, 1 and 2.
+ *
+ * @return The local thread ID of the ATMI CPU task. The
+ * current ATMI CPU task model assumes the workgroup size
+ * of 1 at all times for all dimensions, so this call 
+ * always returns 0.
+ */
+unsigned long get_local_id(unsigned int dim);
+
+/**
+ * @brief Retrieve the local thread count of 
+ * the currently running task. This function is valid 
+ * only within the body of a CPU task. 
+ *
+ * @param[in] dim The dimension of the CPU task. Valid
+ * dimensions are 0, 1 and 2.
+ *
+ * @return The local thread count of the ATMI CPU task. The
+ * current ATMI CPU task model assumes the workgroup size
+ * of 1 at all times for all dimensions, so this call 
+ * always returns 1.
+ *
+ */
+unsigned long get_local_size(unsigned int dim);
+
+/**
+ * @brief Retrieve the thread workgroup ID of 
+ * the currently running task. This function is valid 
+ * only within the body of a CPU task. 
+ *
+ * @param[in] dim The dimension of the CPU task. Valid
+ * dimensions are 0, 1 and 2.
+ *
+ * @return The thread workgroup ID of the ATMI CPU task. The
+ * current ATMI CPU task model assumes the workgroup size
+ * of 1 at all times for all dimensions, so this call 
+ * is equivalent to calling @p get_global_id.
+ */
+unsigned long get_group_id(unsigned int dim);
+
+/**
+ * @brief Retrieve the thread workgroup count of 
+ * the currently running task. This function is valid 
+ * only within the body of a CPU task. 
+ *
+ * @param[in] dim The dimension of the CPU task. Valid
+ * dimensions are 0, 1 and 2.
+ *
+ * @return The thread workgroup count of the ATMI CPU task. The
+ * current ATMI CPU task model assumes the workgroup size
+ * of 1 at all times for all dimensions, so this call 
+ * is equivalent to calling @p get_global_size.
+ */
+unsigned long get_num_groups(unsigned int dim);
 /** @} */
 
 #ifdef __cplusplus

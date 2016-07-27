@@ -17,27 +17,24 @@ enum {
 };    
 
 extern _CPPSTRING_ void decode_cpu_fn(const char *in, char *out, size_t strlength) {
-    int num;
-    for (num = 0; num < strlength; num++) {
+    int num = get_global_id(0);
+    if(num < strlength) 
         out[num] = in[num] + 1;
-    }
 }
 
 extern _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlength) {
     decode_cpu_fn(*in, *out, *strlength);
 }
 
-#define TEST
-
 int main(int argc, char **argv) {
     atmi_init(ATMI_DEVTYPE_ALL);
-    #if 1
+#ifndef USE_BRIG
     const char *module = "hw.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
-    #else
+#else
     const char *module = "hw.brig";
     atmi_platform_type_t module_type = BRIG;
-    #endif
+#endif
     atmi_module_register(&module, &module_type, 1);
 
     atmi_kernel_t kernel;
@@ -76,6 +73,7 @@ int main(int argc, char **argv) {
     ATMI_PARM_SET_DEPENDENCIES(cparm_gpu, k_gpu);
     atmi_task_handle_t d2h_gpu = atmi_memcpy_async(cparm_gpu, output_gpu, d_output, strlength+1);
 
+    // wait only for the last task in the chain
     atmi_task_wait(d2h_gpu);
     output_gpu[strlength] = '\0';
     cout << "Output from the GPU: " << output_gpu << endl;
@@ -89,7 +87,7 @@ int main(int argc, char **argv) {
 	ATMI_CPARM(cparm_cpu);
     atmi_task_handle_t h2d_cpu = atmi_memcpy_async(cparm_cpu, h_input, input, strlength+1);
 
-    ATMI_LPARM_CPU(lparm_cpu, cpu_id);
+    ATMI_LPARM_CPU_1D(lparm_cpu, cpu_id, strlength);
     ATMI_PARM_SET_DEPENDENCIES(lparm_cpu, h2d_cpu);
     void *cpu_args[] = {&h_input, &h_output, &strlength};
     atmi_task_handle_t k_cpu = atmi_task_launch(lparm_cpu, kernel, cpu_args);
@@ -97,6 +95,7 @@ int main(int argc, char **argv) {
     ATMI_PARM_SET_DEPENDENCIES(cparm_cpu, k_cpu);
     atmi_task_handle_t d2h_cpu = atmi_memcpy_async(cparm_cpu, output_cpu, h_output, strlength+1);
     
+    // wait only for the last task in the chain
     atmi_task_wait(d2h_cpu);
     output_cpu[strlength] = '\0';
     cout << "Output from the CPU: " << output_cpu << endl;

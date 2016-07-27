@@ -30,3 +30,5 @@ hello: hw.cpp hw.cl hw_structs.h
 clean:
 	rm -rf *.o *.brig *.hsaco $(OBJS)
 
+test:
+	./hello

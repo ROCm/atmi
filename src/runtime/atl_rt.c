@@ -755,6 +755,11 @@ hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj,
     return queue;
 }
 
+std::vector<hsa_queue_t *> get_cpu_queues(atmi_place_t place) {
+    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+    return proc.getQueues();
+}
+
 hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
     ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
     atmi_scheduler_t sched = stream_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
@@ -1111,7 +1116,7 @@ atmi_status_t atl_init_gpu_context() {
     for(int gpu = 0; gpu < gpu_count; gpu++) {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-        proc.createQueues(SNK_MAX_GPU_QUEUES);
+        proc.createQueues(proc.getNumCUs());
     }
     
     if(context_init_time_init == 0) {
@@ -1143,7 +1148,9 @@ atmi_status_t atl_init_cpu_context() {
 #endif /*ATMI_HAVE_PROFILE */
     int cpu_count = g_atl_machine.getProcessorCount<ATLCPUProcessor>();
     for(int cpu = 0; cpu < cpu_count; cpu++) {
-        int num_queues = SNK_MAX_CPU_QUEUES;
+        atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
+        ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+        int num_queues = proc.getNumCUs();
         cpu_agent_init(cpu, num_queues);
     }
  
@@ -2031,14 +2038,19 @@ atmi_status_t dispatch_task(atl_task_t *task) {
               enqueue_barrier(task, this_Q, lparm->num_needs_any, &needs_any[0], SNK_NOWAIT, SNK_OR, task->devtype);
               }*/
         }
-        /*  Obtain the current queue write index. increases with each call to kernel  */
-        uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
-
-        atl_kernel_impl_t *kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
-
-        /* Find the queue index address to write the packet info into.  */
-        const uint32_t queueMask = this_Q->size - 1;
+        int ndim = -1; 
+        if(task->gridDim[2] > 1) 
+            ndim = 3;
+        else if(task->gridDim[1] > 1) 
+            ndim = 2;
+        else
+            ndim = 1;
         if(task->devtype == ATMI_DEVTYPE_GPU) {
+            /*  Obtain the current queue write index. increases with each call to kernel  */
+            uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
+            atl_kernel_impl_t *kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+            /* Find the queue index address to write the packet info into.  */
+            const uint32_t queueMask = this_Q->size - 1;
             hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
             memset(this_aql, 0, sizeof(hsa_kernel_dispatch_packet_t));
             /*  FIXME: We need to check for queue overflow here. */
@@ -2047,13 +2059,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             //hsa_signal_store_relaxed(task->signal, 1);
             //SignalAddTimer.Stop();
             this_aql->completion_signal = task->signal;
-            int ndim = -1; 
-            if(task->gridDim[2] > 1) 
-                ndim = 3;
-            else if(task->gridDim[1] > 1) 
-                ndim = 2;
-            else
-                ndim = 1;
 
             /* pass this task handle to the kernel as an argument */
 #if 0
@@ -2108,46 +2113,77 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
         } 
         else if(task->devtype == ATMI_DEVTYPE_CPU) {
+            std::vector<hsa_queue_t *> this_queues = get_cpu_queues(task->place);
+            int q_count = this_queues.size();
+            int thread_count = task->gridDim[0] * task->gridDim[1] * task->gridDim[2];
+            if(thread_count == 0) {
+                fprintf(stderr, "WARNING: one of the dimensionsions is set to 0 threads. \
+                         Choosing 1 thread by default. \n");
+                thread_count = 1;
+            }
+            if(thread_count == 1) {
+                int q;
+                for(q = 0; q < q_count; q++) {
+                    if(this_queues[q] == this_Q) 
+                        break;
+                }
+                hsa_queue_t *tmp = this_queues[0];
+                this_queues[0] = this_queues[q];
+                this_queues[q] = tmp;
+            }
             struct timespec dispatch_time;
             clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
-            hsa_agent_dispatch_packet_t* this_aql = &(((hsa_agent_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
-            memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
-            /*  FIXME: We need to check for queue overflow here. Do we need
-             *  to do this for CPU agents too? */
-            //SignalAddTimer.Start();
-            hsa_signal_add_acq_rel(task->signal, 1);
-            //hsa_signal_store_relaxed(task->signal, 1);
-            //SignalAddTimer.Stop();
-            this_aql->completion_signal = task->signal;
-
-            /* Set the type and return args.*/
-            // FIXME FIXME FIXME: Use the hierarchical pif-kernel table to
-            // choose the best kernel. Don't use a flat table structure
-            this_aql->type = (uint16_t)get_kernel_index(task->kernel, task->kernel_id);
-            /* FIXME: We are considering only void return types for now.*/
-            //this_aql->return_address = NULL;
-            /* Set function args */
-            this_aql->arg[0] = (uint64_t) task;
-            this_aql->arg[1] = (uint64_t) task->kernarg_region;
-            this_aql->arg[2] = (uint64_t) task->kernel; // pass task handle to fill in metrics
-            this_aql->arg[3] = UINT64_MAX;
-
-            /*  Prepare and set the packet header */
-            /* FIXME: CPU tasks ignore barrier bit as of now. Change
-             * implementation? I think it doesn't matter because we are
-             * executing the subroutines one-by-one, so barrier bit is
-             * inconsequential.
+            /* this "virtual" task encompasses thread_count number of ATMI CPU tasks performing
+             * data parallel SPMD style of processing
              */
-            set_task_state(task, ATMI_DISPATCHED);
-            this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE);
+            hsa_signal_add_acq_rel(task->signal, thread_count);
+            for(int tid = 0; tid < thread_count; tid++) {
+                hsa_queue_t *this_queue = this_queues[tid % q_count];
+                /*  Obtain the current queue write index. increases with each call to kernel  */
+                uint64_t index = hsa_queue_add_write_index_relaxed(this_queue, 1);
+                /* Find the queue index address to write the packet info into.  */
+                const uint32_t queueMask = this_queue->size - 1;
+                hsa_agent_dispatch_packet_t* this_aql = &(((hsa_agent_dispatch_packet_t*)(this_queue->base_address))[index&queueMask]);
+                memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
+                /*  FIXME: We need to check for queue overflow here. Do we need
+                 *  to do this for CPU agents too? */
+                //SignalAddTimer.Start();
+                //hsa_signal_store_relaxed(task->signal, 1);
+                //SignalAddTimer.Stop();
+                this_aql->completion_signal = task->signal;
 
+                /* Set the type and return args.*/
+                // FIXME FIXME FIXME: Use the hierarchical pif-kernel table to
+                // choose the best kernel. Don't use a flat table structure
+                this_aql->type = (uint16_t)get_kernel_index(task->kernel, task->kernel_id);
+                /* FIXME: We are considering only void return types for now.*/
+                //this_aql->return_address = NULL;
+                /* Set function args */
+                this_aql->arg[0] = (uint64_t) task;
+                this_aql->arg[1] = (uint64_t) task->kernarg_region;
+                this_aql->arg[2] = (uint64_t) task->kernel; // pass task handle to fill in metrics
+                this_aql->arg[3] = tid; // tasks can query for current task ID
+
+                /*  Prepare and set the packet header */
+                /* FIXME: CPU tasks ignore barrier bit as of now. Change
+                 * implementation? I think it doesn't matter because we are
+                 * executing the subroutines one-by-one, so barrier bit is
+                 * inconsequential.
+                 */
+                this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, ATMI_FALSE);
+
+            }
+            set_task_state(task, ATMI_DISPATCHED);
             /* Store dispatched time */
             if(task->profilable == ATMI_TRUE && task->atmi_task) 
                 task->atmi_task->profile.dispatch_time = get_nanosecs(context_init_time, dispatch_time);
-            /* Increment write index and ring doorbell to dispatch the kernel.  */
-            //hsa_queue_store_write_index_relaxed(this_Q, index+1);
-            hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-            signal_worker(this_Q, PROCESS_PKT);
+            for(int q = 0; q < q_count; q++) {
+                /* Increment write index and ring doorbell to dispatch the kernel.  */
+                //hsa_queue_store_write_index_relaxed(this_Q, index+1);
+                uint64_t index = hsa_queue_load_write_index_acquire(this_queues[q]);
+                hsa_signal_store_relaxed(this_queues[q]->doorbell_signal, index);
+                signal_worker(this_queues[q], PROCESS_PKT);
+            }
         }
         TryDispatchTimer.Stop();
         DEBUG_PRINT("Task %d (%d) Dispatched\n", task->id, task->devtype);

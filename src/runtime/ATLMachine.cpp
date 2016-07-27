@@ -196,4 +196,12 @@ hsa_queue_t *ATLProcessor::getQueue(const int index) {
     return _queues[index];
 }
 
+int ATLProcessor::getNumCUs() const {
+    hsa_status_t err;
+    /* Query the number of compute units.  */
+    uint32_t num_cus = 0;
+    err = hsa_agent_get_info(_agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_COMPUTE_UNIT_COUNT, &num_cus);
+    ErrorCheck(Querying the agent number of compute units, err);
 
+    return num_cus;
+}

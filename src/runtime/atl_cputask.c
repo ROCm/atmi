@@ -89,6 +89,22 @@ struct pthreadComparator {
     }
 };
 static std::map<pthread_t, hsa_agent_dispatch_packet_t *, pthreadComparator> TaskPacketMap;
+static pthread_mutex_t mutex_task_packet_map;
+
+hsa_agent_dispatch_packet_t *get_task_packet() {
+    hsa_agent_dispatch_packet_t *packet = NULL;
+    lock(&mutex_task_packet_map);
+    packet = TaskPacketMap[pthread_self()];
+    unlock(&mutex_task_packet_map);
+    return packet;
+}
+
+void set_task_packet(hsa_agent_dispatch_packet_t *packet) {
+    lock(&mutex_task_packet_map);
+    TaskPacketMap[pthread_self()] = packet;
+    unlock(&mutex_task_packet_map);
+}
+
 
 hsa_queue_t* get_cpu_queue(int cpu_id, int tid) {
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
@@ -212,7 +228,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 {
                 ;
                 DEBUG_PRINT("%lu --> %p\n", pthread_self(), packet);
-                TaskPacketMap[pthread_self()] = packet;
+                set_task_packet(packet);
 
                 atl_task_t *task = (atl_task_t *)(packet->arg[0]);
                 atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
@@ -650,7 +666,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 }
                 // reset task packet map so that other tasks will not be able to query for 
                 // thread IDs and sizes
-                TaskPacketMap[pthread_self()] = NULL;
+                set_task_packet(NULL);
 
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
@@ -760,11 +776,14 @@ void *agent_worker(void *agent_args) {
 #endif
 void
 cpu_agent_init(int cpu_id, const size_t num_queues) {
+    static bool initialized = false;
     hsa_status_t err;
     uint32_t i;
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
     ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
     proc.createQueues(num_queues);
+    if(!initialized) pthread_mutex_init(&mutex_task_packet_map, NULL);
+    initialized = true;
 } 
 
 /* FIXME: When and who should call this cleanup funtion? */
@@ -790,7 +809,7 @@ agent_fini()
 }
 
 atl_task_t *get_cur_thread_task_impl() {
-    hsa_agent_dispatch_packet_t *packet = TaskPacketMap[pthread_self()];
+    hsa_agent_dispatch_packet_t *packet = get_task_packet(); 
     if(!packet) {
         fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
     }
@@ -840,7 +859,7 @@ unsigned long get_local_id(unsigned int dim) {
 }
 
 unsigned long get_global_id(unsigned int dim) {
-    hsa_agent_dispatch_packet_t *packet = TaskPacketMap[pthread_self()];
+    hsa_agent_dispatch_packet_t *packet = get_task_packet();
     if(!packet) {
         fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
     }

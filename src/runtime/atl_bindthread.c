@@ -4,8 +4,13 @@
 
 #include <sched.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <errno.h>
 
 #include "atl_bindthread.h"
+
+#define handle_error_en(en, msg) \
+    do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
 
 int atmi_cpu_bindthread(int cpu_index)
 {
@@ -25,3 +30,35 @@ int atmi_cpu_bindthread(int cpu_index)
     }   
 #endif
 }
+
+atmi_status_t set_thread_affinity(int id) {
+    int s, j;
+    cpu_set_t cpuset;
+    pthread_t thread;
+
+    thread = pthread_self();
+
+    /* Set affinity mask to include CPUs 0 to 7 */
+
+    CPU_ZERO(&cpuset);
+    CPU_SET(id, &cpuset);
+
+    s = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+    if (s != 0)
+        handle_error_en(s, "pthread_setaffinity_np");
+
+    /* Check the actual affinity mask
+     * assigned to the thread */
+    s = pthread_getaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+    if (s != 0)
+        handle_error_en(s, "pthread_getaffinity_np");
+
+    /*printf("Set returned by pthread_getaffinity_np() contained:\n");
+    for (j = 0; j < CPU_SETSIZE; j++)
+        if (CPU_ISSET(j, &cpuset))
+            printf("    CPU %d\n", j);
+    */
+    return ATMI_STATUS_SUCCESS; 
+}
+
+

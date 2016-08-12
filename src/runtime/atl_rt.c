@@ -43,6 +43,7 @@
 /* This file is the ATMI library.  */
 #include "atl_internal.h"
 #include "atl_profile.h"
+#include "atl_bindthread.h"
 #include "ATLQueue.h"
 #include "ATLMachine.h"
 #include <pthread.h>
@@ -115,6 +116,7 @@ const char *get_error_string(hsa_status_t err) {
     }
 }
 
+bool g_atmi_initialized = false;
 extern bool handle_signal(hsa_signal_value_t value, void *arg);
 
 void print_atl_kernel(const char * str, const int i);
@@ -161,39 +163,6 @@ struct timespec context_init_time;
 static int context_init_time_init = 0;
 
 atmi_task_handle_t NULL_TASK = ATMI_TASK_HANDLE(0);
-
-#define handle_error_en(en, msg) \
-    do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
-
-atmi_status_t set_thread_affinity(int id) {
-    int s, j;
-    cpu_set_t cpuset;
-    pthread_t thread;
-
-    thread = pthread_self();
-
-    /* Set affinity mask to include CPUs 0 to 7 */
-
-    CPU_ZERO(&cpuset);
-    CPU_SET(id, &cpuset);
-
-    s = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
-    if (s != 0)
-        handle_error_en(s, "pthread_setaffinity_np");
-
-    /* Check the actual affinity mask
-     * assigned to the thread */
-    s = pthread_getaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
-    if (s != 0)
-        handle_error_en(s, "pthread_getaffinity_np");
-
-    /*printf("Set returned by pthread_getaffinity_np() contained:\n");
-    for (j = 0; j < CPU_SETSIZE; j++)
-        if (CPU_ISSET(j, &cpuset))
-            printf("    CPU %d\n", j);
-    */
-    return ATMI_STATUS_SUCCESS; 
-}
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
     long int nanosecs;
@@ -952,14 +921,31 @@ atmi_status_t atl_init_context() {
     return ATMI_STATUS_SUCCESS;
 }
 
+void atl_set_atmi_initialized() {
+    // FIXME: thread safe? locks?
+    g_atmi_initialized = true;
+}
+
+void atl_reset_atmi_initialized() {
+    // FIXME: thread safe? locks?
+    g_atmi_initialized = false;
+}
+
+bool atl_is_atmi_initialized() {
+    return g_atmi_initialized;
+}
+
 atmi_status_t atmi_init(atmi_devtype_t devtype) {
+    atmi_status_t status = ATMI_STATUS_SUCCESS;
+    if(atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU) 
-        atl_init_gpu_context();
+        status = atl_init_gpu_context();
 
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_CPU) 
-        atl_init_cpu_context();
+        status = atl_init_cpu_context();
 
-    return ATMI_STATUS_SUCCESS;
+    if(status == ATMI_STATUS_SUCCESS) atl_set_atmi_initialized();
+    return status;
 }
 
 atmi_status_t atmi_finalize() {
@@ -969,10 +955,11 @@ atmi_status_t atmi_finalize() {
         err = hsa_executable_destroy(g_executables[i]);
         ErrorCheck(Destroying executable, err);
     }
+    atl_reset_atmi_initialized();
     return ATMI_STATUS_SUCCESS;
 }
 
-void init_comute_and_memory() {
+hsa_status_t init_comute_and_memory() {
     hsa_status_t err;
 #ifdef MEMORY_REGION
     err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
@@ -1008,6 +995,7 @@ void init_comute_and_memory() {
     err = hsa_iterate_agents(get_agent_info, NULL);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
+    if(err != HSA_STATUS_SUCCESS) return err;
 
     /* Init all devices or individual device types? */
     std::vector<ATLCPUProcessor> &cpu_procs = g_atl_machine.getProcessors<ATLCPUProcessor>(); 
@@ -1068,24 +1056,32 @@ void init_comute_and_memory() {
     }
     proc_index = 0;
     atl_cpu_kernarg_region.handle=(uint64_t)-1;
-    err = hsa_agent_iterate_regions(cpu_procs[0].getAgent(), get_fine_grained_region, &atl_cpu_kernarg_region);
-    if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
-    err = (atl_cpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
-    ErrorCheck(Finding a CPU kernarg memory region handle, err);
-
+    if(cpu_procs.size() > 0) {
+        err = hsa_agent_iterate_regions(cpu_procs[0].getAgent(), get_fine_grained_region, &atl_cpu_kernarg_region);
+        if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
+        err = (atl_cpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+        ErrorCheck(Finding a CPU kernarg memory region handle, err);
+    }
     /* Find a memory region that supports kernel arguments.  */
     atl_gpu_kernarg_region.handle=(uint64_t)-1;
-    hsa_agent_iterate_regions(gpu_procs[0].getAgent(), get_kernarg_memory_region, &atl_gpu_kernarg_region);
-    err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
-    ErrorCheck(Finding a kernarg memory region, err);
+    if(gpu_procs.size() > 0) {
+        hsa_agent_iterate_regions(gpu_procs[0].getAgent(), get_kernarg_memory_region, &atl_gpu_kernarg_region);
+        err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR : HSA_STATUS_SUCCESS;
+        ErrorCheck(Finding a kernarg memory region, err);
+    }
+    if(num_procs > 0) 
+        return HSA_STATUS_SUCCESS;
+    else
+        return HSA_STATUS_ERROR_NOT_INITIALIZED;
 #endif 
 }
 
-void init_hsa() {
+hsa_status_t init_hsa() {
     if(atlc.g_hsa_initialized == 0) {
         DEBUG_PRINT("Initializing HSA...");
         hsa_status_t err = hsa_init();
         ErrorCheck(Initializing the hsa runtime, err);
+        if(err != HSA_STATUS_SUCCESS) return err;
         char * dep_sync_type = getenv("ATMI_DEPENDENCY_SYNC_TYPE");
         if(dep_sync_type == NULL || strcmp(dep_sync_type, "ATMI_SYNC_BARRIER_PKT") == 0) {
             g_dep_sync_type = ATL_SYNC_BARRIER_PKT;
@@ -1097,11 +1093,14 @@ void init_hsa() {
         g_max_signals = 24;
         if(max_signals != NULL)
             g_max_signals = atoi(max_signals);
-        init_comute_and_memory();
+        err = init_comute_and_memory();
+        if(err != HSA_STATUS_SUCCESS) return err;
+        ErrorCheck(After initializing compute and memory, err);
         init_dag_scheduler();
         atlc.g_hsa_initialized = 1;
         DEBUG_PRINT("done\n");
     }
+    return HSA_STATUS_SUCCESS;
 }
 
 atmi_status_t atl_init_gpu_context() {
@@ -1109,8 +1108,9 @@ atmi_status_t atl_init_gpu_context() {
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
     if(atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
     
-    init_hsa();
     hsa_status_t err;
+    err = init_hsa();
+    if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
 
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
     for(int gpu = 0; gpu < gpu_count; gpu++) {
@@ -1136,7 +1136,8 @@ atmi_status_t atl_init_cpu_context() {
     if(atlc.g_cpu_initialized != 0) return ATMI_STATUS_SUCCESS;
      
     hsa_status_t err;
-    init_hsa();
+    err = init_hsa();
+    if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
     
     // FIXME: For some reason, if CPU context is initialized before, the GPU queues dont get
     // created. They exit with 0x1008 out of resources. HACK!!!
@@ -1150,6 +1151,10 @@ atmi_status_t atl_init_cpu_context() {
     for(int cpu = 0; cpu < cpu_count; cpu++) {
         atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
         ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
+        // FIXME: We are creating as many CPU queues as there are cores
+        // But, this will share CPU worker threads with main host thread
+        // and the HSA callback thread. Is there any real benefit from
+        // restricting the number of queues to num_cus - 2?
         int num_queues = proc.getNumCUs();
         cpu_agent_init(cpu, num_queues);
     }
@@ -1301,6 +1306,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
     hsa_status_t err;
     err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_TYPE, &type); 
     ErrorCheck(Symbol info extraction, err);
+    DEBUG_PRINT("Exec Symbol type: %d\n", type);
     if(type == HSA_SYMBOL_KIND_KERNEL) {
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length); 
         ErrorCheck(Symbol info extraction, err);
@@ -1366,7 +1372,6 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
         hsa_status_t err;
         hsa_profile_t agent_profile;
 
-        DEBUG_PRINT("Registering module...");
         err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
         ErrorCheck(Query the agent profile, err);
         // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
@@ -1550,6 +1555,7 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
 }
 
 atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *impl, const unsigned int ID) {
+    if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
     const char *pif_name = (const char *)(atmi_kernel.handle);
     atl_kernel_t *kernel = KernelImplMap[std::string(pif_name)];
     if(kernel->id_map.find(ID) != kernel->id_map.end()) {
@@ -1583,7 +1589,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
             kernel_type = BRIG;
         }
         else {
-            printf("Did NOT find kernel %s or %s for GPU %d\n", 
+            DEBUG_PRINT("Did NOT find kernel %s or %s for GPU %d\n", 
                     hsaco_name.c_str(),
                     brig_name.c_str(),
                     gpu);
@@ -1627,6 +1633,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
 }
 
 atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_fp impl, const unsigned int ID) {
+    if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
     static int counter = 0;
     const char *pif_name = (const char *)(atmi_kernel.handle);
     std::string cl_pif_name("_x86_");
@@ -1832,7 +1839,7 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     #if 1
     static bool is_called = false;
     if(!is_called) {
-        set_thread_affinity(2);
+        set_thread_affinity(1);
         /*
         int policy;
         struct sched_param param;

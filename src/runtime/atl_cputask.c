@@ -46,6 +46,7 @@
 #include <climits>
 #include <assert.h>
 #include "ATLMachine.h"
+#include <thread>
 
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;
@@ -743,7 +744,17 @@ void *agent_worker(void *agent_args) {
 void *agent_worker(void *agent_args) {
     agent_t *agent = (agent_t *) agent_args;
 
-    atmi_cpu_bindthread(agent->id); 
+    unsigned num_cpus = std::thread::hardware_concurrency();
+    // pin this thread to the core number as its agent ID...
+    // ...BUT from the highest core number
+    // thread: 0 1 2 3
+    // core  : 3 2 1 0
+    // rationale: bind the main thread to core 0. 
+    //            bind the callback thread to core 1.
+    //            bind the CPU agent threads to rest of the cores
+    int set_core = (num_cpus - 1 - (1 * agent->id)) % num_cpus;
+    DEBUG_PRINT("Setting on CPU core: %d / %d\n", set_core, num_cpus);
+    set_thread_affinity(set_core);
 #if defined (ATMI_HAVE_PROFILE)
     atmi_profiling_agent_init(agent->id);
 #endif /* ATMI_HAVE_PROFILE */ 

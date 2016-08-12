@@ -1,7 +1,7 @@
 #Set HSA Environment variables
-HSA_RUNTIME_PATH ?= /opt/rocm/hsa
+HSA_RUNTIME_PATH ?= /opt/rocm
 CLOC_PATH ?= /usr/bin
-ATMI_RUNTIME_PATH ?= /opt/amd/atmi
+ATMI_RUNTIME_PATH ?= /opt/rocm/libatmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include
 BRIG ?= 0
 
@@ -14,7 +14,7 @@ CC=g++
 CFLAGS=-O3 -g -std=c++11
 INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I. 
 
-LIBS=-latmi_runtime -lhsa-runtime64 -lelf
+LIBS=-latmi_runtime 
 LIB_FLAGS=-L${ATMI_RUNTIME_PATH}/lib -L${HSA_RUNTIME_PATH}/lib
 
 OBJS = hello
@@ -24,7 +24,7 @@ OBJS = hello
 all: $(OBJS)
 
 hello: hw.cpp hw.cl 
-	$(CLOC_PATH)/cloc.sh ${BRIGCLOPTS} -clopts "-x cl -Xclang -cl-std=CL2.0" -opt 2 hw.cl
+	$(CLOC_PATH)/cloc.sh ${BRIGCLOPTS} -opt 2 hw.cl
 	$(CC) -o $@ hw.cpp $(BRIGCPPOPTS) $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:

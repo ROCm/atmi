@@ -1,14 +1,12 @@
 #Set HSA Environment variables
-HSA_RUNTIME_PATH ?= /opt/hsa
-HSA_LIBHSAIL_PATH ?= /opt/hsa/lib
-HSA_LLVM_PATH ?= /opt/amd/cloc/bin
-ATMI_RUNTIME_PATH ?= /opt/amd/atmi
+HSA_RUNTIME_PATH ?= /opt/rocm
+ATMI_RUNTIME_PATH ?= /opt/rocm/libatmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include
 PLUGIN_LIB  = ${ATMI_RUNTIME_PATH}/lib/atmi_pifgen.so
 
 CC=g++
 CFLAGS=-O3 -g -std=c++11
-INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I. 
+INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/hsa/include -I. 
 
 LIBS=-latmi_runtime -lhsa-runtime64 -lelf
 LIB_FLAGS=-L${ATMI_RUNTIME_PATH}/lib -L${HSA_RUNTIME_PATH}/lib

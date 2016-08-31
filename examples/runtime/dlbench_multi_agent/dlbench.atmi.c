@@ -6,7 +6,6 @@
 #include "atmi_runtime.h"
 #include <dlbench.h>
 //#define DEBUG
-extern void atmi_task_group_sync(atmi_task_group_t *stream);
 
 #define check(msg, status) \
 if (status != ATMI_STATUS_SUCCESS) { \

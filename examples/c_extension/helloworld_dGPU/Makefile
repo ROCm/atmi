@@ -8,7 +8,7 @@ CC=g++
 CFLAGS=-O3 -g -std=c++11
 INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/hsa/include -I. 
 
-LIBS=-latmi_runtime -lhsa-runtime64 -lelf
+LIBS=-latmi_runtime 
 LIB_FLAGS=-L${ATMI_RUNTIME_PATH}/lib -L${HSA_RUNTIME_PATH}/lib
 
 OBJS = hello

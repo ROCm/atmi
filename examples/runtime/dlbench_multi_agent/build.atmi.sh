@@ -9,12 +9,10 @@ fi
 
 [ -z ${HSA_RUNTIME_PATH} ] && HSA_RUNTIME_PATH=/opt/rocm/hsa
 
-ATMIPATH=/home/aaji/git/atmi
+ATMIPATH=/opt/rocm/libatmi
 CLOC_PATH=/usr/bin
 CC=/usr/bin/gcc
 CXX=g++
-SNK=snack.sh
-SNKHSAIL=/opt/amd/cloc/bin/snackhsail.sh
 
 while [ $# -gt 0 ]; do
   key="$1"
@@ -90,7 +88,7 @@ if [ $mode = "build" ]; then
 	${CLOC_PATH}/cloc.sh -mcpu fiji -opt 2 grayscale.cl
 	echo "${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${module_type} -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11"
 	${CXX} -g -I${ATMIPATH}/include -I${HSA_RUNTIME_PATH}/include -D${module_type} -D${alloc} -D${layout} -D${verbose} -I. -c dlbench.atmi.c -std=c++11
-	echo "${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64"
-	${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -L${HSA_RUNTIME_PATH}/lib -latmi_runtime -lhsa-runtime64 
+	echo "${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -latmi_runtime "
+	${CXX} -o dlbench.atmi_${layout} dlbench.atmi.o ${LFLAGS} -L${ATMIPATH}/lib -latmi_runtime 
 fi
 

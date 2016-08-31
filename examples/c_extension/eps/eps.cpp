@@ -9,6 +9,7 @@
 #include <time.h>
 #include <math.h>
 #include "atmi.h"
+#include "atmi_runtime.h"
 #define NSECPERSEC 1000000000L
 #define NTIMERS 4
 
@@ -26,6 +27,7 @@ __kernel void nullKernel_impl(int i) __attribute__((atmi_kernel("nullKernel", "G
 /*  Recursive call to create the inverted task tree */
 void fib(const int cur_depth, atmi_task_handle_t *thisTaskHandle) {
     ATMI_LPARM_1D(lparm, 1); 
+    lparm->kernel_id = K_ID_nullKernel_impl;
     atmi_task_handle_t *requires = NULL;
     if(cur_depth < TDEPTH) {
         requires = (atmi_task_handle_t *)malloc(TDEGREE * sizeof(atmi_task_handle_t));
@@ -54,6 +56,7 @@ int main(int argc, char *argv[]) {
     /* Initialize the Kernel */
     ATMI_LPARM_1D(lparm, 1);
     lparm->synchronous=ATMI_TRUE;
+    lparm->kernel_id = K_ID_nullKernel_impl;
     nullKernel(lparm, 0);
 
     int ntasks = (TDEGREE <= 1) ? TDEPTH : (1 - pow((float)TDEGREE, (float)TDEPTH)) / (1 - TDEGREE);
@@ -65,8 +68,8 @@ int main(int argc, char *argv[]) {
     atmi_task_handle_t t_dfs;
     fib(1, &t_dfs);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
-    //atmi_task_wait(t_dfs);
-    SYNC_TASK(t_dfs);
+    atmi_task_wait(t_dfs);
+    //SYNC_TASK(t_dfs);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
 #endif
 
@@ -84,6 +87,7 @@ int main(int argc, char *argv[]) {
         for(int i = 0; i < ntasks_n; i++) {
             ATMI_LPARM_1D(lparm, 1);
             lparm->synchronous = ATMI_FALSE;
+            lparm->kernel_id = K_ID_nullKernel_impl;
             atmi_task_handle_t *requires = (atmi_task_handle_t *)malloc(TDEGREE * sizeof(atmi_task_handle_t));
             if(level != TDEPTH - 1) {
                 for(int deg = 0; deg < TDEGREE; deg++) {
@@ -100,8 +104,8 @@ int main(int argc, char *argv[]) {
     }
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
     atmi_task_handle_t t_bf = task_handles[0];
-    //atmi_task_wait(t_bf);
-    SYNC_TASK(t_bf);
+    atmi_task_wait(t_bf);
+    //SYNC_TASK(t_bf);
 
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
 #endif

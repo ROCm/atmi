@@ -19,7 +19,8 @@ extern "C" void decode_cpu(const char* in, char* out, const size_t strlength) {
 }
 
 int main(int argc, char* argv[]) {
-    atmi_init(ATMI_DEVTYPE_ALL);
+    atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
+    if(err != ATMI_STATUS_SUCCESS) return -1;
 
     const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
     size_t strlength = strlen(input);

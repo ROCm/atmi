@@ -1121,7 +1121,9 @@ atmi_status_t atl_init_gpu_context() {
     for(int gpu = 0; gpu < gpu_count; gpu++) {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-        proc.createQueues(proc.getNumCUs());
+        int num_queues = proc.getNumCUs();
+        num_queues = (num_queues > 8) ? 8 : num_queues;
+        proc.createQueues(num_queues);
     }
     
     if(context_init_time_init == 0) {

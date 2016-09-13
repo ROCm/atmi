@@ -942,7 +942,7 @@ bool atl_is_atmi_initialized() {
 
 atmi_status_t atmi_init(atmi_devtype_t devtype) {
     atmi_status_t status = ATMI_STATUS_SUCCESS;
-    if(atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
+    if(atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU) 
         status = atl_init_gpu_context();
 

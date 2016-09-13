@@ -685,6 +685,38 @@ atmi_status_t atmi_task_group_sync(atmi_task_group_t *stream) {
     atmi_task_group_t *str = (stream == NULL) ? &atl_default_stream_obj : stream;
     atmi_task_group_table_t *stream_obj = StreamTable[str->id];
     if(stream_obj) atl_stream_sync(stream_obj);
+#if 0
+        std::cout << "Params Init Timer: " << ParamsInitTimer << std::endl;
+        std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
+        std::cout << "Launch Init Timer: " << TryLaunchInitTimer << std::endl;
+        std::cout << "Dispatch Eval Timer: " << ShouldDispatchTimer << std::endl;
+        std::cout << "Dispatch Timer: " << TryDispatchTimer << std::endl;
+#if 0
+        std::cout << "Handle Signal Timer: " << HandleSignalTimer << std::endl;
+        std::cout << "Handle Signal Invoke Timer: " << HandleSignalInvokeTimer << std::endl;
+        std::cout << "Register Callback Timer: " << RegisterCallbackTimer << std::endl;
+
+        std::cout << "Signal Timer: " << SignalAddTimer << std::endl;
+        std::cout << "Task Wait Time: " << TaskWaitTimer << std::endl;
+        std::cout << "Max Ready Queue Size: " << max_ready_queue_sz << std::endl;
+        std::cout << "Waiting Tasks: " << waiting_count << std::endl;
+        std::cout << "Direct Dispatch Tasks: " << direct_dispatch << std::endl;
+        std::cout << "Callback Dispatch Tasks: " << callback_dispatch << std::endl;
+        std::cout << "SYNC_TASK(" << ret->id.lo << ");" << std::endl;
+#endif 
+        ParamsInitTimer.Reset();
+        TryLaunchTimer.Reset();
+        TryLaunchInitTimer.Reset();
+        ShouldDispatchTimer.Reset();
+        HandleSignalTimer.Reset();
+        HandleSignalInvokeTimer.Reset();
+        TryDispatchTimer.Reset();
+        RegisterCallbackTimer.Reset();
+        max_ready_queue_sz = 0;
+        waiting_count = 0;
+        direct_dispatch = 0;
+        callback_dispatch = 0;
+#endif
 
     return ATMI_STATUS_SUCCESS;
 }
@@ -2027,7 +2059,11 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             ndim = 1;
         if(task->devtype == ATMI_DEVTYPE_GPU) {
             /*  Obtain the current queue write index. increases with each call to kernel  */
+            //uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
+            // Atomically request a new packet ID.
             uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
+            // Wait until the queue is not full before writing the packet
+            while(index - hsa_queue_load_read_index_acquire(this_Q) >= this_Q->size);
             atl_kernel_impl_t *kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
             /* Find the queue index address to write the packet info into.  */
             const uint32_t queueMask = this_Q->size - 1;
@@ -2542,6 +2578,7 @@ atl_task_t *get_new_task() {
 }
 
 void try_dispatch(atl_task_t *ret, void **args, bool synchronous) {
+    ShouldDispatchTimer.Start();
     bool should_dispatch = true;
     bool should_register_callback = true;
     if(g_dep_sync_type == ATL_SYNC_CALLBACK) {
@@ -2553,6 +2590,7 @@ void try_dispatch(atl_task_t *ret, void **args, bool synchronous) {
         should_register_callback = ((ret->groupable != ATMI_TRUE) ||  
                 (ret->groupable == ATMI_TRUE && !(ret->and_predecessors.empty())));
     }
+    ShouldDispatchTimer.Stop();
     
     if(should_dispatch) {
         if(ret->atmi_task) {
@@ -2690,7 +2728,6 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 #else
     ret = get_new_task();
 #endif
-    TryLaunchInitTimer.Stop();
     ret->kernel = kernel;
     ret->kernel_id = kernel_id;
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, ret->kernel_id);
@@ -2719,10 +2756,9 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
     DEBUG_PRINT("Pif %s requires %d task\n", kernel_impl->kernel_name.c_str(), lparm->num_required);
 
-    ShouldDispatchTimer.Start();
+    TryLaunchInitTimer.Stop();
     ret->predecessors.clear();
     ret->predecessors.resize(lparm->num_required);
-    ShouldDispatchTimer.Stop();
     for(int idx = 0; idx < lparm->num_required; idx++) {
         atl_task_t *pred_task = get_task(lparm->requires[idx]);
         assert(pred_task != NULL);

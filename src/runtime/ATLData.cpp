@@ -402,13 +402,13 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
             for(size_t count = 0; count < task->and_predecessors.size(); count++) {
                 if(task->and_predecessors[count]->state < ATMI_DISPATCHED) val++;
                 assert(task->and_predecessors[count]->state >= ATMI_DISPATCHED);
-                DEBUG_PRINT("%d ", task->and_predecessors[count]->id);
+                DEBUG_PRINT("%lu ", task->and_predecessors[count]->id);
             }
             DEBUG_PRINT(")\n");
-            if(val > 0) DEBUG_PRINT("Task[%d] has %d not-dispatched predecessor tasks\n", task->id, val);
+            if(val > 0) DEBUG_PRINT("Task[%lu] has %d not-dispatched predecessor tasks\n", task->id, val);
             enqueue_barrier(task, this_Q, task->and_predecessors.size(), &(task->and_predecessors[0]), SNK_WAIT, SNK_AND, task->devtype);
         }
-        DEBUG_PRINT("%d\n", task->id);
+        DEBUG_PRINT("%lu\n", task->id);
     }
 
     ATLData * volatile src_data = g_data_map.find(src);

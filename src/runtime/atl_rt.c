@@ -262,7 +262,7 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
                 iter++;
                 /* fill out the barrier packet and ring doorbell */
                 barrier->dep_signal[dep_signal_id] = (*tasks)->signal; 
-                DEBUG_PRINT("Enqueue wait for task %d signal handle: %" PRIu64 "\n", (*tasks)->id, barrier->dep_signal[dep_signal_id].handle);
+                DEBUG_PRINT("Enqueue wait for task %lu signal handle: %" PRIu64 "\n", (*tasks)->id, barrier->dep_signal[dep_signal_id].handle);
                 tasks++;
                 tasks_remaining--;
             }
@@ -297,7 +297,7 @@ extern void atl_task_wait(atl_task_t *task) {
                 int value = task->state;//.load(std::memory_order_seq_cst);
                 if(value != ATMI_COMPLETED) {
                     //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", task->signal.handle);
-                    DEBUG_PRINT("Task (%d) state: %d\n", task->id, value);
+                    DEBUG_PRINT("Task (%lu) state: %d\n", task->id, value);
                 }
                 else {
                     //printf("Task[%d] Completed!\n", task->id);
@@ -1166,8 +1166,8 @@ hsa_status_t init_comute_and_memory() {
     }
     assert(num_iGPUs + num_dGPUs == gpu_procs.size() && "Number of dGPUs and iGPUs do not add up");
     DEBUG_PRINT("CPU Agents: %lu\n", cpu_procs.size());
-    DEBUG_PRINT("iGPU Agents: %lu\n", num_iGPUs);
-    DEBUG_PRINT("dGPU Agents: %lu\n", num_dGPUs);
+    DEBUG_PRINT("iGPU Agents: %d\n", num_iGPUs);
+    DEBUG_PRINT("dGPU Agents: %d\n", num_dGPUs);
     DEBUG_PRINT("GPU Agents: %lu\n", gpu_procs.size());
     DEBUG_PRINT("DSP Agents: %lu\n", dsp_procs.size());
     g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_iGPU] = num_iGPUs;
@@ -1850,7 +1850,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     ErrorCheck(Allocating memory for the executable-kernel, err);
 #else
     if(kernel_impl->kernarg_segment_size > 0) {
-        DEBUG_PRINT("New kernarg segment size: %lu\n", kernel_impl->kernarg_segment_size);
+        DEBUG_PRINT("New kernarg segment size: %u\n", kernel_impl->kernarg_segment_size);
         hsa_status_t err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
                 kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
                 0,
@@ -1977,7 +1977,7 @@ void handle_signal_callback(atl_task_t *task) {
     // decrement reference count of its dependencies; add those with ref count = 0 to a
     // “ready” list
     atl_task_vector_t &deps = task->and_successors;
-    DEBUG_PRINT("Deps list of %d [%d]: ", task->id, deps.size());
+    DEBUG_PRINT("Deps list of %lu [%lu]: ", task->id, deps.size());
     atl_task_vector_t temp_list;
     for(atl_task_vector_t::iterator it = deps.begin();
             it != deps.end(); it++) {
@@ -1986,7 +1986,7 @@ void handle_signal_callback(atl_task_t *task) {
         // required because there is only one callback thread, but what if there
         // were more? 
         lock(&((*it)->mutex));
-        DEBUG_PRINT(" %d(%d) ", (*it)->id, (*it)->num_predecessors);
+        DEBUG_PRINT(" %lu(%d) ", (*it)->id, (*it)->num_predecessors);
         (*it)->num_predecessors--;
         if((*it)->num_predecessors == 0) {
             // add to ready list
@@ -2017,7 +2017,7 @@ void handle_signal_callback(atl_task_t *task) {
     // release your kernarg region to the pool
     if(kernel) kernel_impl->free_kernarg_segments.push(task->kernarg_region_index);
     unlock_set(mutexes);
-    DEBUG_PRINT("[Handle Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+    DEBUG_PRINT("[Handle Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
     // dispatch from ready queue if any task exists
     lock(&(task->mutex));
     set_task_metrics(task);
@@ -2051,10 +2051,10 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", task->kernarg_region_index);
     if(kernel) kernel_impl->free_kernarg_segments.push(task->kernarg_region_index);
 
-    DEBUG_PRINT("Task %d completed\n", task->id);
+    DEBUG_PRINT("Task %lu completed\n", task->id);
 
     // decrement each predecessor's num_successors
-    DEBUG_PRINT("Requires list of %d [%d]: ", task->id, requires.size());
+    DEBUG_PRINT("Requires list of %lu [%lu]: ", task->id, requires.size());
     std::vector<hsa_signal_t> temp_list;
     temp_list.clear();
     // if num_successors == 0 then we can reuse their signal. 
@@ -2076,14 +2076,14 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
             it != task->barrier_signals.end(); it++) {
         //hsa_signal_store_relaxed((*it), 1);
         FreeSignalPool.push(*it);
-        DEBUG_PRINT("[Handle Barrier_Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+        DEBUG_PRINT("[Handle Barrier_Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
     }
     clear_container(task->barrier_signals);
     for(std::vector<hsa_signal_t>::iterator it = temp_list.begin();
             it != temp_list.end(); it++) {
         //hsa_signal_store_relaxed((*it), 1);
         FreeSignalPool.push(*it);
-        DEBUG_PRINT("[Handle Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+        DEBUG_PRINT("[Handle Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
     }
     set_task_metrics(task);
     set_task_state(task, ATMI_COMPLETED);
@@ -2172,7 +2172,7 @@ void dispatch_ready_task_for_free_signal() {
                     // perhaps?
                     ready_task->atmi_task->handle = (void *)(&(ready_task->signal));
                 }
-                DEBUG_PRINT("Callback dispatching next task %p (%d)\n", ready_task, ready_task->id);
+                DEBUG_PRINT("Callback dispatching next task %p (%lu)\n", ready_task, ready_task->id);
                 callback_dispatch++;
                 direct_dispatch++;
                 dispatch_task(ready_task);
@@ -2323,14 +2323,14 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
                     it != task->barrier_signals.end(); it++) {
                 //hsa_signal_store_relaxed((*it), 1);
                 FreeSignalPool.push(*it);
-                DEBUG_PRINT("[Handle Barrier_Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+                DEBUG_PRINT("[Handle Barrier_Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
             }
             clear_container(task->barrier_signals);
             for(std::vector<hsa_signal_t>::iterator it = temp_list.begin();
                     it != temp_list.end(); it++) {
                 //hsa_signal_store_relaxed((*it), 1);
                 FreeSignalPool.push(*it);
-                DEBUG_PRINT("[Handle Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+                DEBUG_PRINT("[Handle Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
             }
         }
         else if(g_dep_sync_type == ATL_SYNC_CALLBACK) {
@@ -2519,13 +2519,13 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                 for(size_t count = 0; count < task->and_predecessors.size(); count++) {
                     if(task->and_predecessors[count]->state < ATMI_DISPATCHED) val++;
                     assert(task->and_predecessors[count]->state >= ATMI_DISPATCHED);
-                    DEBUG_PRINT("%d ", task->and_predecessors[count]->id);
+                    DEBUG_PRINT("%lu ", task->and_predecessors[count]->id);
                 }
                 DEBUG_PRINT(")\n");
-                if(val > 0) DEBUG_PRINT("Task[%d] has %d not-dispatched predecessor tasks\n", task->id, val);
+                if(val > 0) DEBUG_PRINT("Task[%lu] has %d not-dispatched predecessor tasks\n", task->id, val);
                 enqueue_barrier(task, this_Q, task->and_predecessors.size(), &(task->and_predecessors[0]), SNK_NOWAIT, SNK_AND, task->devtype);
             }
-            DEBUG_PRINT("%d\n", task->id);
+            DEBUG_PRINT("%lu\n", task->id);
             /*else if ( lparm->num_needs_any > 0) {
               std::vector<atl_task_t *> needs_any(lparm->num_needs_any);
               for(int idx = 0; idx < lparm->num_needs_any; idx++) {
@@ -2730,7 +2730,7 @@ void *try_grab_kernarg_region(atl_task_t *ret, int *free_idx) {
     void * ret_address = NULL;
     if(!(kernel_impl->free_kernarg_segments.empty())) { 
         *free_idx = kernel_impl->free_kernarg_segments.front();
-        DEBUG_PRINT("Acquiring Kernarg Segment Id: %d\n", free_idx);
+        DEBUG_PRINT("Acquiring Kernarg Segment Id: %p\n", free_idx);
         ret_address = (void *)((char *)kernel_impl->kernarg_region + 
                 ((*free_idx) * kernarg_segment_size));
         kernel_impl->free_kernarg_segments.pop();
@@ -2814,7 +2814,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         int dep_count = 0;
         for(int idx = 0; idx < ret->predecessors.size(); idx++) {
             atl_task_t *pred_task = temp_vecs[idx]; 
-            DEBUG_PRINT("Task %d depends on %d as %d th predecessor ",
+            DEBUG_PRINT("Task %lu depends on %lu as %d th predecessor ",
                     ret->id, pred_task->id, idx);
             if(pred_task->state < ATMI_DISPATCHED) {
                 /* still in ready queue and not received a signal */
@@ -2827,7 +2827,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
             }
         }
         if(ret->prev_ordered_task) {
-            DEBUG_PRINT("Task %d depends on %d as ordered predecessor ",
+            DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ",
                     ret->id, ret->prev_ordered_task->id);
             if(ret->prev_ordered_task->state < ATMI_DISPATCHED) {
                 should_dispatch = false;
@@ -2919,7 +2919,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
             atl_task_t *pred_task = temp_vecs[idx]; 
             if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
                 pred_task->num_successors++;
-                DEBUG_PRINT("Task %p (%d) adding %p (%d) as successor\n",
+                DEBUG_PRINT("Task %p (%lu) adding %p (%lu) as successor\n",
                         pred_task, pred_task->id, ret, ret->id);
                 ret->and_predecessors.push_back(pred_task);
             }
@@ -2973,7 +2973,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
         req_mutexes.insert(&(kernel_impl->mutex));
     }
     lock_set(req_mutexes);
-   
+
     if(should_try_dispatch) {
         if(ret->predecessors.size() > 0) {
             // add to its predecessor's dependents list and return 
@@ -2998,8 +2998,8 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
 
     if(should_try_dispatch) {
         if(ret->prev_ordered_task) {
-            DEBUG_PRINT("Task %d depends on %d as ordered predecessor ",
-                    ret->id, ret->prev_ordered_task);
+            DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ",
+                    ret->id, ret->prev_ordered_task->id);
             if(ret->prev_ordered_task->state < ATMI_DISPATCHED) {
                 should_try_dispatch = false;
                 predecessors_complete = false;
@@ -3127,7 +3127,7 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
         should_dispatch = try_dispatch_barrier_pkt(ret, args);
     }
     ShouldDispatchTimer.Stop();
-    
+
     if(should_dispatch) {
         if(ret->atmi_task) {
             // FIXME: set a lookup table for dynamic parallelism kernels
@@ -3138,7 +3138,7 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
         // update kernarg ptrs
         //direct_dispatch++;
         dispatch_task(ret);
-    
+
 
         RegisterCallbackTimer.Start();
         if(register_task_callback) {

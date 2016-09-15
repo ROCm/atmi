@@ -2512,7 +2512,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
 
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
             /* For dependent child tasks, add dependent parent kernels to barriers.  */
-            DEBUG_PRINT("Pif requires %d tasks\n", lparm->predecessor.size());
+            //DEBUG_PRINT("Pif requires %d tasks\n", lparm->predecessor.size());
             if ( task->and_predecessors.size() > 0) {
                 int val = 0;
                 DEBUG_PRINT("(");
@@ -3269,13 +3269,13 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         ret->gridDim[i] = lparm->gridDim[i];
         ret->groupDim[i] = lparm->groupDim[i];
     }
-    DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires, lparm->requires);
-    DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task_info, lparm->task_info);
+    //DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires, lparm->requires);
+    //DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task_info, lparm->task_info);
 
     ret->group = stream;
     ret->stream_obj = stream_obj;
     ret->place = lparm->place;
-    DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);
+    //DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);
     ret->num_predecessors = 0;
     ret->num_successors = 0;
 

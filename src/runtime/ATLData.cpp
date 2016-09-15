@@ -393,7 +393,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         //check_change_in_device_type(task, stream_obj, this_Q, task->devtype);
 
         /* For dependent child tasks, add dependent parent kernels to barriers.  */
-        DEBUG_PRINT("Pif requires %d tasks\n", lparm->predecessor.size());
+        //DEBUG_PRINT("Pif requires %d tasks\n", lparm->predecessor.size());
         if ( task->and_predecessors.size() > 0) {
             int val = 0;
             DEBUG_PRINT("(");

@@ -117,9 +117,15 @@ typedef struct atmi_task_group_table_s {
     atmi_place_t place;
 //    int next_gpu_qid;
 //    int next_cpu_qid;
-    hsa_signal_t common_signal;
-    pthread_mutex_t mutex;
+    hsa_signal_t group_signal;
+    pthread_mutex_t group_mutex;
     std::vector<atl_task_t *> running_groupable_tasks;
+    // TODO: for now, all waiting tasks (groupable and individual) are placed in a
+    // single queue. does it make sense to have groupable waiting tasks separately
+    // waiting in their own queue? perhaps not for now. should revisit if there
+    // are more than one callback threads
+    // std::vector<atl_task_t *> waiting_groupable_tasks;
+    std::atomic_flag callback_started;
 }atmi_task_group_table_t;
 
 typedef enum atl_task_type_s {
@@ -225,7 +231,9 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj);
 
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
+bool handle_group_signal(hsa_signal_value_t value, void *arg);
 
+void do_progress(int progress_count = 0);
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);
@@ -257,7 +265,7 @@ void set_task_handle_ID(atmi_task_handle_t *t, int ID);
 void lock(pthread_mutex_t *m);
 void unlock(pthread_mutex_t *m);
 
-void try_dispatch(atl_task_t *ret, void **args, bool synchronous);
+bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
 atl_task_t *get_new_task();
 const char *get_error_string(hsa_status_t err);
 #define ErrorCheck(msg, status) \

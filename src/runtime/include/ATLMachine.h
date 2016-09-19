@@ -26,9 +26,8 @@ class ATLCoarseMemory;
 
 class ATLProcessor {
     public:
-        ATLProcessor(hsa_agent_t agent) : _agent(agent) {
+        ATLProcessor(hsa_agent_t agent) : _next_best_queue_id(0), _agent(agent) {
             _queues.clear();
-            _next_best_queue_id = 0;
             _dram_memories.clear();
             _gddr_memories.clear();
         }
@@ -48,7 +47,7 @@ class ATLProcessor {
     protected:
         hsa_agent_t     _agent;
         std::vector<hsa_queue_t *> _queues;
-        int _next_best_queue_id; // schedule queues by setting this to best queue ID
+        unsigned int _next_best_queue_id; // schedule queues by setting this to best queue ID
         
         std::vector<ATLFineMemory> _dram_memories;
         std::vector<ATLCoarseMemory> _gddr_memories;

@@ -1676,12 +1676,14 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
             &(kernel_impl->kernarg_region));
     ErrorCheck(Allocating memory for the executable-kernel, err);
 #else
-    hsa_status_t err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
-            kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
-            0,
-            &(kernel_impl->kernarg_region));
-    ErrorCheck(Allocating memory for the executable-kernel, err);
-    allow_access_to_all_gpu_agents(kernel_impl->kernarg_region);
+    if(kernel_impl->kernarg_segment_size > 0) {
+        hsa_status_t err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
+                kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
+                0,
+                &(kernel_impl->kernarg_region));
+        ErrorCheck(Allocating memory for the executable-kernel, err);
+        allow_access_to_all_gpu_agents(kernel_impl->kernarg_region);
+    }
 
 #endif
     for(int i = 0; i < MAX_NUM_KERNELS; i++) {

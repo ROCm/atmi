@@ -118,6 +118,7 @@ typedef struct atmi_task_group_table_s {
 //    int next_gpu_qid;
 //    int next_cpu_qid;
     hsa_signal_t group_signal;
+    hsa_signal_t task_count;
     pthread_mutex_t group_mutex;
     std::vector<atl_task_t *> running_groupable_tasks;
     // TODO: for now, all waiting tasks (groupable and individual) are placed in a

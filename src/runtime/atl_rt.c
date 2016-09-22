@@ -609,7 +609,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
         /* wait on each one of the tasks in the task bag */
         #if 1
         DEBUG_PRINT("Waiting for async unordered tasks\n");
-        hsa_signal_t signal = stream_obj->group_signal;
+        hsa_signal_t signal = stream_obj->task_count;
         if(signal.handle != (uint64_t)-1) {
             #if 1
             hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
@@ -840,6 +840,8 @@ atmi_status_t register_stream(atmi_task_group_t *stream) {
         stream_entry->cpu_queue = NULL;
         stream_entry->gpu_queue = NULL;
         stream_entry->group_signal.handle = (uint64_t)-1;
+        hsa_status_t err=hsa_signal_create(0, 0, NULL, &(stream_entry->task_count));
+        ErrorCheck(Creating a HSA signal, err);
         stream_entry->callback_started.clear();
         pthread_mutex_init(&(stream_entry->group_mutex), NULL);
         StreamTable[stream->id] = stream_entry;
@@ -2051,7 +2053,6 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
 #endif
     HandleSignalTimer.Start();
     atmi_task_group_table_t *task_group = (atmi_task_group_table_t *)arg;
-    //static int counter = 0;
     // TODO: what if the group task has dependents? this is not clear as of now. 
     // we need to define dependencies between tasks and task groups better...
 
@@ -2131,6 +2132,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
 
     // make progress on all other ready tasks
     do_progress(group_tasks.size());
+    hsa_signal_subtract_acq_rel(task_group->task_count, group_tasks.size());
     HandleSignalTimer.Stop();
     HandleSignalInvokeTimer.Start();
     // return true because we want the callback function to always be
@@ -2229,7 +2231,7 @@ void *acquire_kernarg_segment(atl_kernel_impl_t *impl, int *segment_id) {
 atmi_status_t dispatch_task(atl_task_t *task) {
     //DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
 
-    static int counter = 0;
+    static std::atomic<int> counter(0);
     if(task->type == ATL_DATA_MOVEMENT) {
         return dispatch_data_movement(task, task->data_dest_ptr, task->data_src_ptr, 
                                       task->data_size);
@@ -2308,6 +2310,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             if(task->groupable == ATMI_TRUE) {
                 lock(&(stream_obj->group_mutex));
                 hsa_signal_add_acq_rel(task->signal, 1);
+                hsa_signal_add_acq_rel(stream_obj->task_count, 1);
                 stream_obj->running_groupable_tasks.push_back(task);
                 unlock(&(stream_obj->group_mutex));
             }
@@ -2396,6 +2399,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             if(task->groupable == ATMI_TRUE) {
                 lock(&(stream_obj->group_mutex));
                 hsa_signal_add_acq_rel(task->signal, thread_count);
+                hsa_signal_add_acq_rel(stream_obj->task_count, 1);
                 stream_obj->running_groupable_tasks.push_back(task);
                 unlock(&(stream_obj->group_mutex));
             }

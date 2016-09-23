@@ -13,9 +13,9 @@ Table of contents
 
 ## ATMI v0.3
 - A comprehensive machine model for integrated GPU (APU) and discrete GPU (dGPU) systems
-- Data movement API 
-- Device supported: AMD Kaveri and AMD Carrizzo APUs, AMD Fiji dGPUs
-- Runtimes used: ROCm v1.0
+- Data movement API (synchronous and asynchronous options)
+- Devices supported: AMD Carrizo APU and AMD Fiji dGPU
+- Runtimes used: ROCm v1.2
 
 ## ATMI v0.2
 - Efficient resource management

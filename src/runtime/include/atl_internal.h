@@ -19,6 +19,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include <pthread.h>
 #include <vector>
 #include <queue>
+#include <deque>
 #include <map>
 #include <atomic>
 /* ---------------------------------------------------------------------------------
@@ -110,16 +111,18 @@ typedef struct atl_task_list_s {
 
 typedef struct atmi_task_group_table_s {
     boolean ordered;
-    atl_task_list_t *tasks;
+    atl_task_t *last_task;
     hsa_queue_t *gpu_queue;
     hsa_queue_t *cpu_queue;
     atmi_devtype_t last_device_type;
     atmi_place_t place;
 //    int next_gpu_qid;
 //    int next_cpu_qid;
+    unsigned int group_queue_id;
     hsa_signal_t group_signal;
     hsa_signal_t task_count;
     pthread_mutex_t group_mutex;
+    std::deque<atl_task_t *> running_ordered_tasks;
     std::vector<atl_task_t *> running_groupable_tasks;
     // TODO: for now, all waiting tasks (groupable and individual) are placed in a
     // single queue. does it make sense to have groupable waiting tasks separately
@@ -172,6 +175,9 @@ typedef struct atl_task_s {
     atmi_task_group_table_t *stream_obj;
     atmi_task_group_t *group;
     boolean groupable;
+
+    // for ordered task groups
+    atl_task_t * prev_ordered_task;
 
     // other miscellaneous flags
     atmi_devtype_t devtype;
@@ -234,7 +240,7 @@ void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
 bool handle_group_signal(hsa_signal_value_t value, void *arg);
 
-void do_progress(int progress_count = 0);
+void do_progress(atmi_task_group_table_t *task_group, int progress_count = 0);
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);

@@ -342,6 +342,14 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
         ret->predecessors[idx] = pred_task;
     }
 
+    if(ret->stream_obj->ordered) {
+        lock(&(ret->stream_obj->group_mutex));
+        ret->stream_obj->running_ordered_tasks.push_back(ret);
+        ret->prev_ordered_task = ret->stream_obj->last_task;
+        ret->stream_obj->last_task = ret;
+        unlock(&(ret->stream_obj->group_mutex));
+    }
+
     try_dispatch(ret, NULL, lparm->synchronous);
 
     return ret->id;

@@ -50,52 +50,49 @@ int main(int argc, char *argv[]) {
    lparm3->WORKITEMS=64;
    lparm4->WORKITEMS=64;
 
-   /* Initialize the Kernel */
-   stream1->ordered=ATMI_TRUE;
    lparm1->groupable=ATMI_TRUE;
+   lparm2->groupable=ATMI_TRUE;
+   lparm3->groupable=ATMI_TRUE;
+   lparm4->groupable=ATMI_TRUE;
+
+   /* Initialize the Kernel */
    lparm1->synchronous=ATMI_TRUE;
    atmi_task_launch(lparm1, kernel, NULL);
-#if 1
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
    for(int i=0; i<kcalls; i++) atmi_task_launch(lparm1, kernel, NULL);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
-   atmi_task_group_sync(stream1);
-
    lparm1->synchronous=ATMI_FALSE;
+
+#if 1
    stream1->ordered=ATMI_TRUE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
    for(int i=0; i<kcalls; i++) atmi_task_launch(lparm1, kernel, NULL);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-   //SYNC_STREAM(stream1); 
    atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
 #if 1
    stream1->ordered = ATMI_FALSE;
-   lparm1->synchronous = ATMI_FALSE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[4]);
    for(int i=0; i<kcalls; i++) atmi_task_launch(lparm1, kernel, NULL);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
-   //SYNC_STREAM(stream1); 
    atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
 #endif
-#if 0
-   printf("2 Streams Starts\n");
-   fflush(stdout);
+#if 1
    stream1->ordered=ATMI_TRUE;
    stream2->ordered=ATMI_TRUE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[5]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[6]);
    for(int i=0; i<kcalls/2; i++) {
-      nullKernel(lparm1, kcalls); 
-      nullKernel(lparm2, kcalls); 
+      atmi_task_launch(lparm1, kernel, NULL);
+      atmi_task_launch(lparm2, kernel, NULL);
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[5]);
-   SYNC_STREAM(stream1); 
-   SYNC_STREAM(stream2); 
+   atmi_task_group_sync(stream1);
+   atmi_task_group_sync(stream2);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[6]);
 
    stream1->ordered=ATMI_FALSE;
@@ -103,14 +100,15 @@ int main(int argc, char *argv[]) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[7]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[8]);
    for(int i=0; i<kcalls/2; i++) {
-      nullKernel(lparm1, kcalls); 
-      nullKernel(lparm2, kcalls); 
+      atmi_task_launch(lparm1, kernel, NULL);
+      atmi_task_launch(lparm2, kernel, NULL);
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[7]);
-   SYNC_STREAM(stream1); 
-   SYNC_STREAM(stream2); 
+   atmi_task_group_sync(stream1);
+   atmi_task_group_sync(stream2);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[8]);
-
+#endif
+#if 0
    stream1->ordered=ATMI_TRUE;
    stream2->ordered=ATMI_TRUE;
    stream3->ordered=ATMI_TRUE;
@@ -158,27 +156,27 @@ int main(int argc, char *argv[]) {
    printf("Kernel Calls     =  %ld\n",kcalls);
    printf("Secs             =  %6.4f\n",((float)nanosecs[0])/NSECPERSEC);
    printf("Synchronous KPS  =  %6.0f\n\n",kps[0]);
-   printf("Asynchronous Tasks Ordered Stream in 1 stream\n");
+   printf("Asynchronous Ordered Execution in 1 task group\n");
    printf("Secs to dispatch =  %10.8f\n",((float)nanosecs[1])/NSECPERSEC);
    printf("KPS dispatched   =  %6.0f\n",kps[1]);
    printf("Secs to complete =  %10.8f\n",((float)nanosecs[2])/NSECPERSEC);
    printf("KPS completed    =  %6.0f\n\n",kps[2]);
-   printf("Asynchronous Tasks Unordered Stream in 1 stream\n");
+   printf("Asynchronous Unordered Execution in 1 task group\n");
    printf("Secs to dispatch =  %10.8f\n",((float)nanosecs[3])/NSECPERSEC);
    printf("KPS dispatched   =  %6.0f\n",kps[3]);
    printf("Secs to complete =  %10.8f\n",((float)nanosecs[4])/NSECPERSEC);
    printf("KPS completed    =  %6.0f\n\n",kps[4]);
-#if 0
-   printf("Asynchronous Ordered Eecution in 2 streams\n");
+   printf("Asynchronous Ordered Execution in 2 task groups\n");
    printf("Secs to dispatch =  %10.8f\n",((float)nanosecs[5])/NSECPERSEC);
    printf("KPS dispatched   =  %6.0f\n",kps[5]);
    printf("Secs to complete =  %10.8f\n",((float)nanosecs[6])/NSECPERSEC);
    printf("KPS completed    =  %6.0f\n\n",kps[6]);
-   printf("Asynchronous Unordered Execution in 2 streams\n");
+   printf("Asynchronous Unordered Execution in 2 task groups\n");
    printf("Secs to dispatch =  %10.8f\n",((float)nanosecs[7])/NSECPERSEC);
    printf("KPS dispatched   =  %6.0f\n",kps[7]);
    printf("Secs to complete =  %10.8f\n",((float)nanosecs[8])/NSECPERSEC);
    printf("KPS completed    =  %6.0f\n\n",kps[8]);
+#if 0
    printf("Asynchronous Ordered Execution in 4 streams\n");
    printf("Secs to dispatch =  %10.8f\n",((float)nanosecs[9])/NSECPERSEC);
    printf("KPS dispatched   =  %6.0f\n",kps[9]);
@@ -190,7 +188,7 @@ int main(int argc, char *argv[]) {
    printf("Secs to complete =  %10.8f\n",((float)nanosecs[12])/NSECPERSEC);
    printf("KPS completed    =  %6.0f\n\n",kps[12]);
 #endif 
-    atmi_finalize();
+   atmi_finalize();
 }
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {

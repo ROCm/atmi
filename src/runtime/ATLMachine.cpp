@@ -205,9 +205,7 @@ hsa_queue_t *ATLProcessor::getBestQueue(atmi_scheduler_t sched) {
 }
 
 hsa_queue_t *ATLProcessor::getQueue(const int index) {
-    if(index < 0 || index >= _queues.size()) 
-        return NULL;
-    return _queues[index];
+    return _queues[index % _queues.size()];
 }
 
 int ATLProcessor::getNumCUs() const {

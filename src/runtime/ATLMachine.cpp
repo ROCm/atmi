@@ -19,6 +19,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 #include <vector>
+#include <cassert>
 #include "atmi_runtime.h"
 #include "atl_internal.h"
 using namespace std;
@@ -45,20 +46,18 @@ void ATLMemory::free(void *ptr) {
 }*/
 
 
-template<> void ATLProcessor::addMemory(ATLFineMemory &mem) {
-    _dram_memories.push_back(mem);
+void ATLProcessor::addMemory(ATLMemory &mem) {
+    for(std::vector<ATLMemory>::iterator it = _memories.begin();
+                it != _memories.end(); it++) {
+        // if the memory already exists, then just return
+        if(mem.getMemory().handle == it->getMemory().handle)
+            return;
+    }
+    _memories.push_back(mem);
 }
 
-template<> void ATLProcessor::addMemory(ATLCoarseMemory &mem) {
-    _gddr_memories.push_back(mem);
-}
-
-template<> std::vector<ATLFineMemory> &ATLProcessor::getMemories() {
-    return _dram_memories;
-}
-
-template<> std::vector<ATLCoarseMemory> &ATLProcessor::getMemories() {
-    return _gddr_memories;
+std::vector<ATLMemory> &ATLProcessor::getMemories() {
+    return _memories;
 }
 
 template <> std::vector<ATLCPUProcessor> &ATLMachine::getProcessors() { 
@@ -75,14 +74,9 @@ template <> std::vector<ATLDSPProcessor> &ATLMachine::getProcessors() {
 
 hsa_amd_memory_pool_t get_memory_pool(ATLProcessor &proc, const int mem_id) {
     hsa_amd_memory_pool_t pool;
-    vector<ATLFineMemory> &f_mems = proc.getMemories<ATLFineMemory>();
-    vector<ATLCoarseMemory> &c_mems = proc.getMemories<ATLCoarseMemory>();
-    if(mem_id < f_mems.size()) {
-        pool = f_mems[mem_id].getMemory(); 
-    }
-    else {
-        pool = c_mems[mem_id - f_mems.size()].getMemory(); 
-    }
+    vector<ATLMemory> &mems = proc.getMemories();
+    assert(mems.size() && mem_id >=0 && mem_id < mems.size() && "Invalid memory pools for this processor");
+    pool = mems[mem_id].getMemory(); 
     return pool;
 }
 

@@ -402,7 +402,7 @@ static hsa_status_t get_memory_pool_info(hsa_amd_memory_pool_t memory_pool, void
         err = hsa_amd_memory_pool_get_info(memory_pool, HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS, &global_flag);
         ErrorCheck(Get memory pool info, err);
         if(HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED & global_flag) {
-            ATLFineMemory new_mem(memory_pool, *proc);
+            ATLMemory new_mem(memory_pool, *proc, ATMI_MEMTYPE_FINE_GRAINED);
             proc->addMemory(new_mem);
             if(HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_KERNARG_INIT & global_flag) {
                 DEBUG_PRINT("GPU kernel args pool handle: %lu\n", memory_pool.handle);
@@ -410,7 +410,7 @@ static hsa_status_t get_memory_pool_info(hsa_amd_memory_pool_t memory_pool, void
             }
         }
         else {
-            ATLCoarseMemory new_mem(memory_pool, *proc);
+            ATLMemory new_mem(memory_pool, *proc, ATMI_MEMTYPE_COARSE_GRAINED);
             proc->addMemory(new_mem);
         }
     }
@@ -1032,6 +1032,124 @@ hsa_status_t init_comute_and_memory() {
     std::vector<ATLCPUProcessor> &cpu_procs = g_atl_machine.getProcessors<ATLCPUProcessor>(); 
     std::vector<ATLGPUProcessor> &gpu_procs = g_atl_machine.getProcessors<ATLGPUProcessor>(); 
     std::vector<ATLDSPProcessor> &dsp_procs = g_atl_machine.getProcessors<ATLDSPProcessor>(); 
+    /* For CPU memory pools, add other devices that can access them directly
+     * or indirectly */
+    for(std::vector<ATLCPUProcessor>::iterator cpu_it = cpu_procs.begin(); 
+            cpu_it != cpu_procs.end(); cpu_it++) {
+        std::vector<ATLMemory> &cpu_mems = cpu_it->getMemories();
+        for(std::vector<ATLMemory>::iterator cpu_mem_it = cpu_mems.begin();
+                cpu_mem_it != cpu_mems.end(); cpu_mem_it++) {
+            hsa_amd_memory_pool_t pool = cpu_mem_it->getMemory();
+            for(std::vector<ATLGPUProcessor>::iterator gpu_it = gpu_procs.begin(); 
+                    gpu_it != gpu_procs.end(); gpu_it++) {
+                hsa_agent_t agent = gpu_it->getAgent();
+                hsa_amd_memory_pool_access_t access;
+                hsa_amd_agent_memory_pool_get_info(agent, 
+                        pool, 
+                        HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, 
+                        &access);
+                if(access != 0) {
+                    // this means not NEVER, but could be YES or NO
+                    // add this memory pool to the proc
+                    gpu_it->addMemory(*cpu_mem_it);
+                }
+            }
+            for(std::vector<ATLDSPProcessor>::iterator dsp_it = dsp_procs.begin(); 
+                    dsp_it != dsp_procs.end(); dsp_it++) {
+                hsa_agent_t agent = dsp_it->getAgent();
+                hsa_amd_memory_pool_access_t access;
+                hsa_amd_agent_memory_pool_get_info(agent, 
+                        pool, 
+                        HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, 
+                        &access);
+                if(access != 0) {
+                    // this means not NEVER, but could be YES or NO
+                    // add this memory pool to the proc
+                    dsp_it->addMemory(*cpu_mem_it);
+                }
+            }
+        }
+    }
+
+    /* FIXME: are the below combinations of procs and memory pools needed? 
+     * all to all compare procs with their memory pools and add those memory
+     * pools that are accessible by the target procs */
+    for(std::vector<ATLGPUProcessor>::iterator gpu_it = gpu_procs.begin(); 
+            gpu_it != gpu_procs.end(); gpu_it++) {
+        std::vector<ATLMemory> &gpu_mems = gpu_it->getMemories();
+        for(std::vector<ATLMemory>::iterator gpu_mem_it = gpu_mems.begin();
+                gpu_mem_it != gpu_mems.end(); gpu_mem_it++) {
+            hsa_amd_memory_pool_t pool = gpu_mem_it->getMemory();
+            for(std::vector<ATLDSPProcessor>::iterator dsp_it = dsp_procs.begin(); 
+                    dsp_it != dsp_procs.end(); dsp_it++) {
+                hsa_agent_t agent = dsp_it->getAgent();
+                hsa_amd_memory_pool_access_t access;
+                hsa_amd_agent_memory_pool_get_info(agent, 
+                        pool, 
+                        HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, 
+                        &access);
+                if(access != 0) {
+                    // this means not NEVER, but could be YES or NO
+                    // add this memory pool to the proc
+                    dsp_it->addMemory(*gpu_mem_it);
+                }
+            }
+
+            for(std::vector<ATLCPUProcessor>::iterator cpu_it = cpu_procs.begin(); 
+                    cpu_it != cpu_procs.end(); cpu_it++) {
+                hsa_agent_t agent = cpu_it->getAgent();
+                hsa_amd_memory_pool_access_t access;
+                hsa_amd_agent_memory_pool_get_info(agent, 
+                        pool, 
+                        HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, 
+                        &access);
+                if(access != 0) {
+                    // this means not NEVER, but could be YES or NO
+                    // add this memory pool to the proc
+                    cpu_it->addMemory(*gpu_mem_it);
+                }
+            }
+        }
+    }
+
+    for(std::vector<ATLDSPProcessor>::iterator dsp_it = dsp_procs.begin(); 
+            dsp_it != dsp_procs.end(); dsp_it++) {
+        std::vector<ATLMemory> &dsp_mems = dsp_it->getMemories();
+        for(std::vector<ATLMemory>::iterator dsp_mem_it = dsp_mems.begin();
+                dsp_mem_it != dsp_mems.end(); dsp_mem_it++) {
+            hsa_amd_memory_pool_t pool = dsp_mem_it->getMemory();
+            for(std::vector<ATLGPUProcessor>::iterator gpu_it = gpu_procs.begin(); 
+                    gpu_it != gpu_procs.end(); gpu_it++) {
+                hsa_agent_t agent = gpu_it->getAgent();
+                hsa_amd_memory_pool_access_t access;
+                hsa_amd_agent_memory_pool_get_info(agent, 
+                        pool, 
+                        HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, 
+                        &access);
+                if(access != 0) {
+                    // this means not NEVER, but could be YES or NO
+                    // add this memory pool to the proc
+                    gpu_it->addMemory(*dsp_mem_it);
+                }
+            }
+
+            for(std::vector<ATLCPUProcessor>::iterator cpu_it = cpu_procs.begin(); 
+                    cpu_it != cpu_procs.end(); cpu_it++) {
+                hsa_agent_t agent = cpu_it->getAgent();
+                hsa_amd_memory_pool_access_t access;
+                hsa_amd_agent_memory_pool_get_info(agent, 
+                        pool, 
+                        HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, 
+                        &access);
+                if(access != 0) {
+                    // this means not NEVER, but could be YES or NO
+                    // add this memory pool to the proc
+                    cpu_it->addMemory(*dsp_mem_it);
+                }
+            }
+        }
+    }
+
     g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_CPU] = cpu_procs.size();
     g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_GPU] = gpu_procs.size();
     g_atmi_machine.device_count_by_type[ATMI_DEVTYPE_DSP] = dsp_procs.size();
@@ -1067,22 +1185,50 @@ hsa_status_t init_comute_and_memory() {
     for(int i = cpus_begin; i < cpus_end; i++) {
         all_devices[i].type = cpu_procs[proc_index].getType();
         
-        std::vector<ATLFineMemory> fine_memories = cpu_procs[proc_index].getMemories<ATLFineMemory>();
-        std::vector<ATLCoarseMemory> coarse_memories = cpu_procs[proc_index].getMemories<ATLCoarseMemory>();
-        DEBUG_PRINT("CPU\tFine Memories : %lu\n", fine_memories.size());
-        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
-        all_devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+        std::vector<ATLMemory> memories = cpu_procs[proc_index].getMemories();
+        int fine_memories_size = 0;
+        int coarse_memories_size = 0;
+        DEBUG_PRINT("CPU memory types:\t");
+        for(std::vector<ATLMemory>::iterator it = memories.begin(); 
+                            it != memories.end(); it++) {
+            atmi_memtype_t type = it->getType();
+            if(type == ATMI_MEMTYPE_FINE_GRAINED) {
+                fine_memories_size++;
+                DEBUG_PRINT("Fine\t");
+            }
+            else {
+                coarse_memories_size++;
+                DEBUG_PRINT("Coarse\t");
+            }
+        }
+        DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
+        DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
+        all_devices[i].memory_pool_count = memories.size();
         proc_index++;
     }
     proc_index = 0;
     for(int i = gpus_begin; i < gpus_end; i++) {
         all_devices[i].type = gpu_procs[proc_index].getType();
         
-        std::vector<ATLFineMemory> fine_memories = gpu_procs[proc_index].getMemories<ATLFineMemory>();
-        std::vector<ATLCoarseMemory> coarse_memories = gpu_procs[proc_index].getMemories<ATLCoarseMemory>();
-        DEBUG_PRINT("GPU\tFine Memories : %lu\n", fine_memories.size());
-        DEBUG_PRINT("\tCoarse Memories : %lu\n", coarse_memories.size());
-        all_devices[i].memory_pool_count = fine_memories.size() + coarse_memories.size();
+        std::vector<ATLMemory> memories = gpu_procs[proc_index].getMemories();
+        int fine_memories_size = 0;
+        int coarse_memories_size = 0;
+        DEBUG_PRINT("GPU memory types:\t");
+        for(std::vector<ATLMemory>::iterator it = memories.begin(); 
+                            it != memories.end(); it++) {
+            atmi_memtype_t type = it->getType();
+            if(type == ATMI_MEMTYPE_FINE_GRAINED) {
+                fine_memories_size++;
+                DEBUG_PRINT("Fine\t");
+            }
+            else {
+                coarse_memories_size++;
+                DEBUG_PRINT("Coarse\t");
+            }
+        }
+        DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
+        DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
+        all_devices[i].memory_pool_count = memories.size();
         proc_index++;
     }
     proc_index = 0;

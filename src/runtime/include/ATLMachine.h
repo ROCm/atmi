@@ -21,21 +21,19 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include "atl_internal.h"
 #include <vector>
 
-class ATLFineMemory;
-class ATLCoarseMemory;
+class ATLMemory;
 
 class ATLProcessor {
     public:
         ATLProcessor(hsa_agent_t agent) : _next_best_queue_id(0), _agent(agent) {
             _queues.clear();
-            _dram_memories.clear();
-            _gddr_memories.clear();
+            _memories.clear();
         }
-        template<typename T> void addMemory(T &p);
+        void addMemory(ATLMemory &p);
         hsa_agent_t getAgent() const {return _agent; }
         // TODO: Do we need this or are we building the machine structure just once in the program? 
         // void removeMemory(ATLMemory &p); 
-        template<typename T> std::vector<T> &getMemories();
+        std::vector<ATLMemory> &getMemories();
         virtual atmi_devtype_t getType() {return ATMI_DEVTYPE_ALL; }
 
         virtual void createQueues(const int count) {}
@@ -49,8 +47,7 @@ class ATLProcessor {
         std::vector<hsa_queue_t *> _queues;
         unsigned int _next_best_queue_id; // schedule queues by setting this to best queue ID
         
-        std::vector<ATLFineMemory> _dram_memories;
-        std::vector<ATLCoarseMemory> _gddr_memories;
+        std::vector<ATLMemory> _memories;
 };
 
 
@@ -89,12 +86,12 @@ class ATLDSPProcessor : public ATLProcessor {
 
 class ATLMemory {
     public:
-        ATLMemory(hsa_amd_memory_pool_t pool, ATLProcessor p) :
-            _memory_pool(pool), _processor(p) {} 
+        ATLMemory(hsa_amd_memory_pool_t pool, ATLProcessor p, atmi_memtype_t t) :
+            _memory_pool(pool), _processor(p), _type(t) {} 
         ATLProcessor &getProcessor()  { return _processor; }
         hsa_amd_memory_pool_t getMemory() const {return _memory_pool; }
         
-        atmi_memtype_t getType() const {return ATMI_MEMTYPE_ANY; }
+        atmi_memtype_t getType() const {return _type; }
         // uint32_t getAccessType () { return fine of coarse grained? ;}
         /* memory alloc/free */
         void *alloc(size_t s); 
@@ -103,20 +100,7 @@ class ATLMemory {
     private:
         hsa_amd_memory_pool_t   _memory_pool; 
         ATLProcessor    _processor;
-};
-
-class ATLFineMemory : public ATLMemory {
-    public:
-        ATLFineMemory(hsa_amd_memory_pool_t pool, ATLProcessor p) :
-            ATLMemory(pool, p) {} 
-        atmi_memtype_t getType() const { return ATMI_MEMTYPE_FINE_GRAINED; }
-};
-
-class ATLCoarseMemory : public ATLMemory {
-    public:
-        ATLCoarseMemory(hsa_amd_memory_pool_t pool, ATLProcessor p) :
-            ATLMemory(pool, p) {} 
-        atmi_memtype_t getType() const { return ATMI_MEMTYPE_COARSE_GRAINED; }
+        atmi_memtype_t  _type;
 };
 
 class ATLMachine {

@@ -16,6 +16,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #ifndef __ATL_DATA__
 #define __ATL_DATA__
 #include "atmi.h"
+#include <hsa.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
@@ -82,5 +83,8 @@ enum {
     ATMI_D2D = 2,
     ATMI_H2H = 3
 };
+
+hsa_agent_t get_mem_agent(atmi_mem_place_t place);
+hsa_agent_t get_compute_agent(atmi_place_t place);
 
 #endif // __ATL_DATA__

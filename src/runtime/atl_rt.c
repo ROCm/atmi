@@ -19,6 +19,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include "atl_bindthread.h"
 #include "ATLQueue.h"
 #include "ATLMachine.h"
+#include "ATLData.h"
 #include <pthread.h>
 #include <time.h>
 #include <assert.h>
@@ -54,7 +55,7 @@ static size_t waiting_count = 0;
 static size_t direct_dispatch = 0;
 static size_t callback_dispatch = 0;
 atl_task_t ***GlobalTaskPtr;
-#define NSECPERSEC 1000000000L
+#define NANOSECS 1000000000L
 
 //  set NOTCOHERENT needs this include
 #include "hsa_ext_amd.h"
@@ -142,10 +143,10 @@ atmi_task_handle_t NULL_TASK = ATMI_TASK_HANDLE(0);
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
     long int nanosecs;
     if ((end_time.tv_nsec-start_time.tv_nsec)<0) nanosecs =
-        ((((long int) end_time.tv_sec- (long int) start_time.tv_sec )-1)*NSECPERSEC ) +
-            ( NSECPERSEC + (long int) end_time.tv_nsec - (long int) start_time.tv_nsec) ;
+        ((((long int) end_time.tv_sec- (long int) start_time.tv_sec )-1)*NANOSECS ) +
+            ( NANOSECS + (long int) end_time.tv_nsec - (long int) start_time.tv_nsec) ;
     else nanosecs =
-        (((long int) end_time.tv_sec- (long int) start_time.tv_sec )*NSECPERSEC ) +
+        (((long int) end_time.tv_sec- (long int) start_time.tv_sec )*NANOSECS ) +
             ( (long int) end_time.tv_nsec - (long int) start_time.tv_nsec );
     return nanosecs;
 }
@@ -290,7 +291,8 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_co
 
 extern void atl_task_wait(atl_task_t *task) {
     if(task != NULL) {
-        if(task->state < ATMI_DISPATCHED) {
+        if(task->state < ATMI_DISPATCHED || 
+          (task->atmi_task && task->profilable == ATMI_TRUE)) {
             while(true) {
                 int value = task->state;//.load(std::memory_order_seq_cst);
                 if(value != ATMI_COMPLETED) {
@@ -571,14 +573,22 @@ void set_task_metrics(atl_task_t *task) {
         hsa_signal_t signal = task->signal;
         hsa_amd_profiling_dispatch_time_t metrics;
         if(task->devtype == ATMI_DEVTYPE_GPU) {
-            err = hsa_amd_profiling_get_dispatch_time(atl_gpu_agent, 
+            err = hsa_amd_profiling_get_dispatch_time(get_compute_agent(task->place), 
                     signal, &metrics); 
             ErrorCheck(Profiling GPU dispatch, err);
             if(task->atmi_task) {
-                task->atmi_task->profile.start_time = metrics.start;
-                task->atmi_task->profile.end_time = metrics.end;
-                task->atmi_task->profile.dispatch_time = metrics.start;
-                task->atmi_task->profile.ready_time = metrics.start;
+                uint64_t freq;
+                err = hsa_system_get_info(HSA_SYSTEM_INFO_TIMESTAMP_FREQUENCY, 
+                    &freq);
+                ErrorCheck(Getting system timestamp frequency info, err);
+                uint64_t start = metrics.start / (freq/NANOSECS);
+                uint64_t end = metrics.end / (freq/NANOSECS);
+                DEBUG_PRINT("Ticks: (%lu->%lu)\nFreq: %lu\nTime(ns: (%lu->%lu)\n",
+                        metrics.start, metrics.end, freq, start, end);
+                task->atmi_task->profile.start_time = start;
+                task->atmi_task->profile.end_time = end;
+                task->atmi_task->profile.dispatch_time = start;
+                task->atmi_task->profile.ready_time = start;
             }
         }
         else {
@@ -970,7 +980,13 @@ atmi_status_t atmi_finalize() {
         err = hsa_executable_destroy(g_executables[i]);
         ErrorCheck(Destroying executable, err);
     }
+    if(atlc.g_cpu_initialized == 1) {
+        agent_fini();
+        atlc.g_cpu_initialized = 0;
+    }
     atl_reset_atmi_initialized();
+    err = hsa_shut_down();
+    ErrorCheck(Shutting down HSA, err);
     return ATMI_STATUS_SUCCESS;
 }
 
@@ -1837,8 +1853,8 @@ void handle_signal_callback(atl_task_t *task) {
     DEBUG_PRINT("[Handle Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
     // dispatch from ready queue if any task exists
     lock(&(task->mutex));
-    set_task_state(task, ATMI_COMPLETED);
     set_task_metrics(task);
+    set_task_state(task, ATMI_COMPLETED);
     unlock(&(task->mutex));
     do_progress(task->stream_obj);
     //dispatch_ready_task_for_free_signal(); 
@@ -1902,8 +1918,8 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
         FreeSignalPool.push(*it);
         DEBUG_PRINT("[Handle Signal %d ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
     }
-    set_task_state(task, ATMI_COMPLETED);
     set_task_metrics(task);
+    set_task_state(task, ATMI_COMPLETED);
     unlock_set(mutexes);
 
     do_progress(task->stream_obj);
@@ -2120,8 +2136,8 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             kernel_impl->free_kernarg_segments.push(task->kernarg_region_index);
         }
         DEBUG_PRINT("Completed task %lu in group\n", task->id);
-        set_task_state(task, ATMI_COMPLETED);
         set_task_metrics(task);
+        set_task_state(task, ATMI_COMPLETED);
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
             std::vector<hsa_signal_t> temp_list;
             temp_list.clear();
@@ -2476,6 +2492,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                 hsa_queue_t *this_queue = this_queues[tid % q_count];
                 /*  Obtain the current queue write index. increases with each call to kernel  */
                 uint64_t index = hsa_queue_add_write_index_relaxed(this_queue, 1);
+                while(index - hsa_queue_load_read_index_acquire(this_Q) >= this_Q->size);
                 /* Find the queue index address to write the packet info into.  */
                 const uint32_t queueMask = this_queue->size - 1;
                 hsa_agent_dispatch_packet_t* this_aql = &(((hsa_agent_dispatch_packet_t*)(this_queue->base_address))[index&queueMask]);
@@ -2512,10 +2529,15 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             /* Store dispatched time */
             if(task->profilable == ATMI_TRUE && task->atmi_task) 
                 task->atmi_task->profile.dispatch_time = get_nanosecs(context_init_time, dispatch_time);
-            for(int q = 0; q < q_count; q++) {
-                /* Increment write index and ring doorbell to dispatch the kernel.  */
-                //hsa_queue_store_write_index_relaxed(this_Q, index+1);
-                uint64_t index = hsa_queue_load_write_index_acquire(this_queues[q]);
+            // FIXME: in the current logic, multiple CPU threads are round-robin
+            // scheduled across queues from Q0. So, just ring the doorbell on only
+            // the queues that are touched and leave the other queues alone
+            int doorbell_count = (q_count < thread_count) ? q_count : thread_count;
+            for(int q = 0; q < doorbell_count; q++) {
+                /* fetch write index and ring doorbell on one lesser value
+                 * (because the add index call will have incremented it already by
+                 * 1 and dispatch the kernel.  */
+                uint64_t index = hsa_queue_load_write_index_acquire(this_queues[q]) - 1;
                 hsa_signal_store_relaxed(this_queues[q]->doorbell_signal, index);
                 signal_worker(this_queues[q], PROCESS_PKT);
             }
@@ -2960,8 +2982,8 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
         else {
             atl_stream_sync(ret->stream_obj);
         }
-        set_task_state(ret, ATMI_COMPLETED);
         set_task_metrics(ret);
+        set_task_state(ret, ATMI_COMPLETED);
       //  TaskWaitTimer.Stop();
         //std::cout << "Task Wait Interim Timer " << TaskWaitTimer << std::endl;
         //std::cout << "Launch Time: " << TryLaunchTimer << std::endl;

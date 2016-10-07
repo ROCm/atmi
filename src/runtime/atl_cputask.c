@@ -148,6 +148,7 @@ int process_packet(hsa_queue_t *queue, int id)
         hsa_signal_value_t doorbell_value = INT_MAX;
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
+        DEBUG_PRINT("Doorbell val after: %lu\n", hsa_signal_load_acquire(doorbell));
         if (doorbell_value == INT_MAX) break;
         atl_task_t *this_task = NULL; // will be assigned to collect metrics
         char *kernel_name = NULL;
@@ -634,6 +635,52 @@ int process_packet(hsa_queue_t *queue, int id)
                                 );
                         }
                         break;
+                    case 37: 
+                        {
+                        ;
+                        void (*function37) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT16(ARG_TYPE) REPEAT4(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT16(ARG_TYPE) REPEAT4(ARG_TYPE))) kernel_impl->function;
+                        function37(
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
+                                ,kernel_args[15]
+                                ,kernel_args[16]
+                                ,kernel_args[17]
+                                ,kernel_args[18]
+                                ,kernel_args[19]
+                                ,kernel_args[20]
+                                ,kernel_args[21]
+                                ,kernel_args[22]
+                                ,kernel_args[23]
+                                ,kernel_args[24]
+                                ,kernel_args[25]
+                                ,kernel_args[26]
+                                ,kernel_args[27]
+                                ,kernel_args[28]
+                                ,kernel_args[29]
+                                ,kernel_args[30]
+                                ,kernel_args[31]
+                                ,kernel_args[32]
+                                ,kernel_args[33]
+                                ,kernel_args[34]
+                                ,kernel_args[35]
+                                ,kernel_args[36]
+                                );
+                        }
+                        break;
                     default: 
 
                         DEBUG_PRINT("Too many function arguments: %"  PRIu64 "\n", num_params);
@@ -786,7 +833,8 @@ agent_fini()
         uint32_t i;
         for (i = 0; i < agents.size(); i++) {
             agent_t *agent = agents[i];
-            //hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
+            DEBUG_PRINT("Setting doorbell[%d] to INT_MAX\n", i);
+            hsa_signal_store_release(agent->queue->doorbell_signal, INT_MAX);
             hsa_signal_store_release(agent->worker_sig, FINISH);
             pthread_join(agent->thread, NULL);
         }

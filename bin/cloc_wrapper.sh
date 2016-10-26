@@ -1,24 +1,28 @@
 #!/bin/bash
+#MIT License
 #
-#  snack: Structured No API Compiled Kernels .  Snack is used to
-#         generate host-callable functions that launch compiled 
-#         GPU and CPU kernels without an API.  Snack generates the
-#         wrapper source code for these host-callable functions
-#         that embeds compiled kernels into the source. The generated 
-#         source code uses the HSA API to launch these kernels 
-#         with various synchrnous and asynchronous features.
-#         
-#         The generated functions are called a "snack" functions
-#         An application calls snack functions with the programmer
-#         defined name and argument list. An extra argument is 
-#         added to the programmer defined argument list to specify
-#         the launch parameters. Since the host application directly 
-#         calls snack functions and the launch attributes are 
-#         specified in a data structure, there is no host API required.
+#Copyright © 2016 Advanced Micro Devices, Inc.
 #
-#         The snack command requires the cloc.sh tool to generate
-#         HSAIL for GPU kernels. Snack is distributed with the 
-#         snack github repository.  
+#Permission is hereby granted, free of charge, to any person obtaining a copy of
+#this software and associated documentation files (the "Software"), to deal in
+#the Software
+#without restriction, including without limitation the rights to use, copy,
+#modify, merge, publish, distribute, sublicense, and/or sell copies of the
+#Software, and to permit
+#persons to whom the Software is furnished to do so, subject to the following
+#conditions:
+#
+#The above copyright notice and this permission notice shall be included in all
+#copies or substantial portions of the Software.
+#
+#THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#FITNESS FOR A PARTICULAR
+#PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+#BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+#CONTRACT, TORT OR
+#OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+#OR OTHER DEALINGS IN THE SOFTWARE.
 #
 #  Written by Ashwin Aji Ashwin.Aji@amd.com
 #

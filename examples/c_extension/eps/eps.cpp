@@ -1,3 +1,19 @@
+/*
+ * MIT License
+ *
+ * Copyright © 2016 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+ * without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+ * persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * */
+
 #include <unistd.h>
 #include "stdio.h"
 #include "stdlib.h"
@@ -63,17 +79,6 @@ int main(int argc, char *argv[]) {
     int ndependencies = ntasks - 1; 
 
 #if 1
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
-    atmi_task_handle_t t_dfs;
-    fib(1, &t_dfs);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
-    atmi_task_wait(t_dfs);
-    //SYNC_TASK(t_dfs);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-#endif
-
-#if 1
     std::vector<atmi_task_handle_t> task_handles;
     task_handles.resize(ntasks);
 
@@ -109,6 +114,17 @@ int main(int argc, char *argv[]) {
 
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
 #endif
+#if 1
+    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
+    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
+    atmi_task_handle_t t_dfs;
+    fib(1, &t_dfs);
+    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
+    atmi_task_wait(t_dfs);
+    //SYNC_TASK(t_dfs);
+    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
+#endif
+
     for(int i=0; i<NTIMERS; i++) {
         nanosecs[i] = get_nanosecs(start_time[i],end_time[i]);
         eps[i] = ((float) ndependencies * (float) NSECPERSEC) / (float) nanosecs[i] ;

@@ -1,3 +1,19 @@
+/*
+ * MIT License
+ *
+ * Copyright © 2016 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+ * without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+ * persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * */
+
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -6,6 +22,7 @@
 #include <sys/param.h> 
 #include <time.h>
 #include "atmi.h"
+#include "atmi_runtime.h"
 #define NSECPERSEC 1000000000L
 #define NTIMERS 13
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
@@ -17,13 +34,18 @@ int main(int argc, char *argv[]) {
    long int kcalls,nanosecs[NTIMERS];
    float kps[NTIMERS];
 
-   kcalls = 200000;
+   kcalls = (128*1024);
 
    ATMI_LPARM_STREAM(lparm1,stream1);
    ATMI_LPARM_STREAM(lparm2,stream2);
    ATMI_LPARM_STREAM(lparm3,stream3);
    ATMI_LPARM_STREAM(lparm4,stream4);
 
+   lparm1->kernel_id = K_ID_nullKernel_impl;
+   lparm2->kernel_id = K_ID_nullKernel_impl;
+   lparm3->kernel_id = K_ID_nullKernel_impl;
+   lparm4->kernel_id = K_ID_nullKernel_impl;
+   
    lparm1->WORKITEMS=64;
    lparm2->WORKITEMS=64;
    lparm3->WORKITEMS=64;
@@ -36,8 +58,9 @@ int main(int argc, char *argv[]) {
    nullKernel(lparm1, kcalls);
 #if 1
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
-   for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
+//   for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
+   //atmi_task_group_sync(stream1);
 
    lparm1->synchronous=ATMI_FALSE;
    stream1->ordered=ATMI_TRUE;
@@ -49,6 +72,7 @@ int main(int argc, char *argv[]) {
    atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
+#if 1
    stream1->ordered = ATMI_FALSE;
    lparm1->synchronous = ATMI_FALSE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
@@ -58,7 +82,7 @@ int main(int argc, char *argv[]) {
    //SYNC_STREAM(stream1); 
    atmi_task_group_sync(stream1);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
-
+#endif
 #if 0
    printf("2 Streams Starts\n");
    fflush(stdout);

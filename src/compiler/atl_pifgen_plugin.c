@@ -438,8 +438,8 @@ void push_declaration(const char *pif_name, tree fn_type, int num_params) {
     TREE_PUBLIC (new_fndecl) = TREE_PUBLIC (pifdecl);
     TREE_STATIC (new_fndecl) = 0;
     TREE_USED (new_fndecl) = 1;
-    // do NOT use the below flag because C programs fail. Some ANSI C nonsense
-    // that I am still yet to understand. C++ programs work fine with or 
+    // do NOT use the below flag because ANSI C programs fail for some reason. 
+    // C++ programs seem to work fine with or 
     // without them, so we are going without because these declarations are in 
     // global scope anyway.
     //DECL_EXTERNAL (new_fndecl) = 1;

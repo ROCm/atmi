@@ -754,7 +754,7 @@ void *agent_worker(void *agent_args) {
             HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &queue);
     check(Creating an agent queue, err);
 
-    /* FIXME: Looks like a nasty HSA bug. The doorbell signal that we pass to the 
+    /* FIXME: Looks like a HSA bug. The doorbell signal that we pass to the 
      * soft queue creation API never seems to be set. Workaround is to 
      * manually set it again like below.
      */

@@ -162,7 +162,7 @@ void ATLCPUProcessor::createQueues(const int count) {
         //err = hsa_ext_set_profiling( q, 1); 
         //check(Enabling CPU profiling support, err); 
         //profiling does not work for CPU queues
-        /* FIXME: Looks like a nasty HSA bug. The doorbell signal that we pass to the 
+        /* FIXME: Looks like a HSA bug. The doorbell signal that we pass to the 
          * soft queue creation API never seems to be set. Workaround is to 
          * manually set it again like below.
          */

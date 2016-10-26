@@ -1,9 +1,25 @@
+/*
+MIT License 
+
+Copyright © 2016 Advanced Micro Devices, Inc.  
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
 #ifndef __SNK_INTERNAL
 #define __SNK_INTERNAL
 #include "atl_rt.h"
 #include <pthread.h>
 #include <vector>
 #include <queue>
+#include <deque>
 #include <map>
 #include <atomic>
 /* ---------------------------------------------------------------------------------
@@ -95,16 +111,25 @@ typedef struct atl_task_list_s {
 
 typedef struct atmi_task_group_table_s {
     boolean ordered;
-    atl_task_list_t *tasks;
+    atl_task_t *last_task;
     hsa_queue_t *gpu_queue;
     hsa_queue_t *cpu_queue;
     atmi_devtype_t last_device_type;
     atmi_place_t place;
 //    int next_gpu_qid;
 //    int next_cpu_qid;
-    hsa_signal_t common_signal;
-    pthread_mutex_t mutex;
+    unsigned int group_queue_id;
+    hsa_signal_t group_signal;
+    hsa_signal_t task_count;
+    pthread_mutex_t group_mutex;
+    std::deque<atl_task_t *> running_ordered_tasks;
     std::vector<atl_task_t *> running_groupable_tasks;
+    // TODO: for now, all waiting tasks (groupable and individual) are placed in a
+    // single queue. does it make sense to have groupable waiting tasks separately
+    // waiting in their own queue? perhaps not for now. should revisit if there
+    // are more than one callback threads
+    // std::vector<atl_task_t *> waiting_groupable_tasks;
+    std::atomic_flag callback_started;
 }atmi_task_group_table_t;
 
 typedef enum atl_task_type_s {
@@ -150,6 +175,9 @@ typedef struct atl_task_s {
     atmi_task_group_table_t *stream_obj;
     atmi_task_group_t *group;
     boolean groupable;
+
+    // for ordered task groups
+    atl_task_t * prev_ordered_task;
 
     // other miscellaneous flags
     atmi_devtype_t devtype;
@@ -210,7 +238,9 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj);
 
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
+bool handle_group_signal(hsa_signal_value_t value, void *arg);
 
+void do_progress(atmi_task_group_table_t *task_group, int progress_count = 0);
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);
@@ -242,7 +272,7 @@ void set_task_handle_ID(atmi_task_handle_t *t, int ID);
 void lock(pthread_mutex_t *m);
 void unlock(pthread_mutex_t *m);
 
-void try_dispatch(atl_task_t *ret, void **args, bool synchronous);
+bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
 atl_task_t *get_new_task();
 const char *get_error_string(hsa_status_t err);
 #define ErrorCheck(msg, status) \

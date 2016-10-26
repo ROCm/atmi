@@ -1,3 +1,18 @@
+/*
+MIT License 
+
+Copyright © 2016 Advanced Micro Devices, Inc.  
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
 #include "ATLData.h"
 #include <stdio.h>
 #include <string.h>
@@ -64,6 +79,19 @@ ATLData *ATLPointerTracker::find (const void *pointer)
     return ret;
 }
 
+ATLProcessor &get_processor_by_compute_place(atmi_place_t place) {
+    int dev_id = place.device_id;
+    switch(place.type) {
+        case ATMI_DEVTYPE_CPU:
+            return g_atl_machine.getProcessors<ATLCPUProcessor>()[dev_id];
+        case ATMI_DEVTYPE_GPU: 
+            return g_atl_machine.getProcessors<ATLGPUProcessor>()[dev_id];
+        case ATMI_DEVTYPE_DSP: 
+            return g_atl_machine.getProcessors<ATLDSPProcessor>()[dev_id];
+    }
+}
+
+
 ATLProcessor &get_processor_by_mem_place(atmi_mem_place_t place) {
     int dev_id = place.dev_id;
     switch(place.dev_type) {
@@ -76,7 +104,11 @@ ATLProcessor &get_processor_by_mem_place(atmi_mem_place_t place) {
     }
 }
 
-hsa_agent_t get_agent(atmi_mem_place_t place) {
+hsa_agent_t get_compute_agent(atmi_place_t place) {
+    return get_processor_by_compute_place(place).getAgent();
+}
+
+hsa_agent_t get_mem_agent(atmi_mem_place_t place) {
     return get_processor_by_mem_place(place).getAgent();
 }
 
@@ -102,8 +134,8 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
         memcpy(host_ptr, ptr, size);
 
         hsa_signal_add_acq_rel(IdentityCopySignal, 1);
-        err = hsa_amd_memory_async_copy(*mapped_ptr, get_agent(place),
-                host_ptr, get_agent(cpu_place),
+        err = hsa_amd_memory_async_copy(*mapped_ptr, get_mem_agent(place),
+                host_ptr, get_mem_agent(cpu_place),
                 size, 
                 0, NULL, IdentityCopySignal);
         ErrorCheck(Copy async between memory pools, err);
@@ -121,7 +153,7 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
     // OR
     
     void *agent_ptr; 
-    hsa_agent_t dest_agent = get_agent(place);
+    hsa_agent_t dest_agent = get_mem_agent(place);
     // 1) Lock ptr to dest mem pool (poorer performance via PCIe)
     err = hsa_amd_memory_lock(ptr, data->size, &dest_agent, 1, &agent_ptr);
     ErrorCheck(Locking the host ptr, err);
@@ -155,8 +187,8 @@ atmi_status_t atmi_data_unmap_sync(void *ptr, void *mapped_ptr) {
         ErrorCheck(Host staging buffer alloc, err);
 
         hsa_signal_add_acq_rel(IdentityCopySignal, 1);
-        err = hsa_amd_memory_async_copy(host_ptr, get_agent(cpu_place),
-                mapped_ptr, get_agent(m->getPlace()),
+        err = hsa_amd_memory_async_copy(host_ptr, get_mem_agent(cpu_place),
+                mapped_ptr, get_mem_agent(m->getPlace()),
                 m->getSize(), 
                 0, NULL, IdentityCopySignal);
         ErrorCheck(Copy async between memory pools, err);
@@ -185,8 +217,8 @@ atmi_status_t atmi_data_copy_sync(atmi_data_t *dest, const atmi_data_t *src) {
     atmi_mem_place_t src_place = src->place;
     hsa_status_t err;
     hsa_signal_add_acq_rel(IdentityCopySignal, 1);
-    err = hsa_amd_memory_async_copy(dest->ptr, get_agent(dest_place),
-                              src->ptr, get_agent(src_place),
+    err = hsa_amd_memory_async_copy(dest->ptr, get_mem_agent(dest_place),
+                              src->ptr, get_mem_agent(src_place),
                               src->size, 
                               0, NULL, IdentityCopySignal);
 	ErrorCheck(Copy async between memory pools, err);
@@ -198,7 +230,7 @@ atmi_status_t atmi_data_copy_h2d_sync(atmi_data_t *dest, void *src, size_t size)
     void *agent_ptr; 
     hsa_status_t err;
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
-    hsa_agent_t dest_agent = get_agent(dest->place);
+    hsa_agent_t dest_agent = get_mem_agent(dest->place);
     err = hsa_amd_memory_lock(src, data->size, &dest_agent, 1, &agent_ptr);
     ErrorCheck(Locking the host ptr, err);
 
@@ -327,6 +359,14 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
         ret->predecessors[idx] = pred_task;
     }
 
+    if(ret->stream_obj->ordered) {
+        lock(&(ret->stream_obj->group_mutex));
+        ret->stream_obj->running_ordered_tasks.push_back(ret);
+        ret->prev_ordered_task = ret->stream_obj->last_task;
+        ret->stream_obj->last_task = ret;
+        unlock(&(ret->stream_obj->group_mutex));
+    }
+
     try_dispatch(ret, NULL, lparm->synchronous);
 
     return ret->id;
@@ -374,7 +414,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     bool is_src_host = (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     bool is_dest_host = (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
-    hsa_agent_t cpu_agent = get_agent(cpu);
+    hsa_agent_t cpu_agent = get_mem_agent(cpu);
     hsa_agent_t src_agent;
     hsa_agent_t dest_agent;
     void *temp_host_ptr; 
@@ -390,22 +430,22 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     }
     else if(src_data && !dest_data) {
         type = ATMI_D2H;
-        src_agent = get_agent(src_data->getPlace());
+        src_agent = get_mem_agent(src_data->getPlace());
         dest_agent = src_agent; 
         src_ptr = src;
         dest_ptr = dest;
     }
     else if(!src_data && dest_data) {
         type = ATMI_H2D;
-        dest_agent = get_agent(dest_data->getPlace());
+        dest_agent = get_mem_agent(dest_data->getPlace());
         src_agent = dest_agent;
         src_ptr = src;
         dest_ptr = dest;
     }
     else {
         type = ATMI_D2D;
-        src_agent = get_agent(src_data->getPlace());
-        dest_agent = get_agent(dest_data->getPlace());
+        src_agent = get_mem_agent(src_data->getPlace());
+        dest_agent = get_mem_agent(dest_data->getPlace());
         src_ptr = src;
         dest_ptr = dest;
     }
@@ -473,7 +513,7 @@ atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
     ATLData * volatile src_data = g_data_map.find(src);
     ATLData * volatile dest_data = g_data_map.find(dest);
     atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
-    hsa_agent_t cpu_agent = get_agent(cpu);
+    hsa_agent_t cpu_agent = get_mem_agent(cpu);
     hsa_agent_t src_agent;
     hsa_agent_t dest_agent;
     void *temp_host_ptr; 
@@ -482,7 +522,7 @@ atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
     volatile unsigned type;
     if(src_data && !dest_data) {
         type = ATMI_D2H;
-        src_agent = get_agent(src_data->getPlace());
+        src_agent = get_mem_agent(src_data->getPlace());
         dest_agent = src_agent; 
         //dest_agent = cpu_agent; // FIXME: can the two agents be the GPU agent itself?
         ret = atmi_malloc(&temp_host_ptr, size, cpu);
@@ -493,7 +533,7 @@ atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
     }
     else if(!src_data && dest_data) {
         type = ATMI_H2D;
-        dest_agent = get_agent(dest_data->getPlace());
+        dest_agent = get_mem_agent(dest_data->getPlace());
         //src_agent = cpu_agent; // FIXME: can the two agents be the GPU agent itself?
         src_agent = dest_agent;
         ret = atmi_malloc(&temp_host_ptr, size, cpu);
@@ -514,8 +554,8 @@ atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
     }
     else {
         type = ATMI_D2D;
-        src_agent = get_agent(src_data->getPlace());
-        dest_agent = get_agent(dest_data->getPlace());
+        src_agent = get_mem_agent(src_data->getPlace());
+        dest_agent = get_mem_agent(dest_data->getPlace());
         src_ptr = src;
         dest_ptr = dest;
     }

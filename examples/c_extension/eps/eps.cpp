@@ -1,3 +1,19 @@
+/*
+ * MIT License
+ *
+ * Copyright © 2016 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+ * without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+ * persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * */
+
 #include <unistd.h>
 #include "stdio.h"
 #include "stdlib.h"
@@ -9,6 +25,7 @@
 #include <time.h>
 #include <math.h>
 #include "atmi.h"
+#include "atmi_runtime.h"
 #define NSECPERSEC 1000000000L
 #define NTIMERS 4
 
@@ -26,6 +43,7 @@ __kernel void nullKernel_impl(int i) __attribute__((atmi_kernel("nullKernel", "G
 /*  Recursive call to create the inverted task tree */
 void fib(const int cur_depth, atmi_task_handle_t *thisTaskHandle) {
     ATMI_LPARM_1D(lparm, 1); 
+    lparm->kernel_id = K_ID_nullKernel_impl;
     atmi_task_handle_t *requires = NULL;
     if(cur_depth < TDEPTH) {
         requires = (atmi_task_handle_t *)malloc(TDEGREE * sizeof(atmi_task_handle_t));
@@ -54,21 +72,11 @@ int main(int argc, char *argv[]) {
     /* Initialize the Kernel */
     ATMI_LPARM_1D(lparm, 1);
     lparm->synchronous=ATMI_TRUE;
+    lparm->kernel_id = K_ID_nullKernel_impl;
     nullKernel(lparm, 0);
 
     int ntasks = (TDEGREE <= 1) ? TDEPTH : (1 - pow((float)TDEGREE, (float)TDEPTH)) / (1 - TDEGREE);
     int ndependencies = ntasks - 1; 
-
-#if 1
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
-    atmi_task_handle_t t_dfs;
-    fib(1, &t_dfs);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
-    //atmi_task_wait(t_dfs);
-    SYNC_TASK(t_dfs);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-#endif
 
 #if 1
     std::vector<atmi_task_handle_t> task_handles;
@@ -84,6 +92,7 @@ int main(int argc, char *argv[]) {
         for(int i = 0; i < ntasks_n; i++) {
             ATMI_LPARM_1D(lparm, 1);
             lparm->synchronous = ATMI_FALSE;
+            lparm->kernel_id = K_ID_nullKernel_impl;
             atmi_task_handle_t *requires = (atmi_task_handle_t *)malloc(TDEGREE * sizeof(atmi_task_handle_t));
             if(level != TDEPTH - 1) {
                 for(int deg = 0; deg < TDEGREE; deg++) {
@@ -100,11 +109,22 @@ int main(int argc, char *argv[]) {
     }
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
     atmi_task_handle_t t_bf = task_handles[0];
-    //atmi_task_wait(t_bf);
-    SYNC_TASK(t_bf);
+    atmi_task_wait(t_bf);
+    //SYNC_TASK(t_bf);
 
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
 #endif
+#if 1
+    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
+    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
+    atmi_task_handle_t t_dfs;
+    fib(1, &t_dfs);
+    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
+    atmi_task_wait(t_dfs);
+    //SYNC_TASK(t_dfs);
+    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
+#endif
+
     for(int i=0; i<NTIMERS; i++) {
         nanosecs[i] = get_nanosecs(start_time[i],end_time[i]);
         eps[i] = ((float) ndependencies * (float) NSECPERSEC) / (float) nanosecs[i] ;

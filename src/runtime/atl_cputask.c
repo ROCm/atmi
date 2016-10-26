@@ -1,51 +1,27 @@
 /*
+MIT License 
 
-  Copyright (c) 2015 ADVANCED MICRO DEVICES, INC.  
+Copyright © 2016 Advanced Micro Devices, Inc.  
 
-  AMD is granting you permission to use this software and documentation (if any) (collectively, the 
-  Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
-  Materials.  If you do not have a copy of the Software License Agreement, contact your AMD 
-  representative for a copy.
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
 
-  You agree that you will not reverse engineer or decompile the Materials, in whole or in part, except for 
-  example code which is provided in source code form and as allowed by applicable law.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-  WARRANTY DISCLAIMER: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
-  KIND.  AMD DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT 
-  LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
-  PURPOSE, TITLE, NON-INFRINGEMENT, THAT THE SOFTWARE WILL RUN UNINTERRUPTED OR ERROR-
-  FREE OR WARRANTIES ARISING FROM CUSTOM OF TRADE OR COURSE OF USAGE.  THE ENTIRE RISK 
-  ASSOCIATED WITH THE USE OF THE SOFTWARE IS ASSUMED BY YOU.  Some jurisdictions do not 
-  allow the exclusion of implied warranties, so the above exclusion may not apply to You. 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
 
-  LIMITATION OF LIABILITY AND INDEMNIFICATION:  AMD AND ITS LICENSORS WILL NOT, 
-  UNDER ANY CIRCUMSTANCES BE LIABLE TO YOU FOR ANY PUNITIVE, DIRECT, INCIDENTAL, 
-  INDIRECT, SPECIAL OR CONSEQUENTIAL DAMAGES ARISING FROM USE OF THE SOFTWARE OR THIS 
-  AGREEMENT EVEN IF AMD AND ITS LICENSORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH 
-  DAMAGES.  In no event shall AMD's total liability to You for all damages, losses, and 
-  causes of action (whether in contract, tort (including negligence) or otherwise) 
-  exceed the amount of $100 USD.  You agree to defend, indemnify and hold harmless 
-  AMD and its licensors, and any of their directors, officers, employees, affiliates or 
-  agents from and against any and all loss, damage, liability and other expenses 
-  (including reasonable attorneys' fees), resulting from Your use of the Software or 
-  violation of the terms and conditions of this Agreement.  
-
-  U.S. GOVERNMENT RESTRICTED RIGHTS: The Materials are provided with "RESTRICTED RIGHTS." 
-  Use, duplication, or disclosure by the Government is subject to the restrictions as set 
-  forth in FAR 52.227-14 and DFAR252.227-7013, et seq., or its successor.  Use of the 
-  Materials by the Government constitutes acknowledgement of AMD's proprietary rights in them.
-
-  EXPORT RESTRICTIONS: The Materials may be subject to export restrictions as stated in the 
-  Software License Agreement.
-
-*/ 
-/* This file contains logic for CPU tasking in SNACK */
+/* This file contains logic for CPU tasking in ATMI */
 #include "atl_internal.h"
 #include "atl_bindthread.h"
 #include "atl_profile.h"
 #include <climits>
 #include <assert.h>
 #include "ATLMachine.h"
+#include <thread>
 
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;
@@ -89,6 +65,22 @@ struct pthreadComparator {
     }
 };
 static std::map<pthread_t, hsa_agent_dispatch_packet_t *, pthreadComparator> TaskPacketMap;
+static pthread_mutex_t mutex_task_packet_map;
+
+hsa_agent_dispatch_packet_t *get_task_packet() {
+    hsa_agent_dispatch_packet_t *packet = NULL;
+    lock(&mutex_task_packet_map);
+    packet = TaskPacketMap[pthread_self()];
+    unlock(&mutex_task_packet_map);
+    return packet;
+}
+
+void set_task_packet(hsa_agent_dispatch_packet_t *packet) {
+    lock(&mutex_task_packet_map);
+    TaskPacketMap[pthread_self()] = packet;
+    unlock(&mutex_task_packet_map);
+}
+
 
 hsa_queue_t* get_cpu_queue(int cpu_id, int tid) {
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
@@ -156,6 +148,7 @@ int process_packet(hsa_queue_t *queue, int id)
         hsa_signal_value_t doorbell_value = INT_MAX;
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
+        DEBUG_PRINT("Doorbell val after: %lu\n", hsa_signal_load_acquire(doorbell));
         if (doorbell_value == INT_MAX) break;
         atl_task_t *this_task = NULL; // will be assigned to collect metrics
         char *kernel_name = NULL;
@@ -212,7 +205,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 {
                 ;
                 DEBUG_PRINT("%lu --> %p\n", pthread_self(), packet);
-                TaskPacketMap[pthread_self()] = packet;
+                set_task_packet(packet);
 
                 atl_task_t *task = (atl_task_t *)(packet->arg[0]);
                 atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
@@ -642,6 +635,52 @@ int process_packet(hsa_queue_t *queue, int id)
                                 );
                         }
                         break;
+                    case 37: 
+                        {
+                        ;
+                        void (*function37) (ARG_TYPE REPEAT16(ARG_TYPE) REPEAT16(ARG_TYPE) REPEAT4(ARG_TYPE)) = 
+                            (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT16(ARG_TYPE) REPEAT4(ARG_TYPE))) kernel_impl->function;
+                        function37(
+                                kernel_args[0]
+                                ,kernel_args[1]
+                                ,kernel_args[2]
+                                ,kernel_args[3]
+                                ,kernel_args[4]
+                                ,kernel_args[5]
+                                ,kernel_args[6]
+                                ,kernel_args[7]
+                                ,kernel_args[8]
+                                ,kernel_args[9]
+                                ,kernel_args[10]
+                                ,kernel_args[11]
+                                ,kernel_args[12]
+                                ,kernel_args[13]
+                                ,kernel_args[14]
+                                ,kernel_args[15]
+                                ,kernel_args[16]
+                                ,kernel_args[17]
+                                ,kernel_args[18]
+                                ,kernel_args[19]
+                                ,kernel_args[20]
+                                ,kernel_args[21]
+                                ,kernel_args[22]
+                                ,kernel_args[23]
+                                ,kernel_args[24]
+                                ,kernel_args[25]
+                                ,kernel_args[26]
+                                ,kernel_args[27]
+                                ,kernel_args[28]
+                                ,kernel_args[29]
+                                ,kernel_args[30]
+                                ,kernel_args[31]
+                                ,kernel_args[32]
+                                ,kernel_args[33]
+                                ,kernel_args[34]
+                                ,kernel_args[35]
+                                ,kernel_args[36]
+                                );
+                        }
+                        break;
                     default: 
 
                         DEBUG_PRINT("Too many function arguments: %"  PRIu64 "\n", num_params);
@@ -650,7 +689,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 }
                 // reset task packet map so that other tasks will not be able to query for 
                 // thread IDs and sizes
-                TaskPacketMap[pthread_self()] = NULL;
+                set_task_packet(NULL);
 
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
@@ -727,7 +766,17 @@ void *agent_worker(void *agent_args) {
 void *agent_worker(void *agent_args) {
     agent_t *agent = (agent_t *) agent_args;
 
-    atmi_cpu_bindthread(agent->id); 
+    unsigned num_cpus = std::thread::hardware_concurrency();
+    // pin this thread to the core number as its agent ID...
+    // ...BUT from the highest core number
+    // thread: 0 1 2 3
+    // core  : 3 2 1 0
+    // rationale: bind the main thread to core 0. 
+    //            bind the callback thread to core 1.
+    //            bind the CPU agent threads to rest of the cores
+    int set_core = (num_cpus - 1 - (1 * agent->id)) % num_cpus;
+    DEBUG_PRINT("Setting on CPU core: %d / %d\n", set_core, num_cpus);
+    set_thread_affinity(set_core);
 #if defined (ATMI_HAVE_PROFILE)
     atmi_profiling_agent_init(agent->id);
 #endif /* ATMI_HAVE_PROFILE */ 
@@ -760,11 +809,14 @@ void *agent_worker(void *agent_args) {
 #endif
 void
 cpu_agent_init(int cpu_id, const size_t num_queues) {
+    static bool initialized = false;
     hsa_status_t err;
     uint32_t i;
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
     ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
     proc.createQueues(num_queues);
+    if(!initialized) pthread_mutex_init(&mutex_task_packet_map, NULL);
+    initialized = true;
 } 
 
 /* FIXME: When and who should call this cleanup funtion? */
@@ -781,7 +833,8 @@ agent_fini()
         uint32_t i;
         for (i = 0; i < agents.size(); i++) {
             agent_t *agent = agents[i];
-            //hsa_signal_store_release(agent[i].queue->doorbell_signal, SNK_MAX_TASKS);
+            DEBUG_PRINT("Setting doorbell[%d] to INT_MAX\n", i);
+            hsa_signal_store_release(agent->queue->doorbell_signal, INT_MAX);
             hsa_signal_store_release(agent->worker_sig, FINISH);
             pthread_join(agent->thread, NULL);
         }
@@ -790,7 +843,7 @@ agent_fini()
 }
 
 atl_task_t *get_cur_thread_task_impl() {
-    hsa_agent_dispatch_packet_t *packet = TaskPacketMap[pthread_self()];
+    hsa_agent_dispatch_packet_t *packet = get_task_packet(); 
     if(!packet) {
         fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
     }
@@ -840,7 +893,7 @@ unsigned long get_local_id(unsigned int dim) {
 }
 
 unsigned long get_global_id(unsigned int dim) {
-    hsa_agent_dispatch_packet_t *packet = TaskPacketMap[pthread_self()];
+    hsa_agent_dispatch_packet_t *packet = get_task_packet();
     if(!packet) {
         fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
     }

@@ -1,9 +1,25 @@
+/*
+MIT License 
+
+Copyright © 2016 Advanced Micro Devices, Inc.  
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
 #include "ATLMachine.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 #include <vector>
+#include <cassert>
 #include "atmi_runtime.h"
 #include "atl_internal.h"
 using namespace std;
@@ -30,20 +46,18 @@ void ATLMemory::free(void *ptr) {
 }*/
 
 
-template<> void ATLProcessor::addMemory(ATLFineMemory &mem) {
-    _dram_memories.push_back(mem);
+void ATLProcessor::addMemory(ATLMemory &mem) {
+    for(std::vector<ATLMemory>::iterator it = _memories.begin();
+                it != _memories.end(); it++) {
+        // if the memory already exists, then just return
+        if(mem.getMemory().handle == it->getMemory().handle)
+            return;
+    }
+    _memories.push_back(mem);
 }
 
-template<> void ATLProcessor::addMemory(ATLCoarseMemory &mem) {
-    _gddr_memories.push_back(mem);
-}
-
-template<> std::vector<ATLFineMemory> &ATLProcessor::getMemories() {
-    return _dram_memories;
-}
-
-template<> std::vector<ATLCoarseMemory> &ATLProcessor::getMemories() {
-    return _gddr_memories;
+std::vector<ATLMemory> &ATLProcessor::getMemories() {
+    return _memories;
 }
 
 template <> std::vector<ATLCPUProcessor> &ATLMachine::getProcessors() { 
@@ -60,14 +74,9 @@ template <> std::vector<ATLDSPProcessor> &ATLMachine::getProcessors() {
 
 hsa_amd_memory_pool_t get_memory_pool(ATLProcessor &proc, const int mem_id) {
     hsa_amd_memory_pool_t pool;
-    vector<ATLFineMemory> &f_mems = proc.getMemories<ATLFineMemory>();
-    vector<ATLCoarseMemory> &c_mems = proc.getMemories<ATLCoarseMemory>();
-    if(mem_id < f_mems.size()) {
-        pool = f_mems[mem_id].getMemory(); 
-    }
-    else {
-        pool = c_mems[mem_id - f_mems.size()].getMemory(); 
-    }
+    vector<ATLMemory> &mems = proc.getMemories();
+    assert(mems.size() && mem_id >=0 && mem_id < mems.size() && "Invalid memory pools for this processor");
+    pool = mems[mem_id].getMemory(); 
     return pool;
 }
 
@@ -180,20 +189,17 @@ hsa_queue_t *ATLProcessor::getBestQueue(atmi_scheduler_t sched) {
     hsa_queue_t *ret = NULL;
     switch(sched) {
         case ATMI_SCHED_NONE:
-            ret = getQueue(_next_best_queue_id);
+            ret = getQueue(__atomic_load_n(&_next_best_queue_id, __ATOMIC_ACQUIRE) % _queues.size());
             break;
         case ATMI_SCHED_RR:
-            ret = getQueue(_next_best_queue_id);
-            _next_best_queue_id = (_next_best_queue_id + 1) % _queues.size();
+            ret = getQueue(__atomic_fetch_add(&_next_best_queue_id, 1, __ATOMIC_ACQ_REL) % _queues.size());
             break;
     }
     return ret;
 }
 
 hsa_queue_t *ATLProcessor::getQueue(const int index) {
-    if(index < 0 || index >= _queues.size()) 
-        return NULL;
-    return _queues[index];
+    return _queues[index % _queues.size()];
 }
 
 int ATLProcessor::getNumCUs() const {

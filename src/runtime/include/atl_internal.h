@@ -22,6 +22,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include <deque>
 #include <map>
 #include <atomic>
+#define MAX_PIPE_SIZE   (1024)
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
  * --------------------------------------------------------------------------------- */
@@ -35,6 +36,14 @@ typedef void* ARG_TYPE;
 #define REPEAT16(name) REPEAT8(name) REPEAT8(name)
 
 #define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
+
+typedef struct atmi_implicit_args_s {
+    uint64_t    offset_x;
+    uint64_t    offset_y;
+    uint64_t    offset_z;
+    uint64_t    pipe_ptr;
+} atmi_implicit_args_t;
+
 typedef struct agent_t
 {
   int id;

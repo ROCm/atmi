@@ -1506,6 +1506,9 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &(info.kernel_segment_size));
         ErrorCheck(Extracting the kernarg segment size from the executable, err);
 
+        // add size of implicit args, e.g.: offset x, y and z and pipe pointer
+        info.kernel_segment_size += sizeof(atmi_implicit_args_t);
+
         DEBUG_PRINT("Kernel %s --> %lx symbol %u group segsize %u pvt segsize %u bytes kernarg\n", name, 
             info.kernel_object,
             info.group_segment_size,
@@ -1847,12 +1850,30 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     ErrorCheck(Allocating memory for the executable-kernel, err);
 #else
     if(kernel_impl->kernarg_segment_size > 0) {
+        DEBUG_PRINT("New kernarg segment size: %lu\n", kernel_impl->kernarg_segment_size);
         hsa_status_t err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
                 kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
                 0,
                 &(kernel_impl->kernarg_region));
         ErrorCheck(Allocating memory for the executable-kernel, err);
         allow_access_to_all_gpu_agents(kernel_impl->kernarg_region);
+
+        void *pipe_ptrs;
+        // allocate pipe memory in the kernarg memory pool
+        // TODO: may be possible to allocate this on device specific 
+        // memory but data movement will have to be done later by 
+        // post-processing kernel on destination agent. 
+        err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
+                MAX_PIPE_SIZE * MAX_NUM_KERNELS, 
+                0,
+                &pipe_ptrs);
+        ErrorCheck(Allocating pipe memory region, err);
+        allow_access_to_all_gpu_agents(pipe_ptrs);
+
+        for(int k = 0; k < MAX_NUM_KERNELS; k++) {
+            atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)((char *)kernel_impl->kernarg_region + (((k + 1) * kernel_impl->kernarg_segment_size) - sizeof(atmi_implicit_args_t)));
+            impl_args->pipe_ptr = (uint64_t)((char *)pipe_ptrs + (k * MAX_PIPE_SIZE));
+        }
     }
 
 #endif

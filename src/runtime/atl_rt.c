@@ -2588,6 +2588,13 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                 const int dummy_arg_count = 6;
                 kargs += (dummy_arg_count * sizeof(uint64_t));
             }
+            else if(kernel_impl->kernel_type == AMDGCN) {
+                atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+                impl_args->offset_x = 0;
+                impl_args->offset_y = 0;
+                impl_args->offset_z = 0;
+                // char *pipe_ptr = impl_args->pipe_ptr;
+            }
             /*  Process task values */
             /*  this_aql.dimensions=(uint16_t) ndim; */
             this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
@@ -2890,7 +2897,13 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
             if(ret->kernarg_region != NULL) {
                 // we had already created a memory region using malloc. Copy it
                 // to the newly availed space
-                memcpy(addr, ret->kernarg_region, ret->kernarg_region_size);
+                size_t size_to_copy = ret->kernarg_region_size; 
+                if(ret->devtype == ATMI_DEVTYPE_GPU && kernel_impl->kernel_type == AMDGCN) {
+                    // do not copy the implicit args from saved region
+                    // they are to be set/reset during task dispatch
+                    size_to_copy -= sizeof(atmi_implicit_args_t);
+                }
+                memcpy(addr, ret->kernarg_region, size_to_copy);
                 // free existing region
                 free(ret->kernarg_region);
                 ret->kernarg_region = addr;
@@ -3040,7 +3053,13 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
             if(ret->kernarg_region != NULL) {
                 // we had already created a memory region using malloc. Copy it
                 // to the newly availed space
-                memcpy(addr, ret->kernarg_region, ret->kernarg_region_size);
+                size_t size_to_copy = ret->kernarg_region_size; 
+                if(ret->devtype == ATMI_DEVTYPE_GPU && kernel_impl->kernel_type == AMDGCN) {
+                    // do not copy the implicit args from saved region
+                    // they are to be set/reset during task dispatch
+                    size_to_copy -= sizeof(atmi_implicit_args_t);
+                }
+                memcpy(addr, ret->kernarg_region, size_to_copy);
                 // free existing region
                 free(ret->kernarg_region);
                 ret->kernarg_region = addr;

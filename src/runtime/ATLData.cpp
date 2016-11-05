@@ -350,6 +350,8 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
 
     ret->devtype = ATMI_DEVTYPE_CPU;
     ret->kernel = NULL;
+    ret->kernarg_region = NULL;
+    ret->kernarg_region_size = 0;
 
     ret->predecessors.clear();
     ret->predecessors.resize(lparm->num_required);

@@ -1260,11 +1260,11 @@ hsa_status_t init_hsa() {
         ErrorCheck(Initializing the hsa runtime, err);
         if(err != HSA_STATUS_SUCCESS) return err;
         char * dep_sync_type = getenv("ATMI_DEPENDENCY_SYNC_TYPE");
-        if(dep_sync_type == NULL || strcmp(dep_sync_type, "ATMI_SYNC_BARRIER_PKT") == 0) {
-            g_dep_sync_type = ATL_SYNC_BARRIER_PKT;
-        }
-        else if(strcmp(dep_sync_type, "ATMI_SYNC_CALLBACK") == 0) {
+        if(dep_sync_type == NULL || strcmp(dep_sync_type, "ATMI_SYNC_CALLBACK") == 0) {
             g_dep_sync_type = ATL_SYNC_CALLBACK;
+        }
+        else if(strcmp(dep_sync_type, "ATMI_SYNC_BARRIER_PKT") == 0) {
+            g_dep_sync_type = ATL_SYNC_BARRIER_PKT;
         }
         char * max_signals = getenv("ATMI_MAX_HSA_SIGNALS");
         g_max_signals = 24;

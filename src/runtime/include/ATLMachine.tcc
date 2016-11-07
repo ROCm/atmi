@@ -1,45 +1,4 @@
-#ATMI v0.3 (Asynchronous Task and Memory Interface)
-A simple declarative language and runtime for heterogeneous tasking. 
-
-Table of contents
------------------
-
-- [What's New?](#Whatsnew)
-- [License Information](#License)
-
-<A NAME="Whatsnew">
-# What's New?
-
-## ATMI v0.3
-- A comprehensive machine model for integrated GPU (APU) and discrete GPU (dGPU) systems
-- Data movement API (synchronous and asynchronous options)
-- Devices supported: AMD Carrizo APU and AMD Fiji dGPU
-- Runtimes used: ROCm v1.2
-
-## ATMI v0.2
-- Efficient resource management
-    - Signaling among dependent tasks
-    - Kernel argument memory regions
-    - Reuse of task handles
-- Device supported: AMD Kaveri and AMD Carrizzo APUs
-- Runtimes used: ROCm v1.0
-
-## ATMI v0.1
-- ATMI runtime library to manage tasks
-- ATMI C language extension for denoting tasks
-- Asynchronous tasks
-    - CPU tasks
-    - GPU tasks
-- Task depenencies
-- Task groups
-- Recursive tasks
-- Device supported: AMD Kaveri and AMD Carrizzo APUs
-- Runtimes used: HSA 1.0F
-
-<A NAME="License">
-# License
-----------
-
+/*
 MIT License 
 
 Copyright © 2016 Advanced Micro Devices, Inc.  
@@ -53,4 +12,16 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
 PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+extern ATLMachine g_atl_machine;
+template <typename T>
+T& get_processor(atmi_place_t place) {
+    int dev_id = place.device_id;
+    if(dev_id == -1) {
+        // user is asking runtime to pick a device
+        // TODO: best device of this type? pick 0 for now
+        dev_id = 0;
+    }
+    return g_atl_machine.getProcessors<T>()[dev_id];
+}
 

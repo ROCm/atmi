@@ -5,8 +5,7 @@ Table of contents
 -----------------
 
 - [What's New?](#Whatsnew)
-- [Copyright and Disclaimer](#Copyright)
-- [Software License Agreement](LICENSE.TXT)
+- [License Information](#License)
 
 <A NAME="Whatsnew">
 # What's New?
@@ -37,7 +36,7 @@ Table of contents
 - Device supported: AMD Kaveri and AMD Carrizzo APUs
 - Runtimes used: HSA 1.0F
 
-<A NAME="Copyright">
+<A NAME="License">
 # License
 ----------
 

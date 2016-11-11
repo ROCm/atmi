@@ -11,30 +11,23 @@ Table of contents
 # What's New?
 
 ## ATMI v0.3
-- A comprehensive machine model for integrated GPU (APU) and discrete GPU (dGPU) systems
-- Data movement API (synchronous and asynchronous options)
-- Devices supported: AMD Carrizo APU and AMD Fiji dGPU
-- Runtimes used: ROCm v1.2
-
-## ATMI v0.2
+- ATMI-RT: runtime library to manage tasks
+- ATMI-C: language extension for declaring tasks
+- A  comprehensive machine model for CPUs, integrated GPU (APU) and discrete GPU (dGPU) systems.
+- Consistent task management API for CPU tasks and GPU tasks
+    - GPU kernel language: CL (more kernel language support to come in the future)
+    - CPU tasks: support for multi-dimensional task grids (similar to GPU tasks)
+- Task dependencies
+- Task groups
+- Recursive tasks (tasks creating other tasks)
 - Efficient resource management
     - Signaling among dependent tasks
     - Kernel argument memory regions
     - Reuse of task handles
-- Device supported: AMD Kaveri and AMD Carrizzo APUs
-- Runtimes used: ROCm v1.0
-
-## ATMI v0.1
-- ATMI runtime library to manage tasks
-- ATMI C language extension for denoting tasks
-- Asynchronous tasks
-    - CPU tasks
-    - GPU tasks
-- Task depenencies
-- Task groups
-- Recursive tasks
-- Device supported: AMD Kaveri and AMD Carrizzo APUs
-- Runtimes used: HSA 1.0F
+- Data movement API (synchronous and asynchronous options)
+    - Asynchronous data movement is treated as an ATMI task in the task graph.
+- Devices supported: AMD Carrizo and Kaveri APUs, and AMD Fiji dGPU
+- Runtimes used: ROCm v1.2
 
 <A NAME="License">
 # License

@@ -1,5 +1,11 @@
 #ATMI v0.3 (Asynchronous Task and Memory Interface)
-A simple declarative language and runtime for heterogeneous tasking. 
+Asynchronous Task and Memory Interface, or ATMI, is a runtime framework and declarative programming model for heterogeneous 
+CPU-GPU systems. It provides a consistent API to create task graphs on CPUs and GPUs (integrated and discrete). ATMI is a declarative
+programming model, where high-level tasks can be simply described by using a few predefined C-style structures. The task description
+includes specifying its granularity, dependencies to other tasks, data requirements and so on. The ATMI runtime, based on the task
+graph, will perform task scheduling and memory management that is optimal for the underlying platform. ATMI provides a rich and flexible
+user interface so that the end user can relinquish scheduling to the runtime (default behavior) or take full control of scheduling and
+mapping, if desired. The target audience for ATMI is application programmers or middleware developers for high-level languages.
 
 Table of contents
 -----------------

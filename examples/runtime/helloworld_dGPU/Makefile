@@ -13,23 +13,54 @@
 #PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-#Set HSA Environment variables
-HSA_RUNTIME_PATH ?= /opt/rocm
-CLOC_PATH ?= /usr/bin
 ATMI_RUNTIME_PATH ?= /opt/rocm/libatmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include
-BRIG ?= 0
 
+#Set HSA Environment variables
+HSA_RUNTIME_PATH ?= /opt/rocm
+
+#Set LC Environment variables
+AMDLLVM ?= /opt/amd/llvm
+
+#MCPU
+MCPU ?= $(shell mymcpu)
+
+# Kernel format
+BRIG ?= 0
 ifeq ($(BRIG),1)
 	BRIGCLOPTS=-brig
 	BRIGCPPOPTS=-DUSE_BRIG
 endif
 
-CC=g++
-CFLAGS=-O3 -g -std=c++11
-INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I. 
+# Kernel compiler
+CLC ?= 1
 
-LIBS=-latmi_runtime 
+# CLOC
+CLOC_PATH ?= /usr/bin
+CLOCOPTS = -vv
+CLOCOPTS += -clopts "-v"
+
+# ROCm-Device-lib
+BITCODE_LIB ?= ${ROCMLIB}/dist/lib
+
+# GPU compiler
+CLCC=$(AMDLLVM)/bin/clang
+CLCFLAGS = -x cl -Xclang -cl-std=CL2.0 -Xclang -finclude-default-header
+CLCFLAGS += -target amdgcn--amdhsa
+CLCFLAGS += -mcpu=$(MCPU)
+CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/opencl.amdgcn.bc
+CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/ockl.amdgcn.bc
+CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/ocml.amdgcn.bc
+CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/irif.amdgcn.bc
+
+# Host compiler
+CXX = g++
+CXXFLAGS =-O3 -g -std=c++11
+#CXXFLAGS += -v
+
+INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I.
+
+LIBS=-latmi_runtime
 LIB_FLAGS=-L${ATMI_RUNTIME_PATH}/lib -L${HSA_RUNTIME_PATH}/lib
 
 OBJS = hello
@@ -39,8 +70,12 @@ OBJS = hello
 all: $(OBJS)
 
 hello: hw.cpp hw.cl 
-	$(CLOC_PATH)/cloc.sh ${BRIGCLOPTS} -opt 2 hw.cl
-	$(CC) -o $@ hw.cpp $(BRIGCPPOPTS) $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
+ifeq ($(CLC),1)
+	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} ${BRIGCLOPTS} -opt 2 hw.cl
+else
+	$(CLCC) ${CLCFLAGS} -o hw.hsaco hw.cl
+endif
+	$(CXX) -o $@ hw.cpp $(BRIGCPPOPTS) $(CXXFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
 	rm -rf *.o *.brig *.hsaco $(OBJS)

@@ -30,7 +30,7 @@
 // OpenCL header include by default through CL frontend
 
 /**********************************************************************************/
-#include "atmi_device.h"
+//#include "atmi_device.h"
 #include "hw.h"
 /**********************************************************************************/
 

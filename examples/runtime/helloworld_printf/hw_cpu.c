@@ -42,7 +42,7 @@ _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlength, char
 }
 
 /**********************************************************************************/
-#include "atmi_device.h"
+//#include "atmi_device.h"
 #include "hw.h"
 /**********************************************************************************/
 

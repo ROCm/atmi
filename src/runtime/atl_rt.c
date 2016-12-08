@@ -1636,10 +1636,15 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
         module_sizes.push_back(module_size);
     }
 
-    return atmi_module_register_from_memory(&modules[0], &module_sizes[0], types, num_modules);
+    atmi_status_t status = atmi_module_register_from_memory(&modules[0], &module_sizes[0], types, num_modules);
+
+    // memory space got by
+    // void *raw_code_object = malloc(size);
     for(int i = 0; i < num_modules; i++) {
         free(modules[i]);
     }
+
+    return status;
 }
 
 

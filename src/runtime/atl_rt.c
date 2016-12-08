@@ -2133,6 +2133,7 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     return false; 
 }
 
+#if 0
 void dispatch_ready_task_for_free_signal() {
     atl_task_t *ready_task = NULL;
     hsa_signal_t free_signal;
@@ -2188,7 +2189,9 @@ void dispatch_ready_task_for_free_signal() {
         } while(!should_dispatch && iterations < queue_sz);
     }
 }
+#endif
 
+#if 0
 void dispatch_ready_task_or_release_signal(atl_task_t *task) {
     hsa_signal_t signal = task->signal;
     bool should_dispatch = false;
@@ -2231,6 +2234,7 @@ void dispatch_ready_task_or_release_signal(atl_task_t *task) {
         }
     }
 }
+#endif
 
 bool handle_group_signal(hsa_signal_value_t value, void *arg) {
     HandleSignalInvokeTimer.Stop();

@@ -292,6 +292,14 @@ if (status != HSA_STATUS_SUCCESS) { \
  /*  printf("%s succeeded.\n", #msg);*/ \
 }
 
+#define ErrorCheckAndContinue(msg, status) \
+if (status != HSA_STATUS_SUCCESS) { \
+    DEBUG_PRINT("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_error_string(status)); \
+    continue; \
+} else { \
+ /*  printf("%s succeeded.\n", #msg);*/ \
+}
+
 #if 0
 #ifdef __cplusplus
 extern "C" {

@@ -1537,7 +1537,87 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
     return HSA_STATUS_SUCCESS;
 }
 
+std::map<uint32_t, std::string> get_printf_format_strings_map(void *module, size_t module_size) {
+    std::map<uint32_t, std::string> fmt_strings_map;
+    // read the elf section titled ".AMDGPU.runtime_metadata"
+    // and extract the printf format strings
+    Elf *elf;           // ELF struct
+    Elf_Scn *scn;     // Section index struct
+    //Elf64_Shdr *shdr;     // Section struct
+    Elf_Data *edata;                /* Data Descriptor */
+    GElf_Sym sym;			/* Symbol */
+    GElf_Shdr shdr;                 /* Section Header */
+    size_t shstrndx;
+    char *section_name;
+    int symbol_count, i;
+    if(elf_version(EV_CURRENT)==EV_NONE) {
+        fprintf(stderr, "ELF library iinitialization failed: %s", elf_errmsg(-1));
+        exit(-1);
+    }
+    if((elf = elf_memory((char *)module, module_size))==NULL)
+        fprintf(stderr, "elf_memory() failed: %s.", elf_errmsg(-1));
+
+    //Retrieve the section index of the ELF section containing the string table of section names
+
+
+    if(elf_getshdrstrndx(elf, &shstrndx)!=0)
+        fprintf(stderr, "elf_getshdrstrndx() failed: %s.", elf_errmsg(-1));
+
+    scn = NULL;
+    while((scn = elf_nextscn(elf, scn)) != NULL)
+    {
+        // Given a Elf Scn pointer, retrieve the associated section header
+        gelf_getshdr(scn, &shdr);
+
+        // Retrieve the name of the section name
+        if((section_name = elf_strptr(elf, shstrndx, shdr.sh_name))==NULL)
+            fprintf(stderr, "elf_strptr() failed: %s.", elf_errmsg(-1));
+
+        // If the section is the one we want
+
+        DEBUG_PRINT("Section name: %s\n", section_name);
+        if(!strcmp(section_name, ".AMDGPU.runtime_metadata")) {
+            //struct data_t * section_data = (struct data_t *) shdr->sh_addr;
+            // edata points to our symbol table
+            edata = elf_getdata(scn, edata);
+
+            char *edata_buf = (char *)(edata->d_buf) + edata->d_off;
+            size_t edata_size = edata->d_size;
+            /* First 8 characters of the section should have the version
+             * numbers and other meta-metadata information */
+            i = 8;
+            while(i < edata_size) {
+                //printf("array[%d]: %u --> %c\n", i, 0x000000FF & edata_buf[i], edata_buf[i]);
+                if(edata_buf[i] != 30) break;
+                i++;
+                // next 4 chars say the size
+                size_t str_size = 0;
+                for(int j = 0; j < 4; j++) {
+                    str_size |= (edata_buf[i + j] << (8 * j));
+                }
+                i += 4;
+                // get the format string for the given size
+                std::string str;
+                for(int j = i; j < i+str_size; j++) {
+                    str.assign(edata_buf+i, str_size);
+                }
+                std::size_t index_pos = str.find(":");
+                uint32_t fmt_string_index = stoi(str.substr(0, index_pos));
+                printf("Map[%d]: %s\n", fmt_string_index, str.c_str());
+                fmt_strings_map[fmt_string_index] = str;
+                i += str_size;
+            }
+            break;
+        }
+    }
+
+    return fmt_strings_map;
+}
+
+
 atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
+    hsa_status_t err;
+    int some_success = 0;
     std::vector<std::string> modules_str;
     for(int i = 0; i < num_modules; i++) {
         modules_str.push_back(std::string((char *)modules[i]));
@@ -1551,17 +1631,17 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
         hsa_agent_t agent = proc.getAgent();
         hsa_executable_t executable = {0}; 
-        hsa_status_t err;
         hsa_profile_t agent_profile;
 
         err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
-        ErrorCheck(Query the agent profile, err);
+        ErrorCheckAndContinue(Query the agent profile, err);
         // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
         agent_profile = HSA_PROFILE_FULL;
         /* Create the empty executable.  */
         err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
-        ErrorCheck(Create the executable, err);
+        ErrorCheckAndContinue(Create the executable, err);
 
+        int module_load_success = 0;
         for(int i = 0; i < num_modules; i++) {
             void *module_bytes = modules[i];
             size_t module_size = module_sizes[i];
@@ -1572,57 +1652,66 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
                 /* Create hsa program.  */
                 memset(&program,0,sizeof(hsa_ext_program_t));
                 err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
-                ErrorCheck(Create the program, err);
+                ErrorCheckAndContinue(Create the program, err);
 
                 /* Add the BRIG module to hsa program.  */
                 err = hsa_ext_program_add_module(program, module);
-                ErrorCheck(Adding the brig module to the program, err);
+                ErrorCheckAndContinue(Adding the brig module to the program, err);
                 /* Determine the agents ISA.  */
                 hsa_isa_t isa;
                 err = hsa_agent_get_info(agent, HSA_AGENT_INFO_ISA, &isa);
-                ErrorCheck(Query the agents isa, err);
+                ErrorCheckAndContinue(Query the agents isa, err);
 
                 /* * Finalize the program and extract the code object.  */
                 hsa_ext_control_directives_t control_directives;
                 memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
                 hsa_code_object_t code_object;
                 err = hsa_ext_program_finalize(program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
-                ErrorCheck(Finalizing the program, err);
+                ErrorCheckAndContinue(Finalizing the program, err);
 
                 /* Destroy the program, it is no longer needed.  */
                 err=hsa_ext_program_destroy(program);
-                ErrorCheck(Destroying the program, err);
+                ErrorCheckAndContinue(Destroying the program, err);
 
                 /* Load the code object.  */
                 err = hsa_executable_load_code_object(executable, agent, code_object, "");
-                ErrorCheck(Loading the code object, err);
+                ErrorCheckAndContinue(Loading the code object, err);
             }
             else if (types[i] == AMDGCN) {
                 // Deserialize code object.
                 hsa_code_object_t code_object = {0};
                 err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
-                ErrorCheck(Code Object Deserialization, err);
+                ErrorCheckAndContinue(Code Object Deserialization, err);
                 assert(0 != code_object.handle);
 
                 /* Load the code object.  */
                 err = hsa_executable_load_code_object(executable, agent, code_object, NULL);
-                ErrorCheck(Loading the code object, err);
+                ErrorCheckAndContinue(Loading the code object, err);
             }
+            module_load_success = 1;
         }
+        if(!module_load_success) continue;
 
         /* Freeze the executable; it can now be queried for symbols.  */
         err = hsa_executable_freeze(executable, "");
-        ErrorCheck(Freeze the executable, err);
+        ErrorCheckAndContinue(Freeze the executable, err);
 
         err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu); 
-        ErrorCheck(Iterating over symbols for execuatable, err);
+        ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+
+        //err = hsa_executable_iterate_program_symbols(executable, iterate_program_symbols, &gpu); 
+        //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+
+        //err = hsa_executable_iterate_agent_symbols(executable, iterate_agent_symbols, &gpu); 
+        //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
         // save the executable and destroy during finalize
         g_executables.push_back(executable);
+        some_success = 1;
     }
     DEBUG_PRINT("done\n");
     //ModuleMap[executable.handle] = modules_str;
-    return ATMI_STATUS_SUCCESS;
+    return (some_success) ? ATMI_STATUS_SUCCESS : ATMI_STATUS_ERROR;
 }
 
 atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t *types, const int num_modules) {

@@ -106,6 +106,8 @@ typedef struct atl_kernel_info_s {
     uint32_t kernel_segment_size;
 } atl_kernel_info_t;
 
+typedef void* atl_kernel_metadata_t;
+
 extern std::map<std::string, atl_kernel_t *> KernelImplMap;
 
 // ---------------------- Kernel End -------------

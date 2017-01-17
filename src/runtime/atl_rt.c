@@ -107,6 +107,8 @@ std::queue<atl_task_t *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
 
 std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
+std::vector<std::map<std::string, atl_kernel_metadata_t> > KernelMetadataTable;
+
 std::map<std::string, atl_kernel_t *> KernelImplMap;
 std::map<std::string, atmi_klist_t *> PifKlistMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -540,9 +542,12 @@ void init_dag_scheduler() {
         AllTasks.clear();
         AllTasks.reserve(500000);
         //PublicTaskMap.clear();
-        for(int i = 0; i < KernelInfoTable.size(); i++) 
+        for(int i = 0; i < KernelInfoTable.size(); i++)
             KernelInfoTable[i].clear();
         KernelInfoTable.clear();
+        for(int i = 0; i < KernelMetadataTable.size(); i++)
+            KernelMetadataTable[i].clear();
+        KernelMetadataTable.clear();
         NULL_TASK = ATMI_TASK_HANDLE(0);
         atlc.g_mutex_dag_initialized = 1;
         DEBUG_PRINT("main tid = %lu\n", syscall(SYS_gettid));
@@ -651,7 +656,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
                 tasks[task_id] = task_head->task;
                 task_head = task_head->next;
             }
-            
+
             if(stream_obj->gpu_queue != NULL) 
                 enqueue_barrier_gpu(stream_obj->gpu_queue, num_tasks, tasks, SNK_WAIT);
             else if(stream_obj->cpu_queue != NULL) 
@@ -976,6 +981,7 @@ atmi_status_t atmi_init(atmi_devtype_t devtype) {
 atmi_status_t atmi_finalize() {
     // TODO: Finalize all processors, queues, signals, kernarg memory regions
     hsa_status_t err;
+    finalize_hsa();
     for(int i = 0; i < g_executables.size(); i++) {
         err = hsa_executable_destroy(g_executables[i]);
         ErrorCheck(Destroying executable, err);
@@ -984,6 +990,17 @@ atmi_status_t atmi_finalize() {
         agent_fini();
         atlc.g_cpu_initialized = 0;
     }
+
+    for(int i = 0; i < KernelInfoTable.size(); i++) {
+        KernelInfoTable[i].clear();
+    }
+    KernelInfoTable.clear();
+
+    for(int i = 0; i < KernelMetadataTable.size(); i++) {
+        KernelMetadataTable[i].clear();
+    }
+    KernelMetadataTable.clear();
+
     atl_reset_atmi_initialized();
     err = hsa_shut_down();
     ErrorCheck(Shutting down HSA, err);
@@ -996,7 +1013,7 @@ hsa_status_t init_comute_and_memory() {
     err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
-    
+
     /* Query the name of the agent.  */
     //char name[64] = { 0 };
     //err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_NAME, name);
@@ -1184,7 +1201,7 @@ hsa_status_t init_comute_and_memory() {
     int proc_index = 0;
     for(int i = cpus_begin; i < cpus_end; i++) {
         all_devices[i].type = cpu_procs[proc_index].getType();
-        
+
         std::vector<ATLMemory> memories = cpu_procs[proc_index].getMemories();
         int fine_memories_size = 0;
         int coarse_memories_size = 0;
@@ -1209,7 +1226,7 @@ hsa_status_t init_comute_and_memory() {
     proc_index = 0;
     for(int i = gpus_begin; i < gpus_end; i++) {
         all_devices[i].type = gpu_procs[proc_index].getType();
-        
+
         std::vector<ATLMemory> memories = gpu_procs[proc_index].getMemories();
         int fine_memories_size = 0;
         int coarse_memories_size = 0;
@@ -1280,11 +1297,15 @@ hsa_status_t init_hsa() {
     return HSA_STATUS_SUCCESS;
 }
 
+hsa_status_t finalize_hsa() {
+    return HSA_STATUS_SUCCESS;
+}
+
 atmi_status_t atl_init_gpu_context() {
 
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
     if(atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
-    
+
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
@@ -1297,7 +1318,7 @@ atmi_status_t atl_init_gpu_context() {
         num_queues = (num_queues > 8) ? 8 : num_queues;
         proc.createQueues(num_queues);
     }
-    
+
     if(context_init_time_init == 0) {
         clock_gettime(CLOCK_MONOTONIC_RAW,&context_init_time);
         context_init_time_init = 1;
@@ -1309,15 +1330,15 @@ atmi_status_t atl_init_gpu_context() {
 }
 
 atmi_status_t atl_init_cpu_context() {
-   
+
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
 
     if(atlc.g_cpu_initialized != 0) return ATMI_STATUS_SUCCESS;
-     
+
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
-    
+
     // FIXME: For some reason, if CPU context is initialized before, the GPU queues dont get
     // created. They exit with 0x1008 out of resources. HACK!!!
     atl_init_gpu_context();
@@ -1545,9 +1566,12 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
     for(int i = 0; i < num_modules; i++) {
         modules_str.push_back(std::string((char *)modules[i]));
     }
-    
+
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
+
     KernelInfoTable.resize(gpu_count);
+    KernelMetadataTable.resize(gpu_count);
+
     for(int gpu = 0; gpu < gpu_count; gpu++) 
     {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
@@ -1754,7 +1778,7 @@ void clear_container(T &q)
    T empty;
    std::swap(q, empty);
 }
-      
+
 atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num_args,
                                     const size_t *arg_sizes) {
     static int counter = 0;
@@ -1764,7 +1788,7 @@ atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num
     atmi_kernel->handle = (uint64_t)pif;
     std::string pif_name_str = std::string((const char *)(atmi_kernel->handle));
     counter++;
-    
+
     atl_kernel_t *kernel = new atl_kernel_t; 
     kernel->id_map.clear();
     kernel->num_args = num_args;
@@ -1778,7 +1802,7 @@ atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num
 
 atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
     char *pif = (char *)(atmi_kernel.handle);
-    
+
     atl_kernel_t *kernel = KernelImplMap[std::string(pif)];
     //kernel->id_map.clear();
     clear_container(kernel->arg_sizes);
@@ -1898,7 +1922,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
         kernel_impl->free_kernarg_segments.push(i);
     }
     pthread_mutex_init(&(kernel_impl->mutex), NULL);
-    
+
     kernel->id_map[ID] = kernel->impls.size();
 
     kernel->impls.push_back(kernel_impl);
@@ -1920,7 +1944,7 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
     kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_CPU;
     kernel_impl->function = impl;
-    
+
     atl_kernel_t *kernel = KernelImplMap[std::string(pif_name)];
     if(kernel->id_map.find(ID) != kernel->id_map.end()) {
         fprintf(stderr, "Kernel ID %d already found\n", ID);
@@ -2068,7 +2092,7 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     for(int idx = 0; idx < requires.size(); idx++) {
         mutexes.insert(&(requires[idx]->mutex));
     }
-    
+
     lock_set(mutexes);
 
     DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", task->kernarg_region_index);
@@ -2830,7 +2854,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         if(kernel_impl) req_mutexes.insert(&(kernel_impl->mutex));
     }
     atmi_task_group_table_t *stream_obj = ret->stream_obj;
-    
+
     lock_set(req_mutexes);
     //std::cout << "[" << ret->id << "]Signals Before: " << FreeSignalPool.size() << std::endl;
 
@@ -2879,7 +2903,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
     /* round up */
     int barrier_pkt_count = (required_tasks + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
-    
+
     if(should_dispatch) {
         if((ret->groupable != ATMI_TRUE && FreeSignalPool.size() < barrier_pkt_count + 1)
              || (ret->groupable == ATMI_TRUE && FreeSignalPool.size() < barrier_pkt_count)

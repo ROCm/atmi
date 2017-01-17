@@ -58,16 +58,22 @@ if (status != HSA_STATUS_SUCCESS) { \
     printf("%s failed.\n", #msg); \
     exit(1); \
 }
-//#define DEBUG_SNK
+
+#ifdef DEBUG
+#define DEBUG_SNK
 #define VERBOSE_SNK
+#endif
+
+static const char* debug_mode=getenv("ATMI_DEBUG");
+
 #ifdef DEBUG_SNK
-#define DEBUG_PRINT(...) do{ fprintf( stdout, __VA_ARGS__ ); } while( false )
+#define DEBUG_PRINT(...) if (debug_mode) { fprintf ( stderr, "[%s:%d] ", __FILE__, __LINE__); fprintf( stderr, __VA_ARGS__ );}
 #else
 #define DEBUG_PRINT(...) do{ } while ( false )
 #endif
 
 #ifdef VERBOSE_SNK
-#define VERBOSE_PRINT(...) do{ fprintf( stderr, __VA_ARGS__ ); } while( false )
+#define VERBOSE_PRINT(...) if (debug_mode) { fprintf ( stderr, "[%s:%d] ", __FILE__, __LINE__); fprintf( stderr, __VA_ARGS__ );}
 #else
 #define VERBOSE_PRINT(...) do{ } while ( false )
 #endif
@@ -79,6 +85,14 @@ typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 atmi_status_t atl_init_context();
 atmi_status_t atl_init_cpu_context();
 atmi_status_t atl_init_gpu_context();
+
+atmi_status_t atmi_init(atmi_devtype_t devtype);
+atmi_status_t atmi_finalize();
+
+hsa_status_t init_hsa();
+hsa_status_t finalize_hsa();
+
+
 atmi_status_t atl_gpu_create_program();
 atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
 atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable);

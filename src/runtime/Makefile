@@ -20,7 +20,13 @@ ROCM_RUNTIME_PATH=/opt/rocm
 AR=ar
 ARFLAGS=-cvq
 CC=g++
-CFLAGS=-O2 -c -fpic -g -std=c++11
+
+ifeq ($(BUILD_TYPE),debug)
+  CFLAGS=-c -fpic -DDEBUG -g -std=c++11
+else
+  CFLAGS=-O2 -c -fpic -g -std=c++11
+endif
+
 ATMILIB_RUNTIME_PATH=../..
 INC_FLAGS=-I${ATMILIB_RUNTIME_PATH}/include -I${ROCM_RUNTIME_PATH}/hsa/include -I./include 
 LIB_FLAGS=-L${ROCM_RUNTIME_PATH}/lib -lhsa-runtime64 

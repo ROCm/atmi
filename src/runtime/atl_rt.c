@@ -299,7 +299,7 @@ extern void atl_task_wait(atl_task_t *task) {
                 int value = task->state;//.load(std::memory_order_seq_cst);
                 if(value != ATMI_COMPLETED) {
                     //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", task->signal.handle);
-                    DEBUG_PRINT("Task (%lu) state: %d\n", task->id, value);
+                    //DEBUG_PRINT("Task (%lu) state: %d\n", task->id, value);
                 }
                 else {
                     //printf("Task[%d] Completed!\n", task->id);

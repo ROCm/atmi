@@ -60,11 +60,13 @@ if (status != HSA_STATUS_SUCCESS) { \
 }
 
 #ifdef DEBUG
+
+static const char* debug_mode=getenv("ATMI_DEBUG");
+
 #define DEBUG_SNK
 #define VERBOSE_SNK
 #endif
 
-static const char* debug_mode=getenv("ATMI_DEBUG");
 
 #ifdef DEBUG_SNK
 #define DEBUG_PRINT(...) if (debug_mode) { fprintf ( stderr, "[%s:%d] ", __FILE__, __LINE__); fprintf( stderr, __VA_ARGS__ );}

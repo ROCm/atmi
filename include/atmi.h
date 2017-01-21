@@ -103,7 +103,8 @@ typedef enum atmi_state_s {
     ATMI_INITIALIZED = 0, /**< Initialized state */
     ATMI_READY       = 1, /**< Ready state */
     ATMI_DISPATCHED  = 2, /**< Dispatched state */
-    ATMI_COMPLETED   = 3, /**< Completed state */
+    ATMI_EXECUTED    = 3, /**< Executed state */
+    ATMI_COMPLETED   = 4, /**< Completed state */
     ATMI_FAILED      = -1 /**< Failed state */
 } atmi_state_t;
 

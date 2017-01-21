@@ -166,7 +166,6 @@ typedef struct atl_task_s {
     // hsa_kernel_dispatch_packet_t *packet;
     atl_kernel_t *kernel;
     uint32_t kernel_id;
-    std::vector<void *> kernarg_region_ptrs_;
     void *kernarg_region; // malloced or acquired from a pool
     size_t kernarg_region_size;
     int kernarg_region_index;

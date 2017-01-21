@@ -1632,7 +1632,7 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
         g_executables.push_back(executable);
         some_success = 1;
     }
-    DEBUG_PRINT("done\n");
+    DEBUG_PRINT("Modules loaded successful? %d\n", some_success);
     //ModuleMap[executable.handle] = modules_str;
     return (some_success) ? ATMI_STATUS_SUCCESS : ATMI_STATUS_ERROR;
 }
@@ -1948,7 +1948,7 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
 bool is_valid_kernel_id(atl_kernel_t *kernel, unsigned int kernel_id) {
     std::map<unsigned int, unsigned int>::iterator it = kernel->id_map.find(kernel_id);
     if(it == kernel->id_map.end()) {
-        fprintf(stderr, "Kernel ID %d not found\n", kernel_id);
+        fprintf(stderr, "ERROR: Kernel not found\n");
         return false;
     }
     int idx = it->second;
@@ -1987,6 +1987,9 @@ void handle_signal_callback(atl_task_t *task) {
     // tasks without atmi_task handle should not be added to callbacks anyway
     assert(task->groupable != ATMI_TRUE);
 
+    lock(&(task->mutex));
+    set_task_state(task, ATMI_EXECUTED);
+    unlock(&(task->mutex));
     // after predecessor is done, decrement all successor's dependency count. 
     // If count reaches zero, then add them to a 'ready' task list. Next, 
     // dispatch all ready tasks in a round-robin manner to the available 
@@ -2048,6 +2051,9 @@ void handle_signal_callback(atl_task_t *task) {
 void handle_signal_barrier_pkt(atl_task_t *task) {
     // tasks without atmi_task handle should not be added to callbacks anyway
     assert(task->groupable != ATMI_TRUE);
+    lock(&(task->mutex));
+    set_task_state(task, ATMI_EXECUTED);
+    unlock(&(task->mutex));
     std::set<pthread_mutex_t *> mutexes;
     // release the kernarg segment back to the kernarg pool
     atl_kernel_t *kernel = task->kernel;
@@ -2079,7 +2085,7 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
             it != requires.end(); it++) {
         assert((*it)->state >= ATMI_DISPATCHED);
         (*it)->num_successors--;
-        if((*it)->state == ATMI_COMPLETED && (*it)->num_successors == 0) {
+        if((*it)->state >= ATMI_EXECUTED && (*it)->num_successors == 0) {
             // release signal because this predecessor is done waiting for
             temp_list.push_back((*it)->signal);
         }
@@ -2323,9 +2329,6 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             kernel_impl = get_kernel_impl(kernel, task->kernel_id);
             kernel_impl->free_kernarg_segments.push(task->kernarg_region_index);
         }
-        DEBUG_PRINT("Completed task %lu in group\n", task->id);
-        set_task_metrics(task);
-        set_task_state(task, ATMI_COMPLETED);
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
             std::vector<hsa_signal_t> temp_list;
             temp_list.clear();
@@ -2335,7 +2338,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
                     it != requires.end(); it++) {
                 assert((*it)->state >= ATMI_DISPATCHED);
                 (*it)->num_successors--;
-                if((*it)->state == ATMI_COMPLETED && (*it)->num_successors == 0) {
+                if((*it)->state >= ATMI_EXECUTED && (*it)->num_successors == 0) {
                     // release signal because this predecessor is done waiting for
                     temp_list.push_back((*it)->signal);
                 }
@@ -2359,6 +2362,9 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             // individual tasks yet. once we figure that out, we need to include
             // logic here to push the successor tasks to the ready task queue.
         }
+        DEBUG_PRINT("Completed task %lu in group\n", task->id);
+        set_task_metrics(task);
+        set_task_state(task, ATMI_COMPLETED);
     }
     unlock_set(mutexes);
 
@@ -2385,7 +2391,7 @@ void do_progress_on_task_group(atmi_task_group_table_t *task_group) {
             //if(task_group->running_ordered_tasks[i]->state == ATMI_COMPLETED) {
             //    task_group->running_ordered_tasks.erase(task_group->running_ordered_tasks.begin() + i);
             //}
-            if(task_group->running_ordered_tasks[i]->state == ATMI_READY) {
+            if(task_group->running_ordered_tasks[i]->state >= ATMI_READY) {
                 // some other thread is looking at dispatching a task from
                 // this ordered queue, so give up doing progress on this
                 // thread because tasks have to be processed in order by definition
@@ -2394,7 +2400,6 @@ void do_progress_on_task_group(atmi_task_group_table_t *task_group) {
             }
             if(task_group->running_ordered_tasks[i]->state < ATMI_READY) {
                 ready_task = task_group->running_ordered_tasks[i];
-                set_task_state(task_group->running_ordered_tasks[i], ATMI_READY);
                 break;
             }
         }
@@ -2829,6 +2834,11 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     lock_set(req_mutexes);
     //std::cout << "[" << ret->id << "]Signals Before: " << FreeSignalPool.size() << std::endl;
 
+    if(ret->state >= ATMI_READY) {
+        // If someone else is trying to dispatch this task, give up
+        unlock_set(req_mutexes);
+        return false;
+    }
     int required_tasks = 0;
     if(should_dispatch) {
         // find if all dependencies are satisfied
@@ -2861,7 +2871,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         }
         for(int idx = 0; idx < ret->predecessors.size(); idx++) {
             atl_task_t *pred_task = temp_vecs[idx]; 
-            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
+            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ < ATMI_EXECUTED) {
                 required_tasks++;
             }
         }
@@ -2938,7 +2948,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
 
         for(int idx = 0; idx < ret->predecessors.size(); idx++) {
             atl_task_t *pred_task = temp_vecs[idx]; 
-            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
+            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ < ATMI_EXECUTED) {
                 pred_task->num_successors++;
                 DEBUG_PRINT("Task %p (%lu) adding %p (%lu) as successor\n",
                         pred_task, pred_task->id, ret, ret->id);
@@ -2995,6 +3005,11 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     }
     lock_set(req_mutexes);
 
+    if(ret->state >= ATMI_READY) {
+        // If someone else is trying to dispatch this task, give up
+        unlock_set(req_mutexes);
+        return false;
+    }
     if(should_try_dispatch) {
         if(ret->predecessors.size() > 0) {
             // add to its predecessor's dependents list and return 
@@ -3002,7 +3017,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
                 atl_task_t *pred_task = ret->predecessors[idx];
                 DEBUG_PRINT("Task %p depends on %p as predecessor ",
                         ret, pred_task);
-                if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
+                if(pred_task->state /*.load(std::memory_order_seq_cst)*/ < ATMI_EXECUTED) {
                     should_try_dispatch = false;
                     predecessors_complete = false;
                     pred_task->and_successors.push_back(ret);
@@ -3358,7 +3373,7 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
     std::map<std::string, atl_kernel_t *>::iterator map_iter;
     map_iter = KernelImplMap.find(pif_name_str);
     if(map_iter == KernelImplMap.end()) {
-        fprintf(stderr, "ERROR: Kernel/PIF %s not found\n", pif_name);
+        DEBUG_PRINT("ERROR: Kernel/PIF %s not found\n", pif_name);
         return NULL_TASK;
     }
     atl_kernel_t *kernel = map_iter->second;
@@ -3384,8 +3399,7 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
     }
     else {
         if(!is_valid_kernel_id(kernel, kernel_id)) {
-            fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have %d implementations\n", 
-                    pif_name, kernel_id + 1);
+            DEBUG_PRINT("ERROR: Kernel ID %d not found\n", kernel_id);
             return NULL_TASK;
         }
     }

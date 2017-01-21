@@ -88,9 +88,6 @@ atmi_status_t atl_init_context();
 atmi_status_t atl_init_cpu_context();
 atmi_status_t atl_init_gpu_context();
 
-atmi_status_t atmi_init(atmi_devtype_t devtype);
-atmi_status_t atmi_finalize();
-
 hsa_status_t init_hsa();
 hsa_status_t finalize_hsa();
 

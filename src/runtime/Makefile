@@ -21,7 +21,7 @@ AR=ar
 ARFLAGS=-cvq
 CC=g++
 
-ifeq ($(BUILD_TYPE),debug)
+ifneq (,$(filter $(BUILD_TYPE), debug Debug))
   CFLAGS=-c -fpic -DDEBUG -g -std=c++11
 else
   CFLAGS=-O2 -c -fpic -g -std=c++11

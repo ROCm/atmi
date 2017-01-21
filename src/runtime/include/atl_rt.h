@@ -69,13 +69,13 @@ static const char* debug_mode=getenv("ATMI_DEBUG");
 
 
 #ifdef DEBUG_SNK
-#define DEBUG_PRINT(...) if (debug_mode) { fprintf ( stderr, "[%s:%d] ", __FILE__, __LINE__); fprintf( stderr, __VA_ARGS__ );}
+#define DEBUG_PRINT(fmt, ...) if (debug_mode) { fprintf ( stderr, "[%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__);}
 #else
 #define DEBUG_PRINT(...) do{ } while ( false )
 #endif
 
 #ifdef VERBOSE_SNK
-#define VERBOSE_PRINT(...) if (debug_mode) { fprintf ( stderr, "[%s:%d] ", __FILE__, __LINE__); fprintf( stderr, __VA_ARGS__ );}
+#define VERBOSE_PRINT(fmt, ...) if (debug_mode) { fprintf ( stderr, "[%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__);}
 #else
 #define VERBOSE_PRINT(...) do{ } while ( false )
 #endif

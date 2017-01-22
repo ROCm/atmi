@@ -1220,7 +1220,7 @@ hsa_status_t init_comute_and_memory() {
         }
         DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
         DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
-        all_devices[i].memory_pool_count = memories.size();
+        all_devices[i].memory_count = memories.size();
         proc_index++;
     }
     proc_index = 0;
@@ -1245,7 +1245,7 @@ hsa_status_t init_comute_and_memory() {
         }
         DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
         DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
-        all_devices[i].memory_pool_count = memories.size();
+        all_devices[i].memory_count = memories.size();
         proc_index++;
     }
     proc_index = 0;

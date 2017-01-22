@@ -191,13 +191,22 @@ typedef struct atmi_mem_place_s {
     int mem_id;                     /**< Memory spaces; -1 for any              */
 } atmi_mem_place_t;
 
+/**
+ * @brief ATMI Memory Structure
+ */
+typedef struct atmi_memory_s {
+    unsigned long int capacity;
+    atmi_memtype_t  type;
+} atmi_memory_t;
 
 /**                                                                            
  * @brief ATMI Device Structure
  */
 typedef struct atmi_device_s {
     atmi_devtype_t type;            /**< Device type */
-    unsigned int memory_pool_count; /**< Number of memory regions that are 
+    unsigned int memory_count;      /**< Number of memory regions that are 
+                                         accessible from this device. */
+    atmi_memory_t *memories;        /**< The memory regions that are 
                                          accessible from this device. */
 } atmi_device_t;
 

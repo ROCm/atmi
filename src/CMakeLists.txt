@@ -3,6 +3,10 @@ include (FindPackageHandleStandardArgs)
 
 project (atmi)
 
+macro(libatmi_runtime_say message_to_user)
+  message(STATUS "ATMI: ${message_to_user}")
+endmacro()
+
 set (CMAKE_C_COMPILER g++)
 # The version number.
 set (atmi_VERSION_MAJOR 0)

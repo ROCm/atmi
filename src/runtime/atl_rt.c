@@ -1309,13 +1309,22 @@ atmi_status_t atl_init_gpu_context() {
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
+    int num_queues = -1;
+    /* TODO: If we get a good use case for device-specific worker count, we
+     * should explore it, but let us keep the worker count uniform for all
+     * devices of a type until that time
+     */
+    char *num_gpu_workers = getenv("ATMI_DEVICE_GPU_WORKERS");
+    if(num_gpu_workers) num_queues = atoi(num_gpu_workers);
 
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
     for(int gpu = 0; gpu < gpu_count; gpu++) {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-        int num_queues = proc.getNumCUs();
-        num_queues = (num_queues > 8) ? 8 : num_queues;
+        if(num_queues == -1) {
+            num_queues = proc.getNumCUs();
+            num_queues = (num_queues > 8) ? 8 : num_queues;
+        }
         proc.createQueues(num_queues);
     }
 
@@ -1338,6 +1347,13 @@ atmi_status_t atl_init_cpu_context() {
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
+    int num_queues = -1;
+    /* TODO: If we get a good use case for device-specific worker count, we
+     * should explore it, but let us keep the worker count uniform for all
+     * devices of a type until that time
+     */
+    char *num_cpu_workers = getenv("ATMI_DEVICE_CPU_WORKERS");
+    if(num_cpu_workers) num_queues = atoi(num_cpu_workers);
 
     // FIXME: For some reason, if CPU context is initialized before, the GPU queues dont get
     // created. They exit with 0x1008 out of resources. HACK!!!
@@ -1355,7 +1371,9 @@ atmi_status_t atl_init_cpu_context() {
         // But, this will share CPU worker threads with main host thread
         // and the HSA callback thread. Is there any real benefit from
         // restricting the number of queues to num_cus - 2?
-        int num_queues = proc.getNumCUs();
+        if(num_queues == -1) {
+            num_queues = proc.getNumCUs();
+        }
         cpu_agent_init(cpu, num_queues);
     }
  

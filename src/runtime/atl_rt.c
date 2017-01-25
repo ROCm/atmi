@@ -103,6 +103,7 @@ void print_atl_kernel(const char * str, const int i);
 std::map<int, atmi_task_group_table_t *> StreamTable;
 
 std::vector<atl_task_t *> AllTasks;
+std::vector<atl_kernel_metadata_t> AllMetadata;
 std::queue<atl_task_t *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
 
@@ -968,6 +969,12 @@ bool atl_is_atmi_initialized() {
 atmi_status_t atmi_init(atmi_devtype_t devtype) {
     atmi_status_t status = ATMI_STATUS_SUCCESS;
     if(atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
+
+    module_process_create_data = NULL;
+    module_process_destroy_data = NULL;
+    task_process_init_buffer = NULL;
+    task_process_fini_buffer = NULL;
+
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU) 
         status = atl_init_gpu_context();
 
@@ -1000,6 +1007,12 @@ atmi_status_t atmi_finalize() {
         KernelMetadataTable[i].clear();
     }
     KernelMetadataTable.clear();
+
+    if (module_process_destroy_data) {
+      for (int i = 0; i < AllMetadata.size(); i++) {
+        (*module_process_destroy_data)(&AllMetadata[i]);
+      }
+    }
 
     atl_reset_atmi_initialized();
     err = hsa_shut_down();
@@ -1576,6 +1589,73 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
     return HSA_STATUS_SUCCESS;
 }
 
+// function pointers
+module_process_create_data_t module_process_create_data;
+module_process_destroy_data_t module_process_destroy_data;
+task_process_init_buffer_t task_process_init_buffer;
+task_process_fini_buffer_t task_process_fini_buffer;
+
+atmi_status_t atmi_register_module_create_data(module_process_create_data_t fp)
+{
+  //printf("register function pointer \n");
+  module_process_create_data = fp;
+}
+
+atmi_status_t atmi_register_module_destroy_data(module_process_destroy_data_t fp)
+{
+  //printf("register function pointer \n");
+  module_process_destroy_data = fp;
+}
+
+atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp)
+{
+  //printf("register function pointer \n");
+  task_process_init_buffer = fp;
+}
+
+atmi_status_t atmi_register_task_fini_buffer(task_process_fini_buffer_t fp)
+{
+  //printf("register function pointer \n");
+  task_process_fini_buffer = fp;
+}
+
+// register kernel data, including both metadata and gpu location
+typedef struct metadata_per_gpu_s {
+  atl_kernel_metadata_t md;
+  int gpu;
+} metadata_per_gpu_t;
+
+
+hsa_status_t register_kernel_metadata(hsa_code_object_t code, hsa_code_symbol_t symbol, void *data) {
+
+  metadata_per_gpu_t * MetadataPerGPUPtr = (metadata_per_gpu_t *) data;
+
+  int gpu = MetadataPerGPUPtr->gpu;
+
+  hsa_symbol_kind_t type;
+
+  uint32_t name_length;
+  hsa_status_t err;
+  err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_TYPE, &type);
+  ErrorCheck(Symbol info extraction, err);
+
+  DEBUG_PRINT("Exec Symbol type: %d\n", type);
+  if(type == HSA_SYMBOL_KIND_KERNEL) {
+    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME_LENGTH, &name_length);
+    ErrorCheck(Symbol info extraction, err);
+    char *name = (char *)malloc(name_length + 1);
+    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME, name);
+    ErrorCheck(Symbol info extraction, err);
+    name[name_length] = 0;
+
+    //printf("gpu %d , name: %s\n", gpu, name);
+    //printf("Store %p , Map Address: %p, containts %p\n", &KernelMetadataTable, &KernelMetadataTable[gpu][std::string(name)], (void*) MetadataPerGPUPtr->ptr;);
+    KernelMetadataTable[gpu][std::string(name)] = MetadataPerGPUPtr->md;
+    free(name);
+  }
+
+  return HSA_STATUS_SUCCESS;
+}
 
 atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
     hsa_status_t err;
@@ -1652,6 +1732,22 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
                 /* Load the code object.  */
                 err = hsa_executable_load_code_object(executable, agent, code_object, NULL);
                 ErrorCheckAndContinue(Loading the code object, err);
+
+
+                // Register kernel metadata
+                if (module_process_create_data) {
+                  metadata_per_gpu_t MetadataPerGPU;
+                  MetadataPerGPU.md = NULL;
+                  MetadataPerGPU.gpu = gpu;
+
+                  (*module_process_create_data)((void **) &MetadataPerGPU.md, module_bytes, module_size);
+
+                  AllMetadata.push_back(MetadataPerGPU.md);
+
+                  err = hsa_code_object_iterate_symbols(code_object, register_kernel_metadata, &MetadataPerGPU);
+                  ErrorCheck(Iterating over symbols for code object, err);
+                }
+
             }
             module_load_success = 1;
         }
@@ -2178,6 +2274,37 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     HandleSignalTimer.Start();
     atl_task_t *task = (atl_task_t *)arg;
     DEBUG_PRINT("Handle signal from task %lu\n", task->id);
+
+    // process printf buffer
+    {
+      atl_kernel_impl_t *kernel_impl = NULL;
+      if (task_process_fini_buffer) {
+        if(task->kernel) {
+          kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+          //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
+          char *kargs = (char *)(task->kernarg_region);
+          if(task->type == ATL_KERNEL_EXECUTION &&
+              task->devtype == ATMI_DEVTYPE_GPU &&
+              kernel_impl->kernel_type == AMDGCN) {
+            atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+
+            // ------------ Retrieve the gpu number -------------
+            int gpu = task->place.device_id;
+
+            // ------------ Retrieve the kernel name -------------
+            //printf("Kernel Name: %s\n", kernel_impl->kernel_name.c_str());
+
+            // ------------ Retrieve the kernel metadata  -------------
+            if (KernelMetadataTable[gpu].find(kernel_impl->kernel_name) != KernelMetadataTable[gpu].end()) {
+              atl_kernel_metadata_t metadata = KernelMetadataTable[gpu][kernel_impl->kernel_name];
+              // process printf buffer
+              (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE, &metadata);
+            }
+          }
+        }
+      }
+    }
+
     //static int counter = 0;
     if(task->stream_obj->ordered) {
         lock(&(task->stream_obj->group_mutex));
@@ -2352,6 +2479,37 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
         if(kernel) {
             kernel_impl = get_kernel_impl(kernel, task->kernel_id);
             mutexes.insert(&(kernel_impl->mutex));
+
+            // process printf buffer
+            {
+              atl_kernel_impl_t *kernel_impl = NULL;
+              if (task_process_fini_buffer) {
+                if(task->kernel) {
+                  kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+                  //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
+                  char *kargs = (char *)(task->kernarg_region);
+                  if(task->type == ATL_KERNEL_EXECUTION &&
+                      task->devtype == ATMI_DEVTYPE_GPU &&
+                      kernel_impl->kernel_type == AMDGCN) {
+                    atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+
+                    // ------------ Retrieve the gpu number -------------
+                    int gpu = task->place.device_id;
+
+                    // ------------ Retrieve the kernel name -------------
+                    //printf("Kernel Name: %s\n", kernel_impl->kernel_name.c_str());
+
+                    // ------------ Retrieve the kernel metadata  -------------
+                    if (KernelMetadataTable[gpu].find(kernel_impl->kernel_name) != KernelMetadataTable[gpu].end()) {
+                      atl_kernel_metadata_t metadata = KernelMetadataTable[gpu][kernel_impl->kernel_name];
+                      // process printf buffer
+                      (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE, &metadata);
+                    }
+                  }
+                }
+              }
+            }
+
         }
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
             atl_task_vector_t &requires = task->and_predecessors;
@@ -2663,6 +2821,27 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                 impl_args->offset_z = 0;
                 // char *pipe_ptr = impl_args->pipe_ptr;
             }
+
+            // initialize printf buffer
+            {
+              atl_kernel_impl_t *kernel_impl = NULL;
+              if (task_process_init_buffer) {
+                if(task->kernel) {
+                  kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+                  //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
+                  char *kargs = (char *)(task->kernarg_region);
+                  if(task->type == ATL_KERNEL_EXECUTION &&
+                      task->devtype == ATMI_DEVTYPE_GPU &&
+                      kernel_impl->kernel_type == AMDGCN) {
+                    atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+
+                    // initalize printf buffer
+                    (*task_process_init_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
+                  }
+                }
+              }
+            }
+
             /*  Process task values */
             /*  this_aql.dimensions=(uint16_t) ndim; */
             this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;

@@ -108,6 +108,8 @@ typedef struct atl_kernel_info_s {
 
 typedef void* atl_kernel_metadata_t;
 
+extern std::vector<atl_kernel_metadata_t> AllMetadata;
+
 extern std::map<std::string, atl_kernel_t *> KernelImplMap;
 
 // ---------------------- Kernel End -------------
@@ -249,6 +251,11 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj);
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
 bool handle_group_signal(hsa_signal_value_t value, void *arg);
+
+extern module_process_create_data_t module_process_create_data;
+extern module_process_destroy_data_t module_process_destroy_data;
+extern task_process_init_buffer_t task_process_init_buffer;
+extern task_process_fini_buffer_t task_process_fini_buffer;
 
 void do_progress(atmi_task_group_table_t *task_group, int progress_count = 0);
 void dispatch_ready_task_for_free_signal();

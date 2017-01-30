@@ -40,6 +40,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 #include "atl_pifgen.h"
 
+#include <cctype>
 #include <map>
 #include <set>
 #include <string>

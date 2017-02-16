@@ -252,8 +252,6 @@ void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
 bool handle_group_signal(hsa_signal_value_t value, void *arg);
 
-extern module_process_create_data_t module_process_create_data;
-extern module_process_destroy_data_t module_process_destroy_data;
 extern task_process_init_buffer_t task_process_init_buffer;
 extern task_process_fini_buffer_t task_process_fini_buffer;
 

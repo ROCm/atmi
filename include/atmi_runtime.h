@@ -51,7 +51,7 @@ typedef void (*task_process_init_buffer_t) (void *, int);
  */
 atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp);
 
-typedef void (*task_process_fini_buffer_t) (void *, int, void **);
+typedef void (*task_process_fini_buffer_t) (void *, int);
 /**
  * @brief Register a callback to fini a buffer assoicated with a task
  */
@@ -98,18 +98,6 @@ atmi_status_t atmi_finalize();
 /** \defgroup module_functions ATMI Module
  * @{
  */
-typedef void (*module_process_create_data_t) (void **, void *, int);
-/**
- * @brief Register a callback to create data associated with a module
- */
-atmi_status_t atmi_register_module_create_data(module_process_create_data_t fp);
-
-typedef void (*module_process_destroy_data_t) (void **);
-/**
- * @brief Register a callback to destroy data associated with a module
- */
-atmi_status_t atmi_register_module_destroy_data(module_process_destroy_data_t fp);
-
 /**
  * @brief Register the ATMI code module from file. 
  *

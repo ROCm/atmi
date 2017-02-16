@@ -108,7 +108,6 @@ std::queue<atl_task_t *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
 
 std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
-std::vector<std::map<std::string, atl_kernel_metadata_t> > KernelMetadataTable;
 
 std::map<std::string, atl_kernel_t *> KernelImplMap;
 std::map<std::string, atmi_klist_t *> PifKlistMap;
@@ -546,9 +545,6 @@ void init_dag_scheduler() {
         for(int i = 0; i < KernelInfoTable.size(); i++)
             KernelInfoTable[i].clear();
         KernelInfoTable.clear();
-        for(int i = 0; i < KernelMetadataTable.size(); i++)
-            KernelMetadataTable[i].clear();
-        KernelMetadataTable.clear();
         NULL_TASK = ATMI_TASK_HANDLE(0);
         atlc.g_mutex_dag_initialized = 1;
         DEBUG_PRINT("main tid = %lu\n", syscall(SYS_gettid));
@@ -970,8 +966,6 @@ atmi_status_t atmi_init(atmi_devtype_t devtype) {
     atmi_status_t status = ATMI_STATUS_SUCCESS;
     if(atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
 
-    module_process_create_data = NULL;
-    module_process_destroy_data = NULL;
     task_process_init_buffer = NULL;
     task_process_fini_buffer = NULL;
 
@@ -1002,17 +996,6 @@ atmi_status_t atmi_finalize() {
         KernelInfoTable[i].clear();
     }
     KernelInfoTable.clear();
-
-    for(int i = 0; i < KernelMetadataTable.size(); i++) {
-        KernelMetadataTable[i].clear();
-    }
-    KernelMetadataTable.clear();
-
-    if (module_process_destroy_data) {
-      for (int i = 0; i < AllMetadata.size(); i++) {
-        (*module_process_destroy_data)(&AllMetadata[i]);
-      }
-    }
 
     atl_reset_atmi_initialized();
     err = hsa_shut_down();
@@ -1590,22 +1573,8 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
 }
 
 // function pointers
-module_process_create_data_t module_process_create_data;
-module_process_destroy_data_t module_process_destroy_data;
 task_process_init_buffer_t task_process_init_buffer;
 task_process_fini_buffer_t task_process_fini_buffer;
-
-atmi_status_t atmi_register_module_create_data(module_process_create_data_t fp)
-{
-  //printf("register function pointer \n");
-  module_process_create_data = fp;
-}
-
-atmi_status_t atmi_register_module_destroy_data(module_process_destroy_data_t fp)
-{
-  //printf("register function pointer \n");
-  module_process_destroy_data = fp;
-}
 
 atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp)
 {
@@ -1625,38 +1594,6 @@ typedef struct metadata_per_gpu_s {
   int gpu;
 } metadata_per_gpu_t;
 
-
-hsa_status_t register_kernel_metadata(hsa_code_object_t code, hsa_code_symbol_t symbol, void *data) {
-
-  metadata_per_gpu_t * MetadataPerGPUPtr = (metadata_per_gpu_t *) data;
-
-  int gpu = MetadataPerGPUPtr->gpu;
-
-  hsa_symbol_kind_t type;
-
-  uint32_t name_length;
-  hsa_status_t err;
-  err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_TYPE, &type);
-  ErrorCheck(Symbol info extraction, err);
-
-  DEBUG_PRINT("Exec Symbol type: %d\n", type);
-  if(type == HSA_SYMBOL_KIND_KERNEL) {
-    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME_LENGTH, &name_length);
-    ErrorCheck(Symbol info extraction, err);
-    char *name = (char *)malloc(name_length + 1);
-    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME, name);
-    ErrorCheck(Symbol info extraction, err);
-    name[name_length] = 0;
-
-    //printf("gpu %d , name: %s\n", gpu, name);
-    //printf("Store %p , Map Address: %p, containts %p\n", &KernelMetadataTable, &KernelMetadataTable[gpu][std::string(name)], (void*) MetadataPerGPUPtr->ptr;);
-    KernelMetadataTable[gpu][std::string(name)] = MetadataPerGPUPtr->md;
-    free(name);
-  }
-
-  return HSA_STATUS_SUCCESS;
-}
-
 atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
     hsa_status_t err;
     int some_success = 0;
@@ -1668,7 +1605,6 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
 
     KernelInfoTable.resize(gpu_count);
-    KernelMetadataTable.resize(gpu_count);
 
     for(int gpu = 0; gpu < gpu_count; gpu++) 
     {
@@ -1733,20 +1669,6 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
                 err = hsa_executable_load_code_object(executable, agent, code_object, NULL);
                 ErrorCheckAndContinue(Loading the code object, err);
 
-
-                // Register kernel metadata
-                if (module_process_create_data) {
-                  metadata_per_gpu_t MetadataPerGPU;
-                  MetadataPerGPU.md = NULL;
-                  MetadataPerGPU.gpu = gpu;
-
-                  (*module_process_create_data)((void **) &MetadataPerGPU.md, module_bytes, module_size);
-
-                  AllMetadata.push_back(MetadataPerGPU.md);
-
-                  err = hsa_code_object_iterate_symbols(code_object, register_kernel_metadata, &MetadataPerGPU);
-                  ErrorCheck(Iterating over symbols for code object, err);
-                }
 
             }
             module_load_success = 1;
@@ -2288,18 +2210,8 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
               kernel_impl->kernel_type == AMDGCN) {
             atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
 
-            // ------------ Retrieve the gpu number -------------
-            int gpu = task->place.device_id;
+            (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
 
-            // ------------ Retrieve the kernel name -------------
-            //printf("Kernel Name: %s\n", kernel_impl->kernel_name.c_str());
-
-            // ------------ Retrieve the kernel metadata  -------------
-            if (KernelMetadataTable[gpu].find(kernel_impl->kernel_name) != KernelMetadataTable[gpu].end()) {
-              atl_kernel_metadata_t metadata = KernelMetadataTable[gpu][kernel_impl->kernel_name];
-              // process printf buffer
-              (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE, &metadata);
-            }
           }
         }
       }
@@ -2492,19 +2404,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
                       task->devtype == ATMI_DEVTYPE_GPU &&
                       kernel_impl->kernel_type == AMDGCN) {
                     atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
-
-                    // ------------ Retrieve the gpu number -------------
-                    int gpu = task->place.device_id;
-
-                    // ------------ Retrieve the kernel name -------------
-                    //printf("Kernel Name: %s\n", kernel_impl->kernel_name.c_str());
-
-                    // ------------ Retrieve the kernel metadata  -------------
-                    if (KernelMetadataTable[gpu].find(kernel_impl->kernel_name) != KernelMetadataTable[gpu].end()) {
-                      atl_kernel_metadata_t metadata = KernelMetadataTable[gpu][kernel_impl->kernel_name];
-                      // process printf buffer
-                      (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE, &metadata);
-                    }
+                    (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
                   }
                 }
               }

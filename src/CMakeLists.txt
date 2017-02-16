@@ -39,25 +39,23 @@ endif()
 ################################################################################
 #pkg_check_modules(ATMI_SEARCH_LIBHSA QUIET libhsa-runtime64)
 
-find_path (
-  ATMI_DEP_LIBHSA_INCLUDE_DIRS
-  NAMES
-  hsa.h
+find_file (
+  ATMI_DEP_LIBHSA_INCLUDE
+  hsa/hsa.h
   PATHS
-  $ENV{HSA_RUNTIME_PATH}/include
-  /opt/rocm/include/hsa
-  /usr/local/include
+  /opt/rocm
+  /usr/local
   )
+get_filename_component (ATMI_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DEP_LIBHSA_INCLUDE} DIRECTORY)
 
-find_path (
-  ATMI_DEP_LIBHSA_LIBRARIES_DIRS
-  NAMES
+find_library (
+  ATMI_DEP_LIBHSA_LIBRARIES
   libhsa-runtime64.so
   PATHS
-  $ENV{HSA_RUNTIME_PATH}/lib
-  /opt/rocm/lib/
-  /usr/local/lib
+  /opt/rocm
+  /usr/local
   )
+get_filename_component (ATMI_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
 find_package_handle_standard_args(
   ATMI_DEP_LIBHSA

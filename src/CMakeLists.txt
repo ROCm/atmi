@@ -43,8 +43,8 @@ find_file (
   ATMI_DEP_LIBHSA_INCLUDE
   hsa/hsa.h
   PATHS
-  /opt/rocm
-  /usr/local
+  /opt/rocm/include
+  /usr/local/include
   )
 get_filename_component (ATMI_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DEP_LIBHSA_INCLUDE} DIRECTORY)
 
@@ -52,8 +52,8 @@ find_library (
   ATMI_DEP_LIBHSA_LIBRARIES
   libhsa-runtime64.so
   PATHS
-  /opt/rocm
-  /usr/local
+  /opt/rocm/lib
+  /usr/local/lib
   )
 get_filename_component (ATMI_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 

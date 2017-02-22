@@ -3042,6 +3042,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
             // get kernarg resource
             uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size;
             int free_idx = kernel_impl->free_kernarg_segments.front();
+            ret->kernarg_region_index = free_idx;
             DEBUG_PRINT("Acquiring Kernarg Segment Id: %d\n", free_idx);
             void *addr = (void *)((char *)kernel_impl->kernarg_region + 
                     (free_idx * kernarg_segment_size));
@@ -3204,9 +3205,11 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
             uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size;
             int free_idx = kernel_impl->free_kernarg_segments.front();
             DEBUG_PRINT("Acquiring Kernarg Segment Id: %d\n", free_idx);
+            ret->kernarg_region_index = free_idx;
             void *addr = (void *)((char *)kernel_impl->kernarg_region + 
                     (free_idx * kernarg_segment_size));
             kernel_impl->free_kernarg_segments.pop();
+            assert(ret->kernarg_region || args);
             if(ret->kernarg_region != NULL) {
                 // we had already created a memory region using malloc. Copy it
                 // to the newly availed space

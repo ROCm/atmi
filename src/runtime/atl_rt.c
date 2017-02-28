@@ -293,24 +293,8 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_co
 
 extern void atl_task_wait(atl_task_t *task) {
     if(task != NULL) {
-        if(task->state < ATMI_DISPATCHED || 
-          (task->atmi_task && task->profilable == ATMI_TRUE)) {
-            while(true) {
-                int value = task->state;//.load(std::memory_order_seq_cst);
-                if(value != ATMI_COMPLETED) {
-                    //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", task->signal.handle);
-                    //DEBUG_PRINT("Task (%lu) state: %d\n", task->id, value);
-                }
-                else {
-                    //printf("Task[%d] Completed!\n", task->id);
-                    break;
-                }
-            }
-        } 
-        else {
-            DEBUG_PRINT("Signal handle: %" PRIu64 " Signal value:%ld\n", task->signal.handle, hsa_signal_load_relaxed(task->signal));
-            hsa_signal_wait_acquire(task->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
-        }
+        while(task->state != ATMI_COMPLETED) { }
+
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
         set_task_state(task, ATMI_COMPLETED);

@@ -15,6 +15,10 @@
 #
 
 cmake_minimum_required (VERSION 2.8 FATAL_ERROR)
+
+list ( APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules" )
+include ( utils )
+
 include (FindPackageHandleStandardArgs)
 
 project (atmi)
@@ -69,3 +73,40 @@ mark_as_advanced(
  
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
+
+## Get the package version. The defaults to 1.0.0.
+get_version ( "0.3.7" )
+
+set ( BUILD_VERSION_MAJOR ${VERSION_MAJOR} )
+set ( BUILD_VERSION_MINOR ${VERSION_MINOR} )
+set ( BUILD_VERSION_PATCH ${VERSION_PATCH} )
+set ( LIB_VERSION_STRING "${BUILD_VERSION_MAJOR}.${BUILD_VERSION_MINOR}.${BUILD_VERSION_PATCH}" )
+if ( DEFINED VERSION_BUILD )
+    set ( BUILD_VERSION_PATCH "${BUILD_VERSION_PATCH}-${VERSION_BUILD}" )
+endif ()
+set ( BUILD_VERSION_STRING "${BUILD_VERSION_MAJOR}.${BUILD_VERSION_MINOR}.${BUILD_VERSION_PATCH}" )
+
+
+## Packaging directives
+set ( CPACK_PACKAGE_NAME "libatmi-runtime" )
+set ( CPACK_PACKAGE_VENDOR "AMD" )
+set ( CPACK_PACKAGE_VERSION_MAJOR ${BUILD_VERSION_MAJOR} )
+set ( CPACK_PACKAGE_VERSION_MINOR ${BUILD_VERSION_MINOR} )
+set ( CPACK_PACKAGE_VERSION_PATCH ${BUILD_VERSION_PATCH} )
+set ( CPACK_PACKAGE_CONTACT "Advanced Micro Devices Inc." )
+set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "AMD Asynchronous Task and Memory Interface" )
+#set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.md" )
+
+# Debian package specific variables
+set ( CPACK_DEBIAN_PACKAGE_DEPENDS "hsa-rocr-dev" )
+set ( CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RadeonOpenCompute/atmi" )
+set ( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/postinst;${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/prerm"
+)
+
+## RPM package specific variables
+set ( CPACK_RPM_PACKAGE_DEPENDS "hsa-rocr-dev" )
+set ( CPACK_RPM_PRE_INSTALL_SCRIPT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/RPM/rpm_post" )
+set ( CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/RPM/rpm_postun" )
+
+## Include packaging
+include ( CPack )

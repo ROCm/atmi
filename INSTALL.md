@@ -52,7 +52,7 @@ sudo apt-get install amdcloc
 ## Install the libatmi-runtime package (ATMI-RT) from the ROCm apt server. 
 
 ```
-sudo apt-get install libatmi-runtime
+sudo apt-get install atmi
 ```
 
 ## Install the libatmi-runtime package (ATMI-RT) from source package
@@ -62,48 +62,22 @@ Source package may sometimes be more updated than the ROCm apt server.
 mkdir -p ~/git
 cd ~/git
 git clone https://github.com/RadeonOpenCompute/atmi.git
-sudo dpkg -i ~git/atmi/packages/libatmi-runtime_*_amd64.deb
+sudo dpkg -i ~git/atmi/packages/atmi-*.deb
 ```
 
-## Build ATMI-RT from source
+## Build ATMI-RT and ATMI-C from source
 
 ```
 mkdir -p ~/git
 cd ~/git
 git clone https://github.com/RadeonOpenCompute/atmi.git
-cd ~/git/atmi/src/runtime/
-# edit Makefile to set path of ROCM_RUNTIME_PATH if ROCm has not been installed to the default location
+mkdir ~/git/atmi/src/build
+cd ~/git/atmi/src/build
+# ensure you have cmake (version >= 2.8)
+cmake -DCMAKE_INSTALL_PREFIX=/path/to/install ..
+# make all components (RT and the C Plugin)
 make
-# libatmi_runtime.so should have been created as ~/git/atmi/lib/libatmi_runtime.so
-# copy it to any other location that is already under LD_LIBRARY_FLAGS or do the below
-export LD_LIBRARY_FLAGS=~/git/atmi/lib:$LD_LIBRARY_FLAGS # (optional)
-```
-
-## (Optional) Build ATMI-C language extension from source. 
-This feature is not available as part of the ATMI debian packages, so you have to install it from the source. 
-Please see the examples and their Makefile under /path/to/atmi-source/examples/c_extension for details about 
-the usage of the ATMI-C language extenstion feature. 
-
-ATMI-C language extension relies on GCC plugins to create custom function attributes. 
-```
-sudo apt-get install gcc-4.8-plugin-dev # (For Ubuntu "trusty"; version may vary for different Ubuntu flavors.)
-```
-Check if GCC plugins are installed correctly.
-```
-$ g++ -print-file-name=plugin
-/usr/lib/gcc/x86_64-linux-gnu/4.8/plugin
-```
-
-Build ATMI-C language extensions.
-```
-mkdir -p ~/git
-cd ~/git
-git clone https://github.com/RadeonOpenCompute/atmi.git
-cd ~/git/atmi/src/cmopiler/
-# edit Makefile to set path of ROCM_RUNTIME_PATH if ROCm has not been installed to the default location
-make
-# atmi_pifgen.so should have been created as ~/git/atmi/lib/atmi_pifgen.so
-# copy it to any other location that is already under LD_LIBRARY_FLAGS or do the below
-export LD_LIBRARY_FLAGS=~/git/atmi/lib:$LD_LIBRARY_FLAGS # (optional)
+make install
+export LD_LIBRARY_FLAGS=/path/to/install/lib:$LD_LIBRARY_FLAGS # (optional)
 ```
 

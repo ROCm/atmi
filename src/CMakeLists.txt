@@ -74,8 +74,8 @@ mark_as_advanced(
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
 
-## Get the package version. The defaults to 1.0.0.
-get_version ( "0.3.7" )
+## Get the package version. The defaults to 0.0.1.
+get_version ( "0.0.1" )
 
 set ( BUILD_VERSION_MAJOR ${VERSION_MAJOR} )
 set ( BUILD_VERSION_MINOR ${VERSION_MINOR} )
@@ -86,27 +86,33 @@ if ( DEFINED VERSION_BUILD )
 endif ()
 set ( BUILD_VERSION_STRING "${BUILD_VERSION_MAJOR}.${BUILD_VERSION_MINOR}.${BUILD_VERSION_PATCH}" )
 
-
 ## Packaging directives
-set ( CPACK_PACKAGE_NAME "libatmi-runtime" )
-set ( CPACK_PACKAGE_VENDOR "AMD" )
+set ( CPACK_PACKAGE_NAME "atmi" )
+set ( CPACK_PACKAGE_VENDOR "Advanced Micro Devices Inc." )
 set ( CPACK_PACKAGE_VERSION_MAJOR ${BUILD_VERSION_MAJOR} )
 set ( CPACK_PACKAGE_VERSION_MINOR ${BUILD_VERSION_MINOR} )
 set ( CPACK_PACKAGE_VERSION_PATCH ${BUILD_VERSION_PATCH} )
-set ( CPACK_PACKAGE_CONTACT "Advanced Micro Devices Inc." )
-set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "AMD Asynchronous Task and Memory Interface" )
+set ( CPACK_PACKAGE_CONTACT "Ashwin Aji <ashwin.aji@amd.com>" )
+set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "ATMI: Asynchronous Task and Memory Interface" )
 #set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.md" )
-
+set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm/atmi )
 # Debian package specific variables
 set ( CPACK_DEBIAN_PACKAGE_DEPENDS "hsa-rocr-dev" )
 set ( CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RadeonOpenCompute/atmi" )
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/postinst;${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/prerm"
 )
+set ( CPACK_DEB_COMPONENT_INSTALL ON)
 
 ## RPM package specific variables
 set ( CPACK_RPM_PACKAGE_DEPENDS "hsa-rocr-dev" )
 set ( CPACK_RPM_PRE_INSTALL_SCRIPT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/RPM/rpm_post" )
 set ( CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/RPM/rpm_postun" )
+set ( CPACK_RPM_COMPONENT_INSTALL ON)
+
+
+## Set components
+set ( CPACK_COMPONENTS_ALL runtime cplugin )
+set ( CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE 1 )
 
 ## Include packaging
 include ( CPack )

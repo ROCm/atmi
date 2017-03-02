@@ -51,14 +51,20 @@ if(ATMI_DEP_LIBHSA_FOUND)
 
         # Install plugin under the lib destination folder.
         if(CMAKE_BUILD_TYPE MATCHES Debug)
-          install(TARGETS atmi_runtime LIBRARY DESTINATION "lib-debug")
+          install(TARGETS atmi_runtime LIBRARY DESTINATION "lib-debug" COMPONENT runtime )
         else()
-          install(TARGETS atmi_runtime LIBRARY DESTINATION "lib")
+          install(TARGETS atmi_runtime LIBRARY DESTINATION "lib" COMPONENT runtime )
         endif()
+        
+        ## CPack component info
+        set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "ATMI Runtime Library")
+        set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE )
+
         INSTALL(FILES 
                 ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi.h
                 ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_runtime.h
                 DESTINATION "include"
+                COMPONENT runtime
                )
 
         target_link_libraries(

@@ -49,13 +49,13 @@ sudo apt-get install amdcloc
 <A Name="ATMI">
 4. Install/Build ATMI
 ========================
-## Install the libatmi-runtime package (ATMI-RT) from the ROCm apt server. 
+## Install the atmi package (ATMI-RT and ATMI-C) from the ROCm apt server. 
 
 ```
 sudo apt-get install atmi
 ```
 
-## Install the libatmi-runtime package (ATMI-RT) from source package
+## Install the atmi package (ATMI-RT and ATMI-C) from source package
 Source package may sometimes be more updated than the ROCm apt server.
 
 ```

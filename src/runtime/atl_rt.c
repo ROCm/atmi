@@ -140,7 +140,7 @@ atmi_task_group_t atl_default_stream_obj = {0, ATMI_FALSE};
 struct timespec context_init_time;
 static int context_init_time_init = 0;
 
-atmi_task_handle_t NULL_TASK = ATMI_TASK_HANDLE(0);
+atmi_task_handle_t ATMI_NULL_TASK_HANDLE = ATMI_TASK_HANDLE(0xFFFFFFFFFFFFFFFF);
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
     long int nanosecs;
@@ -177,7 +177,7 @@ int get_task_handle_ID(atmi_task_handle_t t) {
 void set_task_handle_ID(atmi_task_handle_t *t, int ID) {
     #if 1
     unsigned long int task_handle = *t;
-    task_handle |= 0xFFFFFFFF;
+    task_handle |= 0xFFFFFFFFFFFFFFFF;
     task_handle &= ID;
     *t = task_handle;
     #else
@@ -529,7 +529,6 @@ void init_dag_scheduler() {
         for(int i = 0; i < KernelInfoTable.size(); i++)
             KernelInfoTable[i].clear();
         KernelInfoTable.clear();
-        NULL_TASK = ATMI_TASK_HANDLE(0);
         atlc.g_mutex_dag_initialized = 1;
         DEBUG_PRINT("main tid = %lu\n", syscall(SYS_gettid));
     }
@@ -2357,7 +2356,10 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             // does it matter which task was enqueued first, as long as we are
             // popping one task for every push?
             if(!task_group->running_ordered_tasks.empty()) {
-                DEBUG_PRINT("Removing task %lu\n", task_group->running_ordered_tasks.front()->id);
+                DEBUG_PRINT("Removing task %lu with state: %d\n", 
+                        task_group->running_ordered_tasks.front()->id,
+                        task_group->running_ordered_tasks.front()->state.load()
+                        );
                 task_group->running_ordered_tasks.pop_front();
             }
         }
@@ -3193,7 +3195,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
             void *addr = (void *)((char *)kernel_impl->kernarg_region + 
                     (free_idx * kernarg_segment_size));
             kernel_impl->free_kernarg_segments.pop();
-            assert(ret->kernarg_region || args);
+            assert(!(ret->kernel->num_args) || (ret->kernel->num_args && (ret->kernarg_region || args)));
             if(ret->kernarg_region != NULL) {
                 // we had already created a memory region using malloc. Copy it
                 // to the newly availed space
@@ -3203,7 +3205,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
                     // they are to be set/reset during task dispatch
                     size_to_copy -= sizeof(atmi_implicit_args_t);
                 }
-                memcpy(addr, ret->kernarg_region, size_to_copy);
+                if(size_to_copy) memcpy(addr, ret->kernarg_region, size_to_copy);
                 // free existing region
                 free(ret->kernarg_region);
                 ret->kernarg_region = addr;
@@ -3475,14 +3477,14 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,  
                                     void **args/*, more params for place info? */) {
     ParamsInitTimer.Start();
-    atmi_task_handle_t ret = NULL_TASK;
+    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
     const char *pif_name = (const char *)(atmi_kernel.handle);
     std::string pif_name_str = std::string(pif_name);
     std::map<std::string, atl_kernel_t *>::iterator map_iter;
     map_iter = KernelImplMap.find(pif_name_str);
     if(map_iter == KernelImplMap.end()) {
         DEBUG_PRINT("ERROR: Kernel/PIF %s not found\n", pif_name);
-        return NULL_TASK;
+        return ATMI_NULL_TASK_HANDLE;
     }
     atl_kernel_t *kernel = map_iter->second;
     kernel->pif_name = pif_name_str;
@@ -3502,20 +3504,20 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
         if(kernel_id == -1) {
             fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have any implementations\n", 
                     pif_name);
-            return NULL_TASK;
+            return ATMI_NULL_TASK_HANDLE;
         }
     }
     else {
         if(!is_valid_kernel_id(kernel, kernel_id)) {
             DEBUG_PRINT("ERROR: Kernel ID %d not found\n", kernel_id);
-            return NULL_TASK;
+            return ATMI_NULL_TASK_HANDLE;
         }
     }
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, kernel_id);
     if(kernel->num_args && kernel_impl->kernarg_region == NULL) {
         fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n", 
                             kernel_impl->kernel_name.c_str());
-        return NULL_TASK;
+        return ATMI_NULL_TASK_HANDLE;
     }
     atmi_devtype_t devtype = kernel_impl->devtype;
     /*lock(&(kernel_impl->mutex));

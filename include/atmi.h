@@ -268,7 +268,7 @@ typedef unsigned long int atmi_task_handle_t;
 /**
  * @brief The special NULL task handle. 
  */
-extern atmi_task_handle_t NULL_TASK;
+extern atmi_task_handle_t ATMI_NULL_TASK_HANDLE;
 
 /**
  * @brief The ATMI Launch Parameter Data Structure

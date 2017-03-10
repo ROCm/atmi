@@ -856,15 +856,26 @@ atl_task_t *get_cur_thread_task_impl() {
 
 atmi_task_handle_t get_atmi_task_handle() {
     atl_task_t *task = get_cur_thread_task_impl();
-    return task->id;
+    if(task) {
+        DEBUG_PRINT("Task ID: %lu\n", task->id);
+        return task->id;
+    }
+    else {
+        DEBUG_PRINT("Task ID: NULL\n");
+        return ATMI_NULL_TASK_HANDLE;
+    }
 }
 
 unsigned long get_global_size(unsigned int dim) {
     atl_task_t *task = get_cur_thread_task_impl();
-    if(dim >=0 && dim < 3)
-        return task->gridDim[dim];
+    if(task) {
+        if(dim >=0 && dim < 3)
+            return task->gridDim[dim];
+        else
+            return 1;
+    }
     else
-        return 1;
+        return 0;
 }
 
 unsigned long get_local_size(unsigned int dim) {

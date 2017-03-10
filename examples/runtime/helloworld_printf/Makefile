@@ -35,27 +35,60 @@ endif
 # Kernel compiler
 CLC ?= 1
 
+# Temp files
+SAVETEMP ?= 0
+
 # CLOC
 CLOC_PATH ?= /usr/bin
-CLOCOPTS = -vv
-CLOCOPTS += -clopts "-v"
+#CLOCOPTS = -vv
+#CLOCOPTS += -clopts "-v"
 
 # ROCm-Device-lib
 BITCODE_LIB ?= ${ROCMLIB}/dist/lib
 
 # GPU compiler
 CLCC=$(AMDLLVM)/bin/clang
+
+LLK=$(AMDLLVM)/bin/llvm-link
+LLC=$(AMDLLVM)/bin/llc
+LLD=$(AMDLLVM)/bin/lld
+
 CLCFLAGS = -x cl -Xclang -cl-std=CL2.0 -Xclang -finclude-default-header
 CLCFLAGS += -target amdgcn--amdhsa
+
+ifeq ($(SAVETEMP),0)
 CLCFLAGS += -mcpu=$(MCPU)
+
 CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/opencl.amdgcn.bc
 CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/ockl.amdgcn.bc
 CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/ocml.amdgcn.bc
 CLCFLAGS += -Xclang -mlink-bitcode-file -Xclang $(BITCODE_LIB)/irif.amdgcn.bc
+else
+CLCFLAGS += -emit-llvm -c
+
+#LLFLAGS = -suppress-warnings
+LLFLAGS += $(BITCODE_LIB)/opencl.amdgcn.bc
+LLFLAGS += $(BITCODE_LIB)/ockl.amdgcn.bc
+LLFLAGS += $(BITCODE_LIB)/ocml.amdgcn.bc
+LLFLAGS += $(BITCODE_LIB)/irif.amdgcn.bc
+
+LCFLAGS = -O2
+LCFLAGS += -filetype=obj
+LCFLAGS += -mtriple amdgcn--amdhsa
+LCFLAGS += -mcpu=$(MCPU)
+
+LDFLAGS = -flavor gnu -shared
+endif
+
+
+# CPU compiler
+CC=$(AMDLLVM)/bin/clang
+CCFLAGS = -g
+#CCFLAGS += -v
 
 # Host compiler
 CXX = g++
-CXXFLAGS =-O3 -g -std=c++11
+CXXFLAGS = -g -std=c++11
 #CXXFLAGS += -v
 
 INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I.
@@ -69,16 +102,34 @@ OBJS = hello
 
 all: $(OBJS)
 
-hello: hw.cpp hw.cl 
+%.hsaco: %.cl $(INC_FILES)
 ifeq ($(CLC),1)
-	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} ${BRIGCLOPTS} -opt 2 hw.cl
+	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} ${BRIGCLOPTS} -opt 2 -o $@ $<
 else
-	$(CLCC) ${CLCFLAGS} -o hw.hsaco hw.cl
+ifeq ($(SAVETEMP),0)
+	$(CLCC) ${CLCFLAGS} -o $@ $<
+else
+	$(CLCC) ${CLCFLAGS} -o $*.bc $<
+	$(LLK) -o $*.linked.bc $*.bc ${LLFLAGS}
+	$(LLC) ${LCFLAGS} -o $*.o $*.linked.bc
+	$(LLD) ${LDFLAGS} -o $@ $*.o
 endif
-	$(CXX) -o $@ hw.cpp $(BRIGCPPOPTS) $(CXXFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
+endif
+	@echo
+
+%.o: %.cpp $(INC_FILES)
+	$(CXX) $(CXXFLAGS) $(INC_FLAGS) -o $@ -c $<
+	@echo
+
+%.o: %.c $(INC_FILES)
+	$(CC) $(CCFLAGS) $(INC_FLAGS) -o $@ -c $<
+	@echo
+
+hello: hw_gpu.hsaco hw_cpu.o hw_host.o
+	$(CXX) -o $@ hw_host.o hw_cpu.o $(LIBS) $(LIB_FLAGS)
 
 clean:
-	rm -rf *.o *.brig *.hsaco $(OBJS)
+	rm -rf *.o *.brig *.i *.bc *.hsaco $(OBJS)
 
 test:
 	./hello

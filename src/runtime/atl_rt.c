@@ -103,10 +103,12 @@ void print_atl_kernel(const char * str, const int i);
 std::map<int, atmi_task_group_table_t *> StreamTable;
 
 std::vector<atl_task_t *> AllTasks;
+std::vector<atl_kernel_metadata_t> AllMetadata;
 std::queue<atl_task_t *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
 
 std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
+
 std::map<std::string, atl_kernel_t *> KernelImplMap;
 std::map<std::string, atmi_klist_t *> PifKlistMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -138,7 +140,7 @@ atmi_task_group_t atl_default_stream_obj = {0, ATMI_FALSE};
 struct timespec context_init_time;
 static int context_init_time_init = 0;
 
-atmi_task_handle_t NULL_TASK = ATMI_TASK_HANDLE(0);
+atmi_task_handle_t ATMI_NULL_TASK_HANDLE = ATMI_TASK_HANDLE(0xFFFFFFFFFFFFFFFF);
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
     long int nanosecs;
@@ -175,7 +177,7 @@ int get_task_handle_ID(atmi_task_handle_t t) {
 void set_task_handle_ID(atmi_task_handle_t *t, int ID) {
     #if 1
     unsigned long int task_handle = *t;
-    task_handle |= 0xFFFFFFFF;
+    task_handle |= 0xFFFFFFFFFFFFFFFF;
     task_handle &= ID;
     *t = task_handle;
     #else
@@ -291,24 +293,8 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_co
 
 extern void atl_task_wait(atl_task_t *task) {
     if(task != NULL) {
-        if(task->state < ATMI_DISPATCHED || 
-          (task->atmi_task && task->profilable == ATMI_TRUE)) {
-            while(true) {
-                int value = task->state;//.load(std::memory_order_seq_cst);
-                if(value != ATMI_COMPLETED) {
-                    //DEBUG_PRINT("Signal Value: %" PRIu64 "\n", task->signal.handle);
-                    DEBUG_PRINT("Task (%lu) state: %d\n", task->id, value);
-                }
-                else {
-                    //printf("Task[%d] Completed!\n", task->id);
-                    break;
-                }
-            }
-        } 
-        else {
-            DEBUG_PRINT("Signal handle: %" PRIu64 " Signal value:%ld\n", task->signal.handle, hsa_signal_load_relaxed(task->signal));
-            hsa_signal_wait_acquire(task->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
-        }
+        while(task->state != ATMI_COMPLETED) { }
+
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
         set_task_state(task, ATMI_COMPLETED);
@@ -540,10 +526,9 @@ void init_dag_scheduler() {
         AllTasks.clear();
         AllTasks.reserve(500000);
         //PublicTaskMap.clear();
-        for(int i = 0; i < KernelInfoTable.size(); i++) 
+        for(int i = 0; i < KernelInfoTable.size(); i++)
             KernelInfoTable[i].clear();
         KernelInfoTable.clear();
-        NULL_TASK = ATMI_TASK_HANDLE(0);
         atlc.g_mutex_dag_initialized = 1;
         DEBUG_PRINT("main tid = %lu\n", syscall(SYS_gettid));
     }
@@ -651,7 +636,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
                 tasks[task_id] = task_head->task;
                 task_head = task_head->next;
             }
-            
+
             if(stream_obj->gpu_queue != NULL) 
                 enqueue_barrier_gpu(stream_obj->gpu_queue, num_tasks, tasks, SNK_WAIT);
             else if(stream_obj->cpu_queue != NULL) 
@@ -963,6 +948,10 @@ bool atl_is_atmi_initialized() {
 atmi_status_t atmi_init(atmi_devtype_t devtype) {
     atmi_status_t status = ATMI_STATUS_SUCCESS;
     if(atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
+
+    task_process_init_buffer = NULL;
+    task_process_fini_buffer = NULL;
+
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU) 
         status = atl_init_gpu_context();
 
@@ -976,6 +965,7 @@ atmi_status_t atmi_init(atmi_devtype_t devtype) {
 atmi_status_t atmi_finalize() {
     // TODO: Finalize all processors, queues, signals, kernarg memory regions
     hsa_status_t err;
+    finalize_hsa();
     for(int i = 0; i < g_executables.size(); i++) {
         err = hsa_executable_destroy(g_executables[i]);
         ErrorCheck(Destroying executable, err);
@@ -984,6 +974,12 @@ atmi_status_t atmi_finalize() {
         agent_fini();
         atlc.g_cpu_initialized = 0;
     }
+
+    for(int i = 0; i < KernelInfoTable.size(); i++) {
+        KernelInfoTable[i].clear();
+    }
+    KernelInfoTable.clear();
+
     atl_reset_atmi_initialized();
     err = hsa_shut_down();
     ErrorCheck(Shutting down HSA, err);
@@ -996,7 +992,7 @@ hsa_status_t init_comute_and_memory() {
     err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
     if(err == HSA_STATUS_INFO_BREAK) { err = HSA_STATUS_SUCCESS; }
     ErrorCheck(Getting a gpu agent, err);
-    
+
     /* Query the name of the agent.  */
     //char name[64] = { 0 };
     //err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_NAME, name);
@@ -1184,7 +1180,7 @@ hsa_status_t init_comute_and_memory() {
     int proc_index = 0;
     for(int i = cpus_begin; i < cpus_end; i++) {
         all_devices[i].type = cpu_procs[proc_index].getType();
-        
+
         std::vector<ATLMemory> memories = cpu_procs[proc_index].getMemories();
         int fine_memories_size = 0;
         int coarse_memories_size = 0;
@@ -1203,13 +1199,13 @@ hsa_status_t init_comute_and_memory() {
         }
         DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
         DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
-        all_devices[i].memory_pool_count = memories.size();
+        all_devices[i].memory_count = memories.size();
         proc_index++;
     }
     proc_index = 0;
     for(int i = gpus_begin; i < gpus_end; i++) {
         all_devices[i].type = gpu_procs[proc_index].getType();
-        
+
         std::vector<ATLMemory> memories = gpu_procs[proc_index].getMemories();
         int fine_memories_size = 0;
         int coarse_memories_size = 0;
@@ -1228,7 +1224,7 @@ hsa_status_t init_comute_and_memory() {
         }
         DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
         DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
-        all_devices[i].memory_pool_count = memories.size();
+        all_devices[i].memory_count = memories.size();
         proc_index++;
     }
     proc_index = 0;
@@ -1280,24 +1276,37 @@ hsa_status_t init_hsa() {
     return HSA_STATUS_SUCCESS;
 }
 
+hsa_status_t finalize_hsa() {
+    return HSA_STATUS_SUCCESS;
+}
+
 atmi_status_t atl_init_gpu_context() {
 
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
     if(atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
-    
+
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
+    int num_queues = -1;
+    /* TODO: If we get a good use case for device-specific worker count, we
+     * should explore it, but let us keep the worker count uniform for all
+     * devices of a type until that time
+     */
+    char *num_gpu_workers = getenv("ATMI_DEVICE_GPU_WORKERS");
+    if(num_gpu_workers) num_queues = atoi(num_gpu_workers);
 
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
     for(int gpu = 0; gpu < gpu_count; gpu++) {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-        int num_queues = proc.getNumCUs();
-        num_queues = (num_queues > 8) ? 8 : num_queues;
+        if(num_queues == -1) {
+            num_queues = proc.getNumCUs();
+            num_queues = (num_queues > 8) ? 8 : num_queues;
+        }
         proc.createQueues(num_queues);
     }
-    
+
     if(context_init_time_init == 0) {
         clock_gettime(CLOCK_MONOTONIC_RAW,&context_init_time);
         context_init_time_init = 1;
@@ -1309,15 +1318,22 @@ atmi_status_t atl_init_gpu_context() {
 }
 
 atmi_status_t atl_init_cpu_context() {
-   
+
     if(atlc.struct_initialized == 0) atmi_init_context_structs();
 
     if(atlc.g_cpu_initialized != 0) return ATMI_STATUS_SUCCESS;
-     
+
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
-    
+    int num_queues = -1;
+    /* TODO: If we get a good use case for device-specific worker count, we
+     * should explore it, but let us keep the worker count uniform for all
+     * devices of a type until that time
+     */
+    char *num_cpu_workers = getenv("ATMI_DEVICE_CPU_WORKERS");
+    if(num_cpu_workers) num_queues = atoi(num_cpu_workers);
+
     // FIXME: For some reason, if CPU context is initialized before, the GPU queues dont get
     // created. They exit with 0x1008 out of resources. HACK!!!
     atl_init_gpu_context();
@@ -1334,7 +1350,9 @@ atmi_status_t atl_init_cpu_context() {
         // But, this will share CPU worker threads with main host thread
         // and the HSA callback thread. Is there any real benefit from
         // restricting the number of queues to num_cus - 2?
-        int num_queues = proc.getNumCUs();
+        if(num_queues == -1) {
+            num_queues = proc.getNumCUs();
+        }
         cpu_agent_init(cpu, num_queues);
     }
  
@@ -1537,31 +1555,57 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
     return HSA_STATUS_SUCCESS;
 }
 
+// function pointers
+task_process_init_buffer_t task_process_init_buffer;
+task_process_fini_buffer_t task_process_fini_buffer;
+
+atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp)
+{
+  //printf("register function pointer \n");
+  task_process_init_buffer = fp;
+}
+
+atmi_status_t atmi_register_task_fini_buffer(task_process_fini_buffer_t fp)
+{
+  //printf("register function pointer \n");
+  task_process_fini_buffer = fp;
+}
+
+// register kernel data, including both metadata and gpu location
+typedef struct metadata_per_gpu_s {
+  atl_kernel_metadata_t md;
+  int gpu;
+} metadata_per_gpu_t;
+
 atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
+    hsa_status_t err;
+    int some_success = 0;
     std::vector<std::string> modules_str;
     for(int i = 0; i < num_modules; i++) {
         modules_str.push_back(std::string((char *)modules[i]));
     }
-    
+
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
+
     KernelInfoTable.resize(gpu_count);
+
     for(int gpu = 0; gpu < gpu_count; gpu++) 
     {
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
         hsa_agent_t agent = proc.getAgent();
         hsa_executable_t executable = {0}; 
-        hsa_status_t err;
         hsa_profile_t agent_profile;
 
         err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
-        ErrorCheck(Query the agent profile, err);
+        ErrorCheckAndContinue(Query the agent profile, err);
         // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
         agent_profile = HSA_PROFILE_FULL;
         /* Create the empty executable.  */
         err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
-        ErrorCheck(Create the executable, err);
+        ErrorCheckAndContinue(Create the executable, err);
 
+        int module_load_success = 0;
         for(int i = 0; i < num_modules; i++) {
             void *module_bytes = modules[i];
             size_t module_size = module_sizes[i];
@@ -1572,57 +1616,68 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
                 /* Create hsa program.  */
                 memset(&program,0,sizeof(hsa_ext_program_t));
                 err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
-                ErrorCheck(Create the program, err);
+                ErrorCheckAndContinue(Create the program, err);
 
                 /* Add the BRIG module to hsa program.  */
                 err = hsa_ext_program_add_module(program, module);
-                ErrorCheck(Adding the brig module to the program, err);
+                ErrorCheckAndContinue(Adding the brig module to the program, err);
                 /* Determine the agents ISA.  */
                 hsa_isa_t isa;
                 err = hsa_agent_get_info(agent, HSA_AGENT_INFO_ISA, &isa);
-                ErrorCheck(Query the agents isa, err);
+                ErrorCheckAndContinue(Query the agents isa, err);
 
                 /* * Finalize the program and extract the code object.  */
                 hsa_ext_control_directives_t control_directives;
                 memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
                 hsa_code_object_t code_object;
                 err = hsa_ext_program_finalize(program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
-                ErrorCheck(Finalizing the program, err);
+                ErrorCheckAndContinue(Finalizing the program, err);
 
                 /* Destroy the program, it is no longer needed.  */
                 err=hsa_ext_program_destroy(program);
-                ErrorCheck(Destroying the program, err);
+                ErrorCheckAndContinue(Destroying the program, err);
 
                 /* Load the code object.  */
                 err = hsa_executable_load_code_object(executable, agent, code_object, "");
-                ErrorCheck(Loading the code object, err);
+                ErrorCheckAndContinue(Loading the code object, err);
             }
             else if (types[i] == AMDGCN) {
                 // Deserialize code object.
                 hsa_code_object_t code_object = {0};
                 err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
-                ErrorCheck(Code Object Deserialization, err);
+                ErrorCheckAndContinue(Code Object Deserialization, err);
                 assert(0 != code_object.handle);
 
                 /* Load the code object.  */
                 err = hsa_executable_load_code_object(executable, agent, code_object, NULL);
-                ErrorCheck(Loading the code object, err);
+                ErrorCheckAndContinue(Loading the code object, err);
+
+
             }
+            module_load_success = 1;
         }
+        if(!module_load_success) continue;
 
         /* Freeze the executable; it can now be queried for symbols.  */
         err = hsa_executable_freeze(executable, "");
-        ErrorCheck(Freeze the executable, err);
+        ErrorCheckAndContinue(Freeze the executable, err);
 
         err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu); 
-        ErrorCheck(Iterating over symbols for execuatable, err);
+        ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+
+        //err = hsa_executable_iterate_program_symbols(executable, iterate_program_symbols, &gpu); 
+        //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+
+        //err = hsa_executable_iterate_agent_symbols(executable, iterate_agent_symbols, &gpu); 
+        //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
         // save the executable and destroy during finalize
         g_executables.push_back(executable);
+        some_success = 1;
     }
-    DEBUG_PRINT("done\n");
+    DEBUG_PRINT("Modules loaded successful? %d\n", some_success);
     //ModuleMap[executable.handle] = modules_str;
-    return ATMI_STATUS_SUCCESS;
+    return (some_success) ? ATMI_STATUS_SUCCESS : ATMI_STATUS_ERROR;
 }
 
 atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t *types, const int num_modules) {
@@ -1636,10 +1691,15 @@ atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t 
         module_sizes.push_back(module_size);
     }
 
-    return atmi_module_register_from_memory(&modules[0], &module_sizes[0], types, num_modules);
+    atmi_status_t status = atmi_module_register_from_memory(&modules[0], &module_sizes[0], types, num_modules);
+
+    // memory space got by
+    // void *raw_code_object = malloc(size);
     for(int i = 0; i < num_modules; i++) {
         free(modules[i]);
     }
+
+    return status;
 }
 
 
@@ -1737,7 +1797,7 @@ void clear_container(T &q)
    T empty;
    std::swap(q, empty);
 }
-      
+
 atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num_args,
                                     const size_t *arg_sizes) {
     static int counter = 0;
@@ -1747,7 +1807,7 @@ atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num
     atmi_kernel->handle = (uint64_t)pif;
     std::string pif_name_str = std::string((const char *)(atmi_kernel->handle));
     counter++;
-    
+
     atl_kernel_t *kernel = new atl_kernel_t; 
     kernel->id_map.clear();
     kernel->num_args = num_args;
@@ -1761,7 +1821,7 @@ atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num
 
 atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
     char *pif = (char *)(atmi_kernel.handle);
-    
+
     atl_kernel_t *kernel = KernelImplMap[std::string(pif)];
     //kernel->id_map.clear();
     clear_container(kernel->arg_sizes);
@@ -1881,7 +1941,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
         kernel_impl->free_kernarg_segments.push(i);
     }
     pthread_mutex_init(&(kernel_impl->mutex), NULL);
-    
+
     kernel->id_map[ID] = kernel->impls.size();
 
     kernel->impls.push_back(kernel_impl);
@@ -1903,7 +1963,7 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
     kernel_impl->kernel_name = cl_pif_name;
     kernel_impl->devtype = ATMI_DEVTYPE_CPU;
     kernel_impl->function = impl;
-    
+
     atl_kernel_t *kernel = KernelImplMap[std::string(pif_name)];
     if(kernel->id_map.find(ID) != kernel->id_map.end()) {
         fprintf(stderr, "Kernel ID %d already found\n", ID);
@@ -1931,7 +1991,7 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
 bool is_valid_kernel_id(atl_kernel_t *kernel, unsigned int kernel_id) {
     std::map<unsigned int, unsigned int>::iterator it = kernel->id_map.find(kernel_id);
     if(it == kernel->id_map.end()) {
-        fprintf(stderr, "Kernel ID %d not found\n", kernel_id);
+        fprintf(stderr, "ERROR: Kernel not found\n");
         return false;
     }
     int idx = it->second;
@@ -1970,6 +2030,9 @@ void handle_signal_callback(atl_task_t *task) {
     // tasks without atmi_task handle should not be added to callbacks anyway
     assert(task->groupable != ATMI_TRUE);
 
+    lock(&(task->mutex));
+    set_task_state(task, ATMI_EXECUTED);
+    unlock(&(task->mutex));
     // after predecessor is done, decrement all successor's dependency count. 
     // If count reaches zero, then add them to a 'ready' task list. Next, 
     // dispatch all ready tasks in a round-robin manner to the available 
@@ -2031,6 +2094,9 @@ void handle_signal_callback(atl_task_t *task) {
 void handle_signal_barrier_pkt(atl_task_t *task) {
     // tasks without atmi_task handle should not be added to callbacks anyway
     assert(task->groupable != ATMI_TRUE);
+    lock(&(task->mutex));
+    set_task_state(task, ATMI_EXECUTED);
+    unlock(&(task->mutex));
     std::set<pthread_mutex_t *> mutexes;
     // release the kernarg segment back to the kernarg pool
     atl_kernel_t *kernel = task->kernel;
@@ -2045,7 +2111,7 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     for(int idx = 0; idx < requires.size(); idx++) {
         mutexes.insert(&(requires[idx]->mutex));
     }
-    
+
     lock_set(mutexes);
 
     DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", task->kernarg_region_index);
@@ -2062,7 +2128,7 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
             it != requires.end(); it++) {
         assert((*it)->state >= ATMI_DISPATCHED);
         (*it)->num_successors--;
-        if((*it)->state == ATMI_COMPLETED && (*it)->num_successors == 0) {
+        if((*it)->state >= ATMI_EXECUTED && (*it)->num_successors == 0) {
             // release signal because this predecessor is done waiting for
             temp_list.push_back((*it)->signal);
         }
@@ -2113,6 +2179,27 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     HandleSignalTimer.Start();
     atl_task_t *task = (atl_task_t *)arg;
     DEBUG_PRINT("Handle signal from task %lu\n", task->id);
+
+    // process printf buffer
+    {
+      atl_kernel_impl_t *kernel_impl = NULL;
+      if (task_process_fini_buffer) {
+        if(task->kernel) {
+          kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+          //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
+          char *kargs = (char *)(task->kernarg_region);
+          if(task->type == ATL_KERNEL_EXECUTION &&
+              task->devtype == ATMI_DEVTYPE_GPU &&
+              kernel_impl->kernel_type == AMDGCN) {
+            atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+
+            (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
+
+          }
+        }
+      }
+    }
+
     //static int counter = 0;
     if(task->stream_obj->ordered) {
         lock(&(task->stream_obj->group_mutex));
@@ -2133,6 +2220,7 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     return false; 
 }
 
+#if 0
 void dispatch_ready_task_for_free_signal() {
     atl_task_t *ready_task = NULL;
     hsa_signal_t free_signal;
@@ -2188,7 +2276,9 @@ void dispatch_ready_task_for_free_signal() {
         } while(!should_dispatch && iterations < queue_sz);
     }
 }
+#endif
 
+#if 0
 void dispatch_ready_task_or_release_signal(atl_task_t *task) {
     hsa_signal_t signal = task->signal;
     bool should_dispatch = false;
@@ -2231,6 +2321,7 @@ void dispatch_ready_task_or_release_signal(atl_task_t *task) {
         }
     }
 }
+#endif
 
 bool handle_group_signal(hsa_signal_value_t value, void *arg) {
     HandleSignalInvokeTimer.Stop();
@@ -2265,7 +2356,10 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             // does it matter which task was enqueued first, as long as we are
             // popping one task for every push?
             if(!task_group->running_ordered_tasks.empty()) {
-                DEBUG_PRINT("Removing task %lu\n", task_group->running_ordered_tasks.front()->id);
+                DEBUG_PRINT("Removing task %lu with state: %d\n", 
+                        task_group->running_ordered_tasks.front()->id,
+                        task_group->running_ordered_tasks.front()->state.load()
+                        );
                 task_group->running_ordered_tasks.pop_front();
             }
         }
@@ -2283,6 +2377,25 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
         if(kernel) {
             kernel_impl = get_kernel_impl(kernel, task->kernel_id);
             mutexes.insert(&(kernel_impl->mutex));
+
+            // process printf buffer
+            {
+              atl_kernel_impl_t *kernel_impl = NULL;
+              if (task_process_fini_buffer) {
+                if(task->kernel) {
+                  kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+                  //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
+                  char *kargs = (char *)(task->kernarg_region);
+                  if(task->type == ATL_KERNEL_EXECUTION &&
+                      task->devtype == ATMI_DEVTYPE_GPU &&
+                      kernel_impl->kernel_type == AMDGCN) {
+                    atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+                    (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
+                  }
+                }
+              }
+            }
+
         }
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
             atl_task_vector_t &requires = task->and_predecessors;
@@ -2302,9 +2415,6 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             kernel_impl = get_kernel_impl(kernel, task->kernel_id);
             kernel_impl->free_kernarg_segments.push(task->kernarg_region_index);
         }
-        DEBUG_PRINT("Completed task %lu in group\n", task->id);
-        set_task_metrics(task);
-        set_task_state(task, ATMI_COMPLETED);
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
             std::vector<hsa_signal_t> temp_list;
             temp_list.clear();
@@ -2314,7 +2424,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
                     it != requires.end(); it++) {
                 assert((*it)->state >= ATMI_DISPATCHED);
                 (*it)->num_successors--;
-                if((*it)->state == ATMI_COMPLETED && (*it)->num_successors == 0) {
+                if((*it)->state >= ATMI_EXECUTED && (*it)->num_successors == 0) {
                     // release signal because this predecessor is done waiting for
                     temp_list.push_back((*it)->signal);
                 }
@@ -2338,6 +2448,9 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             // individual tasks yet. once we figure that out, we need to include
             // logic here to push the successor tasks to the ready task queue.
         }
+        DEBUG_PRINT("Completed task %lu in group\n", task->id);
+        set_task_metrics(task);
+        set_task_state(task, ATMI_COMPLETED);
     }
     unlock_set(mutexes);
 
@@ -2364,7 +2477,7 @@ void do_progress_on_task_group(atmi_task_group_table_t *task_group) {
             //if(task_group->running_ordered_tasks[i]->state == ATMI_COMPLETED) {
             //    task_group->running_ordered_tasks.erase(task_group->running_ordered_tasks.begin() + i);
             //}
-            if(task_group->running_ordered_tasks[i]->state == ATMI_READY) {
+            if(task_group->running_ordered_tasks[i]->state >= ATMI_READY) {
                 // some other thread is looking at dispatching a task from
                 // this ordered queue, so give up doing progress on this
                 // thread because tasks have to be processed in order by definition
@@ -2373,7 +2486,6 @@ void do_progress_on_task_group(atmi_task_group_table_t *task_group) {
             }
             if(task_group->running_ordered_tasks[i]->state < ATMI_READY) {
                 ready_task = task_group->running_ordered_tasks[i];
-                set_task_state(task_group->running_ordered_tasks[i], ATMI_READY);
                 break;
             }
         }
@@ -2595,6 +2707,27 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                 impl_args->offset_z = 0;
                 // char *pipe_ptr = impl_args->pipe_ptr;
             }
+
+            // initialize printf buffer
+            {
+              atl_kernel_impl_t *kernel_impl = NULL;
+              if (task_process_init_buffer) {
+                if(task->kernel) {
+                  kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+                  //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
+                  char *kargs = (char *)(task->kernarg_region);
+                  if(task->type == ATL_KERNEL_EXECUTION &&
+                      task->devtype == ATMI_DEVTYPE_GPU &&
+                      kernel_impl->kernel_type == AMDGCN) {
+                    atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+
+                    // initalize printf buffer
+                    (*task_process_init_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
+                  }
+                }
+              }
+            }
+
             /*  Process task values */
             /*  this_aql.dimensions=(uint16_t) ndim; */
             this_aql->setup  |= (uint16_t) ndim << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
@@ -2804,10 +2937,15 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         if(kernel_impl) req_mutexes.insert(&(kernel_impl->mutex));
     }
     atmi_task_group_table_t *stream_obj = ret->stream_obj;
-    
+
     lock_set(req_mutexes);
     //std::cout << "[" << ret->id << "]Signals Before: " << FreeSignalPool.size() << std::endl;
 
+    if(ret->state >= ATMI_READY) {
+        // If someone else is trying to dispatch this task, give up
+        unlock_set(req_mutexes);
+        return false;
+    }
     int required_tasks = 0;
     if(should_dispatch) {
         // find if all dependencies are satisfied
@@ -2840,7 +2978,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         }
         for(int idx = 0; idx < ret->predecessors.size(); idx++) {
             atl_task_t *pred_task = temp_vecs[idx]; 
-            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
+            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ < ATMI_EXECUTED) {
                 required_tasks++;
             }
         }
@@ -2848,7 +2986,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 4;
     /* round up */
     int barrier_pkt_count = (required_tasks + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
-    
+
     if(should_dispatch) {
         if((ret->groupable != ATMI_TRUE && FreeSignalPool.size() < barrier_pkt_count + 1)
              || (ret->groupable == ATMI_TRUE && FreeSignalPool.size() < barrier_pkt_count)
@@ -2890,6 +3028,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
             // get kernarg resource
             uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size;
             int free_idx = kernel_impl->free_kernarg_segments.front();
+            ret->kernarg_region_index = free_idx;
             DEBUG_PRINT("Acquiring Kernarg Segment Id: %d\n", free_idx);
             void *addr = (void *)((char *)kernel_impl->kernarg_region + 
                     (free_idx * kernarg_segment_size));
@@ -2917,7 +3056,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
 
         for(int idx = 0; idx < ret->predecessors.size(); idx++) {
             atl_task_t *pred_task = temp_vecs[idx]; 
-            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
+            if(pred_task->state /*.load(std::memory_order_seq_cst)*/ < ATMI_EXECUTED) {
                 pred_task->num_successors++;
                 DEBUG_PRINT("Task %p (%lu) adding %p (%lu) as successor\n",
                         pred_task, pred_task->id, ret, ret->id);
@@ -2974,6 +3113,11 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     }
     lock_set(req_mutexes);
 
+    if(ret->state >= ATMI_READY) {
+        // If someone else is trying to dispatch this task, give up
+        unlock_set(req_mutexes);
+        return false;
+    }
     if(should_try_dispatch) {
         if(ret->predecessors.size() > 0) {
             // add to its predecessor's dependents list and return 
@@ -2981,7 +3125,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
                 atl_task_t *pred_task = ret->predecessors[idx];
                 DEBUG_PRINT("Task %p depends on %p as predecessor ",
                         ret, pred_task);
-                if(pred_task->state /*.load(std::memory_order_seq_cst)*/ != ATMI_COMPLETED) {
+                if(pred_task->state /*.load(std::memory_order_seq_cst)*/ < ATMI_EXECUTED) {
                     should_try_dispatch = false;
                     predecessors_complete = false;
                     pred_task->and_successors.push_back(ret);
@@ -3047,9 +3191,11 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
             uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size;
             int free_idx = kernel_impl->free_kernarg_segments.front();
             DEBUG_PRINT("Acquiring Kernarg Segment Id: %d\n", free_idx);
+            ret->kernarg_region_index = free_idx;
             void *addr = (void *)((char *)kernel_impl->kernarg_region + 
                     (free_idx * kernarg_segment_size));
             kernel_impl->free_kernarg_segments.pop();
+            assert(!(ret->kernel->num_args) || (ret->kernel->num_args && (ret->kernarg_region || args)));
             if(ret->kernarg_region != NULL) {
                 // we had already created a memory region using malloc. Copy it
                 // to the newly availed space
@@ -3059,7 +3205,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
                     // they are to be set/reset during task dispatch
                     size_to_copy -= sizeof(atmi_implicit_args_t);
                 }
-                memcpy(addr, ret->kernarg_region, size_to_copy);
+                if(size_to_copy) memcpy(addr, ret->kernarg_region, size_to_copy);
                 // free existing region
                 free(ret->kernarg_region);
                 ret->kernarg_region = addr;
@@ -3331,14 +3477,14 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
 atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,  
                                     void **args/*, more params for place info? */) {
     ParamsInitTimer.Start();
-    atmi_task_handle_t ret = NULL_TASK;
+    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
     const char *pif_name = (const char *)(atmi_kernel.handle);
     std::string pif_name_str = std::string(pif_name);
     std::map<std::string, atl_kernel_t *>::iterator map_iter;
     map_iter = KernelImplMap.find(pif_name_str);
     if(map_iter == KernelImplMap.end()) {
-        fprintf(stderr, "ERROR: Kernel/PIF %s not found\n", pif_name);
-        return NULL_TASK;
+        DEBUG_PRINT("ERROR: Kernel/PIF %s not found\n", pif_name);
+        return ATMI_NULL_TASK_HANDLE;
     }
     atl_kernel_t *kernel = map_iter->second;
     kernel->pif_name = pif_name_str;
@@ -3358,21 +3504,20 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
         if(kernel_id == -1) {
             fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have any implementations\n", 
                     pif_name);
-            return NULL_TASK;
+            return ATMI_NULL_TASK_HANDLE;
         }
     }
     else {
         if(!is_valid_kernel_id(kernel, kernel_id)) {
-            fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have %d implementations\n", 
-                    pif_name, kernel_id + 1);
-            return NULL_TASK;
+            DEBUG_PRINT("ERROR: Kernel ID %d not found\n", kernel_id);
+            return ATMI_NULL_TASK_HANDLE;
         }
     }
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, kernel_id);
     if(kernel->num_args && kernel_impl->kernarg_region == NULL) {
         fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n", 
                             kernel_impl->kernel_name.c_str());
-        return NULL_TASK;
+        return ATMI_NULL_TASK_HANDLE;
     }
     atmi_devtype_t devtype = kernel_impl->devtype;
     /*lock(&(kernel_impl->mutex));

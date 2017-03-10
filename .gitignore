@@ -1,0 +1,15 @@
+# executables
+hello
+a.out
+
+# tag files
+tags
+
+# temp files
+*.i
+*.bc
+*.o
+*.hsaco
+*.swp
+*.swo
+*.swn

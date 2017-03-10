@@ -103,7 +103,8 @@ typedef enum atmi_state_s {
     ATMI_INITIALIZED = 0, /**< Initialized state */
     ATMI_READY       = 1, /**< Ready state */
     ATMI_DISPATCHED  = 2, /**< Dispatched state */
-    ATMI_COMPLETED   = 3, /**< Completed state */
+    ATMI_EXECUTED    = 3, /**< Executed state */
+    ATMI_COMPLETED   = 4, /**< Completed state */
     ATMI_FAILED      = -1 /**< Failed state */
 } atmi_state_t;
 
@@ -190,13 +191,22 @@ typedef struct atmi_mem_place_s {
     int mem_id;                     /**< Memory spaces; -1 for any              */
 } atmi_mem_place_t;
 
+/**
+ * @brief ATMI Memory Structure
+ */
+typedef struct atmi_memory_s {
+    unsigned long int capacity;
+    atmi_memtype_t  type;
+} atmi_memory_t;
 
 /**                                                                            
  * @brief ATMI Device Structure
  */
 typedef struct atmi_device_s {
     atmi_devtype_t type;            /**< Device type */
-    unsigned int memory_pool_count; /**< Number of memory regions that are 
+    unsigned int memory_count;      /**< Number of memory regions that are 
+                                         accessible from this device. */
+    atmi_memory_t *memories;        /**< The memory regions that are 
                                          accessible from this device. */
 } atmi_device_t;
 
@@ -258,7 +268,7 @@ typedef unsigned long int atmi_task_handle_t;
 /**
  * @brief The special NULL task handle. 
  */
-extern atmi_task_handle_t NULL_TASK;
+extern atmi_task_handle_t ATMI_NULL_TASK_HANDLE;
 
 /**
  * @brief The ATMI Launch Parameter Data Structure

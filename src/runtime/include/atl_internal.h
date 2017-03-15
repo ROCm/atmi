@@ -22,6 +22,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include <deque>
 #include <map>
 #include <atomic>
+#include <RealTimerClass.h>
 #define MAX_PIPE_SIZE   (1024)
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
@@ -36,13 +37,20 @@ typedef void* ARG_TYPE;
 #define REPEAT16(name) REPEAT8(name) REPEAT8(name)
 
 #define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
+//#define ATMI_WAIT_STATE HSA_WAIT_STATE_ACTIVE
 
-typedef struct atmi_implicit_args_s {
-    uint64_t    offset_x;
-    uint64_t    offset_y;
-    uint64_t    offset_z;
-    uint64_t    pipe_ptr;
-} atmi_implicit_args_t;
+typedef struct atl_kernel_enqueue_args_s {
+    char        num_gpu_queues;
+    void*       gpu_queue_ptr;
+    char        num_cpu_queues;
+    void*       cpu_worker_signals;
+    void*       cpu_queue_ptr;
+    int         kernel_counter;
+    void*       kernarg_template_ptr;
+    // ___________________________________________________________________________
+    // | num_kernels | GPU AQL k0 | CPU AQL k0 | kernarg | GPU AQL k1 | CPU AQL k1 | ... |
+    // ___________________________________________________________________________
+} atl_kernel_enqueue_args_t;
 
 typedef struct agent_t
 {
@@ -50,6 +58,7 @@ typedef struct agent_t
   hsa_signal_t worker_sig;
   hsa_queue_t *queue;
   pthread_t thread;
+  Global::RealTimer timer;
 } agent_t;
 
 enum {
@@ -92,7 +101,7 @@ typedef struct atl_kernel_impl_s {
 } atl_kernel_impl_t;
 
 typedef struct atl_kernel_s {
-    std::string pif_name; // FIXME: change this to ID later
+    uint64_t pif_id;
     int num_args;
     std::vector<size_t> arg_sizes;
     std::vector<atl_kernel_impl_t *> impls;
@@ -106,15 +115,25 @@ typedef struct atl_kernel_info_s {
     uint32_t kernel_segment_size;
 } atl_kernel_info_t;
 
+typedef struct atl_symbol_info_s {
+    uint64_t addr;
+    uint32_t size;
+} atl_symbol_info_t;
+
+extern std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
+extern std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
+
 typedef void* atl_kernel_metadata_t;
 
 extern std::vector<atl_kernel_metadata_t> AllMetadata;
 
-extern std::map<std::string, atl_kernel_t *> KernelImplMap;
+extern std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 
 // ---------------------- Kernel End -------------
 
 typedef struct atl_task_s atl_task_t;
+typedef std::vector<atl_task_t *> atl_task_vector_t;
+
 typedef struct atl_task_list_s {
     atl_task_t *task;
     atmi_devtype_t devtype;
@@ -131,9 +150,11 @@ typedef struct atmi_task_group_table_s {
     atmi_place_t place;
 //    int next_gpu_qid;
 //    int next_cpu_qid;
+    // dependent tasks for the entire task group
+    atl_task_vector_t and_successors;
     unsigned int group_queue_id;
     hsa_signal_t group_signal;
-    hsa_signal_t task_count;
+    std::atomic<unsigned int> task_count;
     pthread_mutex_t group_mutex;
     std::deque<atl_task_t *> running_ordered_tasks;
     std::vector<atl_task_t *> running_groupable_tasks;
@@ -159,7 +180,6 @@ extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
 extern atmi_task_group_t atl_default_stream_obj;
-typedef std::vector<atl_task_t *> atl_task_vector_t;
 
 typedef struct atl_task_s {
     // reference to HSA signal and the applications task structure
@@ -185,8 +205,9 @@ typedef struct atl_task_s {
     size_t data_size;
     
     atmi_task_group_table_t *stream_obj;
-    atmi_task_group_t *group;
+    atmi_task_group_t group;
     boolean groupable;
+    boolean synchronous;
 
     // for ordered task groups
     atl_task_t * prev_ordered_task;
@@ -206,6 +227,7 @@ typedef struct atl_task_s {
     atl_task_vector_t and_predecessors;
     atl_task_vector_t predecessors;
     std::vector<hsa_signal_t> barrier_signals;
+    std::vector<atmi_task_group_table_t *> pred_stream_objs;
     atmi_task_handle_t id;
     // flag to differentiate between a regular task and a continuation
     // FIXME: probably make this a class hierarchy?
@@ -244,6 +266,11 @@ typedef struct atmi_task_table_s {
 */
 extern int           SNK_NextTaskId;
 extern atl_dep_sync_t g_dep_sync_type;
+
+extern void register_allocation(void *addr, size_t size, atmi_mem_place_t place);
+extern hsa_agent_t get_compute_agent(atmi_place_t place);
+extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place);
+extern bool atl_is_atmi_initialized();
 
 extern void atl_task_wait(atl_task_t *task);
 extern void atl_stream_sync(atmi_task_group_table_t *stream_obj);
@@ -290,6 +317,15 @@ void unlock(pthread_mutex_t *m);
 bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
 atl_task_t *get_new_task();
 const char *get_error_string(hsa_status_t err);
+const char *get_atmi_error_string(atmi_status_t err);
+#define ATMIErrorCheck(msg, status) \
+if (status != ATMI_STATUS_SUCCESS) { \
+    printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_atmi_error_string(status)); \
+    exit(1); \
+} else { \
+ /*  printf("%s succeeded.\n", #msg);*/ \
+}
+
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
     printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_error_string(status)); \

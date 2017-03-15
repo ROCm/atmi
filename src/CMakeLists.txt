@@ -30,13 +30,13 @@ endmacro()
 set (CMAKE_C_COMPILER g++)
 # The version number.
 set (atmi_VERSION_MAJOR 0)
-set (atmi_VERSION_MINOR 3)
+set (atmi_VERSION_MINOR 5)
 
 ################################################################################
 # Default install path to ROCM and not /usr/local
 ################################################################################
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set (CMAKE_INSTALL_PREFIX "/opt/rocm/libatmi" CACHE PATH "default install path" FORCE )
+  set (CMAKE_INSTALL_PREFIX "/opt/rocm/atmi" CACHE PATH "default install path" FORCE )
 endif()
 ################################################################################
 # Looking for ROCM...
@@ -47,32 +47,57 @@ find_file (
   ATMI_DEP_LIBHSA_INCLUDE
   hsa/hsa.h
   PATHS
+  ${HSA_DIR}/include
   /opt/rocm/include
   /usr/local/include
+  NO_DEFAULT_PATH
   )
 get_filename_component (ATMI_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DEP_LIBHSA_INCLUDE} DIRECTORY)
 
-find_library (
+find_package_handle_standard_args(
+  ATMI_DEP_INCHSA
+  DEFAULT_MSG
+  ATMI_DEP_LIBHSA_INCLUDE_DIRS)
+
+find_file (
   ATMI_DEP_LIBHSA_LIBRARIES
   libhsa-runtime64.so
   PATHS
+  ${HSA_DIR}/lib
   /opt/rocm/lib
   /usr/local/lib
+  NO_DEFAULT_PATH
   )
 get_filename_component (ATMI_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
 find_package_handle_standard_args(
   ATMI_DEP_LIBHSA
   DEFAULT_MSG
-  ATMI_DEP_LIBHSA_LIBRARIES_DIRS
-  ATMI_DEP_LIBHSA_INCLUDE_DIRS)
+  ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
 
 mark_as_advanced(
   ATMI_DEP_LIBHSA_INCLUDE_DIRS
   ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
- 
+
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
+add_subdirectory(device_runtime) 
+
+# make examples available in local build
+add_custom_command(
+  OUTPUT examples
+  COMMAND /usr/bin/rsync -rl ${CMAKE_CURRENT_SOURCE_DIR}/../examples .
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../examples/*
+  )
+add_custom_target(example ALL DEPENDS examples)
+
+# make bin available in local build
+add_custom_command(
+  OUTPUT bin
+  COMMAND /usr/bin/rsync -rl ${CMAKE_CURRENT_SOURCE_DIR}/../bin .
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../bin/*
+  )
+add_custom_target(script ALL DEPENDS bin)
 
 ## Get the package version. The defaults to 0.0.1.
 get_version ( "0.0.1" )
@@ -96,6 +121,7 @@ set ( CPACK_PACKAGE_CONTACT "Ashwin Aji <ashwin.aji@amd.com>" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "ATMI: Asynchronous Task and Memory Interface" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" )
 set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm/atmi )
+set ( CPACK_GENERATOR "RPM;DEB")
 # Debian package specific variables
 set ( CPACK_DEBIAN_PACKAGE_DEPENDS "hsa-rocr-dev" )
 set ( CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RadeonOpenCompute/atmi" )
@@ -111,7 +137,7 @@ set ( CPACK_RPM_COMPONENT_INSTALL ON)
 
 
 ## Set components
-set ( CPACK_COMPONENTS_ALL runtime cplugin )
+set ( CPACK_COMPONENTS_ALL runtime cplugin device_runtime )
 set ( CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE 1 )
 
 ## Include packaging

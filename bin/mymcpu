@@ -1,0 +1,340 @@
+#!/bin/bash
+#
+# mymcpu:  Print the mcpu value for the current machine
+# mygpu:   Print a gpu value acceptable as gpu-arch for cuda clang
+#
+# Written by Greg Rodgers Gregory.Rodgers@amd.com
+
+PROGVERSION=0.4-0
+
+# Copyright (c) 2016 ADVANCED MICRO DEVICES, INC.  
+# 
+# AMD is granting you permission to use this software and documentation (if any) (collectively, the 
+# Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
+# Materials.  If you do not have a copy of the Software License Agreement, contact your AMD 
+# representative for a copy.
+# 
+# You agree that you will not reverse engineer or decompile the Materials, in whole or in part, except for 
+# example code which is provided in source code form and as allowed by applicable law.
+# 
+# WARRANTY DISCLAIMER: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
+# KIND.  AMD DISCLAIMS ALL WARRANTIES, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT 
+# LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+# PURPOSE, TITLE, NON-INFRINGEMENT, THAT THE SOFTWARE WILL RUN UNINTERRUPTED OR ERROR-
+# FREE OR WARRANTIES ARISING FROM CUSTOM OF TRADE OR COURSE OF USAGE.  THE ENTIRE RISK 
+# ASSOCIATED WITH THE USE OF THE SOFTWARE IS ASSUMED BY YOU.  Some jurisdictions do not 
+# allow the exclusion of implied warranties, so the above exclusion may not apply to You. 
+# 
+# LIMITATION OF LIABILITY AND INDEMNIFICATION:  AMD AND ITS LICENSORS WILL NOT, 
+# UNDER ANY CIRCUMSTANCES BE LIABLE TO YOU FOR ANY PUNITIVE, DIRECT, INCIDENTAL, 
+# INDIRECT, SPECIAL OR CONSEQUENTIAL DAMAGES ARISING FROM USE OF THE SOFTWARE OR THIS 
+# AGREEMENT EVEN IF AMD AND ITS LICENSORS HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH 
+# DAMAGES.  In no event shall AMD's total liability to You for all damages, losses, and 
+# causes of action (whether in contract, tort (including negligence) or otherwise) 
+# exceed the amount of $100 USD.  You agree to defend, indemnify and hold harmless 
+# AMD and its licensors, and any of their directors, officers, employees, affiliates or 
+# agents from and against any and all loss, damage, liability and other expenses 
+# (including reasonable attorneys' fees), resulting from Your use of the Software or 
+# violation of the terms and conditions of this Agreement.  
+# 
+# U.S. GOVERNMENT RESTRICTED RIGHTS: The Materials are provided with "RESTRICTED RIGHTS." 
+# Use, duplication, or disclosure by the Government is subject to the restrictions as set 
+# forth in FAR 52.227-14 and DFAR252.227-7013, et seq., or its successor.  Use of the 
+# Materials by the Government constitutes acknowledgement of AMD's proprietary rights in them.
+# 
+# EXPORT RESTRICTIONS: The Materials may be subject to export restrictions as stated in the 
+# Software License Agreement.
+# 
+
+function usage(){
+/bin/cat 2>&1 <<"EOF" 
+
+   mymcpu: Print out a codename for the gpu of the current system 
+           or for the gpu specified with -getcodename option. 
+
+   mygpu:  Print out the real gpu name for the current system 
+           or for the codename specified with -getgpuname option.
+           mygpu will only print values accepted by cuda clang in 
+           the clang argument --cuda-gpu-arch
+
+   Usage: mygpu <options>
+
+   Options without values:
+    -h        Print this help message
+    -version  Print the version of mymcpu and mygpu
+
+   Options with values:
+    -getgpuname   <codename>  Convert <codename> to gpu name. 
+    -getcodename  <gpuname>   Convert <gpuname> to a code name 
+
+   Copyright (c) 2017 ADVANCED MICRO DEVICES, INC.
+
+EOF
+   exit 1 
+}
+
+function version(){ 
+   echo $PROGVERSION
+   exit 0
+}
+
+# Only return values acceptable for clang argument --cuda-gpu-arch
+# This routine needs to return "unknown" for code names 
+# we cannot convert. 
+# HELP! TODO: Lots more options to add for both amd and nvidia
+function code2gpu(){ 
+   case "$1" in 
+      "gfx700")  gpuname="gfx700"
+      ;;
+      "kaveri")  gpuname="gfx700"
+      ;;
+      "gfx701")  gpuname="gfx701"
+      ;;
+      "hawaii")  gpuname="gfx701"
+      ;;
+      "gfx801")  gpuname="gfx801"
+      ;;
+      "carrizo") gpuname="gfx801"
+      ;;
+      "gfx802")  gpuname="gfx802"
+      ;;
+      "tonga")   gpuname="gfx802"
+      ;;
+      "gfx803")  gpuname="gfx803"
+      ;;
+      "fiji")    gpuname="gfx803"
+      ;;
+      "vega")    gpuname="gfx900"
+      ;;
+      "sm_30")   gpuname="sm_30"
+      ;;
+      "k4000")   gpuname="sm_30"
+      ;;
+      "k4200")   gpuname="sm_30"
+      ;;
+      "gtx980")   gpuname="sm_35"
+      ;;
+      "")  gpuname="sm_35"
+      ;;
+      *) gpuname="unknown" 
+      ;;
+   esac
+   echo $gpuname
+}
+
+# This routine can echo the gpu name as the codename.
+# HELP! TODO: Lots more options to add for both amd and nvidia
+function gpu2code(){ 
+   case "$1" in 
+      "gfx700") codename="kaveri"
+      ;;
+      "gfx701") codename="hawaii"
+      ;;
+      "gfx801") codename="carrizo"
+      ;;
+      "gfx802") codename="tonga"
+      ;;
+      "gfx803") codename="fiji"
+      ;;
+      "gfx900") codename="vega"
+      ;;
+# sm_ numbers do not map to specific gpus so just return the sm number
+      *) codename="$1"
+      ;;
+   esac
+   echo $codename
+}
+
+#  FIXME: PLEASE HELP US FILL OUT THESE TABLES !
+function nvid2code(){
+   case "$1" in
+      "10de:11fa") codename="k4000"
+      ;;
+      "10de:11b4") codename="k4200"
+      ;;
+      "10de:13c0") codename="gtx980"
+      ;;
+      *) codename="$1" 
+      ;;
+   esac
+   echo $codename
+}
+
+function kfdid2code(){
+   case "$1" in
+      "6860") codename="vega"
+      ;;
+      "6863") codename="vega"
+      ;;
+      "687f") codename="vega"
+      ;;
+      "7300") codename="fiji"
+      ;;
+      *) codename="unknown"
+      ;;
+   esac
+   echo $codename
+}
+
+function apu2code(){
+case "$1" in
+  "A10-7850K" ) codename="kaveri"
+      ;;
+  "A10-7870K" ) codename="kaveri"
+      ;;
+  "A10-7700K" ) codename="kaveri"
+      ;;
+  "A6-7400K") codename="kaveri"
+      ;;
+  "A10 PRO-7350B") codename="kaveri"
+      ;;
+  "A10-7800K" ) codename="kaveri"
+      ;;
+  "FX-8800P") codename="carrizo"
+      ;;
+  "A12-8800B") codename="carrizo"
+      ;;
+  "A12-8700B") codename="carrizo"
+      ;;
+  "A10-8700P") codename="carrizo"
+      ;;
+  "Eng") codename="carrizo"
+      ;;
+  *) codename="unknown"
+      ;;
+esac
+echo $codename
+}
+
+# This function tries to find the codename for the current system. 
+# Fore nvidia systems, we return the gpuname.   It is ok to change 
+# this to use meaningful code names, however yuo must add the codename
+# to code2gpu above. 
+function getmycodename() { 
+CPULABEL=`cat /proc/cpuinfo | grep -m1 "model name" | cut -d: -f2 | cut -d, -f1`
+if [ "$CPULABEL" == "" ] ; then 
+  CPU=`cat /proc/cpuinfo | grep -m1 model | cut -d: -f2`
+  VENDOR="IBM"
+else 
+  VENDOR=`echo $CPULABEL | cut -d" " -f1`
+  CPU=`echo $CPULABEL | cut -d" " -f2`
+  if [ "$CPU" == "A10" ] ; then 
+    CPU=`echo $CPULABEL | cut -d" " -f2-3`
+  fi
+fi
+if [ "$VENDOR" == "AMD" ] ; then 
+  thisname=$(apu2code $CPU)
+  if [ "$thisname" == "unknown" ] ; then
+     thisname=""
+  fi
+fi
+
+#  If not an APU check for GPU
+if [ "$thisname" == "" ] ; then
+   if [ -f "/sys/devices/virtual/kfd/kfd/topology/nodes/1/properties" ] ; then
+      kfdid=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/*/properties | grep device_id | cut -d" " -f2 | grep -v "^0" | sort -u |  xargs printf "%x\n"`
+      #kfdid=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/*/properties | grep device_id | sort -u | cut -d" " -f2 | grep -v "^0" | sort -u |  xargs printf "%x\n"`
+      if [ "$kfdid" != "" ] ; then
+        thisname=$(kfdid2code $kfdid)
+      fi
+   fi
+
+#  kfd may not be working so check lspci for ATI
+   if [ "$thisname" == "unknown" ] ; then
+      slot=`lspci | grep ATI | grep -v Audio | cut -d" " -f1 | sort -u`
+      if [ "$slot" != "" ] ; then
+         kfdid=`lspci -s $slot -n | cut -d" " -f3 | cut -d":" -f2`
+         if [ "$kfdid" != "" ] ; then
+           thisname=$(kfdid2code $kfdid)
+         fi
+      fi
+   fi
+   if [ "$thisname" == "unknown" ] ; then
+      thisname=""
+   fi
+
+   # If not AMD GPU, check for Nvidia GPU
+   if [ "$thisname" == "" ] ; then
+      nvslot=`lspci | grep -i nvidia | grep -v Audio | cut -d" " -f1 | sort -u`
+      if [ "$nvslot" != "" ] ; then
+        nvid=`lspci -n -s $nvslot | cut -d" " -f3`
+        if [ "$nvid" != "" ] ; then
+           thisname=$(nvid2code $nvid)
+        fi
+      fi
+   fi
+fi
+
+if [ "$thisname" != "" ] ; then
+  #FIXME Do we need this case conversion anymore ?
+  lowercasevalue=`echo $thisname | tr '[:upper:]' '[:lower:]'`
+else 
+  lowercasevalue="unknown"
+fi
+echo $lowercasevalue
+
+}
+
+#  ===========  Main code for mymcpu and mygpu starts here ========== 
+TYPERUN=${0##*\/}
+MODE=
+
+#  process args
+while [ $# -gt 0 ] ; do 
+   case "$1" in 
+      -getgpuname)      INPUT_CODENAME=$2; shift ;;
+      -getcodename)     INPUT_GPUNAME=$2; shift ;;
+      -n) 	        MODE=num; shift ;;
+      -h) 	        usage ;; 
+      -help) 	        usage ;; 
+      --help) 	        usage ;; 
+      -version) 	version ;; 
+      --version) 	version ;; 
+      --) 		shift ; break;;
+      *) 		break;echo $1 ignored;
+   esac
+   shift
+done
+
+if [ $INPUT_GPUNAME ] && [ $INPUT_CODENAME ] ; then 
+   echo "ERROR: Please specify only -convert or -codename option"
+   exit 1
+fi
+
+rc=0
+if [ "$TYPERUN" == "mygpu" ] ; then 
+   if [ $INPUT_GPUNAME ] ; then 
+      # nothing to do stupid
+      gpuname=$INPUT_GPUNAME
+   else
+      if [ $INPUT_CODENAME ] ; then 
+         codename=`echo $INPUT_CODENAME | tr '[:upper:]' '[:lower:]'`
+      else
+         codename=$(getmycodename)
+      fi
+      gpuname=$(code2gpu $codename)
+   fi
+   [ "$gpuname" == "unknown" ] && rc=1
+   if [ -z "$MODE" ]; then
+     echo $gpuname
+   else
+     echo `echo $gpuname | sed 's/gfx//' | sed 's/sm_//'`
+   fi
+else 
+   # This is mymcpu so print the codename
+   if [ $INPUT_CODENAME ] ; then 
+      # nothing to do stupid
+      codename=$INPUT_CODENAME
+   else 
+      if [ $INPUT_GPUNAME ] ; then 
+         gpuname=`echo $INPUT_GPUNAME | tr '[:upper:]' '[:lower:]'`
+         codename=$(gpu2code $gpuname)
+      else
+         codename=$(getmycodename)
+      fi
+   fi
+   [ "$codename" == "unknown" ] && rc=1
+   echo $codename
+fi
+
+exit $rc

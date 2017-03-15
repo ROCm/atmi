@@ -287,6 +287,13 @@ atmi_status_t atmi_data_destroy_sync(atmi_data_t *data) {
 }
 #endif 
 
+void register_allocation(void *ptr, size_t size, atmi_mem_place_t place) {
+    ATLData *data = new ATLData(ptr, NULL, size, place, ATMI_IN_OUT); 
+    g_data_map.insert(ptr, data);
+
+    if(place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(ptr);
+}
+
 atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
@@ -295,10 +302,7 @@ atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     DEBUG_PRINT("Malloced [%s %d] %p\n", place.dev_type == ATMI_DEVTYPE_CPU ? "CPU":"GPU", place.dev_id, *ptr); 
     if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
 
-    ATLData *data = new ATLData(*ptr, NULL, size, place, ATMI_IN_OUT); 
-    g_data_map.insert(*ptr, data);
-
-    if(place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(*ptr);
+    register_allocation(*ptr, size, place);
 
     return ret;
 }
@@ -319,6 +323,7 @@ atmi_status_t atmi_free(void *ptr) {
 }
 
 atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void *src, size_t size) {
+    // TODO: Reuse code in atl_rt for setting up default task params
     atmi_task_group_t *stream = NULL;
     if(lparm->group == NULL) {
         stream = &atl_default_stream_obj;
@@ -339,7 +344,7 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
     ret->groupable = lparm->groupable;
     ret->atmi_task = lparm->task_info;
     ret->type = ATL_DATA_MOVEMENT;
-    ret->group = stream;
+    ret->group = *stream;
     ret->stream_obj = stream_obj;
 
     // TODO: performance fix if there are more CPU agents to improve locality
@@ -360,6 +365,15 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
         assert(pred_task != NULL);
         ret->predecessors[idx] = pred_task;
     }
+    ret->pred_stream_objs.clear();
+    ret->pred_stream_objs.resize(lparm->num_required_groups);
+    for(int idx = 0; idx < lparm->num_required_groups; idx++) {
+        std::map<int, atmi_task_group_table_t *>::iterator map_it = StreamTable.find(lparm->required_groups[idx]->id);
+        assert(map_it != StreamTable.end());
+        atmi_task_group_table_t *pred_tg = map_it->second;
+        assert(pred_tg != NULL);
+        ret->pred_stream_objs[idx] = pred_tg;
+    }
 
     if(ret->stream_obj->ordered) {
         lock(&(ret->stream_obj->group_mutex));
@@ -368,6 +382,8 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
         ret->stream_obj->last_task = ret;
         unlock(&(ret->stream_obj->group_mutex));
     }
+    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->stream_obj);
+    (ret->stream_obj->task_count)++;
 
     try_dispatch(ret, NULL, lparm->synchronous);
 
@@ -380,6 +396,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     atmi_status_t ret;
     hsa_status_t err; 
 
+    atmi_task_group_table_t *stream_obj = task->stream_obj;
     if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
         atmi_task_group_table_t *stream_obj = task->stream_obj;
         /* get this stream's HSA queue (could be dynamically mapped or round robin
@@ -455,7 +472,14 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     DEBUG_PRINT("Memcpy dest agent: %lu\n", dest_agent.handle);
     
     if(type == ATMI_H2D || type == ATMI_D2H) {
-        hsa_signal_store_release(task->signal, 2);
+        if(task->groupable == ATMI_TRUE) {
+            lock(&(stream_obj->group_mutex));
+            hsa_signal_add_acq_rel(task->signal, 2);
+            stream_obj->running_groupable_tasks.push_back(task);
+            unlock(&(stream_obj->group_mutex));
+        }
+        else 
+            hsa_signal_store_release(task->signal, 2);
         //hsa_signal_add_acq_rel(task->signal, 1);
         // For malloc'ed buffers, additional atmi_malloc/memcpy/free
         // steps are needed. So, fire and forget a copy thread with 
@@ -496,7 +520,14 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         dest, src, size, src_agent, type, cpu, task->signal).detach();
     }
     else {
-        hsa_signal_store_release(task->signal, 1);
+        if(task->groupable == ATMI_TRUE) {
+            lock(&(stream_obj->group_mutex));
+            hsa_signal_add_acq_rel(task->signal, 1);
+            stream_obj->running_groupable_tasks.push_back(task);
+            unlock(&(stream_obj->group_mutex));
+        }
+        else
+            hsa_signal_store_release(task->signal, 1);
         //hsa_signal_add_acq_rel(task->signal, 1);
         err = hsa_amd_memory_async_copy(
                 dest_ptr, dest_agent,

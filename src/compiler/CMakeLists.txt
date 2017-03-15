@@ -14,6 +14,12 @@
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
+string( TOLOWER "${ATMI_C_EXTENSION}" ATMI_C_EXTENSION_VAR )
+if(NOT ATMI_C_EXTENSION_VAR MATCHES on )
+  libatmi_runtime_say("Not building ATMI C Extension. Use -DATMI_C_EXTENSION=on in your cmake options to enable.")
+  return()
+endif()
+
 if(ATMI_DEP_LIBHSA_FOUND)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
         set (EXECUTE_COMMAND ${CMAKE_C_COMPILER} -print-file-name=plugin)
@@ -31,7 +37,7 @@ if(ATMI_DEP_LIBHSA_FOUND)
         else()
             if(EXISTS "${new_ov}/include/gcc-plugin.h" 
                AND EXISTS "${new_ov}/include/print-tree.h")
-                libatmi_runtime_say("GCC Plugin found")
+                libatmi_runtime_say("GCC Plugin found. Preparing to build ATMI C extensions.")
                 include_directories(${new_ov}/include)
                 set(PLUGIN_FOUND 1)
             else() 

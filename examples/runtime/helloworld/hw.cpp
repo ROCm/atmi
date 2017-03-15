@@ -110,5 +110,6 @@ int main(int argc, char **argv) {
     free(output_gpu);
 
     atmi_kernel_release(kernel);
+    atmi_finalize();
     return 0;
 }

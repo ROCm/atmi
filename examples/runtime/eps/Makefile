@@ -13,17 +13,33 @@
 #PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-ATMI_RUNTIME_PATH ?= /opt/rocm/libatmi
-ATMI_INC=${ATMI_RUNTIME_PATH}/include
+SHELL=/bin/bash
+
+#BUILDROOT
+BUILDROOT = $(shell pwd | sed 's/examples.*$$//')
+#$(info BUILDROOT $(BUILDROOT))
+-include $(BUILDROOT)/atmi-config.mak
+
+#Set ATMI Environment variables
+ATMI_RUNTIME_PATH ?= /opt/rocm/atmi
+
+ATMI_BIN ?= ${ATMI_RUNTIME_PATH}/bin
+ATMI_INC ?= ${ATMI_RUNTIME_PATH}/include
+ATMI_LIB ?= ${ATMI_RUNTIME_PATH}/lib
 
 #Set HSA Environment variables
-HSA_RUNTIME_PATH ?= /opt/rocm
+HSA_RUNTIME_PATH ?= /opt/rocm/hsa
+#Set ROCM device environment variables
+ROCM_DEVICE_PATH ?= /opt/rocm
 
 #Set LC Environment variables
 AMDLLVM ?= /opt/amd/llvm
 
+AMDGPU_TARGET_TRIPLE ?= amdgpu--amdhsa
+
 #MCPU
-MCPU ?= $(shell mymcpu)
+MCPU ?= $(shell ${ATMI_RUNTIME_PATH}/bin/mygpu)
+#$(info MCPU $(MCPU))
 
 # Kernel format
 BRIG ?= 0
@@ -35,10 +51,12 @@ endif
 # Kernel compiler
 CLC ?= 1
 
+INC_FLAGS=-I${ATMI_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/include -I.
+
 # CLOC
-CLOC_PATH ?= /usr/bin
-CLOCOPTS = -vv
-CLOCOPTS += -clopts "-v"
+CLOC_PATH ?= ${ATMI_RUNTIME_PATH}/bin
+CLOCOPTS = -vv -hcc2 ${AMDLLVM} -triple ${AMDGPU_TARGET_TRIPLE} -libgcn ${ROCM_DEVICE_PATH}
+CLOCOPTS += -clopts "$(INC_FLAGS) -O2 -v"
 
 # ROCm-Device-lib
 BITCODE_LIB ?= ${ROCMLIB}/dist/lib
@@ -58,8 +76,6 @@ CXX = g++
 CXXFLAGS =-O3 -g -std=c++11
 #CXXFLAGS += -v
 
-INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I.
-
 LIBS=-latmi_runtime
 LIB_FLAGS=-L${ATMI_RUNTIME_PATH}/lib -L${HSA_RUNTIME_PATH}/lib
 
@@ -72,7 +88,7 @@ all: $(OBJS)
 
 eps: eps.cpp nullKernel.cl 
 ifeq ($(CLC),1)
-	$(CLOC_PATH)/cloc.sh ${BRIGCLOPTS} -opt 2 nullKernel.cl
+	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} ${BRIGCLOPTS} -opt 2 nullKernel.cl
 else
 	$(CLCC) ${CLCFLAGS} -o nullKernel.hsaco nullKernel.cl
 endif
@@ -82,4 +98,4 @@ clean:
 	rm -rf *.o *.brig *.hsaco $(OBJS)
 
 test:
-	ATMI_DEPENDENCY_SYNC_TYPE=ATMI_SYNC_CALLBACK ./eps 2 15
+	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ATMI_DEPENDENCY_SYNC_TYPE=ATMI_SYNC_CALLBACK ./eps 2 15

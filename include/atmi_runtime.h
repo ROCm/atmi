@@ -456,6 +456,16 @@ atmi_task_handle_t atmi_memcpy_async(
 atmi_task_handle_t get_atmi_task_handle(); 
 
 /**
+ * @brief Retrieve the pointer to the task group object 
+ * of the currently running task. This function is valid 
+ * only within the body of a CPU task. 
+ *
+ * @return A pointer to the task group of the ATMI CPU task. 
+ *
+ */
+atmi_task_group_t *get_atmi_task_group();
+
+/**
  * @brief Retrieve the global thread ID of 
  * the currently running task. This function is valid 
  * only within the body of a CPU task. 

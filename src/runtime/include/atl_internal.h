@@ -115,6 +115,8 @@ extern std::map<std::string, atl_kernel_t *> KernelImplMap;
 // ---------------------- Kernel End -------------
 
 typedef struct atl_task_s atl_task_t;
+typedef std::vector<atl_task_t *> atl_task_vector_t;
+
 typedef struct atl_task_list_s {
     atl_task_t *task;
     atmi_devtype_t devtype;
@@ -131,6 +133,8 @@ typedef struct atmi_task_group_table_s {
     atmi_place_t place;
 //    int next_gpu_qid;
 //    int next_cpu_qid;
+    // dependent tasks for the entire task group
+    atl_task_vector_t and_successors;
     unsigned int group_queue_id;
     hsa_signal_t group_signal;
     std::atomic<unsigned int> task_count;
@@ -159,7 +163,6 @@ extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
 extern atmi_task_group_t atl_default_stream_obj;
-typedef std::vector<atl_task_t *> atl_task_vector_t;
 
 typedef struct atl_task_s {
     // reference to HSA signal and the applications task structure
@@ -185,7 +188,7 @@ typedef struct atl_task_s {
     size_t data_size;
     
     atmi_task_group_table_t *stream_obj;
-    atmi_task_group_t *group;
+    atmi_task_group_t group;
     boolean groupable;
 
     // for ordered task groups
@@ -206,6 +209,7 @@ typedef struct atl_task_s {
     atl_task_vector_t and_predecessors;
     atl_task_vector_t predecessors;
     std::vector<hsa_signal_t> barrier_signals;
+    std::vector<atmi_task_group_table_t *> pred_stream_objs;
     atmi_task_handle_t id;
     // flag to differentiate between a regular task and a continuation
     // FIXME: probably make this a class hierarchy?

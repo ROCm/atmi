@@ -339,7 +339,7 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
     ret->groupable = lparm->groupable;
     ret->atmi_task = lparm->task_info;
     ret->type = ATL_DATA_MOVEMENT;
-    ret->group = stream;
+    ret->group = *stream;
     ret->stream_obj = stream_obj;
 
     // TODO: performance fix if there are more CPU agents to improve locality
@@ -359,6 +359,15 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
         atl_task_t *pred_task = get_task(lparm->requires[idx]);
         assert(pred_task != NULL);
         ret->predecessors[idx] = pred_task;
+    }
+    ret->pred_stream_objs.clear();
+    ret->pred_stream_objs.resize(lparm->num_required_groups);
+    for(int idx = 0; idx < lparm->num_required_groups; idx++) {
+        std::map<int, atmi_task_group_table_t *>::iterator map_it = StreamTable.find(lparm->required_groups[idx]->id);
+        assert(map_it != StreamTable.end());
+        atmi_task_group_table_t *pred_tg = map_it->second;
+        assert(pred_tg != NULL);
+        ret->pred_stream_objs[idx] = pred_tg;
     }
 
     if(ret->stream_obj->ordered) {

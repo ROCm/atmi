@@ -208,6 +208,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 set_task_packet(packet);
 
                 atl_task_t *task = (atl_task_t *)(packet->arg[0]);
+                DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id);
                 atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
                 int kernel_id = packet->type;
                 atl_kernel_impl_t *kernel_impl = kernel->impls[kernel_id];
@@ -694,6 +695,7 @@ int process_packet(hsa_queue_t *queue, int id)
                 DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n", packet->completion_signal.handle);
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
                 kernel_args.clear();
+                DEBUG_PRINT("End Thread[%lu] --> ID[%lu] }}}\n", pthread_self(), task->id);
                 }
                 break;
         }
@@ -863,6 +865,18 @@ atmi_task_handle_t get_atmi_task_handle() {
     else {
         DEBUG_PRINT("Task ID: NULL\n");
         return ATMI_NULL_TASK_HANDLE;
+    }
+}
+
+
+atmi_task_group_t *get_atmi_task_group() {
+    atl_task_t *task = get_cur_thread_task_impl();
+    if(task) {
+        DEBUG_PRINT("Returning task group with ID: %d\n", task->group.id);
+        return &(task->group);
+    }
+    else {
+        return NULL;
     }
 }
 

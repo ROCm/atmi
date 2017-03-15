@@ -807,6 +807,7 @@ atmi_status_t register_stream(atmi_task_group_t *stream) {
         atmi_task_group_table_t *stream_entry = new atmi_task_group_table_t;
         stream_entry->last_task = NULL;
         stream_entry->running_groupable_tasks.clear();
+        stream_entry->and_successors.clear();
         stream_entry->cpu_queue = NULL;
         stream_entry->gpu_queue = NULL;
         assert(StreamCommonSignalIdx < ATMI_MAX_STREAMS);
@@ -1788,6 +1789,7 @@ atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num
         kernel->arg_sizes.push_back(arg_sizes[i]);
     }
     clear_container(kernel->impls);
+    kernel->pif_name = pif_name_str;
     KernelImplMap[pif_name_str] = kernel;
     return ATMI_STATUS_SUCCESS;
 }
@@ -2431,6 +2433,47 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
     do_progress(task_group, group_tasks.size());
     DEBUG_PRINT("Releasing %lu tasks from %p task group\n", group_tasks.size(), task_group);
     task_group->task_count -= group_tasks.size();
+    if(g_dep_sync_type == ATL_SYNC_CALLBACK) {
+        if(!task_group->task_count.load()) {
+            // after predecessor is done, decrement all successor's dependency count. 
+            // If count reaches zero, then add them to a 'ready' task list. Next, 
+            // dispatch all ready tasks in a round-robin manner to the available 
+            // GPU/CPU queues. 
+            // decrement reference count of its dependencies; add those with ref count = 0 to a
+            // “ready” list
+            lock(&(task_group->group_mutex));
+            atl_task_vector_t deps = task_group->and_successors;
+            task_group->and_successors.clear();
+            unlock(&(task_group->group_mutex));
+            DEBUG_PRINT("Deps list of %p [%lu]: ", task_group, deps.size());
+            atl_task_vector_t temp_list;
+            for(atl_task_vector_t::iterator it = deps.begin();
+                    it != deps.end(); it++) {
+                // FIXME: should we be grabbing a lock on each successor before
+                // decrementing their predecessor count? Currently, it may not be
+                // required because there is only one callback thread, but what if there
+                // were more? 
+                lock(&((*it)->mutex));
+                DEBUG_PRINT(" %lu(%d) ", (*it)->id, (*it)->num_predecessors);
+                (*it)->num_predecessors--;
+                if((*it)->num_predecessors == 0) {
+                    // add to ready list
+                    temp_list.push_back(*it);
+                }
+                unlock(&((*it)->mutex));
+            }
+            lock(&mutex_readyq_);
+            for(atl_task_vector_t::iterator it = temp_list.begin();
+                    it != temp_list.end(); it++) {
+                // FIXME: if groupable task, push it in the right stream
+                // else push it to readyqueue
+                ReadyTaskQueue.push(*it);
+            }
+            unlock(&mutex_readyq_);
+
+            if(!temp_list.empty()) do_progress(task_group);
+        }
+    }
     HandleSignalTimer.Stop();
     HandleSignalInvokeTimer.Start();
     // return true because we want the callback function to always be
@@ -3078,6 +3121,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     req_mutexes.insert(&mutex_readyq_);
     if(ret->prev_ordered_task) req_mutexes.insert(&(ret->prev_ordered_task->mutex));
     atmi_task_group_table_t *stream_obj = ret->stream_obj;
+    req_mutexes.insert(&(stream_obj->group_mutex));
     atl_kernel_impl_t *kernel_impl = NULL;
     if(ret->kernel) {
         kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
@@ -3104,6 +3148,26 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
                     ret->num_predecessors++;
                     DEBUG_PRINT("(waiting)\n");
                     waiting_count++;
+                }
+                else {
+                    DEBUG_PRINT("(completed)\n");
+                }
+            }
+        }
+        if(ret->pred_stream_objs.size() > 0) {
+            // add to its predecessor's dependents list and return 
+            DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret->id, ret->pred_stream_objs.size());
+            for(int idx = 0; idx < ret->pred_stream_objs.size(); idx++) {
+                atmi_task_group_table_t *pred_tg = ret->pred_stream_objs[idx];
+                DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
+                        ret, pred_tg);
+                if(pred_tg->task_count.load() > 0) {
+                    // predecessor task group is still running, so add yourself to its successor list
+                    should_try_dispatch = false;
+                    predecessors_complete = false;
+                    pred_tg->and_successors.push_back(ret);
+                    ret->num_predecessors++;
+                    DEBUG_PRINT("(waiting)\n");
                 }
                 else {
                     DEBUG_PRINT("(completed)\n");
@@ -3230,6 +3294,7 @@ atl_task_t *get_new_task() {
     ret->and_predecessors.clear();
     ret->predecessors.clear();
     ret->continuation_task = NULL;
+    ret->pred_stream_objs.clear();
     pthread_mutex_init(&(ret->mutex), NULL);
     return ret;
 }
@@ -3409,7 +3474,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     //DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires, lparm->requires);
     //DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task_info, lparm->task_info);
 
-    ret->group = stream;
+    ret->group = *stream;
     ret->stream_obj = stream_obj;
     ret->place = lparm->place;
     //DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);
@@ -3426,6 +3491,16 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         atl_task_t *pred_task = get_task(lparm->requires[idx]);
         assert(pred_task != NULL);
         ret->predecessors[idx] = pred_task;
+    }
+    ret->pred_stream_objs.clear();
+    ret->pred_stream_objs.resize(lparm->num_required_groups);
+    for(int idx = 0; idx < lparm->num_required_groups; idx++) {
+        std::map<int, atmi_task_group_table_t *>::iterator map_it = StreamTable.find(lparm->required_groups[idx]->id);
+        assert(map_it != StreamTable.end());
+        atmi_task_group_table_t *pred_tg = map_it->second;
+        assert(pred_tg != NULL);
+        DEBUG_PRINT("Task %p adding %p task group as predecessor\n", ret, pred_tg);
+        ret->pred_stream_objs[idx] = pred_tg;
     }
 
     ret->type = ATL_KERNEL_EXECUTION;

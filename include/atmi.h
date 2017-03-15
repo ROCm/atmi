@@ -100,12 +100,13 @@ typedef enum atmi_memtype_s {
  * @brief Task States.
  */
 typedef enum atmi_state_s {
+    ATMI_UNINITIALIZED = -1, /**< Uninitialized state */
     ATMI_INITIALIZED = 0, /**< Initialized state */
     ATMI_READY       = 1, /**< Ready state */
     ATMI_DISPATCHED  = 2, /**< Dispatched state */
     ATMI_EXECUTED    = 3, /**< Executed state */
     ATMI_COMPLETED   = 4, /**< Completed state */
-    ATMI_FAILED      = -1 /**< Failed state */
+    ATMI_FAILED      = 9999 /**< Failed state */
 } atmi_state_t;
 
 /**

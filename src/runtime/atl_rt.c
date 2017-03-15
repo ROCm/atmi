@@ -3282,7 +3282,7 @@ atl_task_t *get_new_task() {
     //ret->is_continuation = false;
     lock(&mutex_all_tasks_);
     AllTasks.push_back(ret);
-    set_task_state(ret, ATMI_INITIALIZED);
+    set_task_state(ret, ATMI_UNINITIALIZED);
     atmi_task_handle_t new_id;
     //new_id.node = 0;
     set_task_handle_ID(&new_id, AllTasks.size() - 1);
@@ -3365,11 +3365,18 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
     return should_dispatch;
 }
 
+atl_task_t *atl_trycreate_task(atl_kernel_t *kernel) {
+    atl_task_t *ret = get_new_task();
+    ret->kernel = kernel;
+    return ret;
+}
+
 atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
-                 atl_kernel_t *kernel,
+                 atl_task_t *task_obj,
                  unsigned int kernel_id,
                  void **args) {
     TryLaunchInitTimer.Start();
+    if(!task_obj) return ATMI_NULL_TASK_HANDLE;
     DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id, lparm->place.type, lparm->place.device_id, lparm->place.cu_mask);
 #if 1
     static bool is_called = false;
@@ -3397,7 +3404,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     atmi_task_group_table_t *stream_obj = StreamTable[stream->id];
 
     uint16_t i;
-    atl_task_t *ret = NULL;
+    atl_task_t *ret = task_obj;
     atl_task_t *continuation_task = NULL;
     bool has_continuation = false;
 #if 0
@@ -3454,9 +3461,8 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         pthread_mutex_init(&(continuation_task->mutex), NULL);
     }
 #else
-    ret = get_new_task();
 #endif
-    ret->kernel = kernel;
+    atl_kernel_t *kernel = ret->kernel;
     ret->kernel_id = kernel_id;
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, ret->kernel_id);
     ret->kernarg_region = NULL;
@@ -3525,21 +3531,30 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     return ret->id;
 }
 
-atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,  
-                                    void **args/*, more params for place info? */) {
-    ParamsInitTimer.Start();
-    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+atl_kernel_t *get_kernel_obj(atmi_kernel_t atmi_kernel) {
     const char *pif_name = (const char *)(atmi_kernel.handle);
     std::string pif_name_str = std::string(pif_name);
     std::map<std::string, atl_kernel_t *>::iterator map_iter;
     map_iter = KernelImplMap.find(pif_name_str);
     if(map_iter == KernelImplMap.end()) {
         DEBUG_PRINT("ERROR: Kernel/PIF %s not found\n", pif_name);
-        return ATMI_NULL_TASK_HANDLE;
+        return NULL;
     }
     atl_kernel_t *kernel = map_iter->second;
-    kernel->pif_name = pif_name_str;
-    int this_kernel_iter = 0;
+    return kernel;
+ }
+
+atmi_task_handle_t atmi_task_create(atmi_kernel_t atmi_kernel) {
+    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+    atl_kernel_t *kernel = get_kernel_obj(atmi_kernel);
+    if(kernel) { 
+        atl_task_t *ret_obj = atl_trycreate_task(kernel);
+        if(ret_obj) ret = ret_obj->id;
+    }
+    return ret;
+}
+
+int get_kernel_id(atmi_lparm_t *lparm, atl_kernel_t *kernel) {
     int num_args = kernel->num_args;
     int kernel_id = lparm->kernel_id;
     if(kernel_id == -1) {
@@ -3554,23 +3569,56 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
         }
         if(kernel_id == -1) {
             fprintf(stderr, "ERROR: Kernel/PIF %s doesn't have any implementations\n", 
-                    pif_name);
-            return ATMI_NULL_TASK_HANDLE;
+                    kernel->pif_name.c_str());
+            return -1;
         }
     }
     else {
         if(!is_valid_kernel_id(kernel, kernel_id)) {
             DEBUG_PRINT("ERROR: Kernel ID %d not found\n", kernel_id);
-            return ATMI_NULL_TASK_HANDLE;
+            return -1;
         }
     }
     atl_kernel_impl_t *kernel_impl = get_kernel_impl(kernel, kernel_id);
     if(kernel->num_args && kernel_impl->kernarg_region == NULL) {
         fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n", 
                             kernel_impl->kernel_name.c_str());
-        return ATMI_NULL_TASK_HANDLE;
+        return -1;
     }
-    atmi_devtype_t devtype = kernel_impl->devtype;
+
+    return kernel_id;
+}
+
+atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task, atmi_lparm_t *lparm, 
+                                    void **args) {
+    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+    atl_task_t *task_obj = get_task(task); 
+    if(!task_obj) return ret;
+    
+    /*if(lparm == NULL && args == NULL) {
+        DEBUG_PRINT("Signaling the completed task\n");
+        set_task_state(task_obj, ATMI_COMPLETED);
+        return task;
+    }*/
+
+    atl_kernel_t *kernel = task_obj->kernel;
+    int kernel_id = get_kernel_id(lparm, kernel);
+    if(kernel_id == -1) return ret;
+
+    ret = atl_trylaunch_kernel(lparm, task_obj, kernel_id, args);
+    DEBUG_PRINT("[Returned Task: %lu]\n", ret);
+    return ret;
+}
+
+atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,  
+                                    void **args/*, more params for place info? */) {
+    ParamsInitTimer.Start();
+    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+    atl_kernel_t *kernel = get_kernel_obj(atmi_kernel);
+    if(!kernel) return ret;
+
+    int kernel_id = get_kernel_id(lparm, kernel);
+    if(kernel_id == -1) return ret;
     /*lock(&(kernel_impl->mutex));
     if(kernel_impl->free_kernarg_segments.empty()) {
         // no free kernarg segments -- allocate some more? 
@@ -3580,7 +3628,8 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
     */
     ParamsInitTimer.Stop();
     TryLaunchTimer.Start();
-    ret = atl_trylaunch_kernel(lparm, kernel, kernel_id, args);
+    atl_task_t *ret_obj = atl_trycreate_task(kernel);
+    ret = atl_trylaunch_kernel(lparm, ret_obj, kernel_id, args);
     TryLaunchTimer.Stop();
     DEBUG_PRINT("[Returned Task: %lu]\n", ret);
     return ret;

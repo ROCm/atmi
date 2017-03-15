@@ -586,7 +586,7 @@ void set_task_metrics(atl_task_t *task) {
 extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
     //else 
     {
-        #if 1
+        #if 0
         DEBUG_PRINT("Waiting for async unordered tasks\n");
         hsa_signal_t signal = stream_obj->task_count;
         if(signal.handle != (uint64_t)-1) {
@@ -622,33 +622,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
             task_head = task_head->next;
         } */
         #else
-        int num_tasks = 0;
-        atl_task_list_t *task_head = stream_obj->tasks;
-        while(task_head) {
-            num_tasks++;
-            task_head = task_head->next;
-        }
-        if(num_tasks > 0) {
-            atmi_task_t **tasks = (atmi_task_t **)malloc(sizeof(atmi_task_t *) * num_tasks);
-            int task_id = 0;
-            task_head = stream_obj->tasks;
-            for(task_id = 0; task_id < num_tasks; task_id++) {
-                tasks[task_id] = task_head->task;
-                task_head = task_head->next;
-            }
-
-            if(stream_obj->gpu_queue != NULL) 
-                enqueue_barrier_gpu(stream_obj->gpu_queue, num_tasks, tasks, SNK_WAIT);
-            else if(stream_obj->cpu_queue != NULL) 
-                enqueue_barrier_cpu(stream_obj->cpu_queue, num_tasks, tasks, SNK_WAIT);
-            else {
-                int idx; 
-                for(idx = 0; idx < num_tasks; idx++) {
-                    atl_task_wait(tasks[idx]);
-                }
-            }
-            free(tasks);
-        }
+        while(stream_obj->task_count.load() != 0) {}
         #endif
     }
     if(stream_obj->ordered == ATMI_TRUE) {
@@ -839,8 +813,7 @@ atmi_status_t register_stream(atmi_task_group_t *stream) {
         stream_entry->group_queue_id = StreamCommonSignalIdx++;
         // get the next free signal from the stream common signal pool
         stream_entry->group_signal = StreamCommonSignalPool[stream_entry->group_queue_id];
-        hsa_status_t err=hsa_signal_create(0, 0, NULL, &(stream_entry->task_count));
-        ErrorCheck(Creating a HSA signal, err);
+        stream_entry->task_count.store(0);
         stream_entry->callback_started.clear();
         pthread_mutex_init(&(stream_entry->group_mutex), NULL);
         StreamTable[stream->id] = stream_entry;
@@ -2456,7 +2429,8 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
 
     // make progress on all other ready tasks
     do_progress(task_group, group_tasks.size());
-    hsa_signal_subtract_acq_rel(task_group->task_count, group_tasks.size());
+    DEBUG_PRINT("Releasing %lu tasks from %p task group\n", group_tasks.size(), task_group);
+    task_group->task_count -= group_tasks.size();
     HandleSignalTimer.Stop();
     HandleSignalInvokeTimer.Start();
     // return true because we want the callback function to always be
@@ -2672,7 +2646,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             if(task->groupable == ATMI_TRUE) {
                 lock(&(stream_obj->group_mutex));
                 hsa_signal_add_acq_rel(task->signal, 1);
-                hsa_signal_add_acq_rel(stream_obj->task_count, 1);
                 stream_obj->running_groupable_tasks.push_back(task);
                 unlock(&(stream_obj->group_mutex));
             }
@@ -2789,7 +2762,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             if(task->groupable == ATMI_TRUE) {
                 lock(&(stream_obj->group_mutex));
                 hsa_signal_add_acq_rel(task->signal, thread_count);
-                hsa_signal_add_acq_rel(stream_obj->task_count, 1);
                 stream_obj->running_groupable_tasks.push_back(task);
                 unlock(&(stream_obj->group_mutex));
             }
@@ -3467,6 +3439,10 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         ret->prev_ordered_task = ret->stream_obj->last_task;
         ret->stream_obj->last_task = ret;
         unlock(&(ret->stream_obj->group_mutex));
+    }
+    if(ret->groupable) {
+        DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->stream_obj);
+        (ret->stream_obj->task_count)++;
     }
 
     try_dispatch(ret, args, lparm->synchronous);

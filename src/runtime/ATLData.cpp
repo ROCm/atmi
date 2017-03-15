@@ -368,6 +368,8 @@ atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void
         ret->stream_obj->last_task = ret;
         unlock(&(ret->stream_obj->group_mutex));
     }
+    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->stream_obj);
+    (ret->stream_obj->task_count)++;
 
     try_dispatch(ret, NULL, lparm->synchronous);
 

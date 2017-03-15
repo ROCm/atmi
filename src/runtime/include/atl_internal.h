@@ -133,7 +133,7 @@ typedef struct atmi_task_group_table_s {
 //    int next_cpu_qid;
     unsigned int group_queue_id;
     hsa_signal_t group_signal;
-    hsa_signal_t task_count;
+    std::atomic<unsigned int> task_count;
     pthread_mutex_t group_mutex;
     std::deque<atl_task_t *> running_ordered_tasks;
     std::vector<atl_task_t *> running_groupable_tasks;

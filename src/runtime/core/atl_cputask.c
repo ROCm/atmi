@@ -212,7 +212,7 @@ int process_packet(agent_t *agent)
                 DEBUG_PRINT("%lu --> %p\n", pthread_self(), packet);
                 set_task_packet(packet);
 
-                atl_task_t *task = (atl_task_t *)(packet->arg[0]);
+                atl_task_t *task = get_task(packet->arg[0]);
                 DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id);
                 atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
                 int kernel_id = packet->type;
@@ -860,7 +860,7 @@ atl_task_t *get_cur_thread_task_impl() {
     DEBUG_PRINT("(Get) %lu --> %p\n", pthread_self(), packet);
     atl_task_t *task = NULL;
     if(packet) 
-        task = (atl_task_t *)(packet->arg[0]);
+        task = get_task(packet->arg[0]);
     return task;
 }
 

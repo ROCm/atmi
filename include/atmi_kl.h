@@ -17,6 +17,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #define __ATMI_KL_H__
 
 #define MAX_NUM_KERNELS (64)
+#define MAX_NUM_KERNEL_TYPES (8)
 typedef struct atmi_kernel_packet_s atmi_kernel_packet_t;
 struct atmi_kernel_packet_s {
     unsigned char resevered[64];

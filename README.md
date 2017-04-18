@@ -1,4 +1,4 @@
-#ATMI (Asynchronous Task and Memory Interface)
+# ATMI (Asynchronous Task and Memory Interface)
 Asynchronous Task and Memory Interface, or ATMI, is a runtime framework and declarative programming model for heterogeneous 
 CPU-GPU systems. It provides a consistent API to create task graphs on CPUs and GPUs (integrated and discrete). ATMI is a declarative
 programming model, where high-level tasks can be simply described by using a few predefined C-style structures. The task description
@@ -9,17 +9,15 @@ mapping, if desired. The target audience for ATMI is application programmers or 
 
 # Table of contents
 -----------------
-- [Compilation and Runtime Workflow](#Workflow)
-- [What's New?](#Whatsnew)
+- [Compilation and Runtime Workflow](#Compilation-and-Runtime-Workflow)
+- [What is New?](#What-is-new)
 - [License Information](#License)
 
-<A NAME="Workflow">
 # Compilation and Runtime Workflow
 The below figure depicts the ATMI runtime workflow with CLOC as the compiler utility.
 ![atmi-workflow](https://cloud.githubusercontent.com/assets/996564/20338676/4b6f86a2-ab8d-11e6-8743-df451d5412cf.png)
 
-<A NAME="Whatsnew">
-# What's New?
+# What is New?
 
 ## ATMI v0.3
 - ATMI-RT: runtime library to manage tasks
@@ -38,11 +36,9 @@ The below figure depicts the ATMI runtime workflow with CLOC as the compiler uti
 - Data movement API (synchronous and asynchronous options)
     - Asynchronous data movement is treated as an ATMI task in the task graph.
 - Devices supported: AMD Carrizo and Kaveri APUs, and AMD Fiji dGPU
-- Runtimes used: ROCm v1.2
+- Runtimes used: ROCm v1.4
 
-<A NAME="License">
 # License
-----------
 
 MIT License 
 

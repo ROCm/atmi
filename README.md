@@ -7,12 +7,6 @@ graph, will perform task scheduling and memory management that is optimal for th
 user interface so that the end user can relinquish scheduling to the runtime (default behavior) or take full control of scheduling and
 mapping, if desired. The target audience for ATMI is application programmers or middleware developers for high-level languages.
 
-# Table of contents
------------------
-- [Compilation and Runtime Workflow](#Compilation-and-Runtime-Workflow)
-- [What is New?](#What-is-new)
-- [License Information](#License)
-
 # Compilation and Runtime Workflow
 The below figure depicts the ATMI runtime workflow with CLOC as the compiler utility.
 ![atmi-workflow](https://cloud.githubusercontent.com/assets/996564/20338676/4b6f86a2-ab8d-11e6-8743-df451d5412cf.png)

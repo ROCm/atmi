@@ -51,32 +51,39 @@ int main(int argc, char* argv[]) {
     const unsigned int num_args = 1;
     size_t arg_sizes[] = { sizeof(int) };
     size_t main_arg_sizes[] = { sizeof(unsigned long *), sizeof(long int) };
-    atmi_kernel_create_empty(&main_kernel, 2, main_arg_sizes);
-    atmi_kernel_create_empty(&sub_kernel, num_args, arg_sizes);
-    atmi_kernel_create_empty(&print_kernel, num_args, arg_sizes);
+    atmi_kernel_create(&main_kernel, 2, main_arg_sizes, 
+                       1, 
+                       ATMI_DEVTYPE_GPU, "mainTask_gpu");
+    //atmi_kernel_create(&sub_kernel, num_args, arg_sizes,
+    //                   1,
+    //                   ATMI_DEVTYPE_GPU, "subTask_gpu");
+    atmi_kernel_create(&print_kernel, num_args, arg_sizes,
+                       2,
+                       ATMI_DEVTYPE_GPU, "print_taskId_gpu",
+                       ATMI_DEVTYPE_CPU, (atmi_generic_fp)print_taskId_cpu);
 
-    atmi_kernel_add_gpu_impl(main_kernel, "mainTask_gpu", GPU_IMPL);
-    atmi_kernel_add_gpu_impl(sub_kernel, "subTask_gpu", GPU_IMPL);
-    atmi_kernel_add_gpu_impl(print_kernel, "print_taskId_gpu", GPU_IMPL);
-    atmi_kernel_add_cpu_impl(print_kernel, (atmi_generic_fp)print_taskId_cpu, CPU_IMPL);
-
-    unsigned long int numTasks = 64;
+    unsigned long int numTasks = 16;
     ATMI_LPARM_1D(lparm, numTasks);
     lparm->WORKITEMS = numTasks;
     lparm->synchronous = ATMI_TRUE;
     lparm->place = ATMI_PLACE_GPU(0, 0);
     lparm->groupable = ATMI_TRUE;
-    lparm->kernel_id = GPU_IMPL;
+    //lparm->kernel_id = 0;//GPU_IMPL;
 
     unsigned long *arr;
+    unsigned long *d_arr;
     atmi_mem_place_t cpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_CPU, 0, 0);
+    atmi_mem_place_t gpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, 0, 0);
     atmi_malloc((void **)&arr, sizeof(unsigned long), cpu);
-    *arr = 0;
+    atmi_malloc((void **)&d_arr, sizeof(unsigned long), gpu);
+    *arr = 10;
+    //atmi_memcpy(d_arr, arr, sizeof(unsigned long));
     void *args[] = { &arr, &numTasks };
     atmi_task_launch(lparm, main_kernel, args);
+    //atmi_memcpy(arr, d_arr, sizeof(unsigned long));
     
     printf("Done!\n");
-    printf("Val: %p\n", (void *)*arr); 
+    //printf("Val: %lu\n", *arr); 
     atmi_free(arr);
     atmi_finalize();
 	return 0;

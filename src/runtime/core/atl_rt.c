@@ -940,11 +940,8 @@ atmi_status_t atmi_ke_init() {
 
 
     void *kernarg_template_ptr;
-    size_t template_size = sizeof(int) + // ID
-                           2 * sizeof(hsa_kernel_dispatch_packet_t) + //CPU/GPU AQL
-                           sizeof(void *); //kernarg regions
     err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
-            template_size * MAX_NUM_KERNEL_TYPES, 
+            sizeof(atmi_kernel_enqueue_template_t) * MAX_NUM_KERNEL_TYPES, 
             0,
             &kernarg_template_ptr);
     ErrorCheck(Allocating kernel argument template pointer, err);
@@ -2107,21 +2104,6 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
                 &pipe_ptrs);
         ErrorCheck(Allocating pipe memory region, err);
         allow_access_to_all_gpu_agents(pipe_ptrs);
-
-        void *ke_kernarg_region;
-        // first 4 bytes store the current index of the kernel arg region
-        err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
-                sizeof(int) + kernel_impl->kernarg_segment_size * MAX_NUM_KERNELS, 
-                0,
-                &ke_kernarg_region);
-        ErrorCheck(Allocating memory for the executable-kernel, err);
-        allow_access_to_all_gpu_agents(ke_kernarg_region);
-        *(int *)ke_kernarg_region = 0;
-
-        int cur_kernel = g_ke_args.kernel_counter++;
-        DEBUG_PRINT("Current kernel type: (%d/%d)\n", cur_kernel, MAX_NUM_KERNEL_TYPES);
-        assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
-        if(cur_kernel >= MAX_NUM_KERNEL_TYPES) return ATMI_STATUS_ERROR;
 
         for(int k = 0; k < MAX_NUM_KERNELS; k++) {
             atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)((char *)kernel_impl->kernarg_region + (((k + 1) * kernel_impl->kernarg_segment_size) - sizeof(atmi_implicit_args_t)));

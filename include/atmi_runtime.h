@@ -182,6 +182,43 @@ atmi_machine_t *atmi_machine_get_info();
  * @{
  */
 /**
+ * @brief Create an kernel opaque structure with all its architecture 
+ * specific implementations. 
+ *
+ * @detail An ATMI kernel object is created and its architecture specific implementations 
+ * are added. Each kernel can have several implementations, but should have at least one 
+ * implementation. The opaque kernel handle acts as a key to identify the set of kernel
+ * implementations. An ATMI GPU kernel implementation is identified by a char string, 
+ * whereas a CPU kernel implementation is identified by a function pointer. 
+ * These implementations must have the same number of arguments as specified in
+ * this function. Each kernel implementation is associated with an identifier, 
+ * which is nothing but the order in which the implementations have been added to the 
+ * kernel. The advanced user may want to run the specific implementation of the kernel 
+ * by using the unique identifier in the launch parameter of task launch functions. 
+ * 
+ * @param[out] kernel The opaque kernel handle.
+ *
+ * @param[in] num_args Number of arguments of the kernel. All implementations
+ * must have the same number of input arguments. May be 0.
+ *
+ * @param[in] arg_sizes Size of each argument. May be NULL only if @p num_args is 0.
+ *
+ * @param[in] num_impls Number of implementations for this kernel.
+ *
+ * @param[in] ... va_list Key-value pairs separated by commas of the format 
+ * (@atmi_devtype_t, implementation), where implementation is either the char
+ * string for GPU implementation or function pointer for CPU implementation.
+ *
+ * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
+ *
+ * @retval ::ATMI_STATUS_ERROR The function encountered errors.
+ * 
+ * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
+ *
+ */
+atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
+                                 const size_t *arg_sizes, const int num_impls, ...);
+/**
  * @brief Create an empty kernel opaque structure. 
  *
  * @detail ATMI kernels are instantiated in two steps. First, an empty kernel is

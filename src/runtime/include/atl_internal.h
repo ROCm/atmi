@@ -39,27 +39,11 @@ typedef void* ARG_TYPE;
 #define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
 //#define ATMI_WAIT_STATE HSA_WAIT_STATE_ACTIVE
 
-typedef struct atmi_implicit_args_s {
-    uint64_t    offset_x;
-    uint64_t    offset_y;
-    uint64_t    offset_z;
-    uint64_t    pipe_ptr;
-    uint8_t     num_gpu_queues;
-    uint64_t    gpu_queue_ptr;
-    uint8_t     num_cpu_queues;
-    uint64_t    cpu_queue_ptr;
-    uint64_t    kernarg_template_ptr;
-    // ___________________________________________________________________________
-    // | num_kernels | GPU AQL k0 | CPU AQL k0 | kernarg | GPU AQL k1 | CPU AQL k1 | ... |
-    // ___________________________________________________________________________
-//    uint8_t     num_signals;
-//    uint64_t    signal_ptr;
-} atmi_implicit_args_t;
-
 typedef struct atl_kernel_enqueue_args_s {
     char        num_gpu_queues;
     void*       gpu_queue_ptr;
     char        num_cpu_queues;
+    void*       cpu_worker_signals;
     void*       cpu_queue_ptr;
     int         kernel_counter;
     void*       kernarg_template_ptr;
@@ -117,7 +101,7 @@ typedef struct atl_kernel_impl_s {
 } atl_kernel_impl_t;
 
 typedef struct atl_kernel_s {
-    std::string pif_name; // FIXME: change this to ID later
+    uint64_t pif_id;
     int num_args;
     std::vector<size_t> arg_sizes;
     std::vector<atl_kernel_impl_t *> impls;
@@ -135,7 +119,7 @@ typedef void* atl_kernel_metadata_t;
 
 extern std::vector<atl_kernel_metadata_t> AllMetadata;
 
-extern std::map<std::string, atl_kernel_t *> KernelImplMap;
+extern std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 
 // ---------------------- Kernel End -------------
 
@@ -319,6 +303,15 @@ void unlock(pthread_mutex_t *m);
 bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
 atl_task_t *get_new_task();
 const char *get_error_string(hsa_status_t err);
+const char *get_atmi_error_string(atmi_status_t err);
+#define ATMIErrorCheck(msg, status) \
+if (status != ATMI_STATUS_SUCCESS) { \
+    printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_atmi_error_string(status)); \
+    exit(1); \
+} else { \
+ /*  printf("%s succeeded.\n", #msg);*/ \
+}
+
 #define ErrorCheck(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
     printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_error_string(status)); \

@@ -19,6 +19,8 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include "irif/inc/irif.h"
 #include "atmi_kl.h"
 
+#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+#pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable
 uint16_t create_header(hsa_packet_type_t type, int barrier) {
    uint16_t header = type << HSA_PACKET_HEADER_TYPE;
    header |= barrier << HSA_PACKET_HEADER_BARRIER;
@@ -28,18 +30,17 @@ uint16_t create_header(hsa_packet_type_t type, int barrier) {
 }
 
 void kernel_dispatch(atmi_lparm_t *lparm, global hsa_queue_t *this_Q, 
-                     void *kernarg_region, hsa_kernel_dispatch_packet_t *kernel_packet) { 
+                   void *kernarg_region, hsa_kernel_dispatch_packet_t *kernel_packet) { 
  
     // *** this task ID ***
     __constant hsa_kernel_dispatch_packet_t *p = __llvm_amdgcn_dispatch_ptr();
 
     /* Find the queue index address to write the packet info into.  */ 
     const uint32_t queueMask = this_Q->size - 1; 
-    uint64_t index = __ockl_hsa_queue_add_write_index(this_Q, 1, __ockl_memory_order_relaxed); 
+    uint64_t index = __ockl_hsa_queue_add_write_index(this_Q, 1, __ockl_memory_order_release); 
     hsa_kernel_dispatch_packet_t *this_aql = 
             &(((hsa_kernel_dispatch_packet_t *)(uintptr_t)(this_Q->base_address))[index&queueMask]); 
  
-
     int ndim = -1;
     if(lparm->gridDim[2] > 1)
         ndim = 3;
@@ -85,11 +86,13 @@ void kernel_dispatch(atmi_lparm_t *lparm, global hsa_queue_t *this_Q,
  
     /* Prepare and set the packet header */  
     /* Only set barrier bit if asynchronous execution */ 
-    this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE); 
+    //atomic_store_explicit(&(this_aql->header), create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE), 
+    //                        memory_order_release, memory_scope_all_svm_devices); 
+    this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, ATMI_FALSE);
  
     /* Increment write index and ring doorbell to dispatch the kernel.  */ 
-    __ockl_hsa_signal_store(this_Q->doorbell_signal, index, __ockl_memory_order_release); 
     //__ockl_hsa_signal_add(this_Q->doorbell_signal, 1, __ockl_memory_order_release); 
+    __ockl_hsa_signal_store(this_Q->doorbell_signal, index, __ockl_memory_order_release); 
 }
 
 
@@ -127,7 +130,8 @@ void agent_dispatch(atmi_lparm_t *lparm, global hsa_queue_t *this_Q, void *kerna
     __ockl_hsa_signal_store(*worker_sig, 0, __ockl_memory_order_release); 
 }
 
-void atmi_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region, size_t args_region_size) {
+void atmi_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region, 
+                                   size_t args_region_size) {
     constant atmi_implicit_args_t *impl_args = (constant atmi_implicit_args_t *)__llvm_amdgcn_implicitarg_ptr();
 
     // *** get kernel arg region ***
@@ -137,7 +141,7 @@ void atmi_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region, size
     void *kernarg_region = this_ke_template->kernarg_regions;
     atomic_int *kernarg_index = (atomic_int *) kernarg_region;
     int kernarg_offset = atomic_fetch_add_explicit(kernarg_index, 1, memory_order_relaxed, memory_scope_all_svm_devices);
-    kernarg_region = (void *)((char *)kernarg_region + sizeof(int) + (kernarg_offset * ke_template->kernarg_segment_size));
+    kernarg_region = (void *)((char *)kernarg_region + sizeof(int) + (kernarg_offset * this_ke_template->kernarg_segment_size));
 
     // *** set args ***
     for(size_t i = 0; i < args_region_size; i++) {
@@ -155,7 +159,7 @@ void atmi_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region, size
     }
     else if(lp->place.type == ATMI_DEVTYPE_GPU) {
         // *** get queue ***
-        int qid = get_global_id(0) & 1;
+        int qid = 0;//get_global_id(0) & 1;
         global hsa_queue_t *queue = ((global hsa_queue_t **)(impl_args->gpu_queue_ptr))[qid];
     
         // *** kernel_dispatch
@@ -171,10 +175,10 @@ enum {
 };
 
 typedef struct args_s {
-    int arg1;
+    long int arg1;
 } args_t;
 
-void subTask_gpu(int taskId) {
+kernel void subTask_gpu(long int taskId) {
     ATMI_LPARM_1D(lparm, 1);
     lparm->place = (atmi_place_t)ATMI_PLACE_CPU(0, 0);
     // default case for kernel enqueue: lparm->groupable = ATMI_TRUE;
@@ -184,22 +188,19 @@ void subTask_gpu(int taskId) {
     atmi_task_launch(lparm, K_ID_print_taskId_cpu, (void *)&args, sizeof(args_t));
 }
 
-__kernel void mainTask_gpu(__global ulong *arr, long int numTasks) {
+__kernel void mainTask_gpu(long int numTasks) {
 	int gid = get_global_id(0);
-    subTask_gpu(gid);
-#if 0
-    ATMI_LPARM_1D(lparm, 1);
-    lparm->place = (atmi_place_t)ATMI_PLACE_GPU(0, 0);
-    // default case for kernel enqueue: lparm->groupable = ATMI_TRUE;
-    args_t args;
-    args.arg1 = gid;
+    if(gid % 64 == 0) {
+        ATMI_LPARM_1D(lparm, 1);
+        lparm->place = (atmi_place_t)ATMI_PLACE_GPU(0, 0);
+        // default case for kernel enqueue: lparm->groupable = ATMI_TRUE;
+        args_t args;
+        args.arg1 = gid;
 
-    if(gid < numTasks) {
         atmi_task_launch(lparm, K_ID_subTask_gpu, (void *)&args, sizeof(args_t));
     }
-#endif
 }
 
-__kernel void print_taskId_gpu(int taskId) {
+__kernel void print_taskId_gpu(long int taskId) {
 }
 

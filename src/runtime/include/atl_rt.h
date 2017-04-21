@@ -136,12 +136,6 @@ typedef struct atl_context_s {
 extern atl_context_t atlc ;
 extern atl_context_t * atlc_p ;
 
-
-void atl_kl_init(atmi_klist_t *atmi_klist,
-        atmi_kernel_t kernel,
-        const int pif_id);
-
-
 #ifdef __cplusplus
 }
 #endif

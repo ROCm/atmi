@@ -17,6 +17,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #define __ATMI_KL_H__
 
 #include <atmi.h>
+#ifdef __OPENCL_C_VERSION__ 
+#include "ockl_hsa.h"
+#endif
 #define MAX_NUM_KERNELS (1024)
 #define MAX_NUM_KERNEL_TYPES (8)
 /*typedef struct atmi_task_impl_s {

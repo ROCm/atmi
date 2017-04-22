@@ -69,8 +69,12 @@ endmacro(clang_opencl_bc_lib)
 macro(prepare_builtins name)
   add_custom_command(
     OUTPUT ${name}${BC_EXT}
-    COMMAND ${PREPARE_BUILTINS} ${name}.lib.bc -o ${name}${BC_EXT}
-    DEPENDS prepare-builtins ${name}_lib_bc
+    # FIXME: below is modified version from rocm-device-libs where
+    # we do not need prepare-builtins pass for atmi
+    #COMMAND ${PREPARE_BUILTINS} ${name}.lib.bc -o ${name}${BC_EXT}
+    #DEPENDS prepare-builtins ${name}_lib_bc
+    COMMAND cp ${name}.lib.bc ${name}${BC_EXT}
+    DEPENDS ${name}_lib_bc
   )
   add_custom_target(${name}_bc ALL
     DEPENDS ${name}${BC_EXT}

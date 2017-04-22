@@ -16,6 +16,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #ifndef __ATMI_KL_H__
 #define __ATMI_KL_H__
 
+#include <atmi.h>
 #define MAX_NUM_KERNELS (1024)
 #define MAX_NUM_KERNEL_TYPES (8)
 /*typedef struct atmi_task_impl_s {
@@ -46,5 +47,8 @@ typedef struct atmi_kernel_enqueue_template_s {
     unsigned long    kernarg_segment_size;
     void *kernarg_regions;
 } atmi_kernel_enqueue_template_t;
+
+extern void atmi_task_launch(atmi_lparm_t *lp, unsigned long kernel_id, void *args_region, 
+                                   size_t args_region_size);
 
 #endif

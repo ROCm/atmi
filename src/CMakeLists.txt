@@ -71,8 +71,20 @@ mark_as_advanced(
   ATMI_DEP_LIBHSA_INCLUDE_DIRS
   ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
  
+find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
+list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
+include(AddLLVM)
+
+libatmi_runtime_say(${LLVM_TOOLS_BINARY_DIR})
+if (PREPARE_BUILTINS)
+    add_custom_target(prepare-builtins COMMAND true)
+else()
+    add_subdirectory(utils/prepare-builtins)
+set (PREPARE_BUILTINS $<TARGET_FILE:prepare-builtins>)
+endif()
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
+add_subdirectory(device_runtime) 
 
 ## Get the package version. The defaults to 0.0.1.
 get_version ( "0.0.1" )

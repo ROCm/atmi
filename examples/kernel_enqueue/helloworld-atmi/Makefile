@@ -36,9 +36,9 @@ endif
 CLC ?= 1
 
 # CLOC
-CLOC_PATH ?= ${HOME}/opt/bin
+CLOC_PATH ?= ${HOME}/git/atmi/bin
 #CLOCOPTS = -vv -amdllvm /opt/amd/llvm_0.3-4
-CLOCOPTS = -vv -amdllvm ${HOME}/opt/amd/llvm
+CLOCOPTS = -vv -amdllvm ${HOME}/opt/amd/llvm -atmipath ${HOME}/opt
 CLOCOPTS += -clopts "-O2 -v"
 
 # ROCm-Device-lib

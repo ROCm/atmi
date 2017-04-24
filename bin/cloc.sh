@@ -273,8 +273,8 @@ fi
 #BCFILES="$BCFILES $LIBGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
 #BCFILES="$BCFILES $LIBGCN/$LC_MCPU/lib/irif.amdgcn.bc"
 BCFILES=""
-BCFILES="$BCFILES $AMDLLVM/lib/opencl.amdgcn.bc"
 BCFILES="$BCFILES $ATMI_PATH/lib/atmi.amdgcn.bc"
+BCFILES="$BCFILES $AMDLLVM/lib/opencl.amdgcn.bc"
 BCFILES="$BCFILES $AMDLLVM/lib/ockl.amdgcn.bc"
 BCFILES="$BCFILES $AMDLLVM/lib/ocml.amdgcn.bc"
 BCFILES="$BCFILES $AMDLLVM/lib/irif.amdgcn.bc"
@@ -313,7 +313,7 @@ if [ $GPUCC ] ; then
    INCLUDES="-I $CUDA_PATH/include ${INCLUDES}"
    CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
 else
-   INCLUDES="-I ${HOME}/opt/include -I /opt/rocm/include -I ${LIBGCN}/include ${INCLUDES}" 
+   INCLUDES="-I ${HOME}/opt/include -I /home/aaji/git/ROCm-Device-Libs/ockl/inc -I /home/aaji/git/ROCm-Device-Libs/ocml/inc -I /home/aaji/git/ROCm-Device-Libs/irif/inc -I /opt/rocm/include -I ${LIBGCN}/include ${INCLUDES}" 
    CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target amdgcn--amdhsa -mcpu=$LC_MCPU } 
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}

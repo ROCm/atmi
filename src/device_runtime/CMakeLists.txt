@@ -21,12 +21,19 @@ include(AddLLVM)
 #set (CMAKE_C_COMPILER clang)
 set (CMAKE_C_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang)
 
+if(GFX_VER)
+else()
+    set(GFX_VER "803")
+    libatmi_runtime_say("GFX_VER=${GFX_VER}")
+endif()
+
 list(APPEND CMAKE_OCL_SOURCE_FILE_EXTENSIONS .cl)
 list(APPEND CMAKE_C_SOURCE_FILE_EXTENSIONS .cl)
 list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS .cl)
 
-set (CLANG_OCL_FLAGS "-Werror -x cl -Xclang -cl-std=CL2.0 -fblocks -target amdgcn--amdhsa -DCL_VERSION_2_0=200 -D__OPENCL_C_VERSION__=200 -Dcl_khr_fp64 -Dcl_khr_fp16 -Dcl_khr_subgroups -Dcl_khr_int64_base_atomics -Dcl_khr_int64_extended_atomics -Xclang -finclude-default-header ${CLANG_OPTIONS_APPEND}")
-set (CLANG_OCL_LINK_FLAGS "-target amdgcn--amdhsa -mcpu=fiji")
+set (CLANG_OCL_FLAGS "-Werror -x cl -Xclang -cl-std=CL2.0 -fblocks -target amdgcn--amdhsa -DCL_VERSION_2_0=200 -D__OPENCL_C_VERSION__=200 -Dcl_khr_fp64 -Dcl_khr_fp16 \
+-Dcl_khr_subgroups -Dcl_khr_int64_base_atomics -Dcl_khr_int64_extended_atomics -Xclang -finclude-default-header -target amdgcn--amdhsa -mcpu=gfx${GFX_VER} ${CLANG_OPTIONS_APPEND}")
+set (CLANG_OCL_LINK_FLAGS "-target amdgcn--amdhsa -mcpu=gfx${GFX_VER}")
 
 # FIXME: this is a macro defn file from rocm-device-libs with 
 # no prepare-builtins
@@ -38,7 +45,8 @@ file(GLOB sources
 
 # FIXME: add rocm-device-libs as dependency and capture its include dir
 # FIXME: change this to point to rocm-device-libs/include
-include_directories(/opt/rocm/include)
+include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS}/../../include)
+include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include)
 

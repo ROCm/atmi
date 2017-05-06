@@ -55,17 +55,6 @@ macro(clang_csources name dir)
   endforeach()
 endmacro()
 
-macro(clang_opencl_bc_lib name dir)
-  set(CMAKE_INCLUDE_CURRENT_DIR ON)
-  clang_csources(${name} ${dir} ${ARGN})
-  add_library(${name}_lib_bc STATIC ${csources})
-  set_target_properties(${name}_lib_bc PROPERTIES OUTPUT_NAME ${name})
-  set_target_properties(${name}_lib_bc PROPERTIES PREFIX "" SUFFIX ".lib.bc")
-  set_target_properties(${name}_lib_bc PROPERTIES COMPILE_FLAGS "${CLANG_OCL_FLAGS} -emit-llvm")
-  set_target_properties(${name}_lib_bc PROPERTIES LANGUAGE OCL)
-  set_target_properties(${name}_lib_bc PROPERTIES LINKER_LANGUAGE OCL)
-endmacro(clang_opencl_bc_lib)
-
 macro(prepare_builtins name)
   add_custom_command(
     OUTPUT ${name}${BC_EXT}
@@ -109,7 +98,7 @@ set (oclc_default_libs
   oclc_correctly_rounded_sqrt_off
   oclc_daz_opt_off
   oclc_finite_only_off
-  oclc_isa_version_803
+  oclc_isa_version_${GFX_VER}
   oclc_unsafe_math_off
 )
 
@@ -133,3 +122,22 @@ macro(clang_opencl_test_file dir fname)
   get_filename_component(fdir ${fname} DIRECTORY)
   clang_opencl_test(${name} ${dir}/${fdir})
 endmacro()
+
+macro(clang_opencl_bc_lib name dir)
+  set(CMAKE_INCLUDE_CURRENT_DIR ON)
+  clang_csources(${name} ${dir} ${ARGN})
+
+  set(mlink_flags)
+  set(libs opencl ocml ockl ${oclc_default_libs} irif)
+  foreach (lib ${libs})
+    set(CMAKE_OCL_CREATE_STATIC_LIBRARY "${CMAKE_OCL_CREATE_STATIC_LIBRARY} ${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/${lib}.amdgcn.bc")
+  endforeach()
+  add_library(${name}_lib_bc STATIC ${csources})
+  set_target_properties(${name}_lib_bc PROPERTIES OUTPUT_NAME ${name})
+  set_target_properties(${name}_lib_bc PROPERTIES PREFIX "" SUFFIX ".lib.bc")
+  set_target_properties(${name}_lib_bc PROPERTIES COMPILE_FLAGS "${CLANG_OCL_FLAGS} -emit-llvm")
+  set_target_properties(${name}_lib_bc PROPERTIES LANGUAGE OCL)
+  set_target_properties(${name}_lib_bc PROPERTIES LINKER_LANGUAGE OCL)
+  set_target_properties(${name}_lib_bc PROPERTIES LINK_FLAGS "${CLANG_OCL_LINK_FLAGS}")
+endmacro(clang_opencl_bc_lib)
+

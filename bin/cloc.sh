@@ -75,7 +75,7 @@ function usage(){
 
    Options with values:
     -amdllvm   <path>           $AMDLLVM or /opt/amd/llvm
-    -libgcn    <path>           $LIBGCN or /opt/rocm/libamdgcn  
+    -libgcn    <path>           $LIBGCN or /opt/rocm
     -hlcpath   <path>           $HLC_PATH or /opt/rocm/hlc3.2/bin  
     -cuda-path <path>           $CUDA_PATH or /usr/local/cuda
     -mcpu      <cputype>        Default= value returned by mymcpu
@@ -247,7 +247,7 @@ cdir=$(getdname $0)
 
 # These are default locations of the lightning compiler, libamdgcn, and HLC
 AMDLLVM=${AMDLLVM:-/opt/amd/llvm}
-LIBGCN=${LIBGCN:-/opt/rocm/libamdgcn}
+LIBGCN=${LIBGCN:-/opt/rocm}
 HLC_PATH=${HLC_PATH:-/opt/rocm/hlc3.2/bin}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
 ATMI_PATH=${ATMI_PATH:-/opt/rocm/atmi}
@@ -262,25 +262,35 @@ if [ ! $LC_MCPU ] ; then
 fi
 #LC_MCPU="gfx803"
 
+case $LC_MCPU in
+kaveri)
+    GFX_VER=700
+    ;;
+carrizo)
+    GFX_VER=801
+    ;;
+fiji)
+    GFX_VER=803
+    ;;
+esac
+
 LLVMOPT=${LLVMOPT:-3}
 
 if [ $VV ]  ; then 
    VERBOSE=true
 fi
 
-#BCFILES="$LIBGCN/$LC_MCPU/lib/opencl.amdgcn.bc"
-#BCFILES="$BCFILES $LIBGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
-#BCFILES="$BCFILES $LIBGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
-#BCFILES="$BCFILES $LIBGCN/$LC_MCPU/lib/irif.amdgcn.bc"
 BCFILES=""
 BCFILES="$BCFILES $ATMI_PATH/lib/atmi.amdgcn.bc"
-BCFILES="$BCFILES $AMDLLVM/lib/opencl.amdgcn.bc"
-BCFILES="$BCFILES $AMDLLVM/lib/ockl.amdgcn.bc"
-BCFILES="$BCFILES $AMDLLVM/lib/ocml.amdgcn.bc"
-BCFILES="$BCFILES $AMDLLVM/lib/irif.amdgcn.bc"
-#BCFILES="$BCFILES $AMDLLVM/lib/oclc_isa_version_700.amdgcn.bc"
-BCFILES="$BCFILES $AMDLLVM/lib/oclc_isa_version_803.amdgcn.bc"
-#LINKOPTS="-Xclang -mlink-bitcode-file -Xclang $LIBGCN/lib/libamdgcn.$LC_MCPU.bc"
+BCFILES="$BCFILES $LIBGCN/lib/opencl.amdgcn.bc"
+BCFILES="$BCFILES $LIBGCN/lib/ockl.amdgcn.bc"
+BCFILES="$BCFILES $LIBGCN/lib/ocml.amdgcn.bc"
+BCFILES="$BCFILES $LIBGCN/lib/oclc_correctly_rounded_sqrt_off.amdgcn.bc"
+BCFILES="$BCFILES $LIBGCN/lib/oclc_daz_opt_off.amdgcn.bc"  
+BCFILES="$BCFILES $LIBGCN/lib/oclc_finite_only_off.amdgcn.bc"              
+BCFILES="$BCFILES $LIBGCN/lib/oclc_isa_version_${GFX_VER}.amdgcn.bc"   
+BCFILES="$BCFILES $LIBGCN/lib/oclc_unsafe_math_off.amdgcn.bc"      
+BCFILES="$BCFILES $LIBGCN/lib/irif.amdgcn.bc"
 
 if [ $EXTRABCLIB ] ; then 
    if [ -f $EXTRABCLIB ] ; then 
@@ -313,7 +323,7 @@ if [ $GPUCC ] ; then
    INCLUDES="-I $CUDA_PATH/include ${INCLUDES}"
    CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
 else
-   INCLUDES="-I ${HOME}/opt/include -I /home/aaji/git/ROCm-Device-Libs/ockl/inc -I /home/aaji/git/ROCm-Device-Libs/ocml/inc -I /home/aaji/git/ROCm-Device-Libs/irif/inc -I /opt/rocm/include -I ${LIBGCN}/include ${INCLUDES}" 
+   INCLUDES="-I ${ATMI_PATH}/include -I ${LIBGCN}/include ${INCLUDES}" 
    CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target amdgcn--amdhsa -mcpu=$LC_MCPU } 
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}

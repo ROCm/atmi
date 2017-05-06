@@ -13,8 +13,9 @@
 #PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-ATMI_RUNTIME_PATH ?= /opt/rocm/libatmi
+ATMI_RUNTIME_PATH ?= /opt/rocm/atmi
 ATMI_INC=${ATMI_RUNTIME_PATH}/include
+AMDLLVM_PATH ?= /opt/amd/llvm
 
 #Set HSA Environment variables
 HSA_RUNTIME_PATH ?= /opt/rocm
@@ -36,9 +37,8 @@ endif
 CLC ?= 1
 
 # CLOC
-CLOC_PATH ?= ${HOME}/git/atmi/bin
-#CLOCOPTS = -vv -amdllvm /opt/amd/llvm_0.3-4
-CLOCOPTS = -vv -amdllvm ${HOME}/opt/amd/llvm -atmipath ${HOME}/opt
+CLOC_PATH ?= ../../../bin
+CLOCOPTS = -vv -amdllvm ${AMDLLVM_PATH} -atmipath ${ATMI_RUNTIME_PATH}
 CLOCOPTS += -clopts "-O2 -v"
 
 # ROCm-Device-lib

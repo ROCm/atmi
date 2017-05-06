@@ -75,7 +75,7 @@ find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
 list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
 include(AddLLVM)
 
-libatmi_runtime_say(${LLVM_TOOLS_BINARY_DIR})
+libatmi_runtime_say("LLVM Dir: ${LLVM_TOOLS_BINARY_DIR}")
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
 add_subdirectory(device_runtime) 

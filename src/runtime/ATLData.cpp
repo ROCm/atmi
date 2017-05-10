@@ -391,6 +391,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     atmi_status_t ret;
     hsa_status_t err; 
 
+    atmi_task_group_table_t *stream_obj = task->stream_obj;
     if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
         atmi_task_group_table_t *stream_obj = task->stream_obj;
         /* get this stream's HSA queue (could be dynamically mapped or round robin
@@ -466,7 +467,14 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     DEBUG_PRINT("Memcpy dest agent: %lu\n", dest_agent.handle);
     
     if(type == ATMI_H2D || type == ATMI_D2H) {
-        hsa_signal_store_release(task->signal, 2);
+        if(task->groupable == ATMI_TRUE) {
+            lock(&(stream_obj->group_mutex));
+            hsa_signal_add_acq_rel(task->signal, 2);
+            stream_obj->running_groupable_tasks.push_back(task);
+            unlock(&(stream_obj->group_mutex));
+        }
+        else 
+            hsa_signal_store_release(task->signal, 2);
         //hsa_signal_add_acq_rel(task->signal, 1);
         // For malloc'ed buffers, additional atmi_malloc/memcpy/free
         // steps are needed. So, fire and forget a copy thread with 
@@ -507,7 +515,14 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         dest, src, size, src_agent, type, cpu, task->signal).detach();
     }
     else {
-        hsa_signal_store_release(task->signal, 1);
+        if(task->groupable == ATMI_TRUE) {
+            lock(&(stream_obj->group_mutex));
+            hsa_signal_add_acq_rel(task->signal, 1);
+            stream_obj->running_groupable_tasks.push_back(task);
+            unlock(&(stream_obj->group_mutex));
+        }
+        else
+            hsa_signal_store_release(task->signal, 1);
         //hsa_signal_add_acq_rel(task->signal, 1);
         err = hsa_amd_memory_async_copy(
                 dest_ptr, dest_agent,

@@ -205,6 +205,7 @@ typedef struct atmi_memory_s {
  */
 typedef struct atmi_device_s {
     atmi_devtype_t type;            /**< Device type */
+    unsigned int core_count;        /**< Number of compute cores */
     unsigned int memory_count;      /**< Number of memory regions that are 
                                          accessible from this device. */
     atmi_memory_t *memories;        /**< The memory regions that are 

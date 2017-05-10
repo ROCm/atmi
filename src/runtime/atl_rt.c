@@ -1154,6 +1154,7 @@ hsa_status_t init_comute_and_memory() {
     int proc_index = 0;
     for(int i = cpus_begin; i < cpus_end; i++) {
         all_devices[i].type = cpu_procs[proc_index].getType();
+        all_devices[i].core_count = cpu_procs[proc_index].getNumCUs();
 
         std::vector<ATLMemory> memories = cpu_procs[proc_index].getMemories();
         int fine_memories_size = 0;
@@ -1179,6 +1180,7 @@ hsa_status_t init_comute_and_memory() {
     proc_index = 0;
     for(int i = gpus_begin; i < gpus_end; i++) {
         all_devices[i].type = gpu_procs[proc_index].getType();
+        all_devices[i].core_count = gpu_procs[proc_index].getNumCUs();
 
         std::vector<ATLMemory> memories = gpu_procs[proc_index].getMemories();
         int fine_memories_size = 0;

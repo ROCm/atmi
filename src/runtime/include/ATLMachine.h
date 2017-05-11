@@ -42,6 +42,7 @@ class ATLProcessor {
         std::vector<hsa_queue_t *> getQueues() const {return _queues; }
         virtual hsa_queue_t *getBestQueue(atmi_scheduler_t sched);
         int getNumCUs() const;
+        int getWavefrontSize() const;
     protected:
         hsa_agent_t     _agent;
         std::vector<hsa_queue_t *> _queues;

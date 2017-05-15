@@ -211,3 +211,14 @@ int ATLProcessor::getNumCUs() const {
 
     return num_cus;
 }
+
+int ATLProcessor::getWavefrontSize() const {
+    hsa_status_t err;
+    /* Query the number of compute units.  */
+    uint32_t w_size = 0;
+    err = hsa_agent_get_info(_agent, (hsa_agent_info_t)HSA_AGENT_INFO_WAVEFRONT_SIZE, &w_size);
+    ErrorCheck(Querying the agent wavefront size, err);
+
+    return w_size;
+}
+

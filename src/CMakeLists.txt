@@ -73,6 +73,7 @@ mark_as_advanced(
  
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
+add_subdirectory(interop) 
 
 ## Get the package version. The defaults to 0.0.1.
 get_version ( "0.0.1" )

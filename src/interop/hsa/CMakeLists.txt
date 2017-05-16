@@ -16,10 +16,8 @@
 
 if(ATMI_DEP_LIBHSA_FOUND)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
-        # Enable support for C++11.
-        add_definitions(-std=c++11)
-        add_library(atmi_interop_hsa SHARED
-            atmi_interop_hsa.cpp 
+        target_sources(atmi_runtime PUBLIC
+            ${PROJECT_SOURCE_DIR}/interop/hsa/atmi_interop_hsa.cpp 
             )
 
         include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
@@ -27,28 +25,11 @@ if(ATMI_DEP_LIBHSA_FOUND)
         include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
         include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
 
-        # Install plugin under the lib destination folder.
-        if(CMAKE_BUILD_TYPE MATCHES Debug)
-          install(TARGETS atmi_interop_hsa LIBRARY DESTINATION "lib-debug" COMPONENT interop_hsa )
-        else()
-          install(TARGETS atmi_interop_hsa LIBRARY DESTINATION "lib" COMPONENT interop_hsa )
-        endif()
-        
-        ## CPack component info
-        set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "ATMI-HSA Interop Library")
-        set(CPACK_COMPONENT_CPLUGIN_DEPENDS runtime)
-
         INSTALL(FILES 
                 ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_interop_hsa.h
                 DESTINATION "include"
-                COMPONENT interop_hsa
+                COMPONENT runtime
                )
-
-        target_link_libraries(
-          atmi_interop_hsa
-          "-Wl,--as-needed"
-          -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsa-runtime64 
-          )
     else()
         libatmi_runtime_say("Not building ATMI Runtime: only support ATMI in Linux x86_64 or ppc64le hosts.")
     endif()

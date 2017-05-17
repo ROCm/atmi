@@ -70,3 +70,4 @@ target_link_libraries(
   "-Wl,--as-needed"
   -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsa-runtime64 
   )
+

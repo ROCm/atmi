@@ -14,19 +14,26 @@
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-libatmi_runtime_say("Preparing to build runtime/interop/hsa")
-target_sources(atmi_runtime PUBLIC
-    ${PROJECT_SOURCE_DIR}/runtime/interop/hsa/atmi_interop_hsa.cpp 
-    )
+if(ATMI_DEP_LIBHSA_FOUND)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
+        target_sources(atmi_runtime PUBLIC
+            ${PROJECT_SOURCE_DIR}/runtime/interop/hsa/atmi_interop_hsa.cpp 
+            )
 
-include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../include)
+        include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../include)
 
-INSTALL(FILES 
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../include/atmi_interop_hsa.h
-        DESTINATION "include"
-        COMPONENT runtime
-       )
+        INSTALL(FILES 
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../../../include/atmi_interop_hsa.h
+                DESTINATION "include"
+                COMPONENT runtime
+               )
+    else()
+        libatmi_runtime_say("Not building ATMI Runtime: only support ATMI in Linux x86_64 or ppc64le hosts.")
+    endif()
+else()
+    libatmi_runtime_say("Not building ATMI Runtime: libhsa-runtime64 not found")
+endif()
 

@@ -22,6 +22,8 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include <assert.h>
 #include "ATLMachine.h"
 #include <thread>
+#include <iostream>
+#include <RealTimerClass.h>
 
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;
@@ -133,8 +135,10 @@ uint8_t get_packet_type(uint16_t header) {
     return (header >> HSA_PACKET_HEADER_TYPE) & 0xFF;
 }
 
-int process_packet(hsa_queue_t *queue, int id)
+int process_packet(agent_t *agent)
 {
+    hsa_queue_t *queue = agent->queue;
+    int id = agent->id;
     DEBUG_PRINT("Processing Packet from CPU Queue\n");
 
     uint64_t start_time_ns; 
@@ -146,9 +150,10 @@ int process_packet(hsa_queue_t *queue, int id)
     while (read_index < queue->size) {
         DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index, queue->size);
         hsa_signal_value_t doorbell_value = INT_MAX;
+        agent->timer.Start();
+        double start_time = agent->timer.CurrentTime();
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
-                    HSA_WAIT_STATE_BLOCKED)) < (hsa_signal_value_t) read_index );
-        DEBUG_PRINT("Doorbell val after: %lu\n", hsa_signal_load_acquire(doorbell));
+                    ATMI_WAIT_STATE)) < (hsa_signal_value_t) read_index );
         if (doorbell_value == INT_MAX) break;
         atl_task_t *this_task = NULL; // will be assigned to collect metrics
         char *kernel_name = NULL;
@@ -720,6 +725,7 @@ int process_packet(hsa_queue_t *queue, int id)
 #endif /* ATMI_HAVE_PROFILE */
         read_index++;
         hsa_queue_store_read_index_release(queue, read_index);
+        agent->timer.Stop();
     }
 
     DEBUG_PRINT("Finished executing agent dispatch\n");
@@ -797,7 +803,7 @@ void *agent_worker(void *agent_args) {
 
         if (PROCESS_PKT == hsa_signal_cas_acq_rel(agent->worker_sig,
                     PROCESS_PKT, IDLE) ) {
-            if (!process_packet(agent->queue, agent->id)) continue;
+            if (!process_packet(agent)) continue;
         }
         sig_value = IDLE;
     }
@@ -839,6 +845,8 @@ agent_fini()
             hsa_signal_store_release(agent->queue->doorbell_signal, INT_MAX);
             hsa_signal_store_release(agent->worker_sig, FINISH);
             pthread_join(agent->thread, NULL);
+            std::string str(std::string("CPU[" + std::to_string(i) + "] Timer"));
+            agent->timer.BufPrint(std::cout, str);
         }
     }
     DEBUG_PRINT("agent_fini completed\n");
@@ -847,7 +855,7 @@ agent_fini()
 atl_task_t *get_cur_thread_task_impl() {
     hsa_agent_dispatch_packet_t *packet = get_task_packet(); 
     if(!packet) {
-        fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
+        DEBUG_PRINT("WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
     }
     DEBUG_PRINT("(Get) %lu --> %p\n", pthread_self(), packet);
     atl_task_t *task = NULL;
@@ -920,7 +928,7 @@ unsigned long get_local_id(unsigned int dim) {
 unsigned long get_global_id(unsigned int dim) {
     hsa_agent_dispatch_packet_t *packet = get_task_packet();
     if(!packet) {
-        fprintf(stderr, "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
+        DEBUG_PRINT("WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
     }
 
     DEBUG_PRINT("(Get) %lu --> %p\n", pthread_self(), packet);

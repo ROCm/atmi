@@ -39,17 +39,17 @@ using namespace Global;
 
 pthread_mutex_t mutex_all_tasks_;
 pthread_mutex_t mutex_readyq_;
-RealTimer SignalAddTimer("SignalAddTimer");
-RealTimer HandleSignalTimer("HandleSignalTimer");;
-RealTimer HandleSignalInvokeTimer("HandleSignalInvokeTimer");
-RealTimer TaskWaitTimer("TaskWaitTimer");
-RealTimer TryLaunchTimer("TryLaunchTimer");
-RealTimer ParamsInitTimer("ParamsInitTimer");
-RealTimer TryLaunchInitTimer("TryLaunchInitTimer");
-RealTimer ShouldDispatchTimer("ShouldDispatchTimer");
-RealTimer RegisterCallbackTimer("RegisterCallbackTimer");
-RealTimer LockTimer("LockTimer");
-static RealTimer TryDispatchTimer("TryDispatchTimer");
+RealTimer SignalAddTimer("Signal Time");
+RealTimer HandleSignalTimer("Handle Signal Time");;
+RealTimer HandleSignalInvokeTimer("Handle Signal Invoke Time");
+RealTimer TaskWaitTimer("Task Wait Time");
+RealTimer TryLaunchTimer("Launch Time");
+RealTimer ParamsInitTimer("Params Init Time");
+RealTimer TryLaunchInitTimer("Launch Init Time");
+RealTimer ShouldDispatchTimer("Dispatch Eval Time");
+RealTimer RegisterCallbackTimer("Register Callback Time");
+RealTimer LockTimer("Lock/Unlock Time");
+static RealTimer TryDispatchTimer("Dispatch Time");
 static size_t max_ready_queue_sz = 0;
 static size_t waiting_count = 0;
 static size_t direct_dispatch = 0;
@@ -292,46 +292,16 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_co
 }
 
 extern void atl_task_wait(atl_task_t *task) {
+    TaskWaitTimer.Start();
     if(task != NULL) {
         while(task->state != ATMI_COMPLETED) { }
 
         /* Flag this task as completed */
         /* FIXME: How can HSA tell us if and when a task has failed? */
         set_task_state(task, ATMI_COMPLETED);
-#if 0
-        std::cout << "Params Init Timer: " << ParamsInitTimer << std::endl;
-        std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
-#if 0
-        std::cout << "Handle Signal Timer: " << HandleSignalTimer << std::endl;
-        std::cout << "Handle Signal Invoke Timer: " << HandleSignalInvokeTimer << std::endl;
-        std::cout << "Launch Init Timer: " << TryLaunchInitTimer << std::endl;
-        std::cout << "Dispatch Eval Timer: " << ShouldDispatchTimer << std::endl;
-        std::cout << "Dispatch Timer: " << TryDispatchTimer << std::endl;
-        std::cout << "Register Callback Timer: " << RegisterCallbackTimer << std::endl;
-
-        std::cout << "Signal Timer: " << SignalAddTimer << std::endl;
-        std::cout << "Task Wait Time: " << TaskWaitTimer << std::endl;
-        std::cout << "Max Ready Queue Size: " << max_ready_queue_sz << std::endl;
-        std::cout << "Waiting Tasks: " << waiting_count << std::endl;
-        std::cout << "Direct Dispatch Tasks: " << direct_dispatch << std::endl;
-        std::cout << "Callback Dispatch Tasks: " << callback_dispatch << std::endl;
-        std::cout << "SYNC_TASK(" << ret->id.lo << ");" << std::endl;
-#endif 
-        ParamsInitTimer.Reset();
-        TryLaunchTimer.Reset();
-        TryLaunchInitTimer.Reset();
-        ShouldDispatchTimer.Reset();
-        HandleSignalTimer.Reset();
-        HandleSignalInvokeTimer.Reset();
-        TryDispatchTimer.Reset();
-        RegisterCallbackTimer.Reset();
-        max_ready_queue_sz = 0;
-        waiting_count = 0;
-        direct_dispatch = 0;
-        callback_dispatch = 0;
-#endif
     }
 
+    TaskWaitTimer.Stop();
     return;// ATMI_STATUS_SUCCESS;
 }
 
@@ -639,43 +609,8 @@ atmi_status_t atmi_task_group_sync(atmi_task_group_t *stream) {
     atmi_task_group_table_t *stream_obj = StreamTable[str->id];
     TaskWaitTimer.Start();
     if(stream_obj) atl_stream_sync(stream_obj);
-    else fprintf(stderr, "Waiting for invalid task group signal!\n");
+    else DEBUG_PRINT("Waiting for invalid task group signal!\n");
     TaskWaitTimer.Stop();
-#if 0
-        std::cout << "Params Init Timer: " << ParamsInitTimer << std::endl;
-        std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
-        std::cout << "Launch Init Timer: " << TryLaunchInitTimer << std::endl;
-        std::cout << "Dispatch Eval Timer: " << ShouldDispatchTimer << std::endl;
-        std::cout << "Dispatch Timer: " << TryDispatchTimer << std::endl;
-        std::cout << "Task Wait Time: " << TaskWaitTimer << std::endl;
-        std::cout << "Lock/Unlock Time: " << LockTimer << std::endl;
-#if 0
-        std::cout << "Handle Signal Timer: " << HandleSignalTimer << std::endl;
-        std::cout << "Handle Signal Invoke Timer: " << HandleSignalInvokeTimer << std::endl;
-        std::cout << "Register Callback Timer: " << RegisterCallbackTimer << std::endl;
-
-        std::cout << "Signal Timer: " << SignalAddTimer << std::endl;
-        std::cout << "Max Ready Queue Size: " << max_ready_queue_sz << std::endl;
-        std::cout << "Waiting Tasks: " << waiting_count << std::endl;
-        std::cout << "Direct Dispatch Tasks: " << direct_dispatch << std::endl;
-        std::cout << "Callback Dispatch Tasks: " << callback_dispatch << std::endl;
-        std::cout << "SYNC_TASK(" << ret->id.lo << ");" << std::endl;
-#endif 
-        ParamsInitTimer.Reset();
-        TryLaunchTimer.Reset();
-        TryLaunchInitTimer.Reset();
-        ShouldDispatchTimer.Reset();
-        HandleSignalTimer.Reset();
-        HandleSignalInvokeTimer.Reset();
-        TryDispatchTimer.Reset();
-        LockTimer.Reset();
-        RegisterCallbackTimer.Reset();
-        max_ready_queue_sz = 0;
-        waiting_count = 0;
-        direct_dispatch = 0;
-        callback_dispatch = 0;
-#endif
-
     return ATMI_STATUS_SUCCESS;
 }
 
@@ -957,6 +892,39 @@ atmi_status_t atmi_finalize() {
     atl_reset_atmi_initialized();
     err = hsa_shut_down();
     ErrorCheck(Shutting down HSA, err);
+    std::cout << ParamsInitTimer;
+    std::cout << ParamsInitTimer;
+    std::cout << TryLaunchTimer;
+    std::cout << TryLaunchInitTimer;
+    std::cout << ShouldDispatchTimer;
+    std::cout << TryDispatchTimer;
+    std::cout << TaskWaitTimer;
+    std::cout << LockTimer;
+    std::cout << HandleSignalTimer;
+    std::cout << RegisterCallbackTimer;
+#if 0
+    std::cout << HandleSignalInvokeTimer;
+    std::cout << SignalAddTimer;
+    std::cout << "Max Ready Queue Size: " << max_ready_queue_sz << std::endl;
+    std::cout << "Waiting Tasks: " << waiting_count << std::endl;
+    std::cout << "Direct Dispatch Tasks: " << direct_dispatch << std::endl;
+    std::cout << "Callback Dispatch Tasks: " << callback_dispatch << std::endl;
+    std::cout << "SYNC_TASK(" << ret->id.lo << ");" << std::endl;
+#endif 
+    ParamsInitTimer.Reset();
+    TryLaunchTimer.Reset();
+    TryLaunchInitTimer.Reset();
+    ShouldDispatchTimer.Reset();
+    HandleSignalTimer.Reset();
+    HandleSignalInvokeTimer.Reset();
+    TryDispatchTimer.Reset();
+    LockTimer.Reset();
+    RegisterCallbackTimer.Reset();
+    max_ready_queue_sz = 0;
+    waiting_count = 0;
+    direct_dispatch = 0;
+    callback_dispatch = 0;
+
     return ATMI_STATUS_SUCCESS;
 }
 
@@ -1692,16 +1660,16 @@ pthread_mutex_t sort_mutex_2(pthread_mutex_t *addr1, pthread_mutex_t *addr2, pth
 
 void lock(pthread_mutex_t *m) {
     //printf("Locked Mutex: %p\n", m);
-    LockTimer.Start();
+    //LockTimer.Start();
     pthread_mutex_lock(m);
-    LockTimer.Stop();
+    //LockTimer.Stop();
 }
 
 void unlock(pthread_mutex_t *m) {
     //printf("Unlocked Mutex: %p\n", m);
-    LockTimer.Start();
+    //LockTimer.Start();
     pthread_mutex_unlock(m);
-    LockTimer.Stop();
+    //LockTimer.Stop();
 }
 
 void print_rset(std::set<pthread_mutex_t *> &mutexes) {
@@ -2137,7 +2105,7 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
 }
 
 bool handle_signal(hsa_signal_value_t value, void *arg) {
-    HandleSignalInvokeTimer.Stop();
+    //HandleSignalInvokeTimer.Stop();
     #if 1
     static bool is_called = false;
     if(!is_called) {
@@ -2193,7 +2161,7 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
         handle_signal_barrier_pkt(task); 
     }
     HandleSignalTimer.Stop();
-    HandleSignalInvokeTimer.Start();
+    //HandleSignalInvokeTimer.Start();
     return false; 
 }
 
@@ -2301,7 +2269,7 @@ void dispatch_ready_task_or_release_signal(atl_task_t *task) {
 #endif
 
 bool handle_group_signal(hsa_signal_value_t value, void *arg) {
-    HandleSignalInvokeTimer.Stop();
+    //HandleSignalInvokeTimer.Stop();
 #if 1
     static bool is_called = false;
     if(!is_called) {
@@ -2477,9 +2445,10 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
         }
     }
     HandleSignalTimer.Stop();
-    HandleSignalInvokeTimer.Start();
+    //HandleSignalInvokeTimer.Start();
     // return true because we want the callback function to always be
     // 'registered' for any more incoming tasks belonging to this task group
+    DEBUG_PRINT("Done handle_group_signal\n");
     return false; 
 }
 
@@ -3492,7 +3461,6 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     /* For dependent child tasks, add dependent parent kernels to barriers.  */
     DEBUG_PRINT("Pif %s requires %d task\n", kernel_impl->kernel_name.c_str(), lparm->num_required);
 
-    TryLaunchInitTimer.Stop();
     ret->predecessors.clear();
     ret->predecessors.resize(lparm->num_required);
     for(int idx = 0; idx < lparm->num_required; idx++) {
@@ -3527,6 +3495,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->stream_obj);
         (ret->stream_obj->task_count)++;
     }
+    TryLaunchInitTimer.Stop();
 
     try_dispatch(ret, args, lparm->synchronous);
 

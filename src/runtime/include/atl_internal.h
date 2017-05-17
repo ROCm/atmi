@@ -22,6 +22,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include <deque>
 #include <map>
 #include <atomic>
+#include <RealTimerClass.h>
 #define MAX_PIPE_SIZE   (1024)
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
@@ -36,6 +37,7 @@ typedef void* ARG_TYPE;
 #define REPEAT16(name) REPEAT8(name) REPEAT8(name)
 
 #define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
+//#define ATMI_WAIT_STATE HSA_WAIT_STATE_ACTIVE
 
 typedef struct atmi_implicit_args_s {
     uint64_t    offset_x;
@@ -50,6 +52,7 @@ typedef struct agent_t
   hsa_signal_t worker_sig;
   hsa_queue_t *queue;
   pthread_t thread;
+  Global::RealTimer timer;
 } agent_t;
 
 enum {

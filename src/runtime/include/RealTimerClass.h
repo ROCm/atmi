@@ -21,7 +21,12 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 #include <unistd.h>
 #include <sys/time.h>
 #include <string>
-//#define ATL_TIMER
+#include <sstream>
+#ifdef DEBUG
+static const char* profile_mode=getenv("ATMI_PROFILE");
+#define USE_PROFILE
+#endif
+
 namespace Global {
   
 /// \class RealTimer RealTimer.h "Global/RealTimer.h"
@@ -56,6 +61,10 @@ public:
   /// Print the current state of the counter to the stream.
   void Print(std::ostream& o) const;
 
+  /// Print the current state of the counter to the stream with custom description
+  /// string
+  void BufPrint(std::ostream& o, std::string& str) const;
+  
   /// Return the system time.
   double CurrentTime() const;
 
@@ -99,28 +108,32 @@ inline RealTimer::~RealTimer()
 
 inline void RealTimer::Start()
 {
-#ifdef ATL_TIMER
-  static std::string functionName("RealTimer::Start()");
-  if (isRunning == true) {
-    std::cout << functionName << ": Warning: Timer " << fDesc << " has already been started." <<  std::endl; 
-  } else {
-    start_time = CurrentTime();
-    isRunning = true;
-  }
+#ifdef USE_PROFILE
+    if(profile_mode) {
+        static std::string functionName("RealTimer::Start()");
+        if (isRunning == true) {
+            std::cout << functionName << ": Warning: Timer " << fDesc << " has already been started." <<  std::endl; 
+        } else {
+            start_time = CurrentTime();
+            isRunning = true;
+        }
+    }
 #endif
 }
 
 inline void RealTimer::Stop()
 {
-#ifdef ATL_TIMER
-  static std::string functionName("RealTimer::Stop()");
-  if (isRunning == false) {
-    std::cout << functionName << ": Warning: Timer " << fDesc << " has already been stopped." <<  std::endl; 
-  } else {
-    elapsed += CurrentTime() - start_time;
-    isRunning = false;
-    count++;
-  }
+#ifdef USE_PROFILE
+    if(profile_mode) {
+        static std::string functionName("RealTimer::Stop()");
+        if (isRunning == false) {
+            std::cout << functionName << ": Warning: Timer " << fDesc << " has already been stopped." <<  std::endl; 
+        } else {
+            elapsed += CurrentTime() - start_time;
+            isRunning = false;
+            count++;
+        }
+    }
 #endif
 }
 
@@ -167,11 +180,26 @@ inline double RealTimer::CurrentTime() const
 
 inline void RealTimer::Print(std::ostream& o) const
 {
-  o << elapsed*1000 << " msecs "
-    << count << " times";
-  if (count > 1)
-    o << " " << (elapsed/count)*1000 << " msecs each\n";
+#ifdef USE_PROFILE
+    if(profile_mode) {
+        o << fDesc << ": " << elapsed*1000 << " msecs "
+            << count << " times";
+        if (count > 1)
+            o << " " << (elapsed/count)*1000 << " msecs each\n";
+    }
+#endif
 }
 
+inline void RealTimer::BufPrint(std::ostream& o, std::string& str) const
+{
+#ifdef USE_PROFILE
+    if(profile_mode) {
+        o << str << ": " << elapsed*1000 << " msecs "
+            << count << " times";
+        if (count > 1)
+            o << " " << (elapsed/count)*1000 << " msecs each\n";
+    }
+#endif
+}
 } // namespace
 #endif //  COUTIL_GLOBAL_REALTIMER

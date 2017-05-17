@@ -74,12 +74,6 @@ mark_as_advanced(
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
 
-# compile interop layer if specified explicitly
-string( TOLOWER "${ATMI_HSA_INTEROP}" ATMI_HSA_INTEROP_VAR )
-if(ATMI_HSA_INTEROP_VAR MATCHES on )
-    add_subdirectory(interop) 
-endif()
-
 ## Get the package version. The defaults to 0.0.1.
 get_version ( "0.0.1" )
 

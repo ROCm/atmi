@@ -31,7 +31,7 @@ if(ATMI_DEP_LIBHSA_FOUND)
         else()
             if(EXISTS "${new_ov}/include/gcc-plugin.h" 
                AND EXISTS "${new_ov}/include/print-tree.h")
-                libatmi_runtime_say("GCC Plugin found")
+                libatmi_runtime_say("GCC Plugin found. Preparing to build ATMI C extensions.")
                 include_directories(${new_ov}/include)
                 set(PLUGIN_FOUND 1)
             else() 

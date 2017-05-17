@@ -14,12 +14,20 @@
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-add_subdirectory(core) 
+if(ATMI_DEP_LIBHSA_FOUND)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
+        libatmi_runtime_say("Preparing to build runtime/core")
+        add_subdirectory(core) 
 
-# compile interop layer if specified explicitly
-string( TOLOWER "${ATMI_HSA_INTEROP}" ATMI_HSA_INTEROP_VAR )
-if(ATMI_HSA_INTEROP_VAR MATCHES on )
-    add_subdirectory(interop) 
+        # compile interop layer if specified explicitly
+        string( TOLOWER "${ATMI_HSA_INTEROP}" ATMI_HSA_INTEROP_VAR )
+        if(ATMI_HSA_INTEROP_VAR MATCHES on )
+            add_subdirectory(interop) 
+        endif()
+
+    else()
+        libatmi_runtime_say("Not building ATMI Runtime: only support ATMI in Linux x86_64 or ppc64le hosts.")
+    endif()
+else()
+    libatmi_runtime_say("Not building ATMI Runtime: libhsa-runtime64 not found")
 endif()
-
-

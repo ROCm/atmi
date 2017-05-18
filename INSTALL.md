@@ -74,7 +74,12 @@ git clone https://github.com/RadeonOpenCompute/atmi.git
 mkdir ~/git/atmi/src/build
 cd ~/git/atmi/src/build
 # ensure you have cmake (version >= 2.8)
-cmake -DCMAKE_INSTALL_PREFIX=/path/to/install ..
+cmake \
+    -DCMAKE_INSTALL_PREFIX=/path/to/install \
+    -DLLVM_DIR=/path/to/llvm \ # optional to build ATMI device runtime 
+    -DATMI_HSA_INTEROP=on \    # optional to build ATMI with interop functionality
+    -DGFX_VER=700 \            # to build with specific arch. for ATMI device runtime
+    ..
 # make all components (RT and the C Plugin)
 make
 make install

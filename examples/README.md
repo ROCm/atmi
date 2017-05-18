@@ -1,7 +1,8 @@
 ```
-Examples are categorized into three types depending on the ATMI interface that
+Examples are categorized into many types depending on the ATMI interface that
 is chosen by the programmer: ATMI-C (C extensions), ATMI-RT (Runtime library
-interface) or ATMI-KE (Kernel enqueue).
+interface) or either of these interface with device enqueue (_denq). There is
+also a directory to showcase ATMI with HSA interoperability.
 ```
 
 ----------

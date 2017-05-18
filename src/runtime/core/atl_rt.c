@@ -2111,46 +2111,6 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
             impl_args->offset_x = 0;
             impl_args->offset_y = 0;
             impl_args->offset_z = 0;
-            // fill in the queue
-            impl_args->num_gpu_queues = g_ke_args.num_gpu_queues;
-            impl_args->gpu_queue_ptr = (uint64_t) g_ke_args.gpu_queue_ptr;
-            impl_args->num_cpu_queues = g_ke_args.num_cpu_queues;
-            impl_args->cpu_queue_ptr = (uint64_t) g_ke_args.cpu_queue_ptr;
-
-            // fill in the kernel template AQL packets
-            size_t template_size = sizeof(int) + // ID
-                                   2 * sizeof(hsa_kernel_dispatch_packet_t) + //CPU/GPU AQL
-                                   sizeof(void *); //kernarg regions
-            char *ke_template = (char *)g_ke_args.kernarg_template_ptr + (cur_kernel * template_size);
-            *(int *)ke_template = ID;
-
-            // fill in the GPU AQL template
-            ke_template += sizeof(int);
-            hsa_kernel_dispatch_packet_t *k_packet = (hsa_kernel_dispatch_packet_t *)ke_template;
-            k_packet->header = 0;
-            k_packet->kernarg_address = NULL;
-            k_packet->kernel_object = kernel_impl->kernel_objects[0];
-            k_packet->private_segment_size = kernel_impl->private_segment_sizes[0];
-            k_packet->group_segment_size = kernel_impl->group_segment_sizes[0];
-
-            // fill in the CPU AQL template
-            ke_template += sizeof(hsa_kernel_dispatch_packet_t);
-            hsa_agent_dispatch_packet_t *a_packet = (hsa_agent_dispatch_packet_t *)ke_template;
-            a_packet->header = 0; 
-            a_packet->type = (uint16_t) kernel_mapped_id;
-            /* FIXME: We are considering only void return types for now.*/
-            //a_packet->return_address = NULL;
-            /* Set function args */
-            a_packet->arg[0] = (uint64_t) ATMI_NULL_TASK_HANDLE;
-            a_packet->arg[1] = (uint64_t) NULL; 
-            a_packet->arg[2] = (uint64_t) kernel; // pass task handle to fill in metrics
-            a_packet->arg[3] = 0; // tasks can query for current task ID
-
-            // fill in the kernel arg regions
-            ke_template += sizeof(hsa_agent_dispatch_packet_t);
-            *(void **)ke_template = ke_kernarg_region;
-
-            // fill in the signals?
         }
     }
 

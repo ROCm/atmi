@@ -98,11 +98,7 @@ set (oclc_default_libs
   oclc_correctly_rounded_sqrt_off
   oclc_daz_opt_off
   oclc_finite_only_off
-<<<<<<< HEAD
   oclc_isa_version_${GFX_VER}
-=======
-  oclc_isa_version_803
->>>>>>> cmake updated to build atmi device library (atmi.amdgcn.bc). borrowed many cmake modules from rocm-device-libs
   oclc_unsafe_math_off
 )
 

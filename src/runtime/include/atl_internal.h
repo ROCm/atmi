@@ -52,23 +52,6 @@ typedef struct atl_kernel_enqueue_args_s {
     // ___________________________________________________________________________
 } atl_kernel_enqueue_args_t;
 
-typedef struct atmi_implicit_args_s {
-    uint64_t    offset_x;
-    uint64_t    offset_y;
-    uint64_t    offset_z;
-    uint64_t    pipe_ptr;
-    uint8_t     num_gpu_queues;
-    uint64_t    gpu_queue_ptr;
-    uint8_t     num_cpu_queues;
-    uint64_t    cpu_queue_ptr;
-    uint64_t    kernarg_template_ptr;
-    // ___________________________________________________________________________
-    // | num_kernels | GPU AQL k0 | CPU AQL k0 | kernarg | GPU AQL k1 | CPU AQL k1 | ... |
-    // ___________________________________________________________________________
-//    uint8_t     num_signals;
-//    uint64_t    signal_ptr;
-} atmi_implicit_args_t;
-
 typedef struct agent_t
 {
   int id;

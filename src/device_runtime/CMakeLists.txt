@@ -24,8 +24,9 @@ set (CMAKE_C_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang)
 if(GFX_VER)
 else()
     set(GFX_VER "803")
-    libatmi_runtime_say("GFX_VER=${GFX_VER}")
 endif()
+
+libatmi_runtime_say("Preparing to build device_runtime with GFX_VER=${GFX_VER}")
 
 list(APPEND CMAKE_OCL_SOURCE_FILE_EXTENSIONS .cl)
 list(APPEND CMAKE_C_SOURCE_FILE_EXTENSIONS .cl)

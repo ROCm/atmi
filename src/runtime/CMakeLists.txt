@@ -25,14 +25,6 @@ if(ATMI_DEP_LIBHSA_FOUND)
             add_subdirectory(interop) 
         endif()
         
-        #INSTALL(FILES 
-        #        ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi.h
-        #        ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_runtime.h
-        #######        ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
-        #        DESTINATION "include"
-        #        COMPONENT runtime
-        #       )
-
     else()
         libatmi_runtime_say("Not building ATMI Runtime: only support ATMI in Linux x86_64 or ppc64le hosts.")
     endif()

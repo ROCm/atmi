@@ -115,6 +115,14 @@ typedef struct atl_kernel_info_s {
     uint32_t kernel_segment_size;
 } atl_kernel_info_t;
 
+typedef struct atl_symbol_info_s {
+    uint64_t addr;
+    uint32_t size;
+} atl_symbol_info_t;
+
+extern std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
+extern std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
+
 typedef void* atl_kernel_metadata_t;
 
 extern std::vector<atl_kernel_metadata_t> AllMetadata;
@@ -257,6 +265,11 @@ typedef struct atmi_task_table_s {
 */
 extern int           SNK_NextTaskId;
 extern atl_dep_sync_t g_dep_sync_type;
+
+extern void register_allocation(void *addr, size_t size, atmi_mem_place_t place);
+extern hsa_agent_t get_compute_agent(atmi_place_t place);
+extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place);
+extern bool atl_is_atmi_initialized();
 
 extern void atl_task_wait(atl_task_t *task);
 extern void atl_stream_sync(atmi_task_group_table_t *stream_obj);

@@ -14,10 +14,7 @@ PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS 
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 #include "atmi_interop_hsa.h"
-
-extern hsa_agent_t get_compute_agent(atmi_place_t place);
-extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place);
-extern bool atl_is_atmi_initialized();
+#include "atl_internal.h"
 
 atmi_status_t atmi_interop_hsa_get_agent(atmi_place_t proc, hsa_agent_t *agent) {
     if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
@@ -33,5 +30,29 @@ atmi_status_t atmi_interop_hsa_get_memory_pool(atmi_mem_place_t memory,
     if(!pool) return ATMI_STATUS_ERROR;
 
     *pool = get_memory_pool_by_mem_place(memory);
+    return ATMI_STATUS_SUCCESS;
+}
+
+atmi_status_t atmi_interop_hsa_get_symbol_info(atmi_mem_place_t place, 
+        const char *symbol, void **var_addr, unsigned int *var_size) {
+    /*
+       // Typical usage:
+       void *var_addr;
+       size_t var_size;
+       atmi_interop_hsa_get_symbol_addr(gpu_place, "symbol_name", &var_addr, &var_size);
+       atmi_memcpy(host_add, var_addr, var_size);
+    */
+
+    if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
+    atmi_machine_t *machine = atmi_machine_get_info();
+    if(!symbol || !var_addr || !var_size || !machine) return ATMI_STATUS_ERROR;
+    if(place.dev_id < 0 || 
+        place.dev_id >= machine->device_count_by_type[place.dev_type])
+        return ATMI_STATUS_ERROR;
+
+    // get the symbol info
+    atl_symbol_info_t info = SymbolInfoTable[place.dev_id][std::string(symbol)];
+    *var_addr = (void *)info.addr;
+    *var_size = info.size;
     return ATMI_STATUS_SUCCESS;
 }

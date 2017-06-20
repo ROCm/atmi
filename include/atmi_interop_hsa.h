@@ -62,6 +62,34 @@ atmi_status_t atmi_interop_hsa_get_agent(atmi_place_t proc, hsa_agent_t *agent);
  */
 atmi_status_t atmi_interop_hsa_get_memory_pool(atmi_mem_place_t memory,
                                                hsa_amd_memory_pool_t *pool);
+
+/**
+ * @brief Get the device address and size of an HSA global symbol 
+ *
+ * @detail Use this function to query the device address and size of an HSA global symbol.
+ * The symbol can be set at by the compiler or by the application writer in a
+ * language-specific manner. This function is meaningful only after calling one
+ * of the @p atmi_module_register functions.
+ * 
+ * @param[in] place The ATMI memory place
+ *
+ * @param[in] symbol Pointer to a non-NULL global symbol name 
+ *
+ * @param[in] var_addr Pointer to a non-NULL @p void* variable that will 
+ * hold the device address of the global symbol object. 
+ *
+ * @param[in] var_size Pointer to a non-NULL @p uint variable that will 
+ * hold the size of the global symbol object. 
+ *
+ * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
+ *
+ * @retval ::ATMI_STATUS_ERROR If @p symbol, @p var_addr or @p var_size are invalid 
+ * location in the current node, or if ATMI is not initialized.
+ * 
+ * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
+ */
+atmi_status_t atmi_interop_hsa_get_symbol_info(atmi_mem_place_t place, 
+                            const char *symbol, void **var_addr, unsigned int *var_size);
 /** @} */
 
 #endif // __ATMI_INTEROP_HSA_H__

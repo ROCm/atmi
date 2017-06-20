@@ -21,7 +21,7 @@ target_sources(atmi_runtime PUBLIC
 
 include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../include)
 
 INSTALL(FILES 

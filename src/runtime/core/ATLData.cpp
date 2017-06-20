@@ -287,6 +287,13 @@ atmi_status_t atmi_data_destroy_sync(atmi_data_t *data) {
 }
 #endif 
 
+void register_allocation(void *ptr, size_t size, atmi_mem_place_t place) {
+    ATLData *data = new ATLData(ptr, NULL, size, place, ATMI_IN_OUT); 
+    g_data_map.insert(ptr, data);
+
+    if(place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(ptr);
+}
+
 atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
@@ -295,10 +302,7 @@ atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     DEBUG_PRINT("Malloced [%s %d] %p\n", place.dev_type == ATMI_DEVTYPE_CPU ? "CPU":"GPU", place.dev_id, *ptr); 
     if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
 
-    ATLData *data = new ATLData(*ptr, NULL, size, place, ATMI_IN_OUT); 
-    g_data_map.insert(*ptr, data);
-
-    if(place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(*ptr);
+    register_allocation(*ptr, size, place);
 
     return ret;
 }

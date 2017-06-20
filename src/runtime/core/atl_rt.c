@@ -117,6 +117,7 @@ std::queue<atl_task_t *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
 
 std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
+std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
 
 std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -508,6 +509,9 @@ void init_dag_scheduler() {
         AllTasks.clear();
         AllTasks.reserve(500000);
         //PublicTaskMap.clear();
+        for(int i = 0; i < SymbolInfoTable.size(); i++)
+            SymbolInfoTable[i].clear();
+        SymbolInfoTable.clear();
         for(int i = 0; i < KernelInfoTable.size(); i++)
             KernelInfoTable[i].clear();
         KernelInfoTable.clear();
@@ -992,6 +996,10 @@ atmi_status_t atmi_finalize() {
         atlc.g_cpu_initialized = 0;
     }
 
+    for(int i = 0; i < SymbolInfoTable.size(); i++) {
+        SymbolInfoTable[i].clear();
+    }
+    SymbolInfoTable.clear();
     for(int i = 0; i < KernelInfoTable.size(); i++) {
         KernelInfoTable[i].clear();
     }
@@ -1594,7 +1602,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         ErrorCheck(Allocating memory for the executable-kernel, err);
         */
     }
-    else {
+    else if(type == HSA_SYMBOL_KIND_VARIABLE) {
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length); 
         ErrorCheck(Symbol info extraction, err);
         char *name = (char *)malloc(name_length + 1);
@@ -1602,7 +1610,21 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         ErrorCheck(Symbol info extraction, err);
         name[name_length] = 0;
 
-        DEBUG_PRINT("Symbol name: %s\n", name);
+        atl_symbol_info_t info;
+
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS, &(info.addr)); 
+        ErrorCheck(Symbol info address extraction, err);
+
+        err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_SIZE, &(info.size)); 
+        ErrorCheck(Symbol info size extraction, err);
+
+        atmi_mem_place_t place = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, gpu, 0);
+        register_allocation((void *)info.addr, (size_t)info.size, place);
+        SymbolInfoTable[gpu][std::string(name)] = info;
+        DEBUG_PRINT("Symbol %s = %p (%u bytes)\n", name, (void *)info.addr, info.size);
+    }
+    else {
+        DEBUG_PRINT("Symbol is an indirect function\n");
     }
     return HSA_STATUS_SUCCESS;
 }
@@ -1640,6 +1662,7 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
 
     KernelInfoTable.resize(gpu_count);
+    SymbolInfoTable.resize(gpu_count);
 
     for(int gpu = 0; gpu < gpu_count; gpu++) 
     {

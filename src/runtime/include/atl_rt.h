@@ -24,9 +24,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 #include "hsa.h"
 #include "hsa_ext_finalize.h"
-/*  set NOTCOHERENT needs this include
 #include "hsa_ext_amd.h"
-*/
 
 #include "atmi.h"
 #include "atmi_runtime.h"

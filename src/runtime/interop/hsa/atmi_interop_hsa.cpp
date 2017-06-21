@@ -51,8 +51,16 @@ atmi_status_t atmi_interop_hsa_get_symbol_info(atmi_mem_place_t place,
         return ATMI_STATUS_ERROR;
 
     // get the symbol info
-    atl_symbol_info_t info = SymbolInfoTable[place.dev_id][std::string(symbol)];
-    *var_addr = (void *)info.addr;
-    *var_size = info.size;
-    return ATMI_STATUS_SUCCESS;
+    std::string symbolStr = std::string(symbol);
+    if(SymbolInfoTable[place.dev_id].find(symbolStr) != SymbolInfoTable[place.dev_id].end()) {
+        atl_symbol_info_t info = SymbolInfoTable[place.dev_id][symbolStr];
+        *var_addr = (void *)info.addr;
+        *var_size = info.size;
+        return ATMI_STATUS_SUCCESS;
+    }
+    else {
+        *var_addr = NULL;
+        *var_size = 0;
+        return ATMI_STATUS_ERROR;
+    }
 }

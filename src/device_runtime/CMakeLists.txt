@@ -24,6 +24,7 @@ if(LLVM_FOUND)
       ATMI_DE_DEP_LIBHSA_INCLUDE
       ockl_hsa.h
       PATHS
+      ${LLVM_INCLUDE_DIRS}
       /opt/rocm/include
       /usr/local/include
       )
@@ -33,6 +34,7 @@ if(LLVM_FOUND)
       ATMI_DE_DEP_LIBHSA_LIBRARIES
       ockl.amdgcn.bc
       PATHS
+      ${LLVM_LIBRARY_DIRS}
       /opt/rocm/lib
       /usr/local/lib
       )

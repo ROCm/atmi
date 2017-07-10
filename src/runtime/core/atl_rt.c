@@ -118,6 +118,7 @@ std::queue<hsa_signal_t> FreeSignalPool;
 
 std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
 std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
+std::set<std::string> SymbolSet;
 
 std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -1555,6 +1556,42 @@ atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable) {
     return ATMI_STATUS_SUCCESS;
 }
 
+hsa_status_t validate_code_object(hsa_code_object_t code_object, hsa_code_symbol_t symbol, void *data) {
+    hsa_status_t retVal = HSA_STATUS_SUCCESS;
+    int gpu = *(int *)data;
+    hsa_symbol_kind_t type;
+
+    uint32_t name_length;
+    hsa_status_t err;
+    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_TYPE, &type); 
+    ErrorCheck(Symbol info extraction, err);
+    DEBUG_PRINT("Exec Symbol type: %d\n", type);
+    
+   if(type == HSA_SYMBOL_KIND_VARIABLE) {
+        err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME_LENGTH, &name_length); 
+        ErrorCheck(Symbol info extraction, err);
+        char *name = (char *)malloc(name_length + 1);
+        err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME, name); 
+        ErrorCheck(Symbol info extraction, err);
+        name[name_length] = 0;
+
+        if(SymbolSet.find(std::string(name)) != SymbolSet.end()) {
+            // Symbol already found. Return Error
+            DEBUG_PRINT("Symbol %s already found!\n", name);
+            retVal = HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED;
+        } else {
+            SymbolSet.insert(std::string(name));
+        }
+
+        free(name);
+    }
+    else {
+        DEBUG_PRINT("Symbol is an indirect function\n");
+    }
+    return retVal;
+
+}
+
 hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
     int gpu = *(int *)data;
     hsa_symbol_kind_t type;
@@ -1622,6 +1659,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         register_allocation((void *)info.addr, (size_t)info.size, place);
         SymbolInfoTable[gpu][std::string(name)] = info;
         DEBUG_PRINT("Symbol %s = %p (%u bytes)\n", name, (void *)info.addr, info.size);
+        free(name);
     }
     else {
         DEBUG_PRINT("Symbol is an indirect function\n");
@@ -1680,6 +1718,8 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
         err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
         ErrorCheckAndContinue(Create the executable, err);
 
+        // clear symbol set for every executable
+        SymbolSet.clear();
         int module_load_success = 0;
         for(int i = 0; i < num_modules; i++) {
             void *module_bytes = modules[i];
@@ -1722,6 +1762,9 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
                 err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
                 ErrorCheckAndContinue(Code Object Deserialization, err);
                 assert(0 != code_object.handle);
+
+                err = hsa_code_object_iterate_symbols(code_object, validate_code_object, &gpu); 
+                ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
                 /* Load the code object.  */
                 err = hsa_executable_load_code_object(executable, agent, code_object, NULL);

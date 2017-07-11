@@ -110,63 +110,6 @@ int main(int argc, char *argv[]) {
             kcalls, &start_time, 
             &end_launch_time, &end_time);
 
-/*
-
-    lparm->WORKITEMS=64;
-    lparm->kernel_id = K_ID_mainTask_gpu; 
-    lparm->synchronous=ATMI_TRUE;
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-    mainTask(lparm, kcalls/lparm->WORKITEMS); 
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
-    printf("Kernel Calls     =  %ld\n",kcalls);
-    print_timing("Synchronous Execution (DP)", 
-            kcalls, &start_time, 
-            &end_launch_time, &end_time);
-   
-    lparm->kernel_id = K_ID_mainTask_gpu; 
-    lparm->synchronous=ATMI_FALSE;
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-    mainTask(lparm, kcalls/lparm->WORKITEMS); 
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    atmi_task_group_sync(stream);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
-    print_timing("Asynchronous Execution (DP)", 
-            kcalls, &start_time, 
-            &end_launch_time, &end_time);
-
-    lparm->kernel_id = K_ID_mainTask_recursive_gpu; 
-    lparm->synchronous=ATMI_TRUE;
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-    mainTask(lparm, kcalls/lparm->WORKITEMS); 
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
-    print_timing("Synchronous Recursive Execution (DP)", 
-            kcalls, &start_time, 
-            &end_launch_time, &end_time);
-    lparm->kernel_id = K_ID_mainTask_binary_tree_gpu; 
-    lparm->synchronous=ATMI_FALSE;
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-    mainTask(lparm, (kcalls/lparm->WORKITEMS)); 
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    atmi_task_group_sync(stream);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
-    print_timing("Asynchronous Binary Tree Execution (DP)", 
-            kcalls, &start_time, 
-            &end_launch_time, &end_time);
-*/
-    /*lparm->kernel_id = K_ID_mainTask_4ary_tree_gpu; 
-      lparm->synchronous=ATMI_FALSE;
-      clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-      mainTask(lparm, (kcalls/lparm->WORKITEMS)/4); 
-      clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-      atmi_task_group_sync(stream);
-      clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
-      print_timing("Asynchronous 4-ary Tree Execution (DP)", 
-      kcalls, &start_time, 
-      &end_launch_time, &end_time);
-      */
-
     lparm->WORKITEMS = 64;
     lparm->kernel_id = K_ID_subTask_gpu; 
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
@@ -176,20 +119,6 @@ int main(int argc, char *argv[]) {
     print_timing("Synchronous Task Loop (Ordered)", 
             kcalls, &start_time, 
             &end_launch_time, &end_time);
-/*
-    lparm->synchronous=ATMI_FALSE;
-    lparm->WORKITEMS = 64;
-    lparm->kernel_id = K_ID_subTask_gpu; 
-    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-    for(int i=0; i<kcalls; i++) subTask(lparm); 
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    atmi_task_group_sync(stream);
-    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
-    print_timing("Asynchronous Task Loop (Ordered)", 
-            kcalls, &start_time, 
-            &end_launch_time, &end_time);
-*/
-
 }
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {

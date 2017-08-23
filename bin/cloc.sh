@@ -272,6 +272,12 @@ carrizo)
 fiji)
     GFX_VER=803
     ;;
+vega)
+    GFX_VER=900
+    ;;
+gfx900)
+    GFX_VER=900
+    ;;
 esac
 
 LLVMOPT=${LLVMOPT:-3}

@@ -1704,6 +1704,7 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
 
     for(int gpu = 0; gpu < gpu_count; gpu++) 
     {
+        DEBUG_PRINT("Trying to load module to GPU-%d\n", gpu);
         atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
         hsa_agent_t agent = proc.getAgent();
@@ -2116,21 +2117,25 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     int max_kernarg_segment_size = 0;
     std::string kernel_name; 
     atmi_platform_type_t kernel_type;
+    bool some_success = false;
     for(int gpu = 0; gpu < gpu_count; gpu++) {
         if(KernelInfoTable[gpu].find(hsaco_name) != KernelInfoTable[gpu].end()) {
+			DEBUG_PRINT("Found kernel %s for GPU %d\n", hsaco_name.c_str(), gpu);
             kernel_name = hsaco_name;
             kernel_type = AMDGCN;
+            some_success = true;
         }
         else if(KernelInfoTable[gpu].find(brig_name) != KernelInfoTable[gpu].end()) {
             kernel_name = brig_name;
             kernel_type = BRIG;
+            some_success = true;
         }
         else {
-            fprintf(stderr, "Did NOT find kernel %s or %s for GPU %d\n", 
+            DEBUG_PRINT("Did NOT find kernel %s or %s for GPU %d\n", 
                     hsaco_name.c_str(),
                     brig_name.c_str(),
                     gpu);
-            return ATMI_STATUS_ERROR;
+            continue;
         }
         atl_kernel_info_t info = KernelInfoTable[gpu][kernel_name];
         kernel_impl->kernel_objects[gpu] = info.kernel_object;
@@ -2139,6 +2144,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
         if(max_kernarg_segment_size < info.kernel_segment_size)
             max_kernarg_segment_size = info.kernel_segment_size;
     }
+    if(!some_success) return ATMI_STATUS_ERROR;
     kernel_impl->kernel_name = kernel_name;
     kernel_impl->kernel_type = kernel_type;
     kernel_impl->kernarg_segment_size = max_kernarg_segment_size;

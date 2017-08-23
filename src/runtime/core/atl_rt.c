@@ -890,8 +890,10 @@ atmi_status_t atmi_ke_init() {
         ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
         std::vector<hsa_queue_t *> qs = proc.getQueues();
         num_queues = qs.size();
-        gpu_queues.insert(gpu_queues.begin(), qs.begin(), qs.end());
+        gpu_queues.insert(gpu_queues.end(), qs.begin(), qs.end());
         // TODO: how to handle queues from multiple devices? keep them separate?
+		// Currently, first N queues correspond to GPU0, next N queues map to GPU1
+		// and so on. 
     }
     g_ke_args.num_gpu_queues = gpu_queues.size();
     void *gpu_queue_ptr;
@@ -915,8 +917,10 @@ atmi_status_t atmi_ke_init() {
         ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
         std::vector<hsa_queue_t *> qs = proc.getQueues();
         num_queues = qs.size();
-        cpu_queues.insert(cpu_queues.begin(), qs.begin(), qs.end());
+        cpu_queues.insert(cpu_queues.end(), qs.begin(), qs.end());
         // TODO: how to handle queues from multiple devices? keep them separate?
+		// Currently, first N queues correspond to CPU0, next N queues map to CPU1
+		// and so on. 
     }
     g_ke_args.num_cpu_queues = cpu_queues.size();
     void *cpu_queue_ptr;

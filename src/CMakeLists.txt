@@ -36,7 +36,7 @@ set (atmi_VERSION_MINOR 3)
 # Default install path to ROCM and not /usr/local
 ################################################################################
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set (CMAKE_INSTALL_PREFIX "/opt/rocm/libatmi" CACHE PATH "default install path" FORCE )
+  set (CMAKE_INSTALL_PREFIX "/opt/rocm/atmi" CACHE PATH "default install path" FORCE )
 endif()
 ################################################################################
 # Looking for ROCM...

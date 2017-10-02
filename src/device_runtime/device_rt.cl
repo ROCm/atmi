@@ -79,7 +79,8 @@ void kernel_dispatch(atmi_lparm_t *lparm, global hsa_queue_t *this_Q,
  
     /* thisKernargAddress has already been set up in the beginning of this routine */ 
     /*  Bind kernel argument buffer to the aql packet.  */ 
-    this_aql->kernarg_address = (__constant void *)(uintptr_t)kernarg_region; 
+    //this_aql->kernarg_address = (__constant void *)(uintptr_t)kernarg_region;
+    this_aql->kernarg_address = (__global void *)(uintptr_t)kernarg_region;
     this_aql->kernel_object = kernel_packet->kernel_object; 
     this_aql->private_segment_size = kernel_packet->private_segment_size; 
     this_aql->group_segment_size = kernel_packet->group_segment_size; 

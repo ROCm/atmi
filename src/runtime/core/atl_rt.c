@@ -196,11 +196,22 @@ void set_task_handle_ID(atmi_task_handle_t *t, int ID) {
     #endif
 }
 
+atmi_task_group_t get_task_group(atmi_task_handle_t t) {
+    atl_task_t *task = get_task(t);
+    atmi_task_group_t ret;
+    if(task) 
+        ret = task->group;
+    return ret;        
+}
+
 atl_task_t *get_task(atmi_task_handle_t t) {
     /* FIXME: node 0 only for now */
-    lock(&mutex_all_tasks_);
-    atl_task_t *ret = AllTasks[get_task_handle_ID(t)];
-    unlock(&mutex_all_tasks_);
+    atl_task_t *ret = NULL;
+    if(t != ATMI_NULL_TASK_HANDLE) {
+        lock(&mutex_all_tasks_);
+        ret = AllTasks[get_task_handle_ID(t)];
+        unlock(&mutex_all_tasks_);
+    }
     return ret;
     //return AllTasks[t.lo];
 }
@@ -3774,11 +3785,14 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     DEBUG_PRINT("Pif %s requires %d task\n", kernel_impl->kernel_name.c_str(), lparm->num_required);
 
     ret->predecessors.clear();
-    ret->predecessors.resize(lparm->num_required);
+    //ret->predecessors.resize(lparm->num_required);
     for(int idx = 0; idx < lparm->num_required; idx++) {
         atl_task_t *pred_task = get_task(lparm->requires[idx]);
-        assert(pred_task != NULL);
-        ret->predecessors[idx] = pred_task;
+        //assert(pred_task != NULL);
+        if(pred_task) {
+            DEBUG_PRINT("Task %lu adding %lu task as predecessor\n", ret->id, pred_task->id);
+            ret->predecessors.push_back(pred_task);
+        }
     }
     ret->pred_stream_objs.clear();
     ret->pred_stream_objs.resize(lparm->num_required_groups);

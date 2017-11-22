@@ -5,7 +5,7 @@
 #
 # Written by Greg Rodgers Gregory.Rodgers@amd.com
 
-PROGVERSION=0.3-7
+PROGVERSION=0.4-0
 
 # Copyright (c) 2016 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -110,9 +110,11 @@ function code2gpu(){
       ;;
       "k4000")   gpuname="sm_30"
       ;;
-      "sm_35")   gpuname="sm_35"
+      "k4200")   gpuname="sm_30"
       ;;
-      "gtx980")  gpuname="sm_35"
+      "gtx980")   gpuname="sm_35"
+      ;;
+      "")  gpuname="sm_35"
       ;;
       *) gpuname="unknown" 
       ;;
@@ -136,14 +138,72 @@ function gpu2code(){
       ;;
       "gfx900") codename="vega"
       ;;
-      "sm_35") codename="gtx980"
+# sm_ numbers do not map to specific gpus so just return the sm number
+      *) codename="$1"
       ;;
-      "sm_30") codename="k4000"
+   esac
+   echo $codename
+}
+
+#  FIXME: PLEASE HELP US FILL OUT THESE TABLES !
+function nvid2code(){
+   case "$1" in
+      "10de:11fa") codename="k4000"
+      ;;
+      "10de:11b4") codename="k4200"
+      ;;
+      "10de:13c0") codename="gtx980"
       ;;
       *) codename="$1" 
       ;;
    esac
    echo $codename
+}
+
+function kfdid2code(){
+   case "$1" in
+      "6860") codename="vega"
+      ;;
+      "6863") codename="vega"
+      ;;
+      "687f") codename="vega"
+      ;;
+      "7300") codename="fiji"
+      ;;
+      *) codename="unknown"
+      ;;
+   esac
+   echo $codename
+}
+
+function apu2code(){
+case "$1" in
+  "A10-7850K" ) codename="kaveri"
+      ;;
+  "A10-7870K" ) codename="kaveri"
+      ;;
+  "A10-7700K" ) codename="kaveri"
+      ;;
+  "A6-7400K") codename="kaveri"
+      ;;
+  "A10 PRO-7350B") codename="kaveri"
+      ;;
+  "A10-7800K" ) codename="kaveri"
+      ;;
+  "FX-8800P") codename="carrizo"
+      ;;
+  "A12-8800B") codename="carrizo"
+      ;;
+  "A12-8700B") codename="carrizo"
+      ;;
+  "A10-8700P") codename="carrizo"
+      ;;
+  "Eng") codename="carrizo"
+      ;;
+  *) codename="unknown"
+      ;;
+esac
+echo $codename
 }
 
 # This function tries to find the codename for the current system. 
@@ -162,59 +222,51 @@ else
     CPU=`echo $CPULABEL | cut -d" " -f2-3`
   fi
 fi
-
 if [ "$VENDOR" == "AMD" ] ; then 
-
-  if [ "$CPU" == "A10-7850K" ] || \
-     [ "$CPU" == "A10-7870K" ] || \
-     [ "$CPU" == "A10-7700K" ] || \
-     [ "$CPU" == "A6-7400K" ] || \
-     [ "$CPU" == "A10 PRO-7350B" ] || \
-     [ "$CPU" == "A10-7800K" ] ; then 
-     thisname=kaveri
+  thisname=$(apu2code $CPU)
+  if [ "$thisname" == "unknown" ] ; then
+     thisname=""
   fi
-
-  if [ "$CPU" == "FX-8800P" ] || \
-     [ "$CPU" == "A12-8800B" ] || \
-     [ "$CPU" == "A12-8700B" ] || \
-     [ "$CPU" == "A10-8700P" ] || \
-     [ "$CPU" == "Eng" ] ; then 
-     thisname=carrizo
-  fi
-
 fi
+
+#  If not an APU check for GPU
 if [ "$thisname" == "" ] ; then
    if [ -f "/sys/devices/virtual/kfd/kfd/topology/nodes/1/properties" ] ; then
-      thisname=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/1/properties | grep device_id | cut -d" " -f2 | xargs printf "%x\n"`
-      if [ "$thisname" == "6863" ] ; then
-         thisname="vega"
-      else
-         if [ "$thisname" == "7300" ] ; then
-            thisname="fiji"
+      kfdid=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/*/properties | grep device_id | cut -d" " -f2 | grep -v "^0" | sort -u |  xargs printf "%x\n"`
+      #kfdid=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/*/properties | grep device_id | sort -u | cut -d" " -f2 | grep -v "^0" | sort -u |  xargs printf "%x\n"`
+      if [ "$kfdid" != "" ] ; then
+        thisname=$(kfdid2code $kfdid)
+      fi
+   fi
+
+#  kfd may not be working so check lspci for ATI
+   if [ "$thisname" == "unknown" ] ; then
+      slot=`lspci | grep ATI | grep -v Audio | cut -d" " -f1 | sort -u`
+      if [ "$slot" != "" ] ; then
+         kfdid=`lspci -s $slot -n | cut -d" " -f3 | cut -d":" -f2`
+         if [ "$kfdid" != "" ] ; then
+           thisname=$(kfdid2code $kfdid)
          fi
       fi
    fi
+   if [ "$thisname" == "unknown" ] ; then
+      thisname=""
+   fi
+
+   # If not AMD GPU, check for Nvidia GPU
    if [ "$thisname" == "" ] ; then
-      thisname=`lspci | grep -i -m1 Firepro | cut -d] -f2 | cut -d" " -f2`
-      if [ "$thisname" == "" ] ; then
-         thisname="sm_30"
-         lspci | grep -m1 -q GK106GL
-         if [ $? != 0 ] ; then 
-             thisname="sm_35"
-             lspci | grep -m1 NVIDIA | grep -q 13c0 
-             if [ $? != 0 ] ; then 
-                thisname="sm_35"
-                lspci | grep -m1 -q "GTX 980"
-                if [ $? != 0 ] ; then 
-                   thisname=""
-                fi
-             fi
-         fi
+      nvslot=`lspci | grep -i nvidia | grep -v Audio | cut -d" " -f1 | sort -u`
+      if [ "$nvslot" != "" ] ; then
+        nvid=`lspci -n -s $nvslot | cut -d" " -f3`
+        if [ "$nvid" != "" ] ; then
+           thisname=$(nvid2code $nvid)
+        fi
       fi
    fi
 fi
 
 if [ "$thisname" != "" ] ; then
+  #FIXME Do we need this case conversion anymore ?
   lowercasevalue=`echo $thisname | tr '[:upper:]' '[:lower:]'`
 else 
   lowercasevalue="unknown"

@@ -2832,7 +2832,7 @@ void do_progress(atmi_task_group_table_t *task_group, int progress_count) {
         try_dispatch(*it, NULL, ATMI_FALSE);
     }
     #else
-    if(task_group->ordered) {
+    if(task_group && task_group->ordered) {
         do_progress_on_task_group(task_group);
     }
     else {
@@ -3455,7 +3455,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
                 atmi_task_group_table_t *pred_tg = ret->pred_stream_objs[idx];
                 DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
                         ret, pred_tg);
-                if(pred_tg->task_count.load() > 0) {
+                if(pred_tg && pred_tg->task_count.load() > 0) {
                     // predecessor task group is still running, so add yourself to its successor list
                     should_try_dispatch = false;
                     predecessors_complete = false;
@@ -3798,11 +3798,12 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     ret->pred_stream_objs.resize(lparm->num_required_groups);
     for(int idx = 0; idx < lparm->num_required_groups; idx++) {
         std::map<int, atmi_task_group_table_t *>::iterator map_it = StreamTable.find(lparm->required_groups[idx]->id);
-        assert(map_it != StreamTable.end());
-        atmi_task_group_table_t *pred_tg = map_it->second;
-        assert(pred_tg != NULL);
-        DEBUG_PRINT("Task %p adding %p task group as predecessor\n", ret, pred_tg);
-        ret->pred_stream_objs[idx] = pred_tg;
+        if(map_it != StreamTable.end()) {
+            atmi_task_group_table_t *pred_tg = map_it->second;
+            assert(pred_tg != NULL);
+            DEBUG_PRINT("Task %p adding %p task group as predecessor\n", ret, pred_tg);
+            ret->pred_stream_objs[idx] = pred_tg;
+        }
     }
 
     ret->type = ATL_KERNEL_EXECUTION;

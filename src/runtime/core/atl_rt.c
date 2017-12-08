@@ -3108,7 +3108,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                 hsa_queue_t *this_queue = this_queues[tid % q_count];
                 /*  Obtain the current queue write index. increases with each call to kernel  */
                 uint64_t index = hsa_queue_add_write_index_relaxed(this_queue, 1);
-                while(index - hsa_queue_load_read_index_acquire(this_Q) >= this_Q->size);
+                while(index - hsa_queue_load_read_index_acquire(this_queue) >= this_queue->size);
                 /* Find the queue index address to write the packet info into.  */
                 const uint32_t queueMask = this_queue->size - 1;
                 hsa_agent_dispatch_packet_t* this_aql = &(((hsa_agent_dispatch_packet_t*)(this_queue->base_address))[index&queueMask]);

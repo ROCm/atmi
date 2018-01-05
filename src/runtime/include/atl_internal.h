@@ -207,6 +207,7 @@ typedef struct atl_task_s {
     atmi_task_group_table_t *stream_obj;
     atmi_task_group_t group;
     boolean groupable;
+    boolean synchronous;
 
     // for ordered task groups
     atl_task_t * prev_ordered_task;

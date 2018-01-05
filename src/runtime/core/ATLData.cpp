@@ -323,6 +323,7 @@ atmi_status_t atmi_free(void *ptr) {
 }
 
 atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void *src, size_t size) {
+    // TODO: Reuse code in atl_rt for setting up default task params
     atmi_task_group_t *stream = NULL;
     if(lparm->group == NULL) {
         stream = &atl_default_stream_obj;

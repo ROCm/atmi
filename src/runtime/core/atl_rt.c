@@ -3428,7 +3428,9 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
         unlock_set(req_mutexes);
         return false;
     }
-    if(should_try_dispatch) {
+    // do not add predecessor-successor link if task is already initialized using
+    // create-activate pattern
+    if(ret->state < ATMI_INITIALIZED && should_try_dispatch) {
         if(ret->predecessors.size() > 0) {
             // add to its predecessor's dependents list and return 
             for(int idx = 0; idx < ret->predecessors.size(); idx++) {
@@ -3470,7 +3472,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
         }
     }
 
-    if(should_try_dispatch) {
+    if(ret->state < ATMI_INITIALIZED && should_try_dispatch) {
         if(ret->prev_ordered_task) {
             DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ",
                     ret->id, ret->prev_ordered_task->id);
@@ -3665,12 +3667,12 @@ atl_task_t *atl_trycreate_task(atl_kernel_t *kernel) {
     return ret;
 }
 
-atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
-                 atl_task_t *task_obj,
+void set_task_params(atl_task_t *task_obj, 
+                 const atmi_lparm_t *lparm, 
                  unsigned int kernel_id,
                  void **args) {
     TryLaunchInitTimer.Start();
-    if(!task_obj) return ATMI_NULL_TASK_HANDLE;
+    if(!task_obj) return;
     DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id, lparm->place.type, lparm->place.device_id, lparm->place.cu_mask);
 #if 1
     static bool is_called = false;
@@ -3777,6 +3779,7 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     ret->group = *stream;
     ret->stream_obj = stream_obj;
     ret->place = lparm->place;
+    ret->synchronous = lparm->synchronous;
     //DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);
     ret->num_predecessors = 0;
     ret->num_successors = 0;
@@ -3823,10 +3826,20 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
         (ret->stream_obj->task_count)++;
     }
     TryLaunchInitTimer.Stop();
+}
 
-    try_dispatch(ret, args, lparm->synchronous);
-
-    return ret->id;
+atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
+                 atl_task_t *task_obj,
+                 unsigned int kernel_id,
+                 void **args) {
+    atmi_task_handle_t ret_handle = ATMI_NULL_TASK_HANDLE;
+    atl_task_t *ret = task_obj;
+    if(ret) {
+        set_task_params(ret, lparm, kernel_id, args);
+        try_dispatch(ret, args, lparm->synchronous);
+        ret_handle = ret->id;
+    }
+    return ret_handle;
 }
 
 atl_kernel_t *get_kernel_obj(atmi_kernel_t atmi_kernel) {
@@ -3841,7 +3854,7 @@ atl_kernel_t *get_kernel_obj(atmi_kernel_t atmi_kernel) {
     return kernel;
  }
 
-atmi_task_handle_t atmi_task_create(atmi_kernel_t atmi_kernel) {
+atmi_task_handle_t atmi_task_template_create(atmi_kernel_t atmi_kernel) {
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
     atl_kernel_t *kernel = get_kernel_obj(atmi_kernel);
     if(kernel) { 
@@ -3886,7 +3899,7 @@ int get_kernel_id(atmi_lparm_t *lparm, atl_kernel_t *kernel) {
     return kernel_id;
 }
 
-atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task, atmi_lparm_t *lparm, 
+atmi_task_handle_t atmi_task_template_activate(atmi_task_handle_t task, atmi_lparm_t *lparm, 
                                     void **args) {
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
     atl_task_t *task_obj = get_task(task); 
@@ -3903,6 +3916,110 @@ atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task, atmi_lparm_t *lpa
     if(kernel_id == -1) return ret;
 
     ret = atl_trylaunch_kernel(lparm, task_obj, kernel_id, args);
+    DEBUG_PRINT("[Returned Task: %lu]\n", ret);
+    return ret;
+}
+
+atmi_task_handle_t atmi_task_create(atmi_lparm_t *lparm,
+                                    atmi_kernel_t atmi_kernel,
+                                    void **args) {
+
+    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+    atl_kernel_t *kernel = get_kernel_obj(atmi_kernel);
+    if(kernel) { 
+        atl_task_t *ret_obj = atl_trycreate_task(kernel);
+        if(ret_obj) {
+            int kernel_id = get_kernel_id(lparm, kernel);
+            if(kernel_id == -1) return ret;
+            set_task_params(ret_obj, lparm, kernel_id, args);
+
+            std::set<pthread_mutex_t *> req_mutexes;
+            req_mutexes.clear();
+            req_mutexes.insert((pthread_mutex_t *)&(ret_obj->mutex));
+            std::vector<atl_task_t *> &temp_vecs = ret_obj->predecessors;
+            for(int idx = 0; idx < ret_obj->predecessors.size(); idx++) {
+                atl_task_t *pred_task = ret_obj->predecessors[idx];
+                req_mutexes.insert((pthread_mutex_t *)&(pred_task->mutex));
+            }
+#if 0
+            // do we care about locking for ordered and task group mutexes?
+            if(ret_obj->prev_ordered_task) 
+                req_mutexes.insert(&(ret_obj->prev_ordered_task->mutex));
+            atmi_task_group_table_t *stream_obj = ret_obj->stream_obj;
+            req_mutexes.insert(&(stream_obj->group_mutex));
+#endif
+            lock_set(req_mutexes);
+            // populate its predecessors' successor list 
+            // similar to a double linked list
+            if(ret_obj->predecessors.size() > 0) {
+                // add to its predecessor's dependents list and ret_objurn 
+                for(int idx = 0; idx < ret_obj->predecessors.size(); idx++) {
+                    atl_task_t *pred_task = ret_obj->predecessors[idx];
+                    DEBUG_PRINT("Task %p depends on %p as predecessor ",
+                            ret_obj, pred_task);
+                    if(pred_task->state /*.load(std::memory_order_seq_cst)*/ < ATMI_EXECUTED) {
+                        //should_try_dispatch = false;
+                        //predecessors_complete = false;
+                        pred_task->and_successors.push_back(ret_obj);
+                        ret_obj->num_predecessors++;
+                        DEBUG_PRINT("(waiting)\n");
+                        //waiting_count++;
+                    }
+                    else {
+                        DEBUG_PRINT("(completed)\n");
+                    }
+                }
+            }
+            if(ret_obj->pred_stream_objs.size() > 0) {
+                // add to its predecessor's dependents list and ret_objurn 
+                DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret_obj->id, ret_obj->pred_stream_objs.size());
+                for(int idx = 0; idx < ret_obj->pred_stream_objs.size(); idx++) {
+                    atmi_task_group_table_t *pred_tg = ret_obj->pred_stream_objs[idx];
+                    DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
+                            ret_obj, pred_tg);
+                    if(pred_tg && pred_tg->task_count.load() > 0) {
+                        // predecessor task group is still running, so add yourself to its successor list
+                        //should_try_dispatch = false;
+                        //predecessors_complete = false;
+                        pred_tg->and_successors.push_back(ret_obj);
+                        ret_obj->num_predecessors++;
+                        DEBUG_PRINT("(waiting)\n");
+                    }
+                    else {
+                        DEBUG_PRINT("(completed)\n");
+                    }
+                }
+            }
+
+            // Save kernel args because it will be activated
+            // later. This way, the user will be able to 
+            // reuse their kernarg region that was created 
+            // in the application space.
+            if(ret_obj->kernel && ret_obj->kernarg_region == NULL) {
+                // first time allocation/assignment
+                ret_obj->kernarg_region = malloc(ret_obj->kernarg_region_size);
+                //ret->kernarg_region_copied = true;
+                set_kernarg_region(ret_obj, args);
+            }
+            set_task_state(ret_obj, ATMI_INITIALIZED);
+
+            unlock_set(req_mutexes);
+            ret = ret_obj->id;
+        }
+    }
+    return ret;
+}
+
+atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task) {
+    atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+    atl_task_t *ret_obj = get_task(task); 
+    if(!ret_obj) return ret;
+    ret = ret_obj->id;
+    
+    // If the task has predecessors then you cannot activate this task. Task
+    // activation is supported only for tasks without predecessors. 
+    if(ret_obj->predecessors.size() <= 0) 
+        try_dispatch(ret_obj, NULL, ret_obj->synchronous);
     DEBUG_PRINT("[Returned Task: %lu]\n", ret);
     return ret;
 }

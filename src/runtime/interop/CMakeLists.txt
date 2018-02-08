@@ -14,4 +14,8 @@
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-add_subdirectory(hsa) 
+# compile HSA interop layer if specified explicitly
+string( TOLOWER "${ATMI_HSA_INTEROP}" ATMI_HSA_INTEROP_VAR )
+if(ATMI_HSA_INTEROP_VAR MATCHES on )
+    add_subdirectory(hsa) 
+endif()

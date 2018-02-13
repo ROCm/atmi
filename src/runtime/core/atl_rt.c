@@ -55,7 +55,6 @@ static size_t max_ready_queue_sz = 0;
 static size_t waiting_count = 0;
 static size_t direct_dispatch = 0;
 static size_t callback_dispatch = 0;
-atl_task_t ***GlobalTaskPtr;
 #define NANOSECS 1000000000L
 
 //  set NOTCOHERENT needs this include
@@ -842,20 +841,6 @@ void init_tasks() {
     err=hsa_signal_create(0, 0, NULL, &IdentityCopySignal);
     ErrorCheck(Creating a HSA signal, err);
     DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
-    //GlobalTaskPtr = (atl_task_t ***)malloc(sizeof(atl_task_t**));
-    //int val = posix_memalign((void **)&GlobalTaskPtr, 4096, sizeof(atl_task_t **));
-#ifdef MEMORY_REGION
-    err = hsa_memory_allocate(atl_gpu_kernarg_region, 
-            sizeof(atl_task_t **),
-            (void **)&GlobalTaskPtr);
-#else    
-    err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool, 
-            sizeof(atl_task_t **),
-            0,
-            (void **)&GlobalTaskPtr);
-    allow_access_to_all_gpu_agents(GlobalTaskPtr);
-#endif
-    ErrorCheck(Creating the global task ptr, err);
     atlc.g_tasks_initialized = 1;
 }
 
@@ -1961,7 +1946,13 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
         lock(&((*it)->mutex));
         if((*it)->devtype == ATMI_DEVTYPE_GPU) {
             // free the pipe_ptrs data
-            void *pipe_ptrs = (void *)(((char *)(*it)->kernarg_region) + (*it)->kernarg_segment_size - sizeof(atmi_implicit_args_t));
+            // We create the pipe_ptrs region for all kernel instances
+            // combined, and each instance of the kernel
+            // invocation takes a piece of it. So, the first kernel instance
+            // (k=0) will have the pointer to the entire pipe region itself. 
+            atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(((char *)(*it)->kernarg_region) + (*it)->kernarg_segment_size - sizeof(atmi_implicit_args_t));
+            void *pipe_ptrs = (void *)impl_args->pipe_ptr;
+            DEBUG_PRINT("Freeing pipe ptr: %p\n", pipe_ptrs);
             hsa_memory_free(pipe_ptrs);
             hsa_memory_free((*it)->kernarg_region);
             free((*it)->kernel_objects);
@@ -2190,6 +2181,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
                 0,
                 &pipe_ptrs);
         ErrorCheck(Allocating pipe memory region, err);
+        DEBUG_PRINT("Allocating pipe ptr: %p\n", pipe_ptrs);
         allow_access_to_all_gpu_agents(pipe_ptrs);
 
         for(int k = 0; k < MAX_NUM_KERNELS; k++) {

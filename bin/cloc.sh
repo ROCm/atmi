@@ -4,13 +4,13 @@
 #           using the LLVM Ligntning Compiler. An hsaco file contains 
 #           the amdgpu isa that can be loaded by the HSA Runtime.
 #
-#  Old options -hsail and -brig use HLC that will be deprecated
+#  Old options -hsail and -brig use HLC are deprecated
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #
-PROGVERSION=1.3.2a
+PROGVERSION="0.3-7"
 #
-# Copyright (c) 2016 ADVANCED MICRO DEVICES, INC.  
+# Copyright (c) 2017 ADVANCED MICRO DEVICES, INC.  
 # 
 # AMD is granting you permission to use this software and documentation (if any) (collectively, the 
 # Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
@@ -52,8 +52,8 @@ function usage(){
 /bin/cat 2>&1 <<"EOF" 
 
    cloc.sh: Compile a cl or cu file into an HSA Code object file (.hsaco)  
-            using the LLVM Ligntning Compiler. An hsaco file contains 
-            the amdgpu isa that can be loaded by the HSA Runtime.
+            using the HCC2 compiler. An hsaco file contains the amdgpu 
+            isa that can be loaded by the HSA Runtime.
             As of amdcloc 1.3.1, use of cuda is only experimental.  
             Generated kernels from cuda will not execute. 
 
@@ -70,23 +70,18 @@ function usage(){
     -n        Dryrun, do nothing, show commands that would execute
     -h        Print this help message
     -k        Keep temporary files
-    -brig     Generate brig instead of hsaco (deprecated)
-    -hsail    Generate dissassembled hsail for brig  (deprecated)
 
    Options with values:
-    -amdllvm   <path>           $AMDLLVM or /opt/amd/llvm
-    -libgcn    <path>           $LIBGCN or /opt/rocm
-    -hlcpath   <path>           $HLC_PATH or /opt/rocm/hlc3.2/bin  
+    -hcc2      <path>           $HCC2 or /opt/rocm/hcc2
+    -libgcn    <path>           $LIBAMDGCN or /opt/rocm/libamdgcn  
     -cuda-path <path>           $CUDA_PATH or /usr/local/cuda
-    -mcpu      <cputype>        Default= value returned by mymcpu
+    -mcpu      <cputype>        Default= value returned by mygpu
     -bclib     <bcfile>         Add a bc library for llvm-link
     -clopts    <compiler opts>  Addtional options for cl frontend
     -cuopts    <compiler opts>  Additonal options for cu frontend
     -I         <include dir>    Provide one directory per -I option
-    -lkopts    <LLVM link opts> Default=$LIBGCN/lib/libamdgcn.$mcpu.bc
-    -hsaillib  <fname>          Filename of hsail library. (deprecated)
     -opt       <LLVM opt>       LLVM optimization level
-    -o         <outfilename>    Default=<filename>.<ft> ft=brig or hsail
+    -o         <outfilename>    Default=<filename>.<ft> ft=hsaco
     -t         <tdir>           Temporary directory or intermediate files
                                 Default=/tmp/cloc-tmp-$$
    Examples:
@@ -94,17 +89,17 @@ function usage(){
     cloc.sh whybother.cu      /* creates whybother.hsaco             */
 
    Note: Instead of providing these command line options:
-   -opt,-hlcpath,-amdllvm,-libgcn,-cuda-path,-mcpu,-clopts, or -lkopts 
+   -hcc2, -libgcn, -cuda-path, -mcpu, or -clopts
 
    You may set these environment variables, respectively:
-   LLVMOPT,HLC_PATH,AMDLLVM,LIBGCN,CUDA_PATH,LC_MCPU,CLOPTS, or LKOPTS 
+   HCC2, LIBAMDGCN, CUDA_PATH, LC_MCPU, or CLOPTS
 
    Command line options will take precedence over environment variables. 
 
-   Copyright (c) 2016 ADVANCED MICRO DEVICES, INC.
+   Copyright (c) 2017 ADVANCED MICRO DEVICES, INC.
 
 EOF
-   exit 1 
+   exit 0 
 }
 
 DEADRC=12
@@ -167,19 +162,6 @@ function getdname(){
    echo $__DIRN
 }
 
-function ptxll2gcnll(){
-   LLFILE=$1
-   # change IR from ptx to amdgcn
-   sed -i -e"s/nvptx64-nvidia-cuda/amdgcn--amdhsa/" $LLFILE
-   sed -i -e"s/e-i64:64-v16:16-v32:32-n16:32:64/e-p:32:32-p1:64:64-p2:64:64-p3:32:32-p4:64:64-p5:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64/" $LLFILE
-   sed -i -e"s/\"target-features\"=\"+ptx42\" //" $LLFILE
-   sed -i -e"s/\"sm_35\"/\"$LC_MCPU\"/" $LLFILE
-   sed -i -e"s/^define /define amdgpu_kernel /" $LLFILE
-   while read ptxintr hsaintr ; do 
-      sed -i -e "s/$ptxintr/$hsaintr/" $LLFILE
-   done < $CLOC_PATH/intrinsics.map
-}
-
 #  --------  The main code starts here -----
 INCLUDES=""
 #  Argument processing
@@ -200,16 +182,12 @@ while [ $# -gt 0 ] ; do
       -cuopts) 		CUOPTS=$2; shift ;; 
       -I) 		INCLUDES="$INCLUDES -I $2"; shift ;; 
       -opt) 		LLVMOPT=$2; shift ;; 
-      -lkopts) 		LKOPTS=$2; shift ;; 
       -o) 		OUTFILE=$2; shift ;; 
       -t)		TMPDIR=$2; shift ;; 
-      -hsaillib) 	HSAILLIB=$2; shift ;; 
       -bclib)		EXTRABCLIB=$2; shift ;; 
       -mcpu)            LC_MCPU=$2; shift ;;
-      -atmipath)        ATMI_PATH=$2; shift ;;
-      -amdllvm)         AMDLLVM=$2; shift ;;
-      -libgcn)          LIBGCN=$2; shift ;;
-      -hlcpath)         HLC_PATH=$2; shift ;;
+      -hcc2)            HCC2=$2; shift ;;
+      -libgcn)          LIBAMDGCN=$2; shift ;;
       -cuda-path)       CUDA_PATH=$2; shift ;;
       -h) 	        usage ;; 
       -help) 	        usage ;; 
@@ -245,58 +223,42 @@ fi
 cdir=$(getdname $0)
 [ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
 
-# These are default locations of the lightning compiler, libamdgcn, and HLC
-AMDLLVM=${AMDLLVM:-/opt/amd/llvm}
-LIBGCN=${LIBGCN:-/opt/rocm}
-HLC_PATH=${HLC_PATH:-/opt/rocm/hlc3.2/bin}
+HCC2=${HCC2:-/opt/rocm/hcc2}
+LIBAMDGCN=${LIBAMDGCN:-/opt/rocm/libamdgcn}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
-ATMI_PATH=${ATMI_PATH:-/opt/rocm/atmi}
-#CUOPTS=${CUOPTS:--S -emit-llvm -DGPUCC_AMDGCN -Wno-format-security --cuda-device-only --cuda-gpu-arch=sm_35 --cuda-path=$CUDA_PATH -include $AMDLLVM/lib/clang/4.0.0/include/cuda_builtin_vars.h}
-CUOPTS=${CUOPTS:--S -emit-llvm -DGPUCC_AMDGCN -Wno-format-security --cuda-device-only --cuda-gpu-arch=sm_35 --cuda-path=$CUDA_PATH -include $AMDLLVM/lib/clang/4.0.0/include/__clang_cuda_builtin_vars.h}
 
+# Determine which gfx processor to use, default to Fiji (gfx803)
 if [ ! $LC_MCPU ] ; then 
-   LC_MCPU=`mymcpu`
+   # Use the mygpu in pair with this script, no the pre-installed one.
+   LC_MCPU=`$cdir/mygpu`
    if [ "$LC_MCPU" == "" ] ; then 
-      LC_MCPU="fiji"
+      LC_MCPU="gfx803"
    fi
 fi
-#LC_MCPU="gfx803"
 
-case $LC_MCPU in
-kaveri)
-    GFX_VER=700
-    ;;
-carrizo)
-    GFX_VER=801
-    ;;
-fiji)
-    GFX_VER=803
-    ;;
-vega)
-    GFX_VER=900
-    ;;
-gfx900)
-    GFX_VER=900
-    ;;
-esac
+LLVMOPT=${LLVMOPT:-2}
 
-LLVMOPT=${LLVMOPT:-3}
+CUOPTS=${CUOPTS:- -S -emit-llvm --cuda-device-only -nocudalib -O$LLVMOP --cuda-gpu-arch=$LC_MCPU --cuda-path=$CUDA_PATH -include $HCC2/lib/clang/6.0.0/include/__clang_cuda_builtin_vars.h}
+
 
 if [ $VV ]  ; then 
    VERBOSE=true
 fi
 
 BCFILES=""
-BCFILES="$BCFILES $ATMI_PATH/lib/atmi.amdgcn.bc"
-BCFILES="$BCFILES $LIBGCN/lib/opencl.amdgcn.bc"
-BCFILES="$BCFILES $LIBGCN/lib/ockl.amdgcn.bc"
-BCFILES="$BCFILES $LIBGCN/lib/ocml.amdgcn.bc"
-BCFILES="$BCFILES $LIBGCN/lib/oclc_correctly_rounded_sqrt_off.amdgcn.bc"
-BCFILES="$BCFILES $LIBGCN/lib/oclc_daz_opt_off.amdgcn.bc"  
-BCFILES="$BCFILES $LIBGCN/lib/oclc_finite_only_off.amdgcn.bc"              
-BCFILES="$BCFILES $LIBGCN/lib/oclc_isa_version_${GFX_VER}.amdgcn.bc"   
-BCFILES="$BCFILES $LIBGCN/lib/oclc_unsafe_math_off.amdgcn.bc"      
-BCFILES="$BCFILES $LIBGCN/lib/irif.amdgcn.bc"
+#when atmi is built, the hcc2-rt may not be built yet,
+#make the cuda intrisinc lib optional at this stage.
+if [ -x $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc ]; then
+  BCFILES="$BCFILES $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc"
+fi
+BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc"
+BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/opencl.amdgcn.bc"
+BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
+BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
+BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
+BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/oclc_isa_version.amdgcn.bc"
+
+#LINKOPTS="-Xclang -mlink-bitcode-file -Xclang $LIBAMDGCN/lib/libamdgcn.$LC_MCPU.bc"
 
 if [ $EXTRABCLIB ] ; then 
    if [ -f $EXTRABCLIB ] ; then 
@@ -315,8 +277,7 @@ if [ "$filetype" != "cl" ]  ; then
       echo "ERROR:  $0 requires one argument with file type cl or cu"
       exit $DEADRC 
    else
-      GPUCC=true
-      echo "WARNING:  Use of GPUCC for cuda to amdgcn code object (hsaco) is very experimental\n"
+      CUDACLANG=true
       if [ ! -d $CUDA_PATH ] ; then 
          echo "ERROR:  No CUDA_PATH directory at $CUDA_PATH "
          exit $DEADRC
@@ -325,30 +286,24 @@ if [ "$filetype" != "cl" ]  ; then
 fi
 
 #  Define the subcomands
-if [ $GPUCC ] ; then 
+if [ $CUDACLANG ] ; then 
    INCLUDES="-I $CUDA_PATH/include ${INCLUDES}"
    CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
 else
-   INCLUDES="-I ${ATMI_PATH}/include -I ${LIBGCN}/include ${INCLUDES}" 
-   CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target amdgcn--amdhsa -mcpu=$LC_MCPU } 
+   INCLUDES="-I ${LIBAMDGCN}/include ${INCLUDES}" 
+   CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target amdgcn--cuda -mcpu=$LC_MCPU } 
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}
+CMD_ASM=${CMD_ASM:-llvm-as}
 CMD_LLL=${CMD_LLL:-llvm-link}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -mcpu=$LC_MCPU -amdgpu-annotate-kernel-features}
-CMD_LLC=${CMD_LLC:-llc -mtriple amdgcn--amdhsa -mcpu=$LC_MCPU -filetype=obj}
+CMD_LLC=${CMD_LLC:-llc -mtriple amdgcn--cuda -mcpu=$LC_MCPU -filetype=obj}
 
 RUNDATE=`date`
 
 if [ ! -e "$LASTARG" ]  ; then 
    echo "ERROR:  The file $LASTARG does not exist."
    exit $DEADRC
-fi
-
-if [ "$HSAILLIB" != "" ] ; then 
-   if [ ! -f $HSAILLIB ] ; then 
-      echo "ERROR:  The HSAIL library file $HSAILLIB does not exist "
-      exit $DEADRC
-   fi
 fi
 
 # Parse LASTARG for directory, filename, and symbolname
@@ -405,28 +360,21 @@ fi
 #  Print Header block
 if [ $VERBOSE ] ; then 
    echo "#   "
-   echo "#Info:  CLOC Version:	$PROGVERSION" 
+   echo "#Info:  HCC2 Version:	$PROGVERSION" 
+   echo "#Info:  HCC2 Path:	$HCC2"
    echo "#Info:  Run date:	$RUNDATE" 
    echo "#Info:  Input file:	$INDIR/$FILENAME"
-   if [ $GEN_BRIG ] || [ $GEN_IL ]  ; then
-      echo "#Info:  Brig file:	$OUTDIR/$OUTFILE"
-      [ $GEN_IL ] && echo "#Info:  HSAIL file:	$OUTDIR/$FNAME.hsail"
-      echo "#Info:  HLC path:	$HLC_PATH"
-   else
-      echo "#Info:  Code object:	$OUTDIR/$OUTFILE"
-   fi
-   echo "#Info:  AMDLLVM:	$AMDLLVM"
-   echo "#Info:  ATMI Path:	$ATMI_PATH"
+   echo "#Info:  Code object:	$OUTDIR/$OUTFILE"
    [ $KEEPTDIR ] &&  echo "#Info:  Temp dir:	$TMPDIR" 
    echo "#   "
 fi 
 
+if [ $GEN_IL ] ||  [  $GEN_BRIG ] ; then 
+   echo "ERROR:  Support for HSAIL and BRIG generation depricated"
+   exit $DEADRC
+fi
+
 rc=0
-
-if [ ! $GEN_IL ] && [ ! $GEN_BRIG ] ; then 
-
-   # No HSAIL or Brig.  This is the new code object path
-   # Use the Lightning Compiler in /opt/amd/llvm  to generate HSA code object
 
    if [ $VV ]  ; then 
       CLOPTS="-v $CLOPTS"
@@ -442,75 +390,71 @@ if [ ! $GEN_IL ] && [ ! $GEN_BRIG ] ; then
 
    if [ "$quickpath" == "true" ] ; then 
 
+      [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:  Compile cl	cl --> hsaco ..."
-      runcmd "$AMDLLVM/bin/$CMD_CLC -o $OUTDIR/$OUTFILE $INDIR/$FILENAME"
+      runcmd "$HCC2/bin/$CMD_CLC -o $OUTDIR/$OUTFILE $INDIR/$FILENAME"
 
    else 
       # Run 4 steps, clang,link,opt,llc
-      if [ $GPUCC ] ; then 
-         [ $VERBOSE ] && echo "#Step:  GPUCC		cu --> ll  ..."
-         runcmd "$AMDLLVM/bin/$CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$FILENAME"
-
-      #  echo
-         cmd="$AMDLLVM/bin/llvm-as -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll"
-      #  echo $cmd; runcmd "$cmd"
-         passes="-argpromotion"
-         cmd="$AMDLLVM/bin/opt $passes -o $TMPDIR/$FNAME.lowpass.bc $TMPDIR/$FNAME.bc"
-      #  echo $cmd; runcmd "$cmd"
-         cmd="$AMDLLVM/bin/llvm-dis -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.lowpass.bc"
-      #  echo $cmd; runcmd "$cmd"
-      #  echo
-
-         # fix up the ptx ll to work with amdgcn
-         [ $VERBOSE ] && echo "#Step:  Fix LLVM IR	ll --> ll  ..."
-         runcmd "ptxll2gcnll $TMPDIR/$FNAME.ll"
-         [ $VERBOSE ] && echo "#Step:  Assemble	ll --> bc ..."
-         runcmd "$AMDLLVM/bin/llvm-as -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll"
-         
+      if [ $CUDACLANG ] ; then 
+         [ $VV ] && echo 
+         [ $VERBOSE ] && echo "#Step:  cuda-clang	cu --> ll  ..."
+         runcmd "$HCC2/bin/$CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$FILENAME"
+         [ $VV ] && echo 
+         [ $VERBOSE ] && echo "#Step:  LLVMIR assemble  ll --> bc ..."
+         runcmd "$HCC2/bin/$CMD_ASM -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll"
       else 
+         [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Compile cl	cl --> bc ..."
-         runcmd "$AMDLLVM/bin/$CMD_CLC -c -emit-llvm -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
+         runcmd "$HCC2/bin/$CMD_CLC -c -emit-llvm -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
       fi
 
       if [ $GENLL ] ; then
+         [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Disassemble	bc --> ll ..."
-         runcmd "$AMDLLVM/bin/$CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc"
+         runcmd "$HCC2/bin/$CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc"
          if [ "$OUTDIR" != "$TMPDIR" ] ; then
             runcmd "cp $TMPDIR/$FNAME.ll $OUTDIR/$FNAME.ll"
          fi
       fi
 
+      [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:  Link(llvm-link)	bc --> lnkd.bc ..."
-      runcmd "$AMDLLVM/bin/$CMD_LLL $TMPDIR/$FNAME.bc $BCFILES -o $TMPDIR/$FNAME.lnkd.bc" 
+      runcmd "$HCC2/bin/$CMD_LLL $TMPDIR/$FNAME.bc $BCFILES -o $TMPDIR/$FNAME.lnkd.bc" 
 
       if [ $GENLL ] ; then
+         [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Disassemble	lnkd.bc --> lnkd.ll ..."
-         runcmd "$AMDLLVM/bin/$CMD_LLA -o $TMPDIR/$FNAME.lnkd.ll $TMPDIR/$FNAME.lnkd.bc"
+         runcmd "$HCC2/bin/$CMD_LLA -o $TMPDIR/$FNAME.lnkd.ll $TMPDIR/$FNAME.lnkd.bc"
          if [ "$OUTDIR" != "$TMPDIR" ] ; then
             runcmd "cp $TMPDIR/$FNAME.lnkd.ll $OUTDIR/$FNAME.lnkd.ll"
          fi
       fi 
 
       if [ $LLVMOPT != 0 ] ; then 
-         [ $VERBOSE ] && echo "#Step:  Optimize(opt)	lnkd.bc --> opt.bc -O$LLVMOPT ..."
-         runcmd "$AMDLLVM/bin/$CMD_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc"
+         [ $VV ] && echo 
+         [ $VERBOSE ] && echo "#Step:  Optimize(opt)	lnkd.bc --> final.bc -O$LLVMOPT ..."
+         runcmd "$HCC2/bin/$CMD_OPT -o $TMPDIR/$FNAME.final.bc $TMPDIR/$FNAME.lnkd.bc"
 
          if [ $GENLL ] ; then
-            [ $VERBOSE ] && echo "#Step:  Disassemble	opt.bc --> opt.ll ..."
-            runcmd "$AMDLLVM/bin/$CMD_LLA -o $TMPDIR/$FNAME.opt.ll $TMPDIR/$FNAME.opt.bc"
+            [ $VV ] && echo 
+            [ $VERBOSE ] && echo "#Step:  Disassemble	final.bc --> final.ll ..."
+            runcmd "$HCC2/bin/$CMD_LLA -o $TMPDIR/$FNAME.final.ll $TMPDIR/$FNAME.final.bc"
             if [ "$OUTDIR" != "$TMPDIR" ] ; then
-               runcmd "cp $TMPDIR/$FNAME.opt.ll $OUTDIR/$FNAME.opt.ll"
+               runcmd "cp $TMPDIR/$FNAME.final.ll $OUTDIR/$FNAME.final.ll"
             fi 
          fi 
-         LLC_BC="opt"
+         LLC_BC="final"
       else
          # No optimization so generate object for lnkd bc.
          LLC_BC="lnkd"
       fi 
 
+      [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:  llc mcpu=$LC_MCPU	$LLC_BC.bc --> amdgcn ..."
-      runcmd "$AMDLLVM/bin/$CMD_LLC -o $TMPDIR/$FNAME.gcn $TMPDIR/$FNAME.$LLC_BC.bc"
+      runcmd "$HCC2/bin/$CMD_LLC -o $TMPDIR/$FNAME.gcn $TMPDIR/$FNAME.$LLC_BC.bc"
 
+      [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:	ld.lld		gcn --> hsaco ..."
       if [ $NOSHARED ] ; then 
            SHAREDARG=""
@@ -518,12 +462,13 @@ if [ ! $GEN_IL ] && [ ! $GEN_BRIG ] ; then
            SHAREDARG="-shared"
       fi
       #  FIXME:  Why does shared sometimes cause the -fPIC problem ?
-      runcmd "$AMDLLVM/bin/ld.lld $TMPDIR/$FNAME.gcn --no-undefined $SHAREDARG -o $OUTDIR/$OUTFILE"
+      runcmd "$HCC2/bin/ld.lld $TMPDIR/$FNAME.gcn --no-undefined $SHAREDARG -o $OUTDIR/$OUTFILE"
  
 
    fi # end of if quickpath then ... else  ...
 
    if [ $GENASM ] ; then
+      [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:  llvm-objdump 	hsaco --> .s ..."
       textstarthex=`readelf -S -W  $OUTDIR/$OUTFILE | grep .text | awk '{print $6}'`
       textstart=$((0x$textstarthex))
@@ -531,7 +476,7 @@ if [ ! $GEN_IL ] && [ ! $GEN_BRIG ] ; then
       textsz=$((0x$textszhex))
       countclause=" count=$textsz skip=$textstart"
       dd if=$OUTDIR/$OUTFILE of=$OUTDIR/$FNAME.raw bs=1 $countclause 2>/dev/null
-      hexdump -v -e '/1 "0x%02X "' $OUTDIR/$FNAME.raw | $AMDLLVM/bin/llvm-mc -arch=amdgcn -mcpu=$LC_MCPU -disassemble >$OUTDIR/$FNAME.s 2>$OUTDIR/$FNAME.s.err
+      hexdump -v -e '/1 "0x%02X "' $OUTDIR/$FNAME.raw | $HCC2/bin/llvm-mc -arch=amdgcn -mcpu=$LC_MCPU -disassemble >$OUTDIR/$FNAME.s 2>$OUTDIR/$FNAME.s.err
       rm $OUTDIR/$FNAME.raw
       if [ "$LC_MCPU" == "kaveri" ] ; then 
          echo "WARNING:  Disassembly not supported for Kaveri. See $FNAME.s.err"
@@ -540,94 +485,6 @@ if [ ! $GEN_IL ] && [ ! $GEN_BRIG ] ; then
          echo "#INFO File $OUTDIR/$FNAME.s contains amdgcn assembly"
       fi
    fi
-
-else 
-
-   # -hsail or -brig specified.   This is the OLD code path with HLC
-
-   LLVMOPT=${LLVMOPT:-2} 
-   CMD_HLC_CLC=${CMD_HLC_CLC:-clc2 -cl-std=CL2.0 $CLOPTS $INCLUDES}
-   CMD_HLC_LLA=${CMD_HLC_LLA:-llvm-dis}
-   HLC_LKOPTS=${HLC_LKOPTS:--prelink-opt -l $HLC_PATH/../lib/builtins-hsail.bc -l $HLC_PATH/../lib/builtins-gcn.bc  -l $HLC_PATH/../lib/builtins-hsail-amd-ci.bc}
-   CMD_HLC_LLL=${CMD_HLC_LLL:-llvm-link $HLC_LKOPTS}
-   CMD_HLC_OPT=${CMD_HLC_OPT:-opt -O$LLVMOPT -gpu -whole}
-   CMD_HLC_LLC=${CMD_HLC_LLC:-llc -O$LLVMOPT -march=hsail-64 -filetype=asm}
-   CMD_HLC_BRI=${CMD_HLC_BRI:-HSAILasm}
-   CMD_HLC_ASM=${CMD_HLC_ASM:-HSAILasm -disassemble}
-   if [ $GEN_DEBUG ]  ; then 
-      export LIBHSAIL_OPTIONS_APPEND="-g -include-source"
-   fi
-
-   [ $VERBOSE ] && echo "#Step:  Compile(clc2)	cl --> bc ..."
-   runcmd "$HLC_PATH/$CMD_HLC_CLC -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
-
-   [ $VERBOSE ] && echo "#Step:  Link(llvm-link)	bc --> lnkd.bc ..."
-   runcmd "$HLC_PATH/$CMD_HLC_LLL -o $TMPDIR/$FNAME.lnkd.bc $TMPDIR/$FNAME.bc "
-
-   [ $VERBOSE ] && echo "#Step:  Optimize(opt)	lnkd.bc --> opt.bc -O$LLVMOPT ..."
-   runcmd "$HLC_PATH/$CMD_HLC_OPT -o $TMPDIR/$FNAME.opt.bc $TMPDIR/$FNAME.lnkd.bc"
-
-   if [ $GENLL ] ; then
-     [ $VERBOSE ] && echo "#Step:  Disassemble	opt.bc --> opt.ll ..."
-     runcmd "$HLC_PATH/$CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc"
-     if [ "$OUTDIR" != "$TMPDIR" ] ; then
-        runcmd "cp $TMPDIR/$FNAME.opt.ll $OUTDIR/$FNAME.opt.ll"
-     fi
-   fi
-
-   [ $VERBOSE ] && echo "#Step:  llc arch=hsail	opt.bc --> hsail ..."
-   runcmd "$HLC_PATH/$CMD_HLC_LLC -o $TMPDIR/$FNAME.hsail $TMPDIR/$FNAME.opt.bc"
-
-   if [ "$HSAILLIB" != "" ] ; then 
-   # An HSAILLIB hsail_lib.hsail requires a corresponding hsail_lib.h that 
-   # the programmer included in his .cl.  This header resulted in the generation of 
-   # "decl prog functions" at the top of his hsail for every function in his header functions. 
-   # We must remove these and add the HSAILLIB in its place. 
-   
-   [ $VERBOSE ] && echo "#Step:  HSAILLIB 	Add hsaillib to hsail"
-   if [ $DRYRUN ] ; then
-      echo "DRYRUN commands for adding HSAILLIB not available "
-   else
-      # build a sedstring with names of functions in HSAILLIB
-      sedstringfile=$TMPDIR/sedstring$$
-      grep "decl function" $HSAILLIB | while read line  ; do 
-         name=`echo $line | cut -d" " -f3 | cut -d"(" -f1`
-         echo -n "${sep}^decl\sprog\sfunction\s${name}("
-      sep="\|"
-      done >$sedstringfile
-      sedstring=`cat $sedstringfile`
-      rm $sedstringfile
-      # Rip out "decl prog function" prototypes from original hsail
-      noprogfile=$TMPDIR/noproghsail.hsail
-      finalfile=$TMPDIR/finalhsail.hsail
-      cmd="/bin/sed -e ""/${sedstring}/,/;/d"" "
-      $cmd $TMPDIR/$FNAME.hsail >$noprogfile
-      # Piece together final hsail with header, HSAILLIB, and remaining hsail
-      #  Keep only up to extension "IMAGE";
-      cmd="sed -n ""1,/extension\s\"IMAGE\";/p"" "
-      $cmd $noprogfile >$finalfile
-      echo "//  START of HSAILLIB $HSAILLIB" >>$finalfile
-      cat $HSAILLIB >>$finalfile
-      echo "//  END of HSAILLIB $HSAILLIB" >>$finalfile
-      echo "decl prog function &abort()();" >>$finalfile
-      #  Keep everything after "prog kernel" 
-      cmd="sed -n ""/^prog\skernel/,\$p "" "
-      $cmd $noprogfile >>$finalfile
-      cp $finalfile $TMPDIR/$FNAME.hsail
-      rm $finalfile
-      rm $noprogfile
-   fi
-   fi
-
-   [ $VERBOSE ] && echo "#Step:  HSAILasm	hsail --> $OUTFILE -O$LLVMOPT ..."   
-   runcmd "$HLC_PATH/$CMD_HLC_BRI -o $OUTDIR/$OUTFILE $TMPDIR/$FNAME.hsail"
-
-   if [ $GEN_IL ] ; then 
-      [ $VERBOSE ] && echo "#Step:  HSAILasm   	brig --> $FNAME.hsail ..."
-      runcmd "$HLC_PATH/$CMD_HLC_ASM -o $OUTDIR/$FNAME.hsail $OUTDIR/$OUTFILE"
-   fi
-
-fi
 
 # cleanup
 do_err 0

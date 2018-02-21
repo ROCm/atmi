@@ -31,6 +31,9 @@ endif()
 add_definitions(-c)
 add_definitions(-fpic)
 
+# set output dir for the .so file
+set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../lib)
+
 add_library(atmi_runtime SHARED
     atl_bindthread.c 
     atl_cputask.c    
@@ -46,13 +49,6 @@ include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
-
-# Install plugin under the lib destination folder.
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  install(TARGETS atmi_runtime LIBRARY DESTINATION "lib-debug" COMPONENT runtime )
-else()
-  install(TARGETS atmi_runtime LIBRARY DESTINATION "lib" COMPONENT runtime )
-endif()
 
 ## CPack component info
 set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "ATMI Runtime Library")
@@ -84,8 +80,14 @@ add_custom_command(
 
 add_custom_target(core_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi.h ${OUTPUT_INC_DIRECTORY}/atmi_runtime.h)
 
+# Install plugin under the lib destination folder.
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  install(TARGETS atmi_runtime LIBRARY DESTINATION "lib-debug" COMPONENT runtime )
+else()
+  install(TARGETS atmi_runtime LIBRARY DESTINATION "lib" COMPONENT runtime )
+endif()
 
-INSTALL(FILES 
+INSTALL(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h
         DESTINATION "include"

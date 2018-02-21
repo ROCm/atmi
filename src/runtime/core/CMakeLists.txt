@@ -58,16 +58,37 @@ endif()
 set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "ATMI Runtime Library")
 set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE )
 
+target_link_libraries(
+  atmi_runtime
+  "-Wl,--as-needed"
+  -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsa-runtime64
+  )
+
+# set output dir for .h files
+set (OUTPUT_INC_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../include)
+
+# create output dir for include files
+execute_process(COMMAND "/bin/mkdir" "-p" "${OUTPUT_INC_DIRECTORY}")
+
+add_custom_command(
+  OUTPUT ${OUTPUT_INC_DIRECTORY}/atmi.h
+  COMMAND /bin/cp ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h ${OUTPUT_INC_DIRECTORY}/atmi.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/*.h
+  )
+
+add_custom_command(
+  OUTPUT ${OUTPUT_INC_DIRECTORY}/atmi_runtime.h
+  COMMAND /bin/cp ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h ${OUTPUT_INC_DIRECTORY}/atmi_runtime.h
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/*.h
+  )
+
+add_custom_target(core_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi.h ${OUTPUT_INC_DIRECTORY}/atmi_runtime.h)
+
+
 INSTALL(FILES 
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h
         DESTINATION "include"
         COMPONENT runtime
        )
-
-target_link_libraries(
-  atmi_runtime
-  "-Wl,--as-needed"
-  -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsa-runtime64 
-  )
 

@@ -75,6 +75,22 @@ add_subdirectory(runtime)
 add_subdirectory(compiler) 
 add_subdirectory(device_runtime) 
 
+# make examples available in local build
+add_custom_command(
+  OUTPUT examples
+  COMMAND /bin/cp -r ${CMAKE_CURRENT_SOURCE_DIR}/../examples .
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../examples/*
+  )
+add_custom_target(example ALL DEPENDS examples)
+
+# make bin available in local build
+add_custom_command(
+  OUTPUT bin
+  COMMAND /bin/cp -r ${CMAKE_CURRENT_SOURCE_DIR}/../bin .
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../bin/*
+  )
+add_custom_target(script ALL DEPENDS bin)
+
 ## Get the package version. The defaults to 0.0.1.
 get_version ( "0.0.1" )
 

@@ -17,8 +17,29 @@
 find_package(LLVM QUIET CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
 
 if(LLVM_FOUND)
+    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}. Configure: ${LLVM_DIR}/LLVMConfig.cmake")
+
+    #Compiler info
+    set(CLANG_INSTALL_PREFIX ${LLVM_INSTALL_PREFIX})
+    set(CLANG_MAIN_INCDIR ${LLVM_BUILD_MAIN_INCLUDE_DIR})
+
+    if (CLANG_INSTALL_PREFIX)
+      set(CLANG_BINDIR ${CLANG_INSTALL_PREFIX}/bin)
+      set(CLANG_INCDIR ${CLANG_INSTALL_PREFIX}/include)
+      set(CLANG_LIBDIR ${CLANG_INSTALL_PREFIX}/lib)
+      set(AMDLLVM ${CLANG_INSTALL_PREFIX})
+    else()
+      set(CLANG_BINDIR ${LLVM_BUILD_BINARY_DIR}/bin)
+      set(CLANG_INCDIR ${LLVM_BUILD_BINARY_DIR}/include)
+      set(CLANG_LIBDIR ${LLVM_LIBRARY_DIRS})
+      set(AMDLLVM ${LLVM_BUILD_BINARY_DIR})
+    endif()
+
     list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
     include(AddLLVM)
+
+    #Rocm runtime
+    set(AMDGPU_TARGET_TRIPLE amdgcn--amdhsa)
 
     find_file (
       ATMI_DE_DEP_LIBHSA_INCLUDE
@@ -29,7 +50,7 @@ if(LLVM_FOUND)
       /usr/local/include
       )
     get_filename_component (ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DE_DEP_LIBHSA_INCLUDE} DIRECTORY)
-    
+
     find_file (
       ATMI_DE_DEP_LIBHSA_LIBRARIES
       ockl.amdgcn.bc
@@ -39,19 +60,34 @@ if(LLVM_FOUND)
       /usr/local/lib
       )
     get_filename_component (ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DE_DEP_LIBHSA_LIBRARIES} DIRECTORY)
-    
+
     find_package_handle_standard_args(
       ATMI_DE_DEP_LIBHSA
       "One of these files not found: {ockl_hsa.h, ockl.amdgcn.bc}"
       ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS
       ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS)
-    
+
     mark_as_advanced(
       ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS
       ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
-     
+
+    get_filename_component (ROCM_DEVICE_PATH
+      ${ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS} DIRECTORY
+      )
+
     if(ATMI_DE_DEP_LIBHSA_FOUND)
         libatmi_runtime_say("Preparing to build device_runtime with GFX_VER=${GFX_VER}")
+
+        get_filename_component (ATMI_RUNTIME_PATH
+          ${CMAKE_CURRENT_BINARY_DIR} DIRECTORY
+          )
+
+        # create configure file
+        file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDLLVM=${AMDLLVM}\n")
+        file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_TARGET_TRIPLE}\n")
+        file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}\n")
+        file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ATMI_RUNTIME_PATH=${ATMI_RUNTIME_PATH}\n")
+
         #set (CMAKE_C_COMPILER clang)
         set (CMAKE_C_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang)
     

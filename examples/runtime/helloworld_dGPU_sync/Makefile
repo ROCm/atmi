@@ -35,6 +35,8 @@ ROCM_DEVICE_PATH ?= /opt/rocm
 #Set LC Environment variables
 AMDLLVM ?= /opt/amd/llvm
 
+AMDGPU_TARGET_TRIPLE ?= amdgpu--amdhsa
+
 #MCPU
 MCPU ?= $(shell ${ATMI_RUNTIME_PATH}/bin/mygpu)
 #$(info MCPU $(MCPU))
@@ -53,7 +55,7 @@ INC_FLAGS=-I${ATMI_RUNTIME_PATH}/include -I${ROCM_DEVICE_PATH}/include -I${HSA_R
 
 # CLOC
 CLOC_PATH ?= ${ATMI_RUNTIME_PATH}/bin
-CLOCOPTS = -vv -hcc2 ${AMDLLVM}
+CLOCOPTS = -vv -hcc2 ${AMDLLVM} -triple ${AMDGPU_TARGET_TRIPLE} -libgcn ${ROCM_DEVICE_PATH}
 CLOCOPTS += -clopts "$(INC_FLAGS) -O2 -v"
 
 # ROCm-Device-lib

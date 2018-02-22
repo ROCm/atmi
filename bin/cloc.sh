@@ -187,6 +187,7 @@ while [ $# -gt 0 ] ; do
       -bclib)		EXTRABCLIB=$2; shift ;; 
       -mcpu)            LC_MCPU=$2; shift ;;
       -hcc2)            HCC2=$2; shift ;;
+      -triple)          TARGET_TRIPLE=$2; shift ;;
       -libgcn)          LIBAMDGCN=$2; shift ;;
       -cuda-path)       CUDA_PATH=$2; shift ;;
       -h) 	        usage ;; 
@@ -224,6 +225,7 @@ cdir=$(getdname $0)
 [ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
 
 HCC2=${HCC2:-/opt/rocm/hcc2}
+TARGET_TRIPLE=${TARGET_TRIPLE:-amdgcn--cuda}
 LIBAMDGCN=${LIBAMDGCN:-/opt/rocm/libamdgcn}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
 
@@ -291,13 +293,13 @@ if [ $CUDACLANG ] ; then
    CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
 else
    INCLUDES="-I ${LIBAMDGCN}/include ${INCLUDES}" 
-   CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target amdgcn--cuda -mcpu=$LC_MCPU } 
+   CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE} -mcpu=$LC_MCPU }
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}
 CMD_LLL=${CMD_LLL:-llvm-link}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -mcpu=$LC_MCPU -amdgpu-annotate-kernel-features}
-CMD_LLC=${CMD_LLC:-llc -mtriple amdgcn--cuda -mcpu=$LC_MCPU -filetype=obj}
+CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -mcpu=$LC_MCPU -filetype=obj}
 
 RUNDATE=`date`
 

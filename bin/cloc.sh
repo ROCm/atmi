@@ -248,17 +248,26 @@ if [ $VV ]  ; then
 fi
 
 BCFILES=""
-#when atmi is built, the hcc2-rt may not be built yet,
-#make the cuda intrisinc lib optional at this stage.
-if [ -x $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc ]; then
-  BCFILES="$BCFILES $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc"
+
+ROCMDEVICE=`echo $LIBAMDGCN | grep amdgcn`
+if [ -z $ROCMDEVICE ]; then
+  BCFILES="$BCFILES $LIBAMDGCN/lib/opencl.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/lib/ockl.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/lib/ocml.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/lib/irif.amdgcn.bc"
+else
+  #when atmi is built, the hcc2-rt may not be built yet,
+  #make the cuda intrisinc lib optional at this stage.
+  if [ -x $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc ]; then
+    BCFILES="$BCFILES $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc"
+    BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc"
+  fi
+  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/opencl.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/oclc_isa_version.amdgcn.bc"
 fi
-BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc"
-BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/opencl.amdgcn.bc"
-BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
-BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
-BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
-BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/oclc_isa_version.amdgcn.bc"
 
 #LINKOPTS="-Xclang -mlink-bitcode-file -Xclang $LIBAMDGCN/lib/libamdgcn.$LC_MCPU.bc"
 

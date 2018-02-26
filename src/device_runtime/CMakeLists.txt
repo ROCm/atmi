@@ -82,6 +82,18 @@ if(LLVM_FOUND)
           ${CMAKE_CURRENT_BINARY_DIR} DIRECTORY
           )
 
+        # set output dir for .h files
+        set (OUTPUT_INC_DIRECTORY ${ATMI_RUNTIME_PATH}/include)
+
+        # create output dir for include files
+        execute_process(COMMAND "/bin/mkdir" "-p" "${OUTPUT_INC_DIRECTORY}")
+        add_custom_command(
+          OUTPUT ${OUTPUT_INC_DIRECTORY}/atmi_kl.h
+          COMMAND /bin/cp ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h ${OUTPUT_INC_DIRECTORY}/atmi_kl.h
+          DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../include/*.h
+          )
+        add_custom_target(device_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi_kl.h)
+
         # create configure file
         file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDLLVM=${AMDLLVM}\n")
         file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_TARGET_TRIPLE}\n")

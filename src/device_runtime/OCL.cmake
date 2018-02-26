@@ -62,19 +62,19 @@ macro(prepare_builtins name)
     # we do not need prepare-builtins pass for atmi
     #COMMAND ${PREPARE_BUILTINS} ${name}.lib.bc -o ${name}${BC_EXT}
     #DEPENDS prepare-builtins ${name}_lib_bc
-    COMMAND cp ${name}.lib.bc ${name}${BC_EXT}
+    COMMAND cp ${name}.lib.bc ${CMAKE_CURRENT_BINARY_DIR}/../lib/${name}${BC_EXT}
     DEPENDS ${name}_lib_bc
   )
   add_custom_target(${name}_bc ALL
     DEPENDS ${name}${BC_EXT}
   )
-  set(TARGET_FILE_${name} ${CMAKE_CURRENT_BINARY_DIR}/${name}${BC_EXT} CACHE INTERNAL "")
+  set(TARGET_FILE_${name} ${CMAKE_CURRENT_BINARY_DIR}/../lib/${name}${BC_EXT} CACHE INTERNAL "")
 endmacro(prepare_builtins)
 
 macro(clang_opencl_bc_builtins_lib name dir)
   clang_opencl_bc_lib(${name} ${dir} ${ARGN})
   prepare_builtins(${name})
-  install (FILES ${CMAKE_CURRENT_BINARY_DIR}/${name}${BC_EXT} DESTINATION lib)
+  install (FILES ${CMAKE_CURRENT_BINARY_DIR}/../lib/${name}${BC_EXT} DESTINATION lib)
 endmacro(clang_opencl_bc_builtins_lib)
 
 macro(clang_opencl_code name dir)

@@ -189,6 +189,7 @@ while [ $# -gt 0 ] ; do
       -hcc2)            HCC2=$2; shift ;;
       -triple)          TARGET_TRIPLE=$2; shift ;;
       -libgcn)          LIBAMDGCN=$2; shift ;;
+      -atmipath)        ATMI_PATH=$2; shift ;;
       -cuda-path)       CUDA_PATH=$2; shift ;;
       -h) 	        usage ;; 
       -help) 	        usage ;; 
@@ -228,6 +229,7 @@ HCC2=${HCC2:-/opt/rocm/hcc2}
 TARGET_TRIPLE=${TARGET_TRIPLE:-amdgcn--cuda}
 LIBAMDGCN=${LIBAMDGCN:-/opt/rocm/libamdgcn}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
+#ATMI_PATH=${ATMI_PATH:-/opt/rocm/atmi}
 
 # Determine which gfx processor to use, default to Fiji (gfx803)
 if [ ! $LC_MCPU ] ; then 
@@ -251,14 +253,22 @@ BCFILES=""
 
 ROCMDEVICE=`echo $LIBAMDGCN | grep amdgcn`
 if [ -z $ROCMDEVICE ]; then
+  #This is a temporary setting
+  if [ -f $ATMI_PATH/lib/atmi.amdgcn.bc ]; then
+    BCFILES="$BCFILES $ATMI_PATH/lib/atmi.amdgcn.bc"
+  fi
   BCFILES="$BCFILES $LIBAMDGCN/lib/opencl.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/ockl.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/ocml.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/irif.amdgcn.bc"
 else
+  #This is a temporary setting
+  if [ -f $ATMI_PATH/$LC_MCPU/lib/atmi.amdgcn.bc ]; then
+    BCFILES="$BCFILES $ATMI_PATH/$LC_MCPU/lib/atmi.amdgcn.bc"
+  fi
   #when atmi is built, the hcc2-rt may not be built yet,
   #make the cuda intrisinc lib optional at this stage.
-  if [ -x $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc ]; then
+  if [ -f $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc ]; then
     BCFILES="$BCFILES $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc"
     BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc"
   fi

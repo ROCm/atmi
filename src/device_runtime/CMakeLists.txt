@@ -14,12 +14,31 @@
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
+#set(amdgcn_mcpus fiji kaveri carrizo hawaii)
+#set(amdgcn_mcpus gfx803 gfx700 gfx801 gfx701 gfx800 gfx900 gfx901)
+set(amdgcn_mcpus gfx803)
+
+#Triple
+if (NOT DEFINED AMDGPU_TARGET_TRIPLE)
+  set(AMDGPU_TARGET_TRIPLE "amdgcn--amdhsa")
+endif (NOT DEFINED AMDGPU_TARGET_TRIPLE)
+
+# Introduce GENERIC_IS_ZERO CMake option
+option(GENERIC_IS_ZERO "Teach LLVM/Clang that generic address space IS address space 0 for AMDGPU target" OFF)
+
+if (GENERIC_IS_ZERO)
+  # set the target triple to amdgizcl to show to the compiler
+  # that we are using a newer address space mapping
+  set(AMDGPU_TARGET_TRIPLE "amdgcn--amdhsa-amdgizcl")
+endif (GENERIC_IS_ZERO)
+
+#Find clang
 find_package(LLVM QUIET CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
 
 if(LLVM_FOUND)
   message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}. Configure: ${LLVM_DIR}/LLVMConfig.cmake")
 
-  #Compiler info
+  #LLVM Compiler info
   set(CLANG_INSTALL_PREFIX ${LLVM_INSTALL_PREFIX})
   set(CLANG_MAIN_INCDIR ${LLVM_BUILD_MAIN_INCLUDE_DIR})
 
@@ -39,12 +58,22 @@ else()
     return()
 endif()
 
-list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
-include(AddLLVM)
+#Cmake pattern for checking envrionment
+set(GFXVAR $ENV{GFXLIST})
+
+#Set mcpus
+if (NOT GFXVAR)
+  execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../bin/mygpu
+    OUTPUT_VARIABLE MYGPU
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+  #message(STATUS "      GPU detected: ${MYGPU}")
+  set(mcpus ${MYGPU})
+else()
+  set(mcpus $ENV{GFXLIST})
+endif()
 
 #Rocm runtime
-set(AMDGPU_TARGET_TRIPLE amdgcn--amdhsa)
-
 find_file (
   ATMI_DE_DEP_LIBHSA_INCLUDE
   ockl_hsa.h
@@ -53,6 +82,7 @@ find_file (
   /opt/rocm/include
   /usr/local/include
   )
+
 get_filename_component (ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DE_DEP_LIBHSA_INCLUDE} DIRECTORY)
 
 find_file (
@@ -86,9 +116,19 @@ else()
   return()
 endif()
 
+# Build
 get_filename_component (ATMI_RUNTIME_PATH
   ${CMAKE_CURRENT_BINARY_DIR} DIRECTORY
   )
+
+include(bc.cmake)
+
+file(GLOB sources
+  ${CMAKE_CURRENT_SOURCE_DIR}/*.ll
+  ${CMAKE_CURRENT_SOURCE_DIR}/*.cl
+  ${CMAKE_CURRENT_SOURCE_DIR}/*.cu
+  )
+
 
 # set output dir for .h files
 set (OUTPUT_INC_DIRECTORY ${ATMI_RUNTIME_PATH}/include)
@@ -108,41 +148,36 @@ file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}\n")
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ATMI_RUNTIME_PATH=${ATMI_RUNTIME_PATH}\n")
 
-#set (CMAKE_C_COMPILER clang)
-set (CMAKE_C_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang)
+# create bc files
+foreach(mcpu ${mcpus})
+  execute_process(COMMAND /bin/bash "-c" "/bin/echo ${mcpu} | /bin/sed 's/gfx//'"
+    OUTPUT_VARIABLE GFXNUM
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+  libatmi_runtime_say("build device_runtime with GFXNUM=${GFXNUM}")
 
-if(GFX_VER)
-else()
-  set(GFX_VER "803")
-endif()
+  set(optimization_level 2)
 
+  # set output dir for .bc files
+  set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib/libdevice)
 
-list(APPEND CMAKE_OCL_SOURCE_FILE_EXTENSIONS .cl)
-list(APPEND CMAKE_C_SOURCE_FILE_EXTENSIONS .cl)
-list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS .cl)
+  # create output dir for include files
+  execute_process(COMMAND "/bin/mkdir" "-p" "${OUTPUTDIR}")
 
-set (CLANG_OCL_FLAGS "-Werror -x cl -Xclang -cl-std=CL2.0 -fblocks -target amdgcn--amdhsa -DCL_VERSION_2_0=200 -D__OPENCL_C_VERSION__=200 -Dcl_khr_fp64 -Dcl_khr_fp16 \
--Dcl_khr_subgroups -Dcl_khr_int64_base_atomics -Dcl_khr_int64_extended_atomics -Xclang -finclude-default-header -target amdgcn--amdhsa -mcpu=gfx${GFX_VER} ${CLANG_OPTIONS_APPEND}")
-set (CLANG_OCL_LINK_FLAGS "-target amdgcn--amdhsa -mcpu=gfx${GFX_VER}")
+  add_bc_library(atmi ${CMAKE_CURRENT_SOURCE_DIR} ${sources})
 
-# FIXME: this is a macro defn file from rocm-device-libs with 
-# no prepare-builtins
-include(OCL.cmake)
+  install(FILES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
+    DESTINATION include COMPONENT device_runtime)
 
-file(GLOB sources
-  ${CMAKE_CURRENT_SOURCE_DIR}/*.cl
-  )
-
-# FIXME: add rocm-device-libs as dependency and capture its include dir
-# FIXME: change this to point to rocm-device-libs/include
-include_directories(${ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS}/../../include)
-include_directories(${ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include)
-
-clang_opencl_bc_builtins_lib(atmi ${CMAKE_CURRENT_SOURCE_DIR} ${sources})
-
-install(FILES 
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
-  DESTINATION include COMPONENT device_runtime)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    install(FILES 
+      ${OUTPUTDIR}/libatmi-${mcpu}.bc
+      DESTINATION lib-debug/libdevice COMPONENT device_runtime)
+  else()
+    install(FILES 
+      ${OUTPUTDIR}/libatmi-${mcpu}.bc
+      DESTINATION lib/libdevice COMPONENT device_runtime)
+  endif()
+endforeach()
 

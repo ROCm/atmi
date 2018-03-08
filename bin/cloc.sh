@@ -252,14 +252,17 @@ fi
 BCFILES=""
 
 ROCMDEVICE=`echo $LIBAMDGCN | grep amdgcn`
+
 if [ -z $ROCMDEVICE ]; then
   #This is a temporary setting
   if [ -f $ATMI_PATH/lib/atmi.amdgcn.bc ]; then
     BCFILES="$BCFILES $ATMI_PATH/lib/atmi.amdgcn.bc"
   fi
+  gpunum=`$cdir/mygpu -n`
   BCFILES="$BCFILES $LIBAMDGCN/lib/opencl.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/lib/ockl.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/ocml.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/lib/ockl.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/lib/oclc_isa_version_${gpunum}.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/irif.amdgcn.bc"
 else
   #This is a temporary setting
@@ -273,10 +276,10 @@ else
     BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc"
   fi
   BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/opencl.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/oclc_isa_version.amdgcn.bc"
+  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
 fi
 
 #LINKOPTS="-Xclang -mlink-bitcode-file -Xclang $LIBAMDGCN/lib/libamdgcn.$LC_MCPU.bc"

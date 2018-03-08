@@ -225,12 +225,14 @@ echo $lowercasevalue
 
 #  ===========  Main code for mymcpu and mygpu starts here ========== 
 TYPERUN=${0##*\/}
+MODE=
 
 #  process args
 while [ $# -gt 0 ] ; do 
    case "$1" in 
       -getgpuname)      INPUT_CODENAME=$2; shift ;;
       -getcodename)     INPUT_GPUNAME=$2; shift ;;
+      -n) 	        MODE=num; shift ;;
       -h) 	        usage ;; 
       -help) 	        usage ;; 
       --help) 	        usage ;; 
@@ -261,7 +263,11 @@ if [ "$TYPERUN" == "mygpu" ] ; then
       gpuname=$(code2gpu $codename)
    fi
    [ "$gpuname" == "unknown" ] && rc=1
-   echo $gpuname
+   if [ -z "$MODE" ]; then
+     echo $gpuname
+   else
+     echo `echo $gpuname | sed 's/gfx//' | sed 's/sm_//'`
+   fi
 else 
    # This is mymcpu so print the codename
    if [ $INPUT_CODENAME ] ; then 

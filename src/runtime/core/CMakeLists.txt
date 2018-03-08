@@ -68,13 +68,13 @@ execute_process(COMMAND "/bin/mkdir" "-p" "${OUTPUT_INC_DIRECTORY}")
 
 add_custom_command(
   OUTPUT ${OUTPUT_INC_DIRECTORY}/atmi.h
-  COMMAND /bin/cp ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h ${OUTPUT_INC_DIRECTORY}/atmi.h
+  COMMAND /usr/bin/rsync ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h ${OUTPUT_INC_DIRECTORY}/atmi.h
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/*.h
   )
 
 add_custom_command(
   OUTPUT ${OUTPUT_INC_DIRECTORY}/atmi_runtime.h
-  COMMAND /bin/cp ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h ${OUTPUT_INC_DIRECTORY}/atmi_runtime.h
+  COMMAND /usr/bin/rsync ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h ${OUTPUT_INC_DIRECTORY}/atmi_runtime.h
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/*.h
   )
 

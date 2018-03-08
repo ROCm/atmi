@@ -32,7 +32,7 @@ execute_process(COMMAND "/bin/mkdir" "-p" "${OUTPUT_INC_DIRECTORY}")
 
 add_custom_command(
   OUTPUT ${OUTPUT_INC_DIRECTORY}/atmi_interop_hsa.h
-  COMMAND /bin/cp ${CMAKE_CURRENT_SOURCE_DIR}/../../../../include/atmi_interop_hsa.h ${OUTPUT_INC_DIRECTORY}/atmi_interop_hsa.h
+  COMMAND /usr/bin/rsync ${CMAKE_CURRENT_SOURCE_DIR}/../../../../include/atmi_interop_hsa.h ${OUTPUT_INC_DIRECTORY}/atmi_interop_hsa.h
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../../../include/*.h
   )
 

@@ -47,30 +47,38 @@ find_file (
   ATMI_DEP_LIBHSA_INCLUDE
   hsa/hsa.h
   PATHS
+  ${HSA_DIR}/include
   /opt/rocm/include
   /usr/local/include
+  NO_DEFAULT_PATH
   )
 get_filename_component (ATMI_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DEP_LIBHSA_INCLUDE} DIRECTORY)
 
-find_library (
+find_package_handle_standard_args(
+  ATMI_DEP_INCHSA
+  DEFAULT_MSG
+  ATMI_DEP_LIBHSA_INCLUDE_DIRS)
+
+find_file (
   ATMI_DEP_LIBHSA_LIBRARIES
   libhsa-runtime64.so
   PATHS
+  ${HSA_DIR}/lib
   /opt/rocm/lib
   /usr/local/lib
+  NO_DEFAULT_PATH
   )
 get_filename_component (ATMI_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
 find_package_handle_standard_args(
   ATMI_DEP_LIBHSA
   DEFAULT_MSG
-  ATMI_DEP_LIBHSA_LIBRARIES_DIRS
-  ATMI_DEP_LIBHSA_INCLUDE_DIRS)
+  ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
 
 mark_as_advanced(
   ATMI_DEP_LIBHSA_INCLUDE_DIRS
   ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
- 
+
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
 add_subdirectory(device_runtime) 

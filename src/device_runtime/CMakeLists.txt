@@ -73,33 +73,38 @@ else()
   set(mcpus $ENV{GFXLIST})
 endif()
 
-#Rocm runtime
+#device runtime
 find_file (
   ATMI_DE_DEP_LIBHSA_INCLUDE
   ockl_hsa.h
   PATHS
-  ${LLVM_INCLUDE_DIRS}
+  ${DEVICE_LIB_DIR}/include
   /opt/rocm/include
   /usr/local/include
+  NO_DEFAULT_PATH
   )
-
 get_filename_component (ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DE_DEP_LIBHSA_INCLUDE} DIRECTORY)
+
+find_package_handle_standard_args(
+  ATMI_DE_DEP_INC
+  "One of these files not found: {ockl_hsa.h}"
+  ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS)
 
 find_file (
   ATMI_DE_DEP_LIBHSA_LIBRARIES
   ockl.amdgcn.bc
   PATHS
-  ${LLVM_LIBRARY_DIRS}
+  ${DEVICE_LIB_DIR}/lib
   /opt/rocm/lib
   /usr/local/lib
+  NO_DEFAULT_PATH
   )
 get_filename_component (ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DE_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
 find_package_handle_standard_args(
-  ATMI_DE_DEP_LIBHSA
-  "One of these files not found: {ockl_hsa.h, ockl.amdgcn.bc}"
-  ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS
-  ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS)
+  ATMI_DE_DEP_LIB
+  "One of these files not found: {ockl.amdgcn.bc}"
+  ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
 
 mark_as_advanced(
   ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS
@@ -109,7 +114,7 @@ get_filename_component (ROCM_DEVICE_PATH
   ${ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS} DIRECTORY
   )
 
-if(ATMI_DE_DEP_LIBHSA_FOUND)
+if(ATMI_DE_DEP_LIB_FOUND)
   libatmi_runtime_say("Preparing to build device_runtime with GFX_VER=${GFX_VER}")
 else()
   libatmi_runtime_say("Not building ATMI Device Runtime: ROCm Device Libs not found.")

@@ -265,14 +265,15 @@ if [ -z $ROCMDEVICE ]; then
   BCFILES="$BCFILES $LIBAMDGCN/lib/oclc_isa_version_${gpunum}.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/irif.amdgcn.bc"
 else
-  #This is a temporary setting
-  if [ -f $ATMI_PATH/$LC_MCPU/lib/atmi.amdgcn.bc ]; then
-    BCFILES="$BCFILES $ATMI_PATH/$LC_MCPU/lib/atmi.amdgcn.bc"
+  if [ -f $ATMI_PATH/lib/libdevice/libatmi-$LC_MCPU.bc ]; then
+    BCFILES="$BCFILES $ATMI_PATH/lib/libdevice/libatmi-$LC_MCPU.bc"
   fi
   #when atmi is built, the hcc2-rt may not be built yet,
-  #make the cuda intrisinc lib optional at this stage.
   if [ -f $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc ]; then
     BCFILES="$BCFILES $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc"
+  fi
+  #make the cuda lib optional at this stage, it is configured when build libamdgcn
+  if [ -f $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc ]; then
     BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc"
   fi
   BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/opencl.amdgcn.bc"
@@ -314,8 +315,12 @@ if [ $CUDACLANG ] ; then
    INCLUDES="-I $CUDA_PATH/include ${INCLUDES}"
    CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
 else
-   INCLUDES="-I ${LIBAMDGCN}/include ${INCLUDES}" 
-   CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE} -mcpu=$LC_MCPU }
+  if [ -z $ROCMDEVICE ]; then
+    INCLUDES="-I ${LIBAMDGCN}/include ${INCLUDES}"
+  else
+    INCLUDES="-I ${LIBAMDGCN}/$LC_MCPU/include ${INCLUDES}"
+  fi
+  CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE} -mcpu=$LC_MCPU }
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}

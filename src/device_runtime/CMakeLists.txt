@@ -18,7 +18,7 @@
 #set(amdgcn_mcpus gfx803 gfx700 gfx801 gfx701 gfx800 gfx900 gfx901)
 set(amdgcn_mcpus gfx803)
 
-#Triple
+# Target triple
 if (NOT DEFINED AMDGPU_TARGET_TRIPLE)
   set(AMDGPU_TARGET_TRIPLE "amdgcn--amdhsa")
 endif (NOT DEFINED AMDGPU_TARGET_TRIPLE)
@@ -30,6 +30,11 @@ if (GENERIC_IS_ZERO)
   # set the target triple to amdgizcl to show to the compiler
   # that we are using a newer address space mapping
   set(AMDGPU_TARGET_TRIPLE "amdgcn--amdhsa-amdgizcl")
+  # HCC will execute utils/change-addr-space.sh
+  # and apply utils/add_amdgiz.sed on all .ll files in subdirectory hc/, irif/, opencl/
+  if (CUDA_TRIPLE)
+    set(AMDGPU_TARGET_TRIPLE "amdgcn--cuda")
+  endif (CUDA_TRIPLE)
 endif (GENERIC_IS_ZERO)
 
 #Find clang
@@ -73,46 +78,63 @@ else()
   set(mcpus $ENV{GFXLIST})
 endif()
 
+option(DEVICELIB_IS_AMDGCN "Use device lib from amdgcn instead of rocm" OFF)
+
 #device runtime
-find_file (
-  ATMI_DE_DEP_LIBHSA_INCLUDE
-  ockl_hsa.h
-  PATHS
-  ${DEVICE_LIB_DIR}/include
-  /opt/rocm/include
-  /usr/local/include
-  NO_DEFAULT_PATH
-  )
+if(DEVICELIB_IS_AMDGCN)
+  execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../bin/mygpu
+    OUTPUT_VARIABLE MYGPU
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+  #message(STATUS "      GPU detected: ${MYGPU}")
+  find_file (
+    ATMI_DE_DEP_LIBHSA_INCLUDE
+    ockl_hsa.h
+    PATHS
+    ${DEVICE_LIB_DIR}/include
+    /opt/rocm/libamdgcn/${MYGPU}/include
+    NO_DEFAULT_PATH
+    )
+  find_file (
+    ATMI_DE_DEP_LIBHSA_LIBRARIES
+    ockl.amdgcn.bc
+    PATHS
+    ${DEVICE_LIB_DIR}/lib
+    /opt/rocm/libamdgcn/${MYGPU}/lib
+    NO_DEFAULT_PATH
+    )
+else()
+  find_file (
+    ATMI_DE_DEP_LIBHSA_INCLUDE
+    ockl_hsa.h
+    PATHS
+    ${DEVICE_LIB_DIR}/include
+    /opt/rocm/include
+    /usr/local/include
+    NO_DEFAULT_PATH
+    )
+  find_file (
+    ATMI_DE_DEP_LIBHSA_LIBRARIES
+    ockl.amdgcn.bc
+    PATHS
+    ${DEVICE_LIB_DIR}/lib
+    /opt/rocm/lib
+    /usr/local/lib
+    NO_DEFAULT_PATH
+    )
+endif()
+
 get_filename_component (ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DE_DEP_LIBHSA_INCLUDE} DIRECTORY)
+get_filename_component (ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DE_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
 find_package_handle_standard_args(
   ATMI_DE_DEP_INC
   "One of these files not found: {ockl_hsa.h}"
   ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS)
-
-find_file (
-  ATMI_DE_DEP_LIBHSA_LIBRARIES
-  ockl.amdgcn.bc
-  PATHS
-  ${DEVICE_LIB_DIR}/lib
-  /opt/rocm/lib
-  /usr/local/lib
-  NO_DEFAULT_PATH
-  )
-get_filename_component (ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DE_DEP_LIBHSA_LIBRARIES} DIRECTORY)
-
 find_package_handle_standard_args(
   ATMI_DE_DEP_LIB
   "One of these files not found: {ockl.amdgcn.bc}"
   ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
-
-mark_as_advanced(
-  ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS
-  ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
-
-get_filename_component (ROCM_DEVICE_PATH
-  ${ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS} DIRECTORY
-  )
 
 if(ATMI_DE_DEP_LIB_FOUND)
   libatmi_runtime_say("Preparing to build device_runtime with GFX_VER=${GFX_VER}")
@@ -122,6 +144,20 @@ else()
 endif()
 
 # Build
+mark_as_advanced(
+  ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS
+  ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
+
+get_filename_component (ROCM_DEVICE_PATH
+  ${ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS} DIRECTORY
+  )
+
+if(DEVICELIB_IS_AMDGCN)
+  get_filename_component (ROCM_DEVICE_PATH
+    ${ROCM_DEVICE_PATH} DIRECTORY
+    )
+endif()
+
 get_filename_component (ATMI_RUNTIME_PATH
   ${CMAKE_CURRENT_BINARY_DIR} DIRECTORY
   )
@@ -133,7 +169,6 @@ file(GLOB sources
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cl
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cu
   )
-
 
 # set output dir for .h files
 set (OUTPUT_INC_DIRECTORY ${ATMI_RUNTIME_PATH}/include)

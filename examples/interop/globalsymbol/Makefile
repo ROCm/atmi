@@ -54,7 +54,7 @@ endif
 # Kernel compiler
 CLC ?= 1
 
-INC_FLAGS=-I${ATMI_INC} -I${ROCM_DEVICE_PATH}/include -I${HSA_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/include/hsa -I.
+INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/include/hsa -I.
 
 # CLOC
 CLOC_PATH ?= ${ATMI_RUNTIME_PATH}/bin
@@ -100,4 +100,4 @@ clean:
 	rm -rf *.o *.brig *.hsaco $(OBJS)
 
 test:
-	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./globalsymbol
+	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./globalsymbol

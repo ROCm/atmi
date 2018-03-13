@@ -49,7 +49,7 @@ CXX = g++
 CXXFLAGS =-O3 -g -std=c++11
 #CXXFLAGS += -v
 
-INC_FLAGS=-I${ATMI_INC} -I${ROCM_DEVICE_PATH}/include -I${HSA_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/include/hsa -I.
+INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/include/hsa -I.
 
 LIBS=-latmi_runtime -lhsa-runtime64
 LIB_FLAGS=-L${ATMI_RUNTIME_PATH}/lib -L${HSA_RUNTIME_PATH}/lib
@@ -67,4 +67,4 @@ clean:
 	rm -rf *.o $(OBJS)
 
 test:
-	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./hsainfo
+	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./hsainfo

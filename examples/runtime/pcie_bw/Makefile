@@ -71,4 +71,4 @@ clean:
 	rm -rf *.o $(OBJS)
 
 test:
-	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./pcie_bw
+	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./pcie_bw

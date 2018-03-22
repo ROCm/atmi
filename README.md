@@ -32,6 +32,18 @@ The below figure depicts the ATMI runtime workflow with CLOC as the compiler uti
 - Devices supported: AMD Carrizo and Kaveri APUs, and AMD Fiji dGPU
 - Runtimes used: ROCm v1.4
 
+# configure variables used in cmake script
+
+ATMI is built by default using ROCm device library
+
+The followin cmake configure variable maybe used.
+
+Installation root of HSA runtime: -DHSA_DIR=<HSA runtime path>, default is /opt/rocm
+Installation root of rocm device library: -DDEVICE_LIB_DIR=<local build rocm device lib path>/build/dist
+Clang compiler used for device lib: -DLLVM_DIR=<Clang path> where the dir contains the bin directory
+
+It can also be built using LIBAMDGCN, by using -DEVICELIB_IS_AMDGCN=on
+
 # License
 
 MIT License 

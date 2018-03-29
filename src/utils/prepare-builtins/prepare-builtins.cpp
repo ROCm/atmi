@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     }
 
   }
-
+#if 0
   for (Module::global_iterator i = M->global_begin(), e = M->global_end();
        i != e; ++i) {
     if (!i->isDeclaration() && i->getLinkage() == GlobalValue::ExternalLinkage) {
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
         i->setVisibility(GlobalValue::ProtectedVisibility);
     }
   }
-
+#endif
   for (Module::alias_iterator i = M->alias_begin(), e = M->alias_end();
        i != e; ++i) {
     if (!i->isDeclaration() && i->getLinkage() == GlobalValue::ExternalLinkage) {
@@ -114,14 +114,14 @@ int main(int argc, char **argv) {
   }
 
   std::error_code EC;
-  std::unique_ptr<tool_output_file> Out
-  (new tool_output_file(OutputFilename, EC, sys::fs::F_None));
+  std::unique_ptr<ToolOutputFile> Out(
+      new ToolOutputFile(OutputFilename, EC, sys::fs::F_None));
   if (EC) {
     errs() << EC.message() << '\n';
     exit(1);
   }
 
-  WriteBitcodeToFile(M, Out->os());
+  WriteBitcodeToFile(*M, Out->os());
 
   // Declare success.
   Out->keep();

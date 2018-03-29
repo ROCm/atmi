@@ -190,9 +190,7 @@ macro(add_bc_library name dir)
 
   add_custom_command(
     OUTPUT linkout.${mcpu}.bc
-    #FIXME: remove the warning suppress when the address space strategy are unified
-    #COMMAND ${CLANG_BINDIR}/llvm-link ${bc_files} ${device_libs} -o linkout.${mcpu}.bc
-    COMMAND ${CLANG_BINDIR}/llvm-link -suppress-warnings ${bc_files} ${device_libs} -o linkout.${mcpu}.bc
+    COMMAND ${CLANG_BINDIR}/llvm-link ${bc_files} -o linkout.${mcpu}.bc
     DEPENDS ${bc_files}
     )
   add_custom_command(
@@ -201,35 +199,11 @@ macro(add_bc_library name dir)
     DEPENDS linkout.${mcpu}.bc
     )
 
-  if (EXISTS "${CLANG_BINDIR}/set-linkage")
-    if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
-      add_custom_command(
-        OUTPUT lib${name}-${mcpu}.bc
-        COMMAND ${CLANG_BINDIR}/set-linkage optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
-        DEPENDS optout.${mcpu}.bc #utilities
-        )
-    else ()
-      add_custom_command(
-        OUTPUT lib${name}-${mcpu}.bc
-        COMMAND ${CLANG_BINDIR}/set-linkage optout.${mcpu}.bc -o ${ATMI_RUNTIME_PATH}/lib/atmi.amdgcn.bc
-        DEPENDS optout.${mcpu}.bc #utilities
-        )
-    endif()
-  else ()
-    if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
-      add_custom_command(
-        OUTPUT lib${name}-${mcpu}.bc
-        COMMAND /bin/cp optout.${mcpu}.bc ${OUTPUTDIR}/lib${name}-${mcpu}.bc
-        DEPENDS optout.${mcpu}.bc
-        )
-    else ()
-      add_custom_command(
-        OUTPUT lib${name}-${mcpu}.bc
-        COMMAND /bin/cp optout.${mcpu}.bc ${ATMI_RUNTIME_PATH}/lib/atmi.amdgcn.bc
-        DEPENDS optout.${mcpu}.bc
-        )
-    endif()
-  endif()
+  add_custom_command(
+    OUTPUT lib${name}-${mcpu}.bc
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/../prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
+    DEPENDS optout.${mcpu}.bc prepare-builtins
+  )
 
   add_custom_target(lib${name}-${mcpu} ALL DEPENDS lib${name}-${mcpu}.bc)
 endmacro()

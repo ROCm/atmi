@@ -20,22 +20,8 @@ set(amdgcn_mcpus gfx803)
 
 # Target triple
 if (NOT DEFINED AMDGPU_TARGET_TRIPLE)
-  set(AMDGPU_TARGET_TRIPLE "amdgcn--amdhsa")
+  set(AMDGPU_TARGET_TRIPLE "amdgcn-amd-amdhsa")
 endif (NOT DEFINED AMDGPU_TARGET_TRIPLE)
-
-# Introduce GENERIC_IS_ZERO CMake option
-option(GENERIC_IS_ZERO "Teach LLVM/Clang that generic address space IS address space 0 for AMDGPU target" OFF)
-
-if (GENERIC_IS_ZERO)
-  # set the target triple to amdgizcl to show to the compiler
-  # that we are using a newer address space mapping
-  set(AMDGPU_TARGET_TRIPLE "amdgcn--amdhsa-amdgizcl")
-  # HCC will execute utils/change-addr-space.sh
-  # and apply utils/add_amdgiz.sed on all .ll files in subdirectory hc/, irif/, opencl/
-  if (CUDA_TRIPLE)
-    set(AMDGPU_TARGET_TRIPLE "amdgcn--cuda")
-  endif (CUDA_TRIPLE)
-endif (GENERIC_IS_ZERO)
 
 #Find clang
 find_package(LLVM QUIET CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
@@ -206,18 +192,33 @@ foreach(mcpu ${mcpus})
 
   add_bc_library(atmi ${CMAKE_CURRENT_SOURCE_DIR} ${sources})
 
-  install(FILES 
+  install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
     DESTINATION include COMPONENT device_runtime)
 
-  if(CMAKE_BUILD_TYPE MATCHES Debug)
-    install(FILES 
-      ${OUTPUTDIR}/libatmi-${mcpu}.bc
-      DESTINATION lib-debug/libdevice COMPONENT device_runtime)
+  set(HCC2 $ENV{HCC2})
+  if(HCC2)
+     if(CMAKE_BUILD_TYPE MATCHES Debug)
+       install(FILES
+         ${OUTPUTDIR}/libatmi-${mcpu}.bc
+         DESTINATION lib-debug/libdevice/${mcpu} COMPONENT device_runtime
+         RENAME libatmi.bc)
+     else()
+       install(FILES
+         ${OUTPUTDIR}/libatmi-${mcpu}.bc
+         DESTINATION lib/libdevice/${mcpu} COMPONENT device_runtime
+         RENAME libatmi.bc)
+     endif()
   else()
-    install(FILES 
-      ${OUTPUTDIR}/libatmi-${mcpu}.bc
-      DESTINATION lib/libdevice COMPONENT device_runtime)
-  endif()
+     if(CMAKE_BUILD_TYPE MATCHES Debug)
+       install(FILES
+         ${OUTPUTDIR}/libatmi-${mcpu}.bc
+         DESTINATION lib-debug/libdevice COMPONENT device_runtime)
+     else()
+       install(FILES
+         ${OUTPUTDIR}/libatmi-${mcpu}.bc
+         DESTINATION lib/libdevice COMPONENT device_runtime)
+     endif()
+  endif() # end if HCC2
 endforeach()
 

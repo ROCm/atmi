@@ -63,6 +63,7 @@ if (NOT GFXVAR)
 else()
   set(mcpus $ENV{GFXLIST})
 endif()
+separate_arguments(mcpus)
 
 option(DEVICELIB_IS_AMDGCN "Use device lib from amdgcn instead of rocm" OFF)
 

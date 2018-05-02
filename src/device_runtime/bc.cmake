@@ -190,7 +190,7 @@ macro(add_bc_library name dir)
 
   add_custom_command(
     OUTPUT linkout.${mcpu}.bc
-    COMMAND ${CLANG_BINDIR}/llvm-link ${bc_files} -o linkout.${mcpu}.bc
+    COMMAND ${CLANG_BINDIR}/llvm-link ${bc_files} ${device_libs} -o linkout.${mcpu}.bc
     DEPENDS ${bc_files}
     )
   add_custom_command(
@@ -199,12 +199,20 @@ macro(add_bc_library name dir)
     DEPENDS linkout.${mcpu}.bc
     )
 
-  add_custom_command(
-    OUTPUT lib${name}-${mcpu}.bc
-    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/../prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
-    DEPENDS optout.${mcpu}.bc prepare-builtins
-  )
-
-  add_custom_target(lib${name}-${mcpu} ALL DEPENDS lib${name}-${mcpu}.bc)
+  if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
+    add_custom_command(
+      OUTPUT lib${name}-${mcpu}.bc
+      COMMAND ${CMAKE_CURRENT_BINARY_DIR}/../prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
+      DEPENDS optout.${mcpu}.bc prepare-builtins
+    )
+    add_custom_target(lib${name}-${mcpu} ALL DEPENDS lib${name}-${mcpu}.bc)
+  else()
+    add_custom_command(
+      OUTPUT atmi.amdgcn.bc
+      COMMAND /bin/cp optout.${mcpu}.bc ${ATMI_RUNTIME_PATH}/lib/atmi.amdgcn.bc
+      DEPENDS optout.${mcpu}.bc
+    )
+    add_custom_target(atmi.amdgcn ALL DEPENDS atmi.amdgcn.bc)
+  endif()
 endmacro()
 

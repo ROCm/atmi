@@ -186,7 +186,11 @@ foreach(mcpu ${mcpus})
   set(optimization_level 2)
 
   # set output dir for .bc files
-  set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib/libdevice)
+  if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
+    set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib/libdevice)
+  else()
+    set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib)
+  endif()
 
   # create output dir for include files
   execute_process(COMMAND "/bin/mkdir" "-p" "${OUTPUTDIR}")
@@ -199,26 +203,54 @@ foreach(mcpu ${mcpus})
 
   set(HCC2 $ENV{HCC2})
   if(HCC2)
-     if(CMAKE_BUILD_TYPE MATCHES Debug)
-       install(FILES
-         ${OUTPUTDIR}/libatmi-${mcpu}.bc
-         DESTINATION lib-debug/libdevice/${mcpu} COMPONENT device_runtime
-         RENAME libatmi.bc)
+     if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
+       if(CMAKE_BUILD_TYPE MATCHES Debug)
+         install(FILES
+           ${OUTPUTDIR}/libatmi-${mcpu}.bc
+           DESTINATION lib-debug/libdevice/${mcpu} COMPONENT device_runtime
+           RENAME libatmi.bc)
+       else()
+         install(FILES
+           ${OUTPUTDIR}/libatmi-${mcpu}.bc
+           DESTINATION lib/libdevice/${mcpu} COMPONENT device_runtime
+           RENAME libatmi.bc)
+       endif()
      else()
-       install(FILES
-         ${OUTPUTDIR}/libatmi-${mcpu}.bc
-         DESTINATION lib/libdevice/${mcpu} COMPONENT device_runtime
-         RENAME libatmi.bc)
+       if(CMAKE_BUILD_TYPE MATCHES Debug)
+         install(FILES
+           ${OUTPUTDIR}/atmi.amdgcn.bc
+           DESTINATION lib-debug COMPONENT device_runtime
+           )
+       else()
+         install(FILES
+           ${OUTPUTDIR}/atmi.amdgcn.bc
+           DESTINATION lib COMPONENT device_runtime
+           )
+       endif()
      endif()
   else()
-     if(CMAKE_BUILD_TYPE MATCHES Debug)
-       install(FILES
-         ${OUTPUTDIR}/libatmi-${mcpu}.bc
-         DESTINATION lib-debug/libdevice COMPONENT device_runtime)
+     if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
+       if(CMAKE_BUILD_TYPE MATCHES Debug)
+         install(FILES
+           ${OUTPUTDIR}/libatmi-${mcpu}.bc
+           DESTINATION lib-debug/libdevice COMPONENT device_runtime)
+       else()
+         install(FILES
+           ${OUTPUTDIR}/libatmi-${mcpu}.bc
+           DESTINATION lib/libdevice COMPONENT device_runtime)
+       endif()
      else()
-       install(FILES
-         ${OUTPUTDIR}/libatmi-${mcpu}.bc
-         DESTINATION lib/libdevice COMPONENT device_runtime)
+       if(CMAKE_BUILD_TYPE MATCHES Debug)
+         install(FILES
+           ${OUTPUTDIR}/atmi.amdgcn.bc
+           DESTINATION lib-debug COMPONENT device_runtime
+           )
+       else()
+         install(FILES
+           ${OUTPUTDIR}/atmi.amdgcn.bc
+           DESTINATION lib COMPONENT device_runtime
+           )
+       endif()
      endif()
   endif() # end if HCC2
 endforeach()

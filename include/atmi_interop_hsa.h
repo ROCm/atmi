@@ -90,6 +90,32 @@ atmi_status_t atmi_interop_hsa_get_memory_pool(atmi_mem_place_t memory,
  */
 atmi_status_t atmi_interop_hsa_get_symbol_info(atmi_mem_place_t place, 
                             const char *symbol, void **var_addr, unsigned int *var_size);
+
+/**
+ * @brief Get the HSA-specific kernel info from a kernel name 
+ *
+ * @detail Use this function to query the HSA-specific kernel info from the kernel name.
+ * This function is meaningful only after calling one
+ * of the @p atmi_module_register functions.
+ * 
+ * @param[in] place The ATMI memory place
+ *
+ * @param[in] kernel_name Pointer to a char array with the kernel name 
+ *
+ * @param[in] info The different possible kernel properties
+ *
+ * @param[in] value Pointer to a non-NULL @p uint variable that will 
+ * hold the return value of the kernel property.
+ *
+ * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
+ *
+ * @retval ::ATMI_STATUS_ERROR If @p symbol, @p var_addr or @p var_size are invalid 
+ * location in the current node, or if ATMI is not initialized.
+ * 
+ * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
+ */
+atmi_status_t atmi_interop_hsa_get_kernel_info(atmi_mem_place_t place, 
+        const char *kernel_name, hsa_executable_symbol_info_t info, uint32_t *value);
 /** @} */
 
 #endif // __ATMI_INTEROP_HSA_H__

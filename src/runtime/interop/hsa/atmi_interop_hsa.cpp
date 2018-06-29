@@ -64,3 +64,49 @@ atmi_status_t atmi_interop_hsa_get_symbol_info(atmi_mem_place_t place,
         return ATMI_STATUS_ERROR;
     }
 }
+
+atmi_status_t atmi_interop_hsa_get_kernel_info(atmi_mem_place_t place, 
+        const char *kernel_name, hsa_executable_symbol_info_t kernel_info, uint32_t *value) {
+    /*
+       // Typical usage:
+       uint32_t value;
+       atmi_interop_hsa_get_kernel_addr(gpu_place, "kernel_name", 
+                                    HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE,
+                                    &val);
+    */
+
+    if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
+    atmi_machine_t *machine = atmi_machine_get_info();
+    if(!kernel_name || !value || !machine) return ATMI_STATUS_ERROR;
+    if(place.dev_id < 0 || 
+        place.dev_id >= machine->device_count_by_type[place.dev_type])
+        return ATMI_STATUS_ERROR;
+
+    atmi_status_t status = ATMI_STATUS_SUCCESS;
+    // get the kernel info
+    std::string kernelStr = std::string(kernel_name);
+    if(KernelInfoTable[place.dev_id].find(kernelStr) != KernelInfoTable[place.dev_id].end()) {
+        atl_kernel_info_t info = KernelInfoTable[place.dev_id][kernelStr];
+        switch(kernel_info) {
+            case HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE:
+                *value = info.group_segment_size;
+                break;
+            case HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE:
+                *value = info.private_segment_size;
+                break;
+            case HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE:
+                *value = info.kernel_segment_size;
+                break;
+            default:
+                *value = 0;
+                status = ATMI_STATUS_ERROR;
+                break;
+        }
+    }
+    else {
+        *value = 0;
+        status = ATMI_STATUS_ERROR;
+    }
+    
+    return status;
+}

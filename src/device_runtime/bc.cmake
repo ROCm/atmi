@@ -202,8 +202,8 @@ macro(add_bc_library name dir)
   if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
     add_custom_command(
       OUTPUT lib${name}-${mcpu}.bc
-      COMMAND ${CMAKE_CURRENT_BINARY_DIR}/../prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
-      DEPENDS optout.${mcpu}.bc prepare-builtins
+      COMMAND ${CLANG_BINDIR}/prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
+      DEPENDS optout.${mcpu}.bc
     )
     add_custom_target(lib${name}-${mcpu} ALL DEPENDS lib${name}-${mcpu}.bc)
   else()

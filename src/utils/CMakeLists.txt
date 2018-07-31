@@ -17,4 +17,4 @@ find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
 list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
 include(AddLLVM)
 
-add_subdirectory(prepare-builtins)
+# add_subdirectory(prepare-builtins)

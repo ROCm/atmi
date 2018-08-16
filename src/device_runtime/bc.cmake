@@ -175,7 +175,7 @@ macro(add_bc_library name dir)
   endif()
 
   set(device_libs)
-  if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
+  if(ATMI_DEVICELIB_HCC2)
   else()
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/opencl.amdgcn.bc)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/ocml.amdgcn.bc)
@@ -199,7 +199,7 @@ macro(add_bc_library name dir)
     DEPENDS linkout.${mcpu}.bc
     )
 
-  if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
+  if(ATMI_DEVICELIB_HCC2)
     add_custom_command(
       OUTPUT lib${name}-${mcpu}.bc
       COMMAND ${CLANG_BINDIR}/prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
@@ -208,11 +208,11 @@ macro(add_bc_library name dir)
     add_custom_target(lib${name}-${mcpu} ALL DEPENDS lib${name}-${mcpu}.bc)
   else()
     add_custom_command(
-      OUTPUT atmi.amdgcn.bc
-      COMMAND /bin/cp optout.${mcpu}.bc ${ATMI_RUNTIME_PATH}/lib/atmi.amdgcn.bc
+      OUTPUT ${name}-${mcpu}.amdgcn.bc
+      COMMAND /bin/cp optout.${mcpu}.bc ${ATMI_RUNTIME_PATH}/lib/${name}-${mcpu}.amdgcn.bc
       DEPENDS optout.${mcpu}.bc
     )
-    add_custom_target(atmi.amdgcn ALL DEPENDS atmi.amdgcn.bc)
+    add_custom_target(${name}-${mcpu}.amdgcn ALL DEPENDS ${name}-${mcpu}.amdgcn.bc)
   endif()
 endmacro()
 

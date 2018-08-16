@@ -255,8 +255,8 @@ ROCMDEVICE=`echo $LIBAMDGCN | grep amdgcn`
 
 if [ -z $ROCMDEVICE ]; then
   #This is a temporary setting
-  if [ -f $ATMI_PATH/lib/atmi.amdgcn.bc ]; then
-    BCFILES="$BCFILES $ATMI_PATH/lib/atmi.amdgcn.bc"
+  if [ -f $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc ]; then
+    BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc"
   fi
   gpunum=`$cdir/mygpu -n`
   BCFILES="$BCFILES $LIBAMDGCN/lib/opencl.amdgcn.bc"

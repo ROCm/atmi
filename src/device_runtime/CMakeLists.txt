@@ -14,6 +14,12 @@
 #OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
+string( TOLOWER "${ATMI_DEVICE_RUNTIME}" ATMI_DEVICE_RUNTIME_VAR )
+if(NOT ATMI_DEVICE_RUNTIME_VAR MATCHES on )
+  libatmi_runtime_say("Not building ATMI Device Runtime. Use -DATMI_DEVICE_RUNTIME=on in your cmake options to enable.")
+  return()
+endif()
+
 #set(amdgcn_mcpus fiji kaveri carrizo hawaii)
 #set(amdgcn_mcpus gfx803 gfx700 gfx801 gfx701 gfx800 gfx900 gfx901)
 set(amdgcn_mcpus gfx803)
@@ -65,10 +71,10 @@ else()
 endif()
 separate_arguments(mcpus)
 
-option(DEVICELIB_IS_AMDGCN "Use device lib from amdgcn instead of rocm" OFF)
+option(ATMI_DEVICELIB_HCC2 "Use device libs from the HCC2 installation instead of from ROCm" OFF)
 
 #device runtime
-if(DEVICELIB_IS_AMDGCN)
+if(ATMI_DEVICELIB_HCC2)
   execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../bin/mygpu
     OUTPUT_VARIABLE MYGPU
     OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -79,7 +85,7 @@ if(DEVICELIB_IS_AMDGCN)
     ockl_hsa.h
     PATHS
     ${DEVICE_LIB_DIR}/include
-    /opt/rocm/libamdgcn/${MYGPU}/include
+    /opt/rocm/hcc2/include
     NO_DEFAULT_PATH
     )
   find_file (
@@ -87,7 +93,7 @@ if(DEVICELIB_IS_AMDGCN)
     ockl.amdgcn.bc
     PATHS
     ${DEVICE_LIB_DIR}/lib
-    /opt/rocm/libamdgcn/${MYGPU}/lib
+    /opt/rocm/hcc2/lib/libdevice/${MYGPU}
     NO_DEFAULT_PATH
     )
 else()
@@ -136,14 +142,8 @@ mark_as_advanced(
   ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
 
 get_filename_component (ROCM_DEVICE_PATH
-  ${ATMI_DE_DEP_LIBHSA_LIBRARIES} NAME
+  ${ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS} DIRECTORY
   )
-
-if(DEVICELIB_IS_AMDGCN)
-  get_filename_component (ROCM_DEVICE_PATH
-    ${ROCM_DEVICE_PATH} DIRECTORY
-    )
-endif()
 
 get_filename_component (ATMI_RUNTIME_PATH
   ${CMAKE_CURRENT_BINARY_DIR} DIRECTORY
@@ -186,7 +186,7 @@ foreach(mcpu ${mcpus})
   set(optimization_level 2)
 
   # set output dir for .bc files
-  if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
+  if(ATMI_DEVICELIB_HCC2)
     set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib/libdevice)
   else()
     set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib)
@@ -201,57 +201,28 @@ foreach(mcpu ${mcpus})
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
     DESTINATION include COMPONENT device_runtime)
 
-  set(HCC2 $ENV{HCC2})
-  if(HCC2)
-     if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
-       if(CMAKE_BUILD_TYPE MATCHES Debug)
-         install(FILES
-           ${OUTPUTDIR}/libatmi-${mcpu}.bc
-           DESTINATION lib-debug/libdevice/${mcpu} COMPONENT device_runtime
-           RENAME libatmi.bc)
-       else()
-         install(FILES
-           ${OUTPUTDIR}/libatmi-${mcpu}.bc
-           DESTINATION lib/libdevice/${mcpu} COMPONENT device_runtime
-           RENAME libatmi.bc)
-       endif()
-     else()
-       if(CMAKE_BUILD_TYPE MATCHES Debug)
-         install(FILES
-           ${OUTPUTDIR}/atmi.amdgcn.bc
-           DESTINATION lib-debug COMPONENT device_runtime
-           )
-       else()
-         install(FILES
-           ${OUTPUTDIR}/atmi.amdgcn.bc
-           DESTINATION lib COMPONENT device_runtime
-           )
-       endif()
-     endif()
+  if(ATMI_DEVICELIB_HCC2)
+    if(CMAKE_BUILD_TYPE MATCHES Debug)
+      install(FILES
+        ${OUTPUTDIR}/libatmi-${mcpu}.bc
+        DESTINATION lib-debug/libdevice COMPONENT device_runtime)
+    else()
+      install(FILES
+        ${OUTPUTDIR}/libatmi-${mcpu}.bc
+        DESTINATION lib/libdevice COMPONENT device_runtime)
+    endif()
   else()
-     if(${ROCM_DEVICE_PATH} MATCHES .*amdgcn.*)
-       if(CMAKE_BUILD_TYPE MATCHES Debug)
-         install(FILES
-           ${OUTPUTDIR}/libatmi-${mcpu}.bc
-           DESTINATION lib-debug/libdevice COMPONENT device_runtime)
-       else()
-         install(FILES
-           ${OUTPUTDIR}/libatmi-${mcpu}.bc
-           DESTINATION lib/libdevice COMPONENT device_runtime)
-       endif()
-     else()
-       if(CMAKE_BUILD_TYPE MATCHES Debug)
-         install(FILES
-           ${OUTPUTDIR}/atmi.amdgcn.bc
-           DESTINATION lib-debug COMPONENT device_runtime
-           )
-       else()
-         install(FILES
-           ${OUTPUTDIR}/atmi.amdgcn.bc
-           DESTINATION lib COMPONENT device_runtime
-           )
-       endif()
-     endif()
-  endif() # end if HCC2
+    if(CMAKE_BUILD_TYPE MATCHES Debug)
+      install(FILES
+        ${OUTPUTDIR}/atmi-${mcpu}.amdgcn.bc
+        DESTINATION lib-debug COMPONENT device_runtime
+        )
+    else()
+      install(FILES
+        ${OUTPUTDIR}/atmi-${mcpu}.amdgcn.bc
+        DESTINATION lib COMPONENT device_runtime
+        )
+    endif()
+  endif()
 endforeach()
 

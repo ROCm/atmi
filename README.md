@@ -1,22 +1,19 @@
-# ATMI (Asynchronous Task and Memory Interface)
-Asynchronous Task and Memory Interface, or ATMI, is a runtime framework and declarative programming model for heterogeneous 
+ATMI (Asynchronous Task and Memory Interface)
+=============================================
+
+Asynchronous Task and Memory Interface, or ATMI, is a runtime framework and declarative programming model for heterogeneous
 CPU-GPU systems. It provides a consistent API to create task graphs on CPUs and GPUs (integrated and discrete). ATMI is a declarative
-programming model, where high-level tasks can be simply described by using a few predefined C-style structures. The task description
-includes specifying its granularity, dependencies to other tasks, data requirements and so on. The ATMI runtime, based on the task
-graph, will perform task scheduling and memory management that is optimal for the underlying platform. ATMI provides a rich and flexible
+programming model, where the high-level task configurations can be simply described by using a few predefined C-style structures before launching the tasks.
+The task description includes specifying its granularity, dependencies to other tasks, data requirements and so on. The ATMI runtime, based on the overall task
+graph and individual task configurations, will perform task scheduling and memory management that is optimal for the underlying platform. ATMI provides a rich and flexible
 user interface so that the end user can relinquish scheduling to the runtime (default behavior) or take full control of scheduling and
 mapping, if desired. The target audience for ATMI is application programmers or middleware developers for high-level languages.
 
-# Compilation and Runtime Workflow
-The below figure depicts the ATMI runtime workflow with CLOC as the compiler utility.
-![atmi-workflow](https://cloud.githubusercontent.com/assets/996564/20338676/4b6f86a2-ab8d-11e6-8743-df451d5412cf.png)
-
-# What is New?
-
-## ATMI v0.3
-- ATMI-RT: runtime library to manage tasks
-- ATMI-C: language extension for declaring tasks
-- A  comprehensive machine model for CPUs, integrated GPU (APU) and discrete GPU (dGPU) systems.
+# ATMI (v0.5) Feature List
+- ATMI-RT: host runtime library to manage tasks
+- ATMI-DEVRT: device runtime library for managing task enqueue from the GPU to both the CPU and other GPUs in the system
+- ATMI-C (experimental): C language extension for declaring tasks (works only with GCC)
+- A comprehensive machine model for CPUs, integrated GPU (APU) and discrete GPU systems.
 - Consistent task management API for CPU tasks and GPU tasks
     - GPU kernel language: CL (more kernel language support to come in the future)
     - CPU tasks: support for multi-dimensional task grids (similar to GPU tasks)
@@ -28,27 +25,20 @@ The below figure depicts the ATMI runtime workflow with CLOC as the compiler uti
     - Kernel argument memory regions
     - Reuse of task handles
 - Data movement API (synchronous and asynchronous options)
-    - Asynchronous data movement is treated as an ATMI task in the task graph.
-- Devices supported: AMD Carrizo and Kaveri APUs, and AMD Fiji dGPU
-- Runtimes used: ROCm v1.4
+    - Asynchronous data movement is treated as an ATMI task in the task graph
+- Interoperability with HSA/ROCm: Map between ATMI handles and ROCm data structures for expert programmers
+- Supported platforms: all devices that are supported by [ROCm](https://github.com/RadeonOpenCompute/ROCm) are supported by ATMI
+- Supported runtime: ROCm v1.7+
 
-# configure variables used in cmake script
-
-ATMI is built by default using ROCm device library
-
-The followin cmake configure variable maybe used.
-
-Installation root of HSA runtime: -DHSA_DIR=<HSA runtime path>, default is /opt/rocm
-Installation root of rocm device library: -DDEVICE_LIB_DIR=<local build rocm device lib path>/build/dist
-Clang compiler used for device lib: -DLLVM_DIR=<Clang path> where the dir contains the bin directory
-
-It can also be built using LIBAMDGCN, by using -DEVICELIB_IS_AMDGCN=on
+# Compilation and Runtime Workflow
+The below figure depicts the ATMI runtime workflow with CLOC as the compiler utility.
+![atmi-workflow](https://cloud.githubusercontent.com/assets/996564/20338676/4b6f86a2-ab8d-11e6-8743-df451d5412cf.png)
 
 # License
 
-MIT License 
+MIT License
 
-Copyright © 2016 Advanced Micro Devices, Inc.  
+Copyright © 2016 Advanced Micro Devices, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
 without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit

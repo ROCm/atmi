@@ -94,3 +94,12 @@ INSTALL(FILES
         COMPONENT runtime
        )
 
+INSTALL(FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/cloc.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mymcpu
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
+        PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        DESTINATION "bin"
+        COMPONENT runtime
+       )
+

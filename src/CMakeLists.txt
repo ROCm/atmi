@@ -121,6 +121,7 @@ set ( CPACK_PACKAGE_CONTACT "Ashwin Aji <ashwin.aji@amd.com>" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "ATMI: Asynchronous Task and Memory Interface" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" )
 set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm/atmi )
+set ( CPACK_GENERATOR "RPM;DEB")
 # Debian package specific variables
 set ( CPACK_DEBIAN_PACKAGE_DEPENDS "hsa-rocr-dev" )
 set ( CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RadeonOpenCompute/atmi" )
@@ -136,7 +137,7 @@ set ( CPACK_RPM_COMPONENT_INSTALL ON)
 
 
 ## Set components
-set ( CPACK_COMPONENTS_ALL runtime cplugin )
+set ( CPACK_COMPONENTS_ALL runtime cplugin device_runtime )
 set ( CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE 1 )
 
 ## Include packaging

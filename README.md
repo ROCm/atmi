@@ -9,7 +9,7 @@ graph and individual task configurations, will perform task scheduling and memor
 user interface so that the end user can relinquish scheduling to the runtime (default behavior) or take full control of scheduling and
 mapping, if desired. The target audience for ATMI is application programmers or middleware developers for high-level languages.
 
-# ATMI (v0.5) Feature List
+## ATMI (v0.5) Feature List
 - ATMI-RT: host runtime library to manage tasks
 - ATMI-DEVRT: device runtime library for managing task enqueue from the GPU to both the CPU and other GPUs in the system
 - ATMI-C (experimental): C language extension for declaring tasks (works only with GCC)
@@ -30,11 +30,11 @@ mapping, if desired. The target audience for ATMI is application programmers or 
 - Supported platforms: all devices that are supported by [ROCm](https://github.com/RadeonOpenCompute/ROCm) are supported by ATMI
 - Supported runtime: ROCm v1.7+
 
-# Compilation and Runtime Workflow
+## Compilation and Runtime Workflow
 The below figure depicts the ATMI runtime workflow with CLOC as the compiler utility.
 ![atmi-workflow](https://user-images.githubusercontent.com/996564/44241414-a28b8480-a178-11e8-917a-70c8ccbc83a1.png)
 
-# License
+## License
 
 MIT License
 

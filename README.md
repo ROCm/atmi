@@ -32,7 +32,7 @@ mapping, if desired. The target audience for ATMI is application programmers or 
 
 # Compilation and Runtime Workflow
 The below figure depicts the ATMI runtime workflow with CLOC as the compiler utility.
-![atmi-workflow](https://cloud.githubusercontent.com/assets/996564/20338676/4b6f86a2-ab8d-11e6-8743-df451d5412cf.png)
+![atmi-workflow](https://user-images.githubusercontent.com/996564/44241414-a28b8480-a178-11e8-917a-70c8ccbc83a1.png)
 
 # License
 

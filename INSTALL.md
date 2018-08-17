@@ -5,13 +5,16 @@ ATMI Install Instructions
 - [2. Install/Build ATMI](#ATMI)
 - [3. Build/Test ATMI Examples](#Examples)
 
-## Prepare System for ATMI Installation
 <A Name="Prepare">
+
+## Prepare System for ATMI Installation
+
 ATMI works on all platforms that are supported by ROCm, but has been tested mainly for the Ubuntu 16.04.4 LTS ("xenial") platform.
 See [here](https://github.com/RadeonOpenCompute/ROCm) for details on all supported hardware/OS configurations and instructions on how to install ROCm for your system.
 
-## Install/Build ATMI 
 <A Name="ATMI">
+
+## Install/Build ATMI 
 There are multiple ways to install ATMI (ATMI-RT, ATMI-DEVRT and ATMI-C): from the ROCm apt server, or from the package files on GitHub or build from the source.
 
 #### Install from the ROCm apt server
@@ -57,8 +60,9 @@ make install
 export LD_LIBRARY_FLAGS=/path/to/install/lib:$LD_LIBRARY_FLAGS # (optional)
 ```
 
-## Build/Test ATMI Examples
 <A Name="Examples">
+
+## Build/Test ATMI Examples
 
 ATMI is a dual source programming model (similar to OpenCL), where the host code and device code are compiled separately,
 and the ATMI host runtime loads the device module before launching tasks.

@@ -5,6 +5,7 @@
  *===------------------------------------------------------------------------*/
 #include "atmi_interop_hsa.h"
 #include "atl_internal.h"
+#include "atmi_kl.h"
 
 atmi_status_t atmi_interop_hsa_get_agent(atmi_place_t proc, hsa_agent_t *agent) {
     if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
@@ -85,7 +86,8 @@ atmi_status_t atmi_interop_hsa_get_kernel_info(atmi_mem_place_t place,
                 *value = info.private_segment_size;
                 break;
             case HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE:
-                *value = info.kernel_segment_size;
+                // return the size for non-implicit args
+                *value = info.kernel_segment_size - sizeof(atmi_implicit_args_t);
                 break;
             default:
                 *value = 0;

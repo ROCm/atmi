@@ -61,10 +61,8 @@ else()
 endif()
 separate_arguments(mcpus)
 
-option(ATMI_DEVICELIB_HCC2 "Use device libs from the HCC2 installation instead of from ROCm" OFF)
-
 #device runtime
-if(ATMI_DEVICELIB_HCC2)
+if(ATMI_WITH_HCC2_VAR)
   execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../bin/mygpu
     OUTPUT_VARIABLE MYGPU
     OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -176,7 +174,7 @@ foreach(mcpu ${mcpus})
   set(optimization_level 2)
 
   # set output dir for .bc files
-  if(ATMI_DEVICELIB_HCC2)
+  if(ATMI_WITH_HCC2_VAR)
     set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib/libdevice)
   else()
     set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib)
@@ -191,7 +189,7 @@ foreach(mcpu ${mcpus})
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
     DESTINATION include COMPONENT device_runtime)
 
-  if(ATMI_DEVICELIB_HCC2)
+  if(ATMI_WITH_HCC2_VAR)
     if(CMAKE_BUILD_TYPE MATCHES Debug)
       install(FILES
         ${OUTPUTDIR}/libatmi-${mcpu}.bc

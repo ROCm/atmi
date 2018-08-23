@@ -69,6 +69,11 @@ mark_as_advanced(
   ATMI_DEP_LIBHSA_INCLUDE_DIRS
   ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
 
+string(TOLOWER "${ATMI_WITH_HCC2}" ATMI_WITH_HCC2_STR)
+if(ATMI_WITH_HCC2_STR MATCHES on)
+  set(ATMI_WITH_HCC2_VAR TRUE)
+endif()
+
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
 add_subdirectory(device_runtime) 

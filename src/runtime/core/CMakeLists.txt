@@ -84,7 +84,8 @@ INSTALL(FILES
         COMPONENT runtime
        )
 
-INSTALL(FILES
+if(NOT ATMI_WITH_HCC2_VAR)
+  INSTALL(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/cloc.sh
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mymcpu
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
@@ -92,4 +93,4 @@ INSTALL(FILES
         DESTINATION "bin"
         COMPONENT runtime
        )
-
+endif()

@@ -74,6 +74,11 @@ if(ATMI_WITH_HCC2_STR MATCHES on)
   set(ATMI_WITH_HCC2_VAR TRUE)
 endif()
 
+set(ATMI_RUNTIME_PATH ${CMAKE_CURRENT_BINARY_DIR})
+
+# create configure file
+file(WRITE ${ATMI_RUNTIME_PATH}/atmi-config.mak "ATMI_RUNTIME_PATH=${ATMI_RUNTIME_PATH}\n")
+
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 
 add_subdirectory(device_runtime) 

@@ -133,10 +133,6 @@ get_filename_component (ROCM_DEVICE_PATH
   ${ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS} DIRECTORY
   )
 
-get_filename_component (ATMI_RUNTIME_PATH
-  ${CMAKE_CURRENT_BINARY_DIR} DIRECTORY
-  )
-
 include(bc.cmake)
 
 file(GLOB sources
@@ -157,11 +153,10 @@ add_custom_command(
   )
 add_custom_target(device_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi_kl.h)
 
-# create configure file
+# append to the configure file
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDLLVM=${AMDLLVM}\n")
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_TARGET_TRIPLE}\n")
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}\n")
-file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ATMI_RUNTIME_PATH=${ATMI_RUNTIME_PATH}\n")
 
 # create bc files
 foreach(mcpu ${mcpus})

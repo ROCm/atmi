@@ -1614,7 +1614,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         ErrorCheck(Extracting the kernarg segment size from the executable, err);
 
         // add size of implicit args, e.g.: offset x, y and z and pipe pointer
-        info.kernel_segment_size += sizeof(atmi_implicit_args_t);
+        info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
 
         DEBUG_PRINT("Kernel %s --> %lx symbol %u group segsize %u pvt segsize %u bytes kernarg\n", name,
             info.kernel_object,

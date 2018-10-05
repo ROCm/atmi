@@ -29,6 +29,17 @@ typedef void* ARG_TYPE;
 #define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
 //#define ATMI_WAIT_STATE HSA_WAIT_STATE_ACTIVE
 
+typedef struct opencl_implicit_args_s {
+// ABI has 6 implicit trailing arguments:
+//  global_offset[3], printf_buf, default vqueue pointer, and self AqlWrap pointer
+    unsigned long    offset_x;
+    unsigned long    offset_y;
+    unsigned long    offset_z;
+    unsigned long    printf_buf;
+    unsigned long    vqueue_ptr;
+    unsigned long    self_aqlWrap_ptr;
+} opencl_implicit_args_t;
+
 typedef struct atl_kernel_enqueue_args_s {
     char        num_gpu_queues;
     void*       gpu_queue_ptr;

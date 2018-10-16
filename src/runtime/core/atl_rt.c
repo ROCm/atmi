@@ -869,6 +869,7 @@ bool atl_is_atmi_initialized() {
 atmi_status_t atmi_ke_init() {
     // create and fill in the global structure needed for device enqueue
     // fill in gpu queues
+    hsa_status_t err;
     std::vector<hsa_queue_t *> gpu_queues;
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
     for(int gpu = 0; gpu < gpu_count; gpu++) {
@@ -883,15 +884,17 @@ atmi_status_t atmi_ke_init() {
 		// and so on.
     }
     g_ke_args.num_gpu_queues = gpu_queues.size();
-    void *gpu_queue_ptr;
-    hsa_status_t err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
-            sizeof(hsa_queue_t *) * g_ke_args.num_gpu_queues,
-            0,
-            &gpu_queue_ptr);
-    ErrorCheck(Allocating GPU queue pointers, err);
-    allow_access_to_all_gpu_agents(gpu_queue_ptr);
-    for(int gpuq = 0; gpuq < gpu_queues.size(); gpuq++) {
-        ((hsa_queue_t **)gpu_queue_ptr)[gpuq] = gpu_queues[gpuq];
+    void *gpu_queue_ptr = NULL;
+    if(g_ke_args.num_gpu_queues > 0) {
+        err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
+                sizeof(hsa_queue_t *) * g_ke_args.num_gpu_queues,
+                0,
+                &gpu_queue_ptr);
+        ErrorCheck(Allocating GPU queue pointers, err);
+        allow_access_to_all_gpu_agents(gpu_queue_ptr);
+        for(int gpuq = 0; gpuq < gpu_queues.size(); gpuq++) {
+            ((hsa_queue_t **)gpu_queue_ptr)[gpuq] = gpu_queues[gpuq];
+        }
     }
     g_ke_args.gpu_queue_ptr = gpu_queue_ptr;
 
@@ -910,39 +913,45 @@ atmi_status_t atmi_ke_init() {
 		// and so on.
     }
     g_ke_args.num_cpu_queues = cpu_queues.size();
-    void *cpu_queue_ptr;
-    err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
-            sizeof(hsa_queue_t *) * g_ke_args.num_cpu_queues,
-            0,
-            &cpu_queue_ptr);
-    ErrorCheck(Allocating CPU queue pointers, err);
-    allow_access_to_all_gpu_agents(cpu_queue_ptr);
-    for(int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
-        ((hsa_queue_t **)cpu_queue_ptr)[cpuq] = cpu_queues[cpuq];
+    void *cpu_queue_ptr = NULL;
+    if(g_ke_args.num_cpu_queues > 0) {
+        err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
+                sizeof(hsa_queue_t *) * g_ke_args.num_cpu_queues,
+                0,
+                &cpu_queue_ptr);
+        ErrorCheck(Allocating CPU queue pointers, err);
+        allow_access_to_all_gpu_agents(cpu_queue_ptr);
+        for(int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
+            ((hsa_queue_t **)cpu_queue_ptr)[cpuq] = cpu_queues[cpuq];
+        }
     }
     g_ke_args.cpu_queue_ptr = cpu_queue_ptr;
 
-    void *cpu_worker_signals;
-    err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
-            sizeof(hsa_signal_t) * g_ke_args.num_cpu_queues,
-            0,
-            &cpu_worker_signals);
-    ErrorCheck(Allocating CPU queue iworker signals, err);
-    allow_access_to_all_gpu_agents(cpu_worker_signals);
-    for(int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
-        ((hsa_signal_t *)cpu_worker_signals)[cpuq] = *(get_worker_sig(cpu_queues[cpuq]));
+    void *cpu_worker_signals = NULL;
+    if(g_ke_args.num_cpu_queues > 0) {
+        err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
+                sizeof(hsa_signal_t) * g_ke_args.num_cpu_queues,
+                0,
+                &cpu_worker_signals);
+        ErrorCheck(Allocating CPU queue iworker signals, err);
+        allow_access_to_all_gpu_agents(cpu_worker_signals);
+        for(int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
+            ((hsa_signal_t *)cpu_worker_signals)[cpuq] = *(get_worker_sig(cpu_queues[cpuq]));
+        }
     }
     g_ke_args.cpu_worker_signals = cpu_worker_signals;
 
 
-    void *kernarg_template_ptr;
-    // Allocate template space for shader kernels
-    err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
-            sizeof(atmi_kernel_enqueue_template_t) * MAX_NUM_KERNEL_TYPES,
-            0,
-            &kernarg_template_ptr);
-    ErrorCheck(Allocating kernel argument template pointer, err);
-    allow_access_to_all_gpu_agents(kernarg_template_ptr);
+    void *kernarg_template_ptr = NULL;
+    if(MAX_NUM_KERNEL_TYPES > 0) {
+        // Allocate template space for shader kernels
+        err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
+                sizeof(atmi_kernel_enqueue_template_t) * MAX_NUM_KERNEL_TYPES,
+                0,
+                &kernarg_template_ptr);
+        ErrorCheck(Allocating kernel argument template pointer, err);
+        allow_access_to_all_gpu_agents(kernarg_template_ptr);
+    }
     g_ke_args.kernarg_template_ptr = kernarg_template_ptr;
     g_ke_args.kernel_counter = 0;
     return ATMI_STATUS_SUCCESS;
@@ -1387,9 +1396,6 @@ atmi_status_t atl_init_cpu_context() {
     char *num_cpu_workers = getenv("ATMI_DEVICE_CPU_WORKERS");
     if(num_cpu_workers) num_queues = atoi(num_cpu_workers);
 
-    // FIXME: For some reason, if CPU context is initialized before, the GPU queues dont get
-    // created. They exit with 0x1008 out of resources. HACK!!!
-    atl_init_gpu_context();
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
 #if defined (ATMI_HAVE_PROFILE)
@@ -3913,6 +3919,9 @@ atmi_task_handle_t atmi_task_create(atmi_lparm_t *lparm,
                                     void **args) {
 
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+    if((lparm->place.type & ATMI_DEVTYPE_GPU && !atlc.g_gpu_initialized) ||
+       (lparm->place.type & ATMI_DEVTYPE_CPU && !atlc.g_cpu_initialized))
+        return ret;
     atl_kernel_t *kernel = get_kernel_obj(atmi_kernel);
     if(kernel) {
         atl_task_t *ret_obj = atl_trycreate_task(kernel);
@@ -4016,6 +4025,9 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
                                     void **args/*, more params for place info? */) {
     ParamsInitTimer.Start();
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+    if((lparm->place.type & ATMI_DEVTYPE_GPU && !atlc.g_gpu_initialized) ||
+       (lparm->place.type & ATMI_DEVTYPE_CPU && !atlc.g_cpu_initialized))
+        return ret;
     atl_kernel_t *kernel = get_kernel_obj(atmi_kernel);
     if(!kernel) return ret;
 

@@ -2034,7 +2034,8 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
 
         // fill in the kernel template AQL packets
         int cur_kernel = g_ke_args.kernel_counter++;
-        assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
+        // FIXME: reformulate this for debug mode
+        // assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
         if(cur_kernel >= MAX_NUM_KERNEL_TYPES) return ATMI_STATUS_ERROR;
         atmi_kernel_enqueue_template_t *ke_template = &((atmi_kernel_enqueue_template_t *)g_ke_args.kernarg_template_ptr)[cur_kernel];
         ke_template->kernel_handle = atmi_kernel->handle; // To be used by device code to pick a task template

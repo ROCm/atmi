@@ -6,6 +6,9 @@
 
 # Enable support for C++11.
 add_definitions(-std=c++11)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(ppc64le)|(aarch64)$")
+   add_definitions(-DLITTLEENDIAN_CPU=1)
+endif()
 
 # If building this library in debug mode, we define a macro to enable
 # dumping progress messages at runtime.
@@ -49,9 +52,9 @@ set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE )
 
 target_link_libraries(
   atmi_runtime
-  "-Wl,--as-needed"
-  -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsa-runtime64
-  )
+  -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib -lhsa-runtime64 -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib
+  -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsakmt -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}
+)
 
 # set output dir for .h files
 set (OUTPUT_INC_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../include)

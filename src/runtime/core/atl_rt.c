@@ -2805,7 +2805,7 @@ void do_progress(atmi_task_group_table_t *task_group, int progress_count) {
     bool should_dispatch = false;
     bool should_register_callback = false;
 #if 1
-    #if 0
+#if 0
     atl_task_vector_t ready_tasks;
     clear_container(ready_tasks);
     lock(&mutex_readyq_);
@@ -2825,33 +2825,58 @@ void do_progress(atmi_task_group_table_t *task_group, int progress_count) {
             it!= ready_tasks.end(); it++) {
         try_dispatch(*it, NULL, ATMI_FALSE);
     }
-    #else
+#else
     if(task_group && task_group->ordered) {
         do_progress_on_task_group(task_group);
     }
     else {
         size_t queue_sz = 0;
-        lock(&mutex_readyq_);
-        queue_sz = ReadyTaskQueue.size();
-        unlock(&mutex_readyq_);
         int dispatched_tasks = 0;
-        for(int i = 0; i < queue_sz; i++) {
-            atl_task_t *ready_task = NULL;
+
+        if(g_dep_sync_type == ATL_SYNC_CALLBACK) {
             lock(&mutex_readyq_);
-            if(!ReadyTaskQueue.empty()) {
-                ready_task = ReadyTaskQueue.front();
-                ReadyTaskQueue.pop();
-            }
+            queue_sz = ReadyTaskQueue.size();
             unlock(&mutex_readyq_);
 
-            if(ready_task) {
-                should_dispatch = try_dispatch(ready_task, NULL, ATMI_FALSE);
-                dispatched_tasks++;
+            for(int i = 0; i < queue_sz; i++) {
+                atl_task_t *ready_task = NULL;
+                lock(&mutex_readyq_);
+                if(!ReadyTaskQueue.empty()) {
+                    ready_task = ReadyTaskQueue.front();
+                    ReadyTaskQueue.pop();
+                }
+                unlock(&mutex_readyq_);
+
+                if(ready_task) {
+                    DEBUG_PRINT("2 CALLING TRY DISPATCH for task: %lu\n", ready_task->id);
+                    try_dispatch(ready_task, NULL, ATMI_FALSE);
+                    dispatched_tasks++;
+                }
             }
-            if(should_dispatch && dispatched_tasks >= progress_count) break;
+        }
+        else {
+            lock(&mutex_readyq_);
+            queue_sz = ReadyTaskQueue.size();
+            unlock(&mutex_readyq_);
+            int dispatched_tasks = 0;
+            for(int i = 0; i < queue_sz; i++) {
+                atl_task_t *ready_task = NULL;
+                lock(&mutex_readyq_);
+                if(!ReadyTaskQueue.empty()) {
+                    ready_task = ReadyTaskQueue.front();
+                    ReadyTaskQueue.pop();
+                }
+                unlock(&mutex_readyq_);
+
+                if(ready_task) {
+                    should_dispatch = try_dispatch(ready_task, NULL, ATMI_FALSE);
+                    dispatched_tasks++;
+                }
+                if(should_dispatch && dispatched_tasks >= progress_count) break;
+            }
         }
     }
-    #endif
+#endif
 #else
     atl_task_t *ready_task = NULL;
     lock(&mutex_readyq_);

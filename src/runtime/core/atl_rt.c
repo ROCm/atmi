@@ -3061,7 +3061,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             this_aql->reserved2 = task->id;
             set_task_state(task, ATMI_DISPATCHED);
             /*  Prepare and set the packet header */
-            this_aql->header = create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, stream_obj->ordered);
+            packet_store_release((uint32_t*) this_aql,
+                create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, stream_obj->ordered),
+                this_aql->setup);
             /* Increment write index and ring doorbell to dispatch the kernel.  */
             //hsa_queue_store_write_index_relaxed(this_Q, index+1);
             hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
@@ -3132,7 +3134,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                  * executing the subroutines one-by-one, so barrier bit is
                  * inconsequential.
                  */
-                this_aql->header = create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, stream_obj->ordered);
+                packet_store_release((uint32_t*) this_aql,
+                    create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, stream_obj->ordered),
+                    this_aql->type);
 
             }
             set_task_state(task, ATMI_DISPATCHED);

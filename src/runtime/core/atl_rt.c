@@ -3936,6 +3936,10 @@ atmi_task_handle_t atmi_task_create(atmi_lparm_t *lparm,
 
             std::set<pthread_mutex_t *> req_mutexes;
             req_mutexes.clear();
+
+            if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) // may need to add to readyQ
+                req_mutexes.insert(&mutex_readyq_);
+
             req_mutexes.insert((pthread_mutex_t *)&(ret_obj->mutex));
             std::vector<atl_task_t *> &temp_vecs = ret_obj->predecessors;
             for(int idx = 0; idx < ret_obj->predecessors.size(); idx++) {
@@ -4001,6 +4005,14 @@ atmi_task_handle_t atmi_task_create(atmi_lparm_t *lparm,
                 ret_obj->kernarg_region = malloc(ret_obj->kernarg_region_size);
                 //ret->kernarg_region_copied = true;
                 set_kernarg_region(ret_obj, args);
+            }
+            if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+                // for barrier packets, add to ready queue by default because they
+                // can be enqueued as long as resources are available. Dependency
+                // is managed by HW. For callback method, we add to ready queue
+                // ONLY if dependencies are satisfied
+                if(ret_obj->stream_obj->ordered == false)
+                    ReadyTaskQueue.push(ret_obj);
             }
             set_task_state(ret_obj, ATMI_INITIALIZED);
 

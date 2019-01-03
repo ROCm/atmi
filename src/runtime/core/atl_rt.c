@@ -788,7 +788,7 @@ atmi_status_t register_stream(atmi_task_group_t *stream) {
    The value atmi_context_data. is equivalent to atmi_context->
 
 2  atlc is all internal global values.
-   The structure atl_context_t is defined in atl_rt.h
+   The structure atl_context_t is defined in atl_internal.h
    Most references will use the global structure prefix atlc.
    However the pointer value atlc_p-> is equivalent to atlc.
 

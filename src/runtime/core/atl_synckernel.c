@@ -3,7 +3,7 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#include "atl_rt.h"
+#include "atl_internal.h"
 #include "atmi.h"
 #include <assert.h>
 

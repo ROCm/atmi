@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <map>
 #include <mutex>
+namespace core {
 class ATLData {
     public: 
         ATLData(void *ptr, size_t size, atmi_mem_place_t place, atmi_arg_type_t type) : 
@@ -76,5 +77,5 @@ enum {
 
 hsa_agent_t get_mem_agent(atmi_mem_place_t place);
 hsa_agent_t get_compute_agent(atmi_place_t place);
-
+} // namespace core
 #endif // __ATL_DATA__

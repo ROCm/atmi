@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+using namespace core;
 // FIXME: How many profiling agents in total do we need to support? 
 // There should be one profiling agent per device queue. 
 // 128 should be large enough for single GPU systems.

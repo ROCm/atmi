@@ -80,45 +80,6 @@ static const char* debug_mode=getenv("ATMI_DEBUG");
 typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 #endif
 
-atmi_status_t atl_init_context();
-atmi_status_t atl_init_cpu_context();
-atmi_status_t atl_init_gpu_context();
-
-hsa_status_t init_hsa();
-hsa_status_t finalize_hsa();
-
-
-atmi_status_t atl_gpu_create_program();
-atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
-atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable);
-
-atmi_status_t atl_gpu_create_executable(hsa_executable_t *executable);
-atmi_status_t atl_gpu_add_finalized_module(hsa_executable_t *executable, char *module, 
-                const size_t module_sz);
-atmi_status_t atl_gpu_freeze_executable(hsa_executable_t *executable);
-
-atmi_status_t atl_gpu_memory_allocate(const atmi_lparm_t *lparm,
-                 hsa_executable_t executable,
-                 const char *pif_name,
-                 void **thisKernargAddress);
-
-atmi_status_t atl_init_kernel(
-                             const char *pif_name, 
-                             const atmi_devtype_t devtype,
-                             const int num_params, 
-                             const char *cpu_kernel_name, 
-                             atmi_generic_fp fn_ptr,
-                             const char *gpu_kernel_name);
-//atmi_status_t atl_pif_init(atl_pif_kernel_table_t pif_fn_table[], int sz);
-atmi_status_t atl_get_gpu_kernel_info(
-                            hsa_executable_t executable,
-                            const char *kernel_symbol_name,
-                            uint64_t                         *_KN__Kernel_Object,
-                            uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size,
-                            uint32_t                         *_KN__Kernarg_Size
-                            );
-
 
 /*  All global values go in this global structure */
 typedef struct atl_context_s {
@@ -140,7 +101,6 @@ extern atl_context_t * atlc_p ;
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
  * --------------------------------------------------------------------------------- */
-long int get_nanosecs( struct timespec start_time, struct timespec end_time);
 typedef void* ARG_TYPE;
 #define COMMA ,
 #define REPEAT(name)   COMMA name
@@ -391,6 +351,48 @@ typedef struct atmi_task_table_s {
 extern int           SNK_NextTaskId;
 extern atl_dep_sync_t g_dep_sync_type;
 
+namespace core {
+atmi_status_t atl_init_context();
+atmi_status_t atl_init_cpu_context();
+atmi_status_t atl_init_gpu_context();
+
+hsa_status_t init_hsa();
+hsa_status_t finalize_hsa();
+
+
+atmi_status_t atl_gpu_create_program();
+atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
+atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable);
+
+atmi_status_t atl_gpu_create_executable(hsa_executable_t *executable);
+atmi_status_t atl_gpu_add_finalized_module(hsa_executable_t *executable, char *module, 
+                const size_t module_sz);
+atmi_status_t atl_gpu_freeze_executable(hsa_executable_t *executable);
+
+atmi_status_t atl_gpu_memory_allocate(const atmi_lparm_t *lparm,
+                 hsa_executable_t executable,
+                 const char *pif_name,
+                 void **thisKernargAddress);
+
+atmi_status_t atl_init_kernel(
+                             const char *pif_name, 
+                             const atmi_devtype_t devtype,
+                             const int num_params, 
+                             const char *cpu_kernel_name, 
+                             atmi_generic_fp fn_ptr,
+                             const char *gpu_kernel_name);
+//atmi_status_t atl_pif_init(atl_pif_kernel_table_t pif_fn_table[], int sz);
+atmi_status_t atl_get_gpu_kernel_info(
+                            hsa_executable_t executable,
+                            const char *kernel_symbol_name,
+                            uint64_t                         *_KN__Kernel_Object,
+                            uint32_t                         *_KN__Group_Segment_Size,
+                            uint32_t                         *_KN__Private_Segment_Size,
+                            uint32_t                         *_KN__Kernarg_Size
+                            );
+
+long int get_nanosecs( struct timespec start_time, struct timespec end_time);
+
 extern void register_allocation(void *addr, size_t size, atmi_mem_place_t place);
 extern hsa_agent_t get_compute_agent(atmi_place_t place);
 extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place);
@@ -428,7 +430,6 @@ void set_task_metrics(atl_task_t *task);
 
 void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest);
 uint16_t create_header(hsa_packet_type_t type, int barrier);
-hsa_signal_t* get_worker_sig(hsa_queue_t *queue);
 
 bool try_dispatch_barrier_pkt(atl_task_t *ret);
 atl_task_t *get_task(atmi_task_handle_t t);
@@ -440,6 +441,9 @@ void unlock(pthread_mutex_t *m);
 
 bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
 atl_task_t *get_new_task();
+}
+hsa_signal_t* get_worker_sig(hsa_queue_t *queue);
+
 const char *get_error_string(hsa_status_t err);
 const char *get_atmi_error_string(atmi_status_t err);
 #define ATMIErrorCheck(msg, status) \

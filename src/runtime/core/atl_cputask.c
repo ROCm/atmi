@@ -15,6 +15,8 @@
 #include <iostream>
 #include <RealTimerClass.h>
 
+using namespace core;
+
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;
 

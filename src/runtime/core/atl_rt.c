@@ -10,6 +10,7 @@
 #include "ATLQueue.h"
 #include "ATLMachine.h"
 #include "ATLData.h"
+#include "rt.h"
 #include <pthread.h>
 #include <time.h>
 #include <assert.h>
@@ -49,46 +50,6 @@ static size_t callback_dispatch = 0;
 
 //  set NOTCOHERENT needs this include
 #include "hsa_ext_amd.h"
-
-/* -------------- Helper functions -------------------------- */
-const char *get_atmi_error_string(atmi_status_t err) {
-    switch(err) {
-        case ATMI_STATUS_SUCCESS: return "ATMI_STATUS_SUCCESS";
-        case ATMI_STATUS_ERROR: return "ATMI_STATUS_ERROR";
-        default: return "";
-    }
-}
-
-const char *get_error_string(hsa_status_t err) {
-    switch(err) {
-        case HSA_STATUS_SUCCESS: return "HSA_STATUS_SUCCESS";
-        case HSA_STATUS_INFO_BREAK: return "HSA_STATUS_INFO_BREAK";
-        case HSA_STATUS_ERROR: return "HSA_STATUS_ERROR";
-        case HSA_STATUS_ERROR_INVALID_ARGUMENT: return "HSA_STATUS_ERROR_INVALID_ARGUMENT";
-        case HSA_STATUS_ERROR_INVALID_QUEUE_CREATION: return "HSA_STATUS_ERROR_INVALID_QUEUE_CREATION";
-        case HSA_STATUS_ERROR_INVALID_ALLOCATION: return "HSA_STATUS_ERROR_INVALID_ALLOCATION";
-        case HSA_STATUS_ERROR_INVALID_AGENT: return "HSA_STATUS_ERROR_INVALID_AGENT";
-        case HSA_STATUS_ERROR_INVALID_REGION: return "HSA_STATUS_ERROR_INVALID_REGION";
-        case HSA_STATUS_ERROR_INVALID_SIGNAL: return "HSA_STATUS_ERROR_INVALID_SIGNAL";
-        case HSA_STATUS_ERROR_INVALID_QUEUE: return "HSA_STATUS_ERROR_INVALID_QUEUE";
-        case HSA_STATUS_ERROR_OUT_OF_RESOURCES: return "HSA_STATUS_ERROR_OUT_OF_RESOURCES";
-        case HSA_STATUS_ERROR_INVALID_PACKET_FORMAT: return "HSA_STATUS_ERROR_INVALID_PACKET_FORMAT";
-        case HSA_STATUS_ERROR_RESOURCE_FREE: return "HSA_STATUS_ERROR_RESOURCE_FREE";
-        case HSA_STATUS_ERROR_NOT_INITIALIZED: return "HSA_STATUS_ERROR_NOT_INITIALIZED";
-        case HSA_STATUS_ERROR_REFCOUNT_OVERFLOW: return "HSA_STATUS_ERROR_REFCOUNT_OVERFLOW";
-        case HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS: return "HSA_STATUS_ERROR_INCOMPATIBLE_ARGUMENTS";
-        case HSA_STATUS_ERROR_INVALID_INDEX: return "HSA_STATUS_ERROR_INVALID_INDEX";
-        case HSA_STATUS_ERROR_INVALID_ISA: return "HSA_STATUS_ERROR_INVALID_ISA";
-        case HSA_STATUS_ERROR_INVALID_ISA_NAME: return "HSA_STATUS_ERROR_INVALID_ISA_NAME";
-        case HSA_STATUS_ERROR_INVALID_CODE_OBJECT: return "HSA_STATUS_ERROR_INVALID_CODE_OBJECT";
-        case HSA_STATUS_ERROR_INVALID_EXECUTABLE: return "HSA_STATUS_ERROR_INVALID_EXECUTABLE";
-        case HSA_STATUS_ERROR_FROZEN_EXECUTABLE: return "HSA_STATUS_ERROR_FROZEN_EXECUTABLE";
-        case HSA_STATUS_ERROR_INVALID_SYMBOL_NAME: return "HSA_STATUS_ERROR_INVALID_SYMBOL_NAME";
-        case HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED: return "HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED";
-        case HSA_STATUS_ERROR_VARIABLE_UNDEFINED: return "HSA_STATUS_ERROR_VARIABLE_UNDEFINED";
-        case HSA_STATUS_ERROR_EXCEPTION: return "HSA_STATUS_ERROR_EXCEPTION";
-    }
-}
 
 bool g_atmi_initialized = false;
 extern bool handle_signal(hsa_signal_value_t value, void *arg);
@@ -141,6 +102,30 @@ struct timespec context_init_time;
 static int context_init_time_init = 0;
 
 atmi_task_handle_t ATMI_NULL_TASK_HANDLE = ATMI_TASK_HANDLE(0xFFFFFFFFFFFFFFFF);
+
+/*
+   All global values are defined here in two data structures.
+
+1  atmi_context is all information we expose externally.
+   The structure atmi_context_t is defined in atmi.h.
+   Most references will use pointer prefix atmi_context->
+   The value atmi_context_data. is equivalent to atmi_context->
+
+2  atlc is all internal global values.
+   The structure atl_context_t is defined in atl_internal.h
+   Most references will use the global structure prefix atlc.
+   However the pointer value atlc_p-> is equivalent to atlc.
+
+*/
+
+
+atmi_context_t atmi_context_data;
+atmi_context_t * atmi_context = NULL;
+atl_context_t atlc = { .struct_initialized=0 };
+atl_context_t * atlc_p = NULL;
+
+namespace core {
+// this file will eventually be refactored into rt.cpp and other module-specific files
 
 long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
     long int nanosecs;
@@ -319,7 +304,7 @@ extern void atl_task_wait(atl_task_t *task) {
     return;// ATMI_STATUS_SUCCESS;
 }
 
-extern atmi_status_t atmi_task_wait(atmi_task_handle_t task) {
+extern atmi_status_t Runtime::TaskWait(atmi_task_handle_t task) {
     DEBUG_PRINT("Waiting for task ID: %lu\n", task);
     atl_task_wait(get_task(task));
     return ATMI_STATUS_SUCCESS;
@@ -621,7 +606,7 @@ extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
     clear_saved_tasks(stream_obj);
 }
 
-atmi_status_t atmi_task_group_sync(atmi_task_group_t *stream) {
+atmi_status_t Runtime::TaskGroupSync(atmi_task_group_t *stream) {
     atmi_task_group_t *str = (stream == NULL) ? &atl_default_stream_obj : stream;
     atmi_task_group_table_t *stream_obj = StreamTable[str->id];
     TaskWaitTimer.Start();
@@ -778,27 +763,6 @@ atmi_status_t register_stream(atmi_task_group_t *stream) {
 
     return ATMI_STATUS_SUCCESS;
 }
-
-/*
-   All global values are defined here in two data structures.
-
-1  atmi_context is all information we expose externally.
-   The structure atmi_context_t is defined in atmi.h.
-   Most references will use pointer prefix atmi_context->
-   The value atmi_context_data. is equivalent to atmi_context->
-
-2  atlc is all internal global values.
-   The structure atl_context_t is defined in atl_internal.h
-   Most references will use the global structure prefix atlc.
-   However the pointer value atlc_p-> is equivalent to atlc.
-
-*/
-
-
-atmi_context_t atmi_context_data;
-atmi_context_t * atmi_context = NULL;
-atl_context_t atlc = { .struct_initialized=0 };
-atl_context_t * atlc_p = NULL;
 
 void init_tasks() {
     if(atlc.g_tasks_initialized != 0) return;
@@ -957,7 +921,7 @@ atmi_status_t atmi_ke_init() {
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_init(atmi_devtype_t devtype) {
+atmi_status_t Runtime::Initialize(atmi_devtype_t devtype) {
     atmi_status_t status = ATMI_STATUS_SUCCESS;
     if(atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
 
@@ -976,7 +940,7 @@ atmi_status_t atmi_init(atmi_devtype_t devtype) {
     return status;
 }
 
-atmi_status_t atmi_finalize() {
+atmi_status_t Runtime::Finalize() {
     // TODO: Finalize all processors, queues, signals, kernarg memory regions
     hsa_status_t err;
     finalize_hsa();
@@ -1669,7 +1633,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
 task_process_init_buffer_t task_process_init_buffer;
 task_process_fini_buffer_t task_process_fini_buffer;
 
-atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp)
+atmi_status_t Runtime::RegisterTaskInitBuffer(task_process_init_buffer_t fp)
 {
   //printf("register function pointer \n");
   task_process_init_buffer = fp;
@@ -1677,7 +1641,7 @@ atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp)
   return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_register_task_fini_buffer(task_process_fini_buffer_t fp)
+atmi_status_t Runtime::RegisterTaskFiniBuffer(task_process_fini_buffer_t fp)
 {
   //printf("register function pointer \n");
   task_process_fini_buffer = fp;
@@ -1691,7 +1655,7 @@ typedef struct metadata_per_gpu_s {
   int gpu;
 } metadata_per_gpu_t;
 
-atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
+atmi_status_t Runtime::RegisterModuleFromMemory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
     hsa_status_t err;
     int some_success = 0;
     std::vector<std::string> modules_str;
@@ -1801,7 +1765,7 @@ atmi_status_t atmi_module_register_from_memory(void **modules, size_t *module_si
     return (some_success) ? ATMI_STATUS_SUCCESS : ATMI_STATUS_ERROR;
 }
 
-atmi_status_t atmi_module_register(const char **filenames, atmi_platform_type_t *types, const int num_modules) {
+atmi_status_t Runtime::RegisterModule(const char **filenames, atmi_platform_type_t *types, const int num_modules) {
     std::vector<void *> modules;
     std::vector<size_t> module_sizes;
     for(int i = 0; i < num_modules; i++) {
@@ -1919,7 +1883,7 @@ void clear_container(T &q)
    std::swap(q, empty);
 }
 
-atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num_args,
+atmi_status_t Runtime::CreateEmptyKernel(atmi_kernel_t *atmi_kernel, const int num_args,
                                     const size_t *arg_sizes) {
     static uint64_t counter = 0;
     uint64_t pif_id = ++counter;
@@ -1937,7 +1901,7 @@ atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel, const int num
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
+atmi_status_t Runtime::ReleaseKernel(atmi_kernel_t atmi_kernel) {
     uint64_t pif_id = atmi_kernel.handle;
 
     atl_kernel_t *kernel = KernelImplMap[pif_id];
@@ -1976,8 +1940,8 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
-        const size_t *arg_sizes, const int num_impls, ...) {
+atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel, const int num_args,
+        const size_t *arg_sizes, const int num_impls, va_list arguments) {
     atmi_status_t status;
     hsa_status_t err;
     if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
@@ -1989,8 +1953,8 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
     uint64_t pif_id = atmi_kernel->handle;
     atl_kernel_t *kernel = KernelImplMap[pif_id];
     size_t max_kernarg_segment_size = 0;
-    va_list arguments;
-    va_start(arguments, num_impls);
+    //va_list arguments;
+    //va_start(arguments, num_impls);
     for(int impl_id = 0; impl_id < num_impls; impl_id++) {
         atmi_devtype_t devtype = (atmi_devtype_t)va_arg(arguments, int);
         if(devtype == ATMI_DEVTYPE_GPU) {
@@ -2016,7 +1980,7 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
         ATMIErrorCheck(Creating kernel implementations, status);
         // rest of kernel impl fields will be populated at first kernel launch
     }
-    va_end(arguments);
+    //va_end(arguments);
     //// FIXME EEEEEE: for EVERY GPU impl, add all CPU/GPU implementations in
     //their templates!!!
     if(has_gpu_impl) {
@@ -2099,7 +2063,7 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *impl, const unsigned int ID) {
+atmi_status_t Runtime::AddGPUKernelImpl(atmi_kernel_t atmi_kernel, const char *impl, const unsigned int ID) {
     if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
     uint64_t pif_id = atmi_kernel.handle;
     atl_kernel_t *kernel = KernelImplMap[pif_id];
@@ -2208,7 +2172,7 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_fp impl, const unsigned int ID) {
+atmi_status_t Runtime::AddCPUKernelImpl(atmi_kernel_t atmi_kernel, atmi_generic_fp impl, const unsigned int ID) {
     if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
     static int counter = 0;
     uint64_t pif_id = atmi_kernel.handle;
@@ -3877,7 +3841,7 @@ atl_kernel_t *get_kernel_obj(atmi_kernel_t atmi_kernel) {
     return kernel;
  }
 
-atmi_task_handle_t atmi_task_template_create(atmi_kernel_t atmi_kernel) {
+atmi_task_handle_t Runtime::CreateTaskTemplate(atmi_kernel_t atmi_kernel) {
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
     atl_kernel_t *kernel = get_kernel_obj(atmi_kernel);
     if(kernel) {
@@ -3922,7 +3886,7 @@ int get_kernel_id(atmi_lparm_t *lparm, atl_kernel_t *kernel) {
     return kernel_id;
 }
 
-atmi_task_handle_t atmi_task_template_activate(atmi_task_handle_t task, atmi_lparm_t *lparm,
+atmi_task_handle_t Runtime::ActivateTaskTemplate(atmi_task_handle_t task, atmi_lparm_t *lparm,
                                     void **args) {
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
     atl_task_t *task_obj = get_task(task);
@@ -3943,7 +3907,7 @@ atmi_task_handle_t atmi_task_template_activate(atmi_task_handle_t task, atmi_lpa
     return ret;
 }
 
-atmi_task_handle_t atmi_task_create(atmi_lparm_t *lparm,
+atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
                                     atmi_kernel_t atmi_kernel,
                                     void **args) {
 
@@ -4048,7 +4012,7 @@ atmi_task_handle_t atmi_task_create(atmi_lparm_t *lparm,
     return ret;
 }
 
-atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task) {
+atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
     atl_task_t *ret_obj = get_task(task);
     if(!ret_obj) return ret;
@@ -4062,7 +4026,7 @@ atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task) {
     return ret;
 }
 
-atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,
+atmi_task_handle_t Runtime::LaunchTask(atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,
                                     void **args/*, more params for place info? */) {
     ParamsInitTimer.Start();
     atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
@@ -4091,9 +4055,9 @@ atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kern
 }
 
 /* Machine Info */
-atmi_machine_t *atmi_machine_get_info() {
+atmi_machine_t* Runtime::GetMachineInfo() {
     if(!atlc.g_hsa_initialized) return NULL;
     return &g_atmi_machine;
 }
 
-
+} // namespace core

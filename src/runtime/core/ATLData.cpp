@@ -13,6 +13,7 @@
 #include <iostream>
 #include "atmi_runtime.h"
 #include "atl_internal.h"
+#include "rt.h"
 #include <cassert>
 #include <thread>
 
@@ -20,6 +21,8 @@ using namespace std;
 
 extern ATLMachine g_atl_machine;
 extern hsa_signal_t IdentityCopySignal;
+
+namespace core {
 
 void allow_access_to_all_gpu_agents(void *ptr);
 ATLPointerTracker g_data_map;  // Track all am pointer allocations.
@@ -284,7 +287,7 @@ void register_allocation(void *ptr, size_t size, atmi_mem_place_t place) {
     if(place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(ptr);
 }
 
-atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place) {
+atmi_status_t Runtime::Malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
     hsa_status_t err = hsa_amd_memory_pool_allocate(pool, size, 0, ptr);
@@ -297,7 +300,7 @@ atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     return ret;
 }
 
-atmi_status_t atmi_free(void *ptr) {
+atmi_status_t Runtime::Memfree(void *ptr) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_status_t err = hsa_amd_memory_pool_free(ptr);
     ErrorCheck(atmi_free, err);
@@ -312,7 +315,7 @@ atmi_status_t atmi_free(void *ptr) {
     return ret;
 }
 
-atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *lparm, void *dest, const void *src, size_t size) {
+atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const void *src, size_t size) {
     // TODO: Reuse code in atl_rt for setting up default task params
     atmi_task_group_t *stream = NULL;
     if(lparm->group == NULL) {
@@ -529,7 +532,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
+atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     atmi_status_t ret;
     hsa_status_t err; 
 
@@ -606,3 +609,4 @@ atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size) {
     return ret;
 }
 
+} // namespace core

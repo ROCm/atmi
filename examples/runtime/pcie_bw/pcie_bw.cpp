@@ -19,7 +19,16 @@ using namespace std;
 
 #define NSECPERSEC 1000000000L
 #define NTIMERS 13
-long int get_nanosecs( struct timespec start_time, struct timespec end_time) ;
+long int get_nanosecs( struct timespec start_time, struct timespec end_time) {
+    long int nanosecs;
+    if ((end_time.tv_nsec-start_time.tv_nsec)<0) nanosecs =
+        ((((long int) end_time.tv_sec- (long int) start_time.tv_sec )-1)*NSECPERSEC ) +
+            ( NSECPERSEC + (long int) end_time.tv_nsec - (long int) start_time.tv_nsec) ;
+    else nanosecs =
+        (((long int) end_time.tv_sec- (long int) start_time.tv_sec )*NSECPERSEC ) +
+            ( (long int) end_time.tv_nsec - (long int) start_time.tv_nsec );
+    return nanosecs;
+}
 
 int main(int argc, char **argv) {
     atmi_init(ATMI_DEVTYPE_ALL);

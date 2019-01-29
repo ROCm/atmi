@@ -358,7 +358,13 @@ atmi_status_t atl_init_gpu_context();
 
 hsa_status_t init_hsa();
 hsa_status_t finalize_hsa();
+template<typename T>
+void clear_container(T &q) {
+   T empty;
+   std::swap(q, empty);
+}
 
+bool is_valid_kernel_id(atl_kernel_t *kernel, unsigned int kernel_id);
 
 atmi_status_t atl_gpu_create_program();
 atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]);

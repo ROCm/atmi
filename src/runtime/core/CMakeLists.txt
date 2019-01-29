@@ -25,6 +25,7 @@ add_definitions(-fpic)
 set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../lib)
 
 add_library(atmi_runtime SHARED
+    platform.cpp
     atl_bindthread.c 
     atl_cputask.c    
     atl_profile.c    

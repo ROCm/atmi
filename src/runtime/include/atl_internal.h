@@ -56,22 +56,19 @@ if (status != HSA_STATUS_SUCCESS) { \
 }
 
 #ifdef DEBUG
-
-static const char* debug_mode=getenv("ATMI_DEBUG");
-
 #define DEBUG_SNK
 #define VERBOSE_SNK
 #endif
 
 
 #ifdef DEBUG_SNK
-#define DEBUG_PRINT(fmt, ...) if (debug_mode) { fprintf ( stderr, "[%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__);}
+#define DEBUG_PRINT(fmt, ...) if (core::Runtime::getInstance().getDebugMode()) { fprintf ( stderr, "[%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__);}
 #else
 #define DEBUG_PRINT(...) do{ } while ( false )
 #endif
 
 #ifdef VERBOSE_SNK
-#define VERBOSE_PRINT(fmt, ...) if (debug_mode) { fprintf ( stderr, "[%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__);}
+#define VERBOSE_PRINT(fmt, ...) if (core::Runtime::getInstance().getDebugMode()) { fprintf ( stderr, "[%s:%d] " fmt, __FILE__, __LINE__, ##__VA_ARGS__);}
 #else
 #define VERBOSE_PRINT(...) do{ } while ( false )
 #endif
@@ -342,7 +339,6 @@ typedef struct atmi_task_table_s {
 } atmi_task_table_t;
 */
 extern int           SNK_NextTaskId;
-extern atl_dep_sync_t g_dep_sync_type;
 
 namespace core {
 atmi_status_t atl_init_context();

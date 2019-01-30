@@ -164,8 +164,6 @@ void ATLGPUProcessor::createQueues(const int count) {
         err = hsa_amd_profiling_set_profiler_enabled(this_Q, 1); 
         ErrorCheck(Enabling profiling support, err);
 
-
-#if 1
         if(cu_mask_enable)
         {
             if(!cu_masks[qid])
@@ -182,7 +180,6 @@ void ATLGPUProcessor::createQueues(const int count) {
             if(ret != HSA_STATUS_SUCCESS)
                 fprintf(stderr, "Error: hsa_amd_queue_cu_set_mask\n");
         }
-#endif
 
         _queues.push_back(this_Q);
 

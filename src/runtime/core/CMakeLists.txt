@@ -35,6 +35,7 @@ add_library(atmi_runtime SHARED
     ATLMachine.cpp
     ATLQueue.cpp
     atmi.cpp
+    utils.cpp
     )
 
 include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})

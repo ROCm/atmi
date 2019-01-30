@@ -390,7 +390,8 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     hsa_status_t err; 
 
     atmi_task_group_table_t *stream_obj = task->stream_obj;
-    if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+    atl_dep_sync_t dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
+    if(dep_sync_type == ATL_SYNC_BARRIER_PKT) {
         atmi_task_group_table_t *stream_obj = task->stream_obj;
         /* get this stream's HSA queue (could be dynamically mapped or round robin
          * if it is an unordered stream */

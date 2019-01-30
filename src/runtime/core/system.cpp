@@ -51,7 +51,6 @@ size_t waiting_count = 0;
 size_t direct_dispatch = 0;
 size_t callback_dispatch = 0;
 
-int g_max_signals;
 bool g_atmi_initialized = false;
 
 struct timespec context_init_time;
@@ -720,17 +719,7 @@ namespace core {
       hsa_status_t err = hsa_init();
       ErrorCheck(Initializing the hsa runtime, err);
       if(err != HSA_STATUS_SUCCESS) return err;
-      char * dep_sync_type = getenv("ATMI_DEPENDENCY_SYNC_TYPE");
-      if(dep_sync_type == NULL || strcmp(dep_sync_type, "ATMI_SYNC_CALLBACK") == 0) {
-        g_dep_sync_type = ATL_SYNC_CALLBACK;
-      }
-      else if(strcmp(dep_sync_type, "ATMI_SYNC_BARRIER_PKT") == 0) {
-        g_dep_sync_type = ATL_SYNC_BARRIER_PKT;
-      }
-      char * max_signals = getenv("ATMI_MAX_HSA_SIGNALS");
-      g_max_signals = 24;
-      if(max_signals != NULL)
-        g_max_signals = atoi(max_signals);
+
       err = init_comute_and_memory();
       if(err != HSA_STATUS_SUCCESS) return err;
       ErrorCheck(After initializing compute and memory, err);
@@ -769,7 +758,8 @@ namespace core {
       ErrorCheck(Creating a HSA signal, err);
       StreamCommonSignalPool[task_num] = new_signal;
     }
-    for ( task_num = 0 ; task_num < g_max_signals; task_num++){
+    int max_signals = core::Runtime::getInstance().getMaxSignals();
+    for ( task_num = 0 ; task_num < max_signals; task_num++){
       hsa_signal_t new_signal;
       err=hsa_signal_create(0, 0, NULL, &new_signal);
       //err=hsa_signal_create(0, 1, &gpu_agents[0], &new_signal);
@@ -796,23 +786,17 @@ namespace core {
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
-    int num_queues = -1;
-    /* TODO: If we get a good use case for device-specific worker count, we
-     * should explore it, but let us keep the worker count uniform for all
-     * devices of a type until that time
-     */
-    char *num_gpu_workers = getenv("ATMI_DEVICE_GPU_WORKERS");
-    if(num_gpu_workers) num_queues = atoi(num_gpu_workers);
 
     int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
     for(int gpu = 0; gpu < gpu_count; gpu++) {
       atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
       ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-      if(num_queues == -1) {
-        num_queues = proc.getNumCUs();
-        num_queues = (num_queues > 8) ? 8 : num_queues;
+      int num_gpu_queues = core::Runtime::getInstance().getNumGPUQueues();
+      if(num_gpu_queues == -1) {
+        num_gpu_queues = proc.getNumCUs();
+        num_gpu_queues = (num_gpu_queues > 8) ? 8 : num_gpu_queues;
       }
-      proc.createQueues(num_queues);
+      proc.createQueues(num_gpu_queues);
     }
 
     if(context_init_time_init == 0) {
@@ -834,13 +818,6 @@ namespace core {
     hsa_status_t err;
     err = init_hsa();
     if(err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
-    int num_queues = -1;
-    /* TODO: If we get a good use case for device-specific worker count, we
-     * should explore it, but let us keep the worker count uniform for all
-     * devices of a type until that time
-     */
-    char *num_cpu_workers = getenv("ATMI_DEVICE_CPU_WORKERS");
-    if(num_cpu_workers) num_queues = atoi(num_cpu_workers);
 
     /* Get a CPU agent, create a pthread to handle packets*/
     /* Iterate over the agents and pick the cpu agent */
@@ -855,12 +832,12 @@ namespace core {
       // But, this will share CPU worker threads with main host thread
       // and the HSA callback thread. Is there any real benefit from
       // restricting the number of queues to num_cus - 2?
-      if(num_queues == -1) {
-        num_queues = proc.getNumCUs();
+      int num_cpu_queues = core::Runtime::getInstance().getNumCPUQueues();
+      if(num_cpu_queues == -1) {
+        num_cpu_queues = proc.getNumCUs();
       }
-      cpu_agent_init(cpu, num_queues);
+      cpu_agent_init(cpu, num_cpu_queues);
     }
-
 
     init_tasks();
     atlc.g_cpu_initialized = 1;

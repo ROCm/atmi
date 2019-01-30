@@ -56,7 +56,7 @@ hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
 static std::atomic<unsigned int> StreamCommonSignalIdx(0);
 std::queue<atl_task_t *> DispatchedTasks;
 
-atl_dep_sync_t g_dep_sync_type;
+static atl_dep_sync_t g_dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
 /* Stream specific globals */
 atmi_task_group_t atl_default_stream_obj = {0, ATMI_FALSE};
 

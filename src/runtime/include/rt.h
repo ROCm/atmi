@@ -9,8 +9,51 @@
 #include <hsa.h>
 #include <atmi_runtime.h>
 #include <cstdarg>
+#include <string>
 
 namespace core {
+  class Environment {
+    public:
+      explicit Environment() :
+        max_signals_(24),
+        num_gpu_queues_(-1),
+        num_cpu_queues_(-1),
+        debug_mode_(0),
+        profile_mode_(0) {
+          GetEnvAll();
+        }
+
+      virtual ~Environment() {}
+
+      void GetEnvAll();
+
+      int getDepSyncType() const { return dep_sync_type_; }
+      int getMaxSignals() const { return max_signals_; }
+      int getNumGPUQueues() const { return num_gpu_queues_; }
+      int getNumCPUQueues() const { return num_cpu_queues_; }
+      // TODO: int may change to enum if we have more debug modes
+      int getDebugMode() const { return debug_mode_; }
+      // TODO: int may change to enum if we have more profile modes
+      int getProfileMode() const { return profile_mode_; }
+
+    private:
+      std::string GetEnv(const char *name) {
+        char *env = getenv(name);
+        std::string ret;
+        if(env) {
+          ret = env;
+        }
+        return ret;
+      }
+
+      int dep_sync_type_;
+      int max_signals_;
+      int num_gpu_queues_;
+      int num_cpu_queues_;
+      int debug_mode_;
+      int profile_mode_;
+  };
+
   class Runtime{
     public:
       static Runtime& getInstance(){
@@ -50,13 +93,26 @@ namespace core {
       atmi_status_t Memfree(void *);
       atmi_status_t Malloc(void**, size_t, atmi_mem_place_t);
 
+      // environment variables
+      const Environment& getEnvironment() const { return env_; }
+      int getDepSyncType() const { return env_.getDepSyncType(); }
+      int getMaxSignals() const { return env_.getMaxSignals(); }
+      int getNumGPUQueues() const { return env_.getNumGPUQueues(); }
+      int getNumCPUQueues() const { return env_.getNumCPUQueues(); }
+      // TODO: int may change to enum if we have more debug modes
+      int getDebugMode() const { return env_.getDebugMode(); }
+      // TODO: int may change to enum if we have more profile modes
+      int getProfileMode() const { return env_.getProfileMode(); }
+
     private:
       Runtime()= default;
       ~Runtime()= default;
       Runtime(const Runtime&)= delete;
       Runtime& operator=(const Runtime&)= delete;
-  };
 
+      // variable to track environment variables
+      Environment env_;
+  };
 } // namespace core
 
 #endif // __RT_H__

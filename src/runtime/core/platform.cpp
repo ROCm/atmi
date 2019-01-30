@@ -268,15 +268,7 @@ namespace core {
     std::cout << LockTimer;
     std::cout << HandleSignalTimer;
     std::cout << RegisterCallbackTimer;
-#if 0
-    std::cout << HandleSignalInvokeTimer;
-    std::cout << SignalAddTimer;
-    std::cout << "Max Ready Queue Size: " << max_ready_queue_sz << std::endl;
-    std::cout << "Waiting Tasks: " << waiting_count << std::endl;
-    std::cout << "Direct Dispatch Tasks: " << direct_dispatch << std::endl;
-    std::cout << "Callback Dispatch Tasks: " << callback_dispatch << std::endl;
-    std::cout << "SYNC_TASK(" << ret->id.lo << ");" << std::endl;
-#endif
+
     ParamsInitTimer.Reset();
     TryLaunchTimer.Reset();
     TryLaunchInitTimer.Reset();
@@ -933,42 +925,12 @@ namespace core {
   }
 
   atmi_status_t atl_gpu_add_finalized_module(hsa_executable_t *executable, char *module, const size_t module_sz) {
-#if 0
-    // Open file.
-    std::ifstream file(module, std::ios::in | std::ios::binary);
-    assert(file.is_open() && file.good());
-
-    // Find out file size.
-    file.seekg(0, file.end);
-    size_t size = file.tellg();
-    file.seekg(0, file.beg);
-
-    // Allocate memory for raw code object.
-    void *raw_code_object = malloc(size);
-    assert(raw_code_object);
-
-    // Read file contents.
-    file.read((char*)raw_code_object, size);
-
-    // Close file.
-    file.close();
-
-    // Deserialize code object.
-    hsa_code_object_t code_object = {0};
-    hsa_status_t err = hsa_code_object_deserialize(raw_code_object, size, NULL, &code_object);
-    ErrorCheck(Code Object Deserialization, err);
-    assert(0 != code_object.handle);
-
-    // Free raw code object memory.
-    free(raw_code_object);
-#else
     // Deserialize code object.
     hsa_code_object_t code_object = {0};
     hsa_status_t err = hsa_code_object_deserialize(module, module_sz, NULL, &code_object);
     ErrorCheck(Code Object Deserialization, err);
     assert(0 != code_object.handle);
 
-#endif
     /* Load the code object.  */
     err = hsa_executable_load_code_object(*executable, atl_gpu_agent, code_object, "");
     ErrorCheck(Loading the code object, err);

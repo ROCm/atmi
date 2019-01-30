@@ -218,13 +218,6 @@ extern std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 typedef struct atl_task_s atl_task_t;
 typedef std::vector<atl_task_t *> atl_task_vector_t;
 
-typedef struct atl_task_list_s {
-    atl_task_t *task;
-    atmi_devtype_t devtype;
-    boolean profilable;
-    struct atl_task_list_s *next;
-} atl_task_list_t;
-
 typedef struct atmi_task_group_table_s {
     boolean ordered;
     atl_task_t *last_task;

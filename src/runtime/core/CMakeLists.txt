@@ -90,7 +90,7 @@ INSTALL(FILES
         COMPONENT runtime
        )
 
-if(NOT ATMI_WITH_HCC2_VAR)
+if(NOT ATMI_WITH_AOMP_VAR)
   INSTALL(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/cloc.sh
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mymcpu

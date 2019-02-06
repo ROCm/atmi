@@ -62,7 +62,7 @@ endif()
 separate_arguments(mcpus)
 
 #device runtime
-if(ATMI_WITH_HCC2_VAR)
+if(ATMI_WITH_AOMP_VAR)
   execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../bin/mygpu
     OUTPUT_VARIABLE MYGPU
     OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -73,7 +73,7 @@ if(ATMI_WITH_HCC2_VAR)
     ockl_hsa.h
     PATHS
     ${DEVICE_LIB_DIR}/include
-    /opt/rocm/hcc2/include
+    ${CMAKE_INSTALL_PREFIX}/include
     NO_DEFAULT_PATH
     )
   find_file (
@@ -81,7 +81,7 @@ if(ATMI_WITH_HCC2_VAR)
     ockl.amdgcn.bc
     PATHS
     ${DEVICE_LIB_DIR}/lib
-    /opt/rocm/hcc2/lib/libdevice/${MYGPU}
+    ${CMAKE_INSTALL_PATH}/lib/libdevice/${MYGPU}
     NO_DEFAULT_PATH
     )
 else()
@@ -174,7 +174,7 @@ foreach(mcpu ${mcpus})
   set(optimization_level 2)
 
   # set output dir for .bc files
-  if(ATMI_WITH_HCC2_VAR)
+  if(ATMI_WITH_AOMP_VAR)
     set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib/libdevice)
   else()
     set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib)
@@ -189,7 +189,7 @@ foreach(mcpu ${mcpus})
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
     DESTINATION include COMPONENT device_runtime)
 
-  if(ATMI_WITH_HCC2_VAR)
+  if(ATMI_WITH_AOMP_VAR)
     if(CMAKE_BUILD_TYPE MATCHES Debug)
       install(FILES
         ${OUTPUTDIR}/libatmi-${mcpu}.bc

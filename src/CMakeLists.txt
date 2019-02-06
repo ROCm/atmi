@@ -33,12 +33,20 @@ endif()
 ################################################################################
 #pkg_check_modules(ATMI_SEARCH_LIBHSA QUIET libhsa-runtime64)
 
+string(TOLOWER "${ATMI_WITH_AOMP}" ATMI_WITH_AOMP_STR)
+if(ATMI_WITH_AOMP_STR MATCHES on)
+  set(ATMI_WITH_AOMP_VAR TRUE)
+  set(ROCLIBS ${CMAKE_INSTALL_PREFIX})
+else()
+  set(ROCLIBS "/opt/rocm")
+endif()
+
 find_file (
   ATMI_DEP_LIBHSA_INCLUDE
   hsa/hsa.h
   PATHS
   ${HSA_DIR}/include
-  /opt/rocm/include
+  ${ROCLIBS}/include
   /usr/local/include
   NO_DEFAULT_PATH
   )
@@ -54,10 +62,11 @@ find_file (
   libhsa-runtime64.so
   PATHS
   ${HSA_DIR}/lib
-  /opt/rocm/lib
+  ${ROCLIBS}/lib
   /usr/local/lib
   NO_DEFAULT_PATH
   )
+
 get_filename_component (ATMI_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
 find_package_handle_standard_args(
@@ -69,10 +78,6 @@ mark_as_advanced(
   ATMI_DEP_LIBHSA_INCLUDE_DIRS
   ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
 
-string(TOLOWER "${ATMI_WITH_HCC2}" ATMI_WITH_HCC2_STR)
-if(ATMI_WITH_HCC2_STR MATCHES on)
-  set(ATMI_WITH_HCC2_VAR TRUE)
-endif()
 
 add_subdirectory(runtime) 
 add_subdirectory(compiler) 

@@ -13,6 +13,10 @@ include (FindPackageHandleStandardArgs)
 
 project (atmi)
 
+macro(libatmi_runtime_say_and_exit message_to_user)
+  message(FATAL_ERROR "ATMI: ${message_to_user}")
+endmacro()
+
 macro(libatmi_runtime_say message_to_user)
   message(STATUS "ATMI: ${message_to_user}")
 endmacro()

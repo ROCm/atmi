@@ -33,10 +33,10 @@ extern "C" {
 #define _CPPSTRING_ "C"
 #endif
 #ifndef __cplusplus
-#define _CPPSTRING_ 
+#define _CPPSTRING_
 #endif
 
-#define ATMI_MAX_STREAMS            8 
+#define ATMI_MAX_STREAMS            8
 #define ATMI_MAX_TASKS_PER_STREAM   125
 
 #define SNK_MAX_FUNCTIONS   100
@@ -101,7 +101,7 @@ extern atl_context_t * atlc_p ;
 typedef void* ARG_TYPE;
 #define COMMA ,
 #define REPEAT(name)   COMMA name
-#define REPEAT2(name)  REPEAT(name)   REPEAT(name) 
+#define REPEAT2(name)  REPEAT(name)   REPEAT(name)
 #define REPEAT4(name)  REPEAT2(name)  REPEAT2(name)
 #define REPEAT8(name)  REPEAT4(name)  REPEAT4(name)
 #define REPEAT16(name) REPEAT8(name) REPEAT8(name)
@@ -159,8 +159,8 @@ int process_packet(hsa_queue_t *queue, int id);
 
 // ---------------------- Kernel Start -------------
 typedef struct atl_kernel_impl_s {
-    // FIXME: would anyone need to reverse engineer the 
-    // user-specified ID from the impls index? 
+    // FIXME: would anyone need to reverse engineer the
+    // user-specified ID from the impls index?
     unsigned int kernel_id;
     std::string kernel_name;
     atmi_platform_type_t kernel_type;
@@ -174,7 +174,8 @@ typedef struct atl_kernel_impl_s {
     uint32_t *group_segment_sizes;
     uint32_t *private_segment_sizes;
     uint32_t kernarg_segment_size; // differs for CPU vs GPU
-    
+    std::vector<uint64_t> arg_offsets;
+
     /* Kernel argument map */
     pthread_mutex_t mutex; // to lock changes to the free pool
     void *kernarg_region;
@@ -194,6 +195,10 @@ typedef struct atl_kernel_info_s {
     uint32_t group_segment_size;
     uint32_t private_segment_size;
     uint32_t kernel_segment_size;
+    uint32_t num_args;
+    std::vector<uint64_t> arg_alignments;
+    std::vector<uint64_t> arg_offsets;
+    std::vector<uint64_t> arg_sizes;
 } atl_kernel_info_t;
 
 typedef struct atl_symbol_info_s {
@@ -270,14 +275,14 @@ typedef struct atl_task_s {
     bool kernarg_region_copied;
 
     // list of dependents
-    uint32_t num_predecessors; 
-    uint32_t num_successors; 
-    atl_task_type_t type; 
+    uint32_t num_predecessors;
+    uint32_t num_successors;
+    atl_task_type_t type;
 
     void *data_src_ptr;
     void *data_dest_ptr;
     size_t data_size;
-    
+
     atmi_task_group_table_t *stream_obj;
     atmi_task_group_t group;
     boolean groupable;
@@ -347,6 +352,25 @@ atmi_status_t atl_init_gpu_context();
 
 hsa_status_t init_hsa();
 hsa_status_t finalize_hsa();
+/*
+* Generic utils
+*/
+template <typename T> inline T alignDown(T value, size_t alignment) {
+  return (T)(value & ~(alignment - 1));
+}
+
+template <typename T> inline T* alignDown(T* value, size_t alignment) {
+  return (T*)alignDown((intptr_t)value, alignment);
+}
+
+template <typename T> inline T alignUp(T value, size_t alignment) {
+  return alignDown((T)(value + alignment - 1), alignment);
+}
+
+template <typename T> inline T* alignUp(T* value, size_t alignment) {
+  return (T*)alignDown((intptr_t)(value + alignment - 1), alignment);
+}
+
 template<typename T>
 void clear_container(T &q) {
    T empty;
@@ -360,7 +384,7 @@ atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
 atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable);
 
 atmi_status_t atl_gpu_create_executable(hsa_executable_t *executable);
-atmi_status_t atl_gpu_add_finalized_module(hsa_executable_t *executable, char *module, 
+atmi_status_t atl_gpu_add_finalized_module(hsa_executable_t *executable, char *module,
                 const size_t module_sz);
 atmi_status_t atl_gpu_freeze_executable(hsa_executable_t *executable);
 
@@ -370,10 +394,10 @@ atmi_status_t atl_gpu_memory_allocate(const atmi_lparm_t *lparm,
                  void **thisKernargAddress);
 
 atmi_status_t atl_init_kernel(
-                             const char *pif_name, 
+                             const char *pif_name,
                              const atmi_devtype_t devtype,
-                             const int num_params, 
-                             const char *cpu_kernel_name, 
+                             const int num_params,
+                             const char *cpu_kernel_name,
                              atmi_generic_fp fn_ptr,
                              const char *gpu_kernel_name);
 //atmi_status_t atl_pif_init(atl_pif_kernel_table_t pif_fn_table[], int sz);
@@ -457,6 +481,20 @@ if (status != HSA_STATUS_SUCCESS) { \
  /*  printf("%s succeeded.\n", #msg);*/ \
 }
 
+#define comgrErrorCheck(msg, status) \
+if (status != AMD_COMGR_STATUS_SUCCESS) { \
+    printf("[%s:%d] %s failed\n", __FILE__, __LINE__, #msg); \
+    return HSA_STATUS_ERROR_INVALID_CODE_OBJECT; \
+} else { \
+ /*  printf("%s succeeded.\n", #msg);*/ \
+}
+
+#define ELFErrorReturn(msg, status) \
+{ \
+  printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_error_string(status)); \
+  return status; \
+}
+
 #define ErrorCheckAndContinue(msg, status) \
 if (status != HSA_STATUS_SUCCESS) { \
     DEBUG_PRINT("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_error_string(status)); \
@@ -468,11 +506,11 @@ if (status != HSA_STATUS_SUCCESS) { \
 #if 0
 #ifdef __cplusplus
 extern "C" {
-#endif 
+#endif
 
-typedef struct hsa_amd_profiling_dispatch_time_s { 
-    uint64_t start; 
-    uint64_t end; 
+typedef struct hsa_amd_profiling_dispatch_time_s {
+    uint64_t start;
+    uint64_t end;
 } hsa_amd_profiling_dispatch_time_t;
 hsa_status_t HSA_API hsa_amd_profiling_set_profiler_enabled(hsa_queue_t* queue, int enable);
 hsa_status_t HSA_API hsa_amd_profiling_get_dispatch_time(
@@ -482,5 +520,5 @@ hsa_status_t HSA_API hsa_amd_profiling_get_dispatch_time(
 #ifdef __cplusplus
 }
 #endif //__cplusplus
-#endif // 0 
+#endif // 0
 #endif //__ATMI_INTERNAL

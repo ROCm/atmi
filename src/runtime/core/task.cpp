@@ -1428,11 +1428,13 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
   // atmi_data_affinity_policy_t: ATMI_COPY, ATMI_NOCOPY
   atmi_place_t place = ret->place;
   for(int i = 0; i < ret->kernel->num_args; i++) {
-    void *thisArgAddress = args[i];
-    memcpy(thisKernargAddress, thisArgAddress, ret->kernel->arg_sizes[i]);
+    memcpy(thisKernargAddress + kernel_impl->arg_offsets[i],
+           args[i],
+           ret->kernel->arg_sizes[i]);
     //hsa_memory_register(thisKernargAddress, ???
-    DEBUG_PRINT("Arg[%d] = %p\n", i, *(void **)thisKernargAddress);
-    thisKernargAddress += ret->kernel->arg_sizes[i];
+    DEBUG_PRINT("Arg[%d] = %p\n",
+                i,
+                *(void **)((char *)thisKernargAddress + kernel_impl->arg_offsets[i]));
   }
 }
 

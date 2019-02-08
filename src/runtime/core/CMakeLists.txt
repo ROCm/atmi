@@ -6,6 +6,38 @@
 
 # Enable support for C++11.
 add_definitions(-std=c++11)
+
+# Find clang
+find_package(LLVM QUIET CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
+list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
+include(AddLLVM)
+add_definitions(${LLVM_DEFINITIONS})
+include_directories(${LLVM_INCLUDE_DIRS})
+if(NOT LLVM_FOUND)
+  libatmi_runtime_say_and_exit("LLVM library required to build ATMI to load the HSA code object")
+endif()
+
+# Find libelf
+find_package(LibElf REQUIRED)
+include_directories(${LIBELF_INCLUDE_DIRS})
+# libatmi_runtime_say("LIBELF: ${LIBELF_INCLUDE_DIRS} ${LIBELF_LIBRARIES} and ${LIBELF_FOUND}")
+
+# Find comgr
+find_package(amd_comgr REQUIRED CONFIG)
+find_path (amd_comgr_INCLUDE_DIRS
+    NAMES
+    amd_comgr.h
+    PATHS
+    ${ATMI_DEP_LIBHSA_INCLUDE_DIRS}
+    /opt/rocm/include
+    /usr/include
+    /usr/local/include
+    ENV CPATH)
+
+set(amd_comgr_LIBRARIES amd_comgr)
+include_directories(${amd_comgr_INCLUDE_DIRS})
+# libatmi_runtime_say("amd_comgr: ${amd_comgr_INCLUDE_DIRS} ${amd_comgr_LIBRARIES} and ${amd_comgr_FOUND}")
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(ppc64le)|(aarch64)$")
    add_definitions(-DLITTLEENDIAN_CPU=1)
 endif()
@@ -52,6 +84,9 @@ set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE )
 
 target_link_libraries(
   atmi_runtime
+  -Wl,-as-needed
+  ${amd_comgr_LIBRARIES}
+  ${LIBELF_LIBRARIES}
   -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib -lhsa-runtime64 -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib
   -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsakmt -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}
 )

@@ -12,6 +12,68 @@
 #include <fstream>
 #include <set>
 #include <string>
+#include <iomanip>
+
+#include "amd_comgr.h"
+#include <gelf.h>
+#include <libelf.h>
+
+typedef unsigned char* address;
+/*
+ * Note descriptors.
+ */
+typedef struct {
+  uint32_t    n_namesz;    /* Length of note's name. */
+  uint32_t    n_descsz;    /* Length of note's value. */
+  uint32_t    n_type;      /* Type of note. */
+} Elf_Note;
+
+#include "llvm/Support/AMDGPUMetadata.h"
+
+typedef llvm::AMDGPU::HSAMD::Metadata CodeObjectMD;
+typedef llvm::AMDGPU::HSAMD::Kernel::Metadata KernelMD;
+typedef llvm::AMDGPU::HSAMD::Kernel::Arg::Metadata KernelArgMD;
+
+using llvm::AMDGPU::HSAMD::AccessQualifier;
+using llvm::AMDGPU::HSAMD::AddressSpaceQualifier;
+using llvm::AMDGPU::HSAMD::ValueKind;
+using llvm::AMDGPU::HSAMD::ValueType;
+
+enum class ArgField : uint8_t {
+  Name          = 0,
+  TypeName      = 1,
+  Size          = 2,
+  Align         = 3,
+  ValueKind     = 4,
+  ValueType     = 5,
+  PointeeAlign  = 6,
+  AddrSpaceQual = 7,
+  AccQual       = 8,
+  ActualAccQual = 9,
+  IsConst       = 10,
+  IsRestrict    = 11,
+  IsVolatile    = 12,
+  IsPipe        = 13
+};
+
+static const std::map<std::string,ArgField> ArgFieldMap =
+{
+  {"Name",          ArgField::Name},
+  {"TypeName",      ArgField::TypeName},
+  {"Size",          ArgField::Size},
+  {"Align",         ArgField::Align},
+  {"ValueKind",     ArgField::ValueKind},
+  {"ValueType",     ArgField::ValueType},
+  {"PointeeAlign",  ArgField::PointeeAlign},
+  {"AddrSpaceQual", ArgField::AddrSpaceQual},
+  {"AccQual",       ArgField::AccQual},
+  {"ActualAccQual", ArgField::ActualAccQual},
+  {"IsConst",       ArgField::IsConst},
+  {"IsRestrict",    ArgField::IsRestrict},
+  {"IsVolatile",    ArgField::IsVolatile},
+  {"IsPipe",        ArgField::IsPipe}
+};
+
 #include "RealTimerClass.h"
 using namespace Global;
 
@@ -983,6 +1045,307 @@ namespace core {
 
   }
 
+  static amd_comgr_status_t getMetaBuf(const amd_comgr_metadata_node_t meta,
+      std::string* str) {
+    size_t size = 0;
+    amd_comgr_status_t status = amd_comgr_get_metadata_string(meta, &size, NULL);
+
+    if (status == AMD_COMGR_STATUS_SUCCESS) {
+      str->resize(size-1);    // minus one to discount the null character
+      status = amd_comgr_get_metadata_string(meta, &size, &((*str)[0]));
+    }
+
+    return status;
+  }
+
+  static amd_comgr_status_t populateArgs(const amd_comgr_metadata_node_t key,
+      const amd_comgr_metadata_node_t value,
+      void *data) {
+    amd_comgr_status_t status;
+    amd_comgr_metadata_kind_t kind;
+    std::string buf;
+
+    // get the key of the argument field
+    size_t size = 0;
+    status = amd_comgr_get_metadata_kind(key, &kind);
+    if (kind == AMD_COMGR_METADATA_KIND_STRING && status == AMD_COMGR_STATUS_SUCCESS) {
+      status = getMetaBuf(key, &buf);
+    }
+    if (status != AMD_COMGR_STATUS_SUCCESS) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    auto itArgField = ArgFieldMap.find(buf);
+    if (itArgField == ArgFieldMap.end()) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    // get the value of the argument field
+    status = getMetaBuf(value, &buf);
+
+    KernelArgMD* lcArg = static_cast<KernelArgMD*>(data);
+
+    switch (itArgField->second) {
+      case ArgField::Name:
+        lcArg->mName = buf;
+        break;
+      case ArgField::TypeName:
+        lcArg->mTypeName = buf;
+        break;
+      case ArgField::Size:
+        lcArg->mSize = atoi(buf.c_str());
+        break;
+      case ArgField::Align:
+        lcArg->mAlign = atoi(buf.c_str());
+        break;
+#if 0
+      case ArgField::ValueKind:
+        {
+          auto itValueKind = ArgValueKind.find(buf);
+          if (itValueKind == ArgValueKind.end()) {
+            return AMD_COMGR_STATUS_ERROR;
+          }
+          lcArg->mValueKind = itValueKind->second;
+        }
+        break;
+      case ArgField::ValueType:
+        {
+          auto itValueType = ArgValueType.find(buf);
+          if (itValueType == ArgValueType.end()) {
+            return AMD_COMGR_STATUS_ERROR;
+          }
+          lcArg->mValueType = itValueType->second;
+        }
+        break;
+      case ArgField::PointeeAlign:
+        lcArg->mPointeeAlign = atoi(buf.c_str());
+        break;
+      case ArgField::AddrSpaceQual:
+        {
+          auto itAddrSpaceQual = ArgAddrSpaceQual.find(buf);
+          if (itAddrSpaceQual == ArgAddrSpaceQual.end()) {
+            return AMD_COMGR_STATUS_ERROR;
+          }
+          lcArg->mAddrSpaceQual = itAddrSpaceQual->second;
+        }
+        break;
+      case ArgField::AccQual:
+        {
+          auto itAccQual = ArgAccQual.find(buf);
+          if (itAccQual == ArgAccQual.end()) {
+            return AMD_COMGR_STATUS_ERROR;
+          }
+          lcArg->mAccQual = itAccQual->second;
+        }
+        break;
+      case ArgField::ActualAccQual:
+        {
+          auto itAccQual = ArgAccQual.find(buf);
+          if (itAccQual == ArgAccQual.end()) {
+            return AMD_COMGR_STATUS_ERROR;
+          }
+          lcArg->mActualAccQual = itAccQual->second;
+        }
+        break;
+      case ArgField::IsConst:
+        lcArg->mIsConst = (buf.compare("true") == 0);
+        break;
+      case ArgField::IsRestrict:
+        lcArg->mIsRestrict = (buf.compare("true") == 0);
+        break;
+      case ArgField::IsVolatile:
+        lcArg->mIsVolatile = (buf.compare("true") == 0);
+        break;
+      case ArgField::IsPipe:
+        lcArg->mIsPipe = (buf.compare("true") == 0);
+        break;
+#endif
+      default:
+        return AMD_COMGR_STATUS_SUCCESS;
+        //return AMD_COMGR_STATUS_ERROR;
+    }
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
+  hsa_status_t get_code_object_custom_metadata_v2(void *binary, size_t binSize, int gpu) {
+    amd_comgr_metadata_node_t programMD;
+    amd_comgr_status_t status;
+    amd_comgr_data_t binaryData;
+
+    status  = amd_comgr_create_data(AMD_COMGR_DATA_KIND_EXECUTABLE, &binaryData);
+    comgrErrorCheck(COMGR create binary data, status);
+
+    status = amd_comgr_set_data(binaryData, binSize,
+          reinterpret_cast<const char*>(binary));
+    comgrErrorCheck(COMGR set binary data, status);
+
+    status = amd_comgr_get_data_metadata(binaryData, &programMD);
+    comgrErrorCheck(COMGR get program metadata, status);
+
+    amd_comgr_release_data(binaryData);
+
+    amd_comgr_metadata_node_t kernelsMD;
+    size_t kernelsSize = 0;
+
+    status = amd_comgr_metadata_lookup(programMD, "Kernels", &kernelsMD);
+    comgrErrorCheck(COMGR kernels lookup in program metadata, status);
+
+    status = amd_comgr_get_metadata_list_size(kernelsMD, &kernelsSize);
+    comgrErrorCheck(COMGR kernels size lookup in kernels metadata, status);
+
+    for (size_t i = 0; i < kernelsSize; i++) {
+      std::string kernelName;
+      amd_comgr_metadata_node_t nameMeta;
+      amd_comgr_metadata_node_t kernelMD;
+      amd_comgr_metadata_node_t argsMeta;
+
+      status = amd_comgr_index_list_metadata(kernelsMD, i, &kernelMD);
+      comgrErrorCheck(COMGR ith kernel in kernels metadata, status);
+
+      status = amd_comgr_metadata_lookup(kernelMD, "Name", &nameMeta);
+      comgrErrorCheck(COMGR kernel name metadata lookup in kernel metadata, status);
+
+      status  = getMetaBuf(nameMeta, &kernelName);
+      comgrErrorCheck(COMGR kernel name lookup in name metadata, status);
+
+
+      size_t offset = 0;
+      size_t argsSize;
+
+      status =  amd_comgr_metadata_lookup(kernelMD, "Args", &argsMeta);
+      comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
+
+      status = amd_comgr_get_metadata_list_size(argsMeta, &argsSize);
+      comgrErrorCheck(COMGR kernel args size lookup in kernel args metadata, status);
+
+      atl_kernel_info_t info;
+      info.num_args = argsSize;
+
+      for (size_t i = 0; i < argsSize; ++i) {
+        KernelArgMD  lcArg;
+
+        amd_comgr_metadata_node_t argsNode;
+        amd_comgr_metadata_kind_t kind;
+
+        status = amd_comgr_index_list_metadata(argsMeta, i, &argsNode);
+        comgrErrorCheck(COMGR list args node in kernel args metadata, status);
+
+        status = amd_comgr_get_metadata_kind(argsNode, &kind);
+        comgrErrorCheck(COMGR args kind in kernel args metadata, status);
+
+        if (kind != AMD_COMGR_METADATA_KIND_MAP) {
+          status = AMD_COMGR_STATUS_ERROR;
+        }
+        comgrErrorCheck(COMGR check args kind in kernel args metadata, status);
+
+        status = amd_comgr_iterate_map_metadata(argsNode, populateArgs, static_cast<void*>(&lcArg));
+        comgrErrorCheck(COMGR iterate args map in kernel args metadata, status);
+
+        amd_comgr_destroy_metadata(argsNode);
+
+        if (status != AMD_COMGR_STATUS_SUCCESS) {
+          amd_comgr_destroy_metadata(argsMeta);
+          return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
+        }
+
+        // populate info with num args, their sizes and alignments
+        info.arg_sizes.push_back(lcArg.mSize);
+        info.arg_alignments.push_back(lcArg.mAlign);
+        //  use offset with/instead of alignment
+        offset = core::alignUp(offset, lcArg.mAlign);
+        info.arg_offsets.push_back(offset);
+        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %lu)\n", i, lcArg.mName.c_str(), lcArg.mSize, offset);
+        offset += lcArg.mSize;
+      }
+
+      // kernel received, now add it to the kernel info table
+      KernelInfoTable[gpu][kernelName] = info;
+
+      amd_comgr_destroy_metadata(argsMeta);
+      amd_comgr_destroy_metadata(nameMeta);
+      amd_comgr_destroy_metadata(kernelMD);
+    }
+    amd_comgr_destroy_metadata(kernelsMD);
+
+    return HSA_STATUS_SUCCESS;
+  }
+
+  hsa_status_t get_code_object_custom_metadata_v3(void *binary, size_t binSize, int gpu) {
+     // parse code object with different keys from v2
+     // also, the kernel name is not the same as the symbol name -- so special checks needed
+     return HSA_STATUS_SUCCESS;
+  }
+
+  hsa_status_t get_code_object_custom_metadata(void *binary, size_t binSize, int gpu) {
+    int code_object_ver = 0;
+    // Get the code object version by looking int the runtime metadata note
+    // Begin the Elf image from memory
+    Elf* e = elf_memory((char*)binary, binSize);
+    if (elf_kind(e) != ELF_K_ELF) {
+      ELFErrorReturn(Error while reading the ELF program binary,
+          HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+    }
+
+    size_t numpHdrs;
+    if (elf_getphdrnum(e, &numpHdrs) != 0) {
+      ELFErrorReturn(Error while reading the ELF program binary,
+          HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+    }
+
+    for (size_t i = 0; i < numpHdrs; ++i) {
+      GElf_Phdr pHdr;
+      if (gelf_getphdr(e, i, &pHdr) != &pHdr) {
+        continue;
+      }
+      // Look for the runtime metadata note
+      if (pHdr.p_type == PT_NOTE && pHdr.p_align >= sizeof(int)) {
+        // Iterate over the notes in this segment
+        address ptr = (address)binary + pHdr.p_offset;
+        address segmentEnd = ptr + pHdr.p_filesz;
+
+        while (ptr < segmentEnd) {
+          Elf_Note* note = (Elf_Note*)ptr;
+          address name = (address)&note[1];
+          address desc = name + core::alignUp(note->n_namesz, sizeof(int));
+
+          if (note->n_type == 7 ||
+              note->n_type == 8) {
+            ELFErrorReturn(Error: object code with old metadata is not supported,
+                HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+          }
+          else if (note->n_type == 10 /* NT_AMD_AMDGPU_HSA_METADATA */ &&
+              note->n_namesz == sizeof "AMD" &&
+              !memcmp(name, "AMD", note->n_namesz)) {
+            // code object v2
+            code_object_ver = 2;
+            // We've found the code object version, exit the
+            // note record loop now.
+            break;
+          }
+          else if (note->n_type == 32 /* NT_AMDGPU_METADATA */ &&
+              note->n_namesz == sizeof "AMDGPU" &&
+              !memcmp(name, "AMDGPU", note->n_namesz)) {
+            // code object v3
+            code_object_ver = 3;
+            // We've found the code object version, exit the
+            // note record loop now.
+            break;
+          }
+          ptr += sizeof(*note) + core::alignUp(note->n_namesz, sizeof(int)) +
+            core::alignUp(note->n_descsz, sizeof(int));
+        }
+      }
+    }
+
+    if(code_object_ver == 2)
+      return get_code_object_custom_metadata_v2(binary, binSize, gpu);
+    else if(code_object_ver == 3)
+      return get_code_object_custom_metadata_v3(binary, binSize, gpu);
+    else
+      ELFErrorReturn(Error: Code object version invalid,
+        HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+  }
+
   hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
     int gpu = *(int *)data;
     hsa_symbol_kind_t type;
@@ -999,7 +1362,16 @@ namespace core {
       err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME, name);
       ErrorCheck(Symbol info extraction, err);
       name[name_length] = 0;
+
+      // by now, the kernel info table should already have an entry
+      // because the non-ROCr custom code object parsing is called before
+      // iterating over the code object symbols using ROCr
       atl_kernel_info_t info;
+      if(KernelInfoTable[gpu].find(std::string(name)) != KernelInfoTable[gpu].end()) {
+        // found, so assign and update
+        info = KernelInfoTable[gpu][std::string(name)];
+      }
+
       /* Extract dispatch information from the symbol */
       err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &(info.kernel_object));
       ErrorCheck(Extracting the symbol from the executable, err);
@@ -1015,11 +1387,16 @@ namespace core {
       // add size of implicit args, e.g.: offset x, y and z and pipe pointer
       info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
 
+      // FIXME: The symbol name and the actual kernel name can be different (especially in code
+      // object v3 where the suffix ".kd" is added. Change the key of this map from symbol name
+      // to actual kernel name
       DEBUG_PRINT("Kernel %s --> %lx symbol %u group segsize %u pvt segsize %u bytes kernarg\n", name,
           info.kernel_object,
           info.group_segment_size,
           info.private_segment_size,
           info.kernel_segment_size);
+
+      // assign it back to the kernel info table
       KernelInfoTable[gpu][std::string(name)] = info;
       free(name);
 
@@ -1127,6 +1504,14 @@ namespace core {
           ErrorCheckAndContinue(Loading the code object, err);
         }
         else if (types[i] == AMDGCN) {
+          // Some metadata info is not available through ROCr API, so use custom
+          // code object metadata parsing to collect such metadata info
+          void *tmp_module = malloc(module_size);
+          memcpy(tmp_module, module_bytes, module_size);
+          err = get_code_object_custom_metadata(tmp_module, module_size, gpu);
+          ErrorCheckAndContinue(Getting custom code object metadata, err);
+          free(tmp_module);
+
           // Deserialize code object.
           hsa_code_object_t code_object = {0};
           err = hsa_code_object_deserialize(module_bytes, module_size, NULL, &code_object);
@@ -1428,6 +1813,10 @@ namespace core {
     kernel_impl->kernel_name = kernel_name;
     kernel_impl->kernel_type = kernel_type;
     kernel_impl->kernarg_segment_size = max_kernarg_segment_size;
+    atl_kernel_info_t any_gpu_info = KernelInfoTable[0][kernel_name];
+    for(int i = 0; i < kernel->num_args; i++) {
+      kernel_impl->arg_offsets.push_back(any_gpu_info.arg_offsets[i]);
+    }
     /* create kernarg memory */
     kernel_impl->kernarg_region = NULL;
 #ifdef MEMORY_REGION
@@ -1505,6 +1894,7 @@ namespace core {
     /* create kernarg memory */
     uint32_t kernarg_size = 0;
     for(int i = 0; i < kernel->num_args; i++){
+      kernel_impl->arg_offsets.push_back(kernarg_size);
       kernarg_size += kernel->arg_sizes[i];
     }
     kernel_impl->kernarg_segment_size = kernarg_size;

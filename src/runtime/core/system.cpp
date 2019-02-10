@@ -1435,6 +1435,12 @@ namespace core {
     return HSA_STATUS_SUCCESS;
   }
 
+  hsa_status_t create_kernarg_memory_agent(hsa_executable_t executable,
+                                           hsa_agent_t agent,
+                                           hsa_executable_symbol_t symbol, void *data) {
+    return create_kernarg_memory(executable, symbol, data);
+  }
+
   atmi_status_t Runtime::RegisterModuleFromMemory(void **modules, size_t *module_sizes, atmi_platform_type_t *types, const int num_modules) {
     hsa_status_t err;
     int some_success = 0;
@@ -1525,6 +1531,9 @@ namespace core {
           err = hsa_executable_load_code_object(executable, agent, code_object, NULL);
           ErrorCheckAndContinue(Loading the code object, err);
 
+          err = hsa_executable_iterate_agent_symbols(executable, agent,
+                                                     create_kernarg_memory_agent, &gpu);
+          ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
         }
         module_load_success = 1;
@@ -1535,8 +1544,8 @@ namespace core {
       err = hsa_executable_freeze(executable, "");
       ErrorCheckAndContinue(Freeze the executable, err);
 
-      err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu);
-      ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+      //err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu);
+      //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
       //err = hsa_executable_iterate_program_symbols(executable, iterate_program_symbols, &gpu);
       //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);

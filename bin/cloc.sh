@@ -326,7 +326,7 @@ CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}
 CMD_LLL=${CMD_LLL:-llvm-link}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -mcpu=$LC_MCPU -amdgpu-annotate-kernel-features}
-CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -mcpu=$LC_MCPU -filetype=obj}
+CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -mcpu=$LC_MCPU -filetype=obj -mattr=-code-object-v3}
 
 RUNDATE=`date`
 

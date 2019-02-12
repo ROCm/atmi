@@ -252,6 +252,12 @@ fi
 BCFILES=""
 
 ROCMDEVICE=`echo $LIBAMDGCN | grep amdgcn`
+ROCMVERSION=${ROCMVERSION:-2}
+rocm_ver_var=`cat /opt/rocm/.info/version* | cut -d'.' -f1`
+rc=$?
+if [ $rc == 0 ] ; then
+  ROCMVERSION=$rocm_ver_var
+fi
 
 if [ -z $ROCMDEVICE ]; then
   #This is a temporary setting
@@ -263,7 +269,9 @@ if [ -z $ROCMDEVICE ]; then
   BCFILES="$BCFILES $LIBAMDGCN/lib/ocml.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/ockl.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/lib/oclc_isa_version_${gpunum}.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/lib/irif.amdgcn.bc"
+  if [ "$ROCMVERSION" -lt "2" ] ; then
+    BCFILES="$BCFILES $LIBAMDGCN/lib/irif.amdgcn.bc"
+  fi
 else
   if [ -f $ATMI_PATH/lib/libdevice/libatmi-$LC_MCPU.bc ]; then
     BCFILES="$BCFILES $ATMI_PATH/lib/libdevice/libatmi-$LC_MCPU.bc"
@@ -280,7 +288,9 @@ else
   BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
   BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/oclc_isa_version.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
+  if [ $ROCMVERSION -lt 2 ] ; then
+    BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
+  fi
 fi
 
 #LINKOPTS="-Xclang -mlink-bitcode-file -Xclang $LIBAMDGCN/lib/libamdgcn.$LC_MCPU.bc"

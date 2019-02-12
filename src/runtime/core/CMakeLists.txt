@@ -28,7 +28,7 @@ find_path (amd_comgr_INCLUDE_DIRS
     NAMES
     amd_comgr.h
     PATHS
-    ${ATMI_DEP_LIBHSA_INCLUDE_DIRS}
+    ${ROCM_INCLUDE_DIRS}
     /opt/rocm/include
     /usr/include
     /usr/local/include
@@ -73,7 +73,7 @@ add_library(atmi_runtime SHARED
     utils.cpp
     )
 
-include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
+include_directories(${ROCM_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
@@ -87,8 +87,11 @@ target_link_libraries(
   -Wl,-as-needed
   ${amd_comgr_LIBRARIES}
   ${LIBELF_LIBRARIES}
-  -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib -lhsa-runtime64 -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib
-  -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsakmt -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}
+  ${ROCM_LIBRARIES}
+  -L${ROCM_LIBRARIES_DIR}/../hsa/lib
+  -L${ROCM_LIBRARIES_DIR}
+  -Wl,-rpath,${ROCM_LIBRARIES_DIR}/../hsa/lib
+  -Wl,-rpath,${ROCM_LIBRARIES_DIR}
 )
 
 # set output dir for .h files

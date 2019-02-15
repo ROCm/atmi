@@ -53,11 +53,13 @@ enum class ArgField : uint8_t {
   IsConst       = 10,
   IsRestrict    = 11,
   IsVolatile    = 12,
-  IsPipe        = 13
+  IsPipe        = 13,
+  Offset        = 14
 };
 
 static const std::map<std::string,ArgField> ArgFieldMap =
 {
+  // v2
   {"Name",          ArgField::Name},
   {"TypeName",      ArgField::TypeName},
   {"Size",          ArgField::Size},
@@ -71,9 +73,48 @@ static const std::map<std::string,ArgField> ArgFieldMap =
   {"IsConst",       ArgField::IsConst},
   {"IsRestrict",    ArgField::IsRestrict},
   {"IsVolatile",    ArgField::IsVolatile},
-  {"IsPipe",        ArgField::IsPipe}
+  {"IsPipe",        ArgField::IsPipe},
+  // v3
+  {".type_name",    ArgField::TypeName},
+  {".value_kind",   ArgField::ValueKind},
+  {".address_space",ArgField::AddrSpaceQual},
+  {".is_const",     ArgField::IsConst},
+  {".offset",       ArgField::Offset},
+  {".size",         ArgField::Size},
+  {".value_type",   ArgField::ValueType},
+  {".name",         ArgField::Name}
 };
 
+enum class CodePropField : uint8_t {
+  KernargSegmentSize      = 0,
+  GroupSegmentFixedSize   = 1,
+  PrivateSegmentFixedSize = 2,
+  KernargSegmentAlign     = 3,
+  WavefrontSize           = 4,
+  NumSGPRs                = 5,
+  NumVGPRs                = 6,
+  MaxFlatWorkGroupSize    = 7,
+  IsDynamicCallStack      = 8,
+  IsXNACKEnabled          = 9,
+  NumSpilledSGPRs         = 10,
+  NumSpilledVGPRs         = 11
+};
+
+static const std::map<std::string,CodePropField> CodePropFieldMap =
+{
+  {"KernargSegmentSize",      CodePropField::KernargSegmentSize},
+  {"GroupSegmentFixedSize",   CodePropField::GroupSegmentFixedSize},
+  {"PrivateSegmentFixedSize", CodePropField::PrivateSegmentFixedSize},
+  {"KernargSegmentAlign",     CodePropField::KernargSegmentAlign},
+  {"WavefrontSize",           CodePropField::WavefrontSize},
+  {"NumSGPRs",                CodePropField::NumSGPRs},
+  {"NumVGPRs",                CodePropField::NumVGPRs},
+  {"MaxFlatWorkGroupSize",    CodePropField::MaxFlatWorkGroupSize},
+  {"IsDynamicCallStack",      CodePropField::IsDynamicCallStack},
+  {"IsXNACKEnabled",          CodePropField::IsXNACKEnabled},
+  {"NumSpilledSGPRs",         CodePropField::NumSpilledSGPRs},
+  {"NumSpilledVGPRs",         CodePropField::NumSpilledVGPRs}
+};
 #include "RealTimerClass.h"
 using namespace Global;
 
@@ -93,6 +134,7 @@ hsa_profile_t atl_gpu_agent_profile;
 atl_kernel_enqueue_args_t g_ke_args;
 static std::vector<hsa_executable_t> g_executables;
 
+std::map<std::string, std::string> KernelNameMap;
 std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
 std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
 std::set<std::string> SymbolSet;
@@ -1071,6 +1113,7 @@ namespace core {
     if (kind == AMD_COMGR_METADATA_KIND_STRING && status == AMD_COMGR_STATUS_SUCCESS) {
       status = getMetaBuf(key, &buf);
     }
+    //std::cout << "Trying to get argField: " << buf << std::endl;
     if (status != AMD_COMGR_STATUS_SUCCESS) {
       return AMD_COMGR_STATUS_ERROR;
     }
@@ -1098,6 +1141,12 @@ namespace core {
       case ArgField::Align:
         lcArg->mAlign = atoi(buf.c_str());
         break;
+      case ArgField::Offset:
+        // FIXME: KernelArgMD does not have the mOffset field; until that changes, we use
+        // mAlign to store the offset; minor "workaround"
+        lcArg->mAlign = atoi(buf.c_str());
+        break;
+      // TODO: If we are interested in parsing other fields, then uncomment them from below
 #if 0
       case ArgField::ValueKind:
         {
@@ -1167,6 +1216,80 @@ namespace core {
     return AMD_COMGR_STATUS_SUCCESS;
   }
 
+  static amd_comgr_status_t populateCodeProps(const amd_comgr_metadata_node_t key,
+                                            const amd_comgr_metadata_node_t value,
+                                            void *data) {
+    amd_comgr_status_t status;
+    amd_comgr_metadata_kind_t kind;
+    std::string buf;
+
+    // get the key of the argument field
+    status = amd_comgr_get_metadata_kind(key, &kind);
+    if (kind == AMD_COMGR_METADATA_KIND_STRING && status == AMD_COMGR_STATUS_SUCCESS) {
+      status = getMetaBuf(key, &buf);
+    }
+
+    if (status != AMD_COMGR_STATUS_SUCCESS) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    auto itCodePropField = CodePropFieldMap.find(buf);
+    if (itCodePropField == CodePropFieldMap.end()) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    // get the value of the argument field
+    if (status == AMD_COMGR_STATUS_SUCCESS) {
+      status = getMetaBuf(value, &buf);
+    }
+
+    KernelMD*  kernelMD = static_cast<KernelMD*>(data);
+    switch (itCodePropField->second) {
+      case CodePropField::KernargSegmentSize:
+        kernelMD->mCodeProps.mKernargSegmentSize = atoi(buf.c_str());
+        break;
+      // TODO: If we are interested in parsing other fields, then uncomment them from below
+#if 0
+      case CodePropField::GroupSegmentFixedSize:
+        kernelMD->mCodeProps.mGroupSegmentFixedSize = atoi(buf.c_str());
+        break;
+      case CodePropField::PrivateSegmentFixedSize:
+        kernelMD->mCodeProps.mPrivateSegmentFixedSize = atoi(buf.c_str());
+        break;
+      case CodePropField::KernargSegmentAlign:
+        kernelMD->mCodeProps.mKernargSegmentAlign = atoi(buf.c_str());
+        break;
+      case CodePropField::WavefrontSize:
+        kernelMD->mCodeProps.mWavefrontSize = atoi(buf.c_str());
+        break;
+      case CodePropField::NumSGPRs:
+        kernelMD->mCodeProps.mNumSGPRs = atoi(buf.c_str());
+        break;
+      case CodePropField::NumVGPRs:
+        kernelMD->mCodeProps.mNumVGPRs = atoi(buf.c_str());
+        break;
+      case CodePropField::MaxFlatWorkGroupSize:
+        kernelMD->mCodeProps.mMaxFlatWorkGroupSize = atoi(buf.c_str());
+        break;
+      case CodePropField::IsDynamicCallStack:
+        kernelMD->mCodeProps.mIsDynamicCallStack = (buf.compare("true") == 0);
+        break;
+      case CodePropField::IsXNACKEnabled:
+        kernelMD->mCodeProps.mIsXNACKEnabled = (buf.compare("true") == 0);
+        break;
+      case CodePropField::NumSpilledSGPRs:
+        kernelMD->mCodeProps.mNumSpilledSGPRs = atoi(buf.c_str());
+        break;
+      case CodePropField::NumSpilledVGPRs:
+        kernelMD->mCodeProps.mNumSpilledVGPRs = atoi(buf.c_str());
+        break;
+#endif
+      default:
+        return AMD_COMGR_STATUS_SUCCESS;
+    }
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
   hsa_status_t get_code_object_custom_metadata_v2(void *binary, size_t binSize, int gpu) {
     amd_comgr_metadata_node_t programMD;
     amd_comgr_status_t status;
@@ -1176,7 +1299,7 @@ namespace core {
     comgrErrorCheck(COMGR create binary data, status);
 
     status = amd_comgr_set_data(binaryData, binSize,
-          reinterpret_cast<const char*>(binary));
+        reinterpret_cast<const char*>(binary));
     comgrErrorCheck(COMGR set binary data, status);
 
     status = amd_comgr_get_data_metadata(binaryData, &programMD);
@@ -1198,6 +1321,8 @@ namespace core {
       amd_comgr_metadata_node_t nameMeta;
       amd_comgr_metadata_node_t kernelMD;
       amd_comgr_metadata_node_t argsMeta;
+      amd_comgr_metadata_node_t codePropsMeta;
+      KernelMD kernelObj;
 
       status = amd_comgr_index_list_metadata(kernelsMD, i, &kernelMD);
       comgrErrorCheck(COMGR ith kernel in kernels metadata, status);
@@ -1208,6 +1333,11 @@ namespace core {
       status  = getMetaBuf(nameMeta, &kernelName);
       comgrErrorCheck(COMGR kernel name lookup in name metadata, status);
 
+      // For v3, the kernel symbol name is different from the kernel name itself, so there
+      // is a need for a kernel symbol->name map. However, for v2, the symbol and kernel
+      // names are the same. But, to be consistent with v3's implementation, we still use
+      // the kernel symbol->name map, but the key for v2 will be the kernel name itself.
+      KernelNameMap[kernelName] = kernelName;
 
       size_t offset = 0;
       size_t argsSize;
@@ -1258,9 +1388,22 @@ namespace core {
         offset += lcArg.mSize;
       }
 
+      // extract the code properties metadata
+      status = amd_comgr_metadata_lookup(kernelMD, "CodeProps", &codePropsMeta);
+      comgrErrorCheck(COMGR code props lookup, status);
+
+      status = amd_comgr_iterate_map_metadata(codePropsMeta, populateCodeProps,
+          static_cast<void*>(&kernelObj));
+      comgrErrorCheck(COMGR code props iterate, status);
+      info.kernel_segment_size = kernelObj.mCodeProps.mKernargSegmentSize;
+
+      // add size of implicit args, e.g.: offset x, y and z and pipe pointer
+      info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
+
       // kernel received, now add it to the kernel info table
       KernelInfoTable[gpu][kernelName] = info;
 
+      amd_comgr_destroy_metadata(codePropsMeta);
       amd_comgr_destroy_metadata(argsMeta);
       amd_comgr_destroy_metadata(nameMeta);
       amd_comgr_destroy_metadata(kernelMD);
@@ -1271,9 +1414,133 @@ namespace core {
   }
 
   hsa_status_t get_code_object_custom_metadata_v3(void *binary, size_t binSize, int gpu) {
-     // parse code object with different keys from v2
-     // also, the kernel name is not the same as the symbol name -- so special checks needed
-     return HSA_STATUS_SUCCESS;
+    // parse code object with different keys from v2
+    // also, the kernel name is not the same as the symbol name -- so a symbol->name map is needed
+    amd_comgr_metadata_node_t programMD;
+    amd_comgr_status_t status;
+    amd_comgr_data_t binaryData;
+
+    status  = amd_comgr_create_data(AMD_COMGR_DATA_KIND_EXECUTABLE, &binaryData);
+    comgrErrorCheck(COMGR create binary data, status);
+
+    status = amd_comgr_set_data(binaryData, binSize,
+        reinterpret_cast<const char*>(binary));
+    comgrErrorCheck(COMGR set binary data, status);
+
+    status = amd_comgr_get_data_metadata(binaryData, &programMD);
+    comgrErrorCheck(COMGR get program metadata, status);
+
+    amd_comgr_release_data(binaryData);
+
+    amd_comgr_metadata_node_t kernelsMD;
+    size_t kernelsSize = 0;
+
+    status = amd_comgr_metadata_lookup(programMD, "amdhsa.kernels", &kernelsMD);
+    comgrErrorCheck(COMGR kernels lookup in program metadata, status);
+
+    status = amd_comgr_get_metadata_list_size(kernelsMD, &kernelsSize);
+    comgrErrorCheck(COMGR kernels size lookup in kernels metadata, status);
+
+    for (size_t i = 0; i < kernelsSize; i++) {
+      std::string kernelName;
+      std::string symbolName;
+      std::string kernargSegSize;
+      amd_comgr_metadata_node_t symbolMeta;
+      amd_comgr_metadata_node_t nameMeta;
+      amd_comgr_metadata_node_t kernelMD;
+      amd_comgr_metadata_node_t argsMeta;
+      amd_comgr_metadata_node_t kernargSegSizeMeta;
+
+      status = amd_comgr_index_list_metadata(kernelsMD, i, &kernelMD);
+      comgrErrorCheck(COMGR ith kernel in kernels metadata, status);
+
+      status = amd_comgr_metadata_lookup(kernelMD, ".name", &nameMeta);
+      comgrErrorCheck(COMGR kernel name metadata lookup in kernel metadata, status);
+
+      status  = getMetaBuf(nameMeta, &kernelName);
+      comgrErrorCheck(COMGR kernel name lookup in name metadata, status);
+
+      status = amd_comgr_metadata_lookup(kernelMD, ".symbol", &symbolMeta);
+      comgrErrorCheck(COMGR kernel symbol metadata lookup in kernel metadata, status);
+
+      status  = getMetaBuf(symbolMeta, &symbolName);
+      comgrErrorCheck(COMGR kernel symbol lookup in name metadata, status);
+
+      status = amd_comgr_metadata_lookup(kernelMD, ".kernarg_segment_size", &kernargSegSizeMeta);
+      comgrErrorCheck(COMGR kernarg segment size metadata lookup in kernel metadata, status);
+
+      status  = getMetaBuf(kernargSegSizeMeta, &kernargSegSize);
+      comgrErrorCheck(COMGR kernarg segment size lookup in kernarg seg size metadata, status);
+
+      // create a map from symbol to name
+      DEBUG_PRINT("Kernel symbol %s; Name: %s; Size: %s\n",
+                  symbolName.c_str(), kernelName.c_str(), kernargSegSize.c_str());
+      KernelNameMap[symbolName] = kernelName;
+
+      size_t argsSize;
+
+      status =  amd_comgr_metadata_lookup(kernelMD, ".args", &argsMeta);
+      comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
+
+      status = amd_comgr_get_metadata_list_size(argsMeta, &argsSize);
+      comgrErrorCheck(COMGR kernel args size lookup in kernel args metadata, status);
+
+      atl_kernel_info_t info;
+      info.num_args = argsSize;
+      info.kernel_segment_size = std::stoi(kernargSegSize);
+
+      // add size of implicit args, e.g.: offset x, y and z and pipe pointer
+      info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
+
+      for (size_t i = 0; i < argsSize; ++i) {
+        KernelArgMD  lcArg;
+
+        amd_comgr_metadata_node_t argsNode;
+        amd_comgr_metadata_kind_t kind;
+
+        status = amd_comgr_index_list_metadata(argsMeta, i, &argsNode);
+        comgrErrorCheck(COMGR list args node in kernel args metadata, status);
+
+        status = amd_comgr_get_metadata_kind(argsNode, &kind);
+        comgrErrorCheck(COMGR args kind in kernel args metadata, status);
+
+        if (kind != AMD_COMGR_METADATA_KIND_MAP) {
+          status = AMD_COMGR_STATUS_ERROR;
+        }
+        comgrErrorCheck(COMGR check args kind in kernel args metadata, status);
+
+        status = amd_comgr_iterate_map_metadata(argsNode, populateArgs, static_cast<void*>(&lcArg));
+        comgrErrorCheck(COMGR iterate args map in kernel args metadata, status);
+
+        amd_comgr_destroy_metadata(argsNode);
+
+        if (status != AMD_COMGR_STATUS_SUCCESS) {
+          amd_comgr_destroy_metadata(argsMeta);
+          return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
+        }
+
+        // populate info with sizes and offsets
+        info.arg_sizes.push_back(lcArg.mSize);
+        // FIXME: KernelArgMD does not have the mOffset field; until that changes, we use
+        // mAlign to store the offset; minor "workaround"
+        //info.arg_alignments.push_back(lcArg.mAlign);
+        //  use offset with/instead of alignment
+        // offset = lcArg.mAlign;
+        info.arg_offsets.push_back(lcArg.mAlign);
+        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %lu)\n",
+                    i, lcArg.mName.c_str(), lcArg.mSize, lcArg.mAlign);
+      }
+
+      // kernel received, now add it to the kernel info table
+      KernelInfoTable[gpu][kernelName] = info;
+
+      amd_comgr_destroy_metadata(argsMeta);
+      amd_comgr_destroy_metadata(nameMeta);
+      amd_comgr_destroy_metadata(kernelMD);
+    }
+    amd_comgr_destroy_metadata(kernelsMD);
+
+    return HSA_STATUS_SUCCESS;
   }
 
   hsa_status_t get_code_object_custom_metadata(void *binary, size_t binSize, int gpu) {
@@ -1343,7 +1610,7 @@ namespace core {
       return get_code_object_custom_metadata_v3(binary, binSize, gpu);
     else
       ELFErrorReturn(Error: Code object version invalid,
-        HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+          HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
   }
 
   hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_symbol_t symbol, void *data) {
@@ -1367,9 +1634,10 @@ namespace core {
       // because the non-ROCr custom code object parsing is called before
       // iterating over the code object symbols using ROCr
       atl_kernel_info_t info;
-      if(KernelInfoTable[gpu].find(std::string(name)) != KernelInfoTable[gpu].end()) {
+      std::string kernelName = KernelNameMap[std::string(name)];
+      if(KernelInfoTable[gpu].find(kernelName) != KernelInfoTable[gpu].end()) {
         // found, so assign and update
-        info = KernelInfoTable[gpu][std::string(name)];
+        info = KernelInfoTable[gpu][kernelName];
       }
 
       /* Extract dispatch information from the symbol */
@@ -1380,24 +1648,15 @@ namespace core {
       err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE, &(info.private_segment_size));
       ErrorCheck(Extracting the private segment from the executable, err);
 
-      /* Extract dispatch information from the symbol */
-      err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &(info.kernel_segment_size));
-      ErrorCheck(Extracting the kernarg segment size from the executable, err);
-
-      // add size of implicit args, e.g.: offset x, y and z and pipe pointer
-      info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
-
-      // FIXME: The symbol name and the actual kernel name can be different (especially in code
-      // object v3 where the suffix ".kd" is added. Change the key of this map from symbol name
-      // to actual kernel name
-      DEBUG_PRINT("Kernel %s --> %lx symbol %u group segsize %u pvt segsize %u bytes kernarg\n", name,
+      DEBUG_PRINT("Kernel %s --> %lx symbol %u group segsize %u pvt segsize %u bytes kernarg\n",
+          kernelName.c_str(),
           info.kernel_object,
           info.group_segment_size,
           info.private_segment_size,
           info.kernel_segment_size);
 
       // assign it back to the kernel info table
-      KernelInfoTable[gpu][std::string(name)] = info;
+      KernelInfoTable[gpu][kernelName] = info;
       free(name);
 
       /*
@@ -1436,8 +1695,8 @@ namespace core {
   }
 
   hsa_status_t create_kernarg_memory_agent(hsa_executable_t executable,
-                                           hsa_agent_t agent,
-                                           hsa_executable_symbol_t symbol, void *data) {
+      hsa_agent_t agent,
+      hsa_executable_symbol_t symbol, void *data) {
     return create_kernarg_memory(executable, symbol, data);
   }
 
@@ -1532,7 +1791,7 @@ namespace core {
           ErrorCheckAndContinue(Loading the code object, err);
 
           err = hsa_executable_iterate_agent_symbols(executable, agent,
-                                                     create_kernarg_memory_agent, &gpu);
+              create_kernarg_memory_agent, &gpu);
           ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
         }

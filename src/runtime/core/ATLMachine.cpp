@@ -131,7 +131,13 @@ int cu_mask_parser(char *gpu_workers, uint64_t *cu_masks, int count)
     }
 
     return cu_mask_enable;
+}
 
+void callbackQueue(hsa_status_t status, hsa_queue_t *source, void *data) {
+  if(status != HSA_STATUS_SUCCESS) {
+    fprintf (stderr, "[%s:%d] GPU error in queue %p\n", __FILE__, __LINE__, source);
+    abort();
+   }
 }
 
 void ATLGPUProcessor::createQueues(const int count) {
@@ -158,8 +164,8 @@ void ATLGPUProcessor::createQueues(const int count) {
     int qid;
     for (qid = 0; qid < count; qid++){
         hsa_queue_t *this_Q;
-
-        err=hsa_queue_create(_agent, queue_size, HSA_QUEUE_TYPE_MULTI, NULL, NULL, UINT32_MAX, UINT32_MAX, &this_Q);
+        err=hsa_queue_create(_agent, queue_size, HSA_QUEUE_TYPE_MULTI,
+                             callbackQueue, NULL, UINT32_MAX, UINT32_MAX, &this_Q);
         ErrorCheck(Creating the queue, err);
         err = hsa_amd_profiling_set_profiler_enabled(this_Q, 1); 
         ErrorCheck(Enabling profiling support, err);

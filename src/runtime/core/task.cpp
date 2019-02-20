@@ -111,11 +111,13 @@ void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest){
   __atomic_store_n(packet,header|(rest<<16),__ATOMIC_RELEASE);
 }
 
-uint16_t create_header(hsa_packet_type_t type, int barrier) {
+uint16_t create_header(hsa_packet_type_t type, int barrier,
+                       atmi_task_fence_scope_t acq_fence,
+                       atmi_task_fence_scope_t rel_fence) {
    uint16_t header = type << HSA_PACKET_HEADER_TYPE;
    header |= barrier << HSA_PACKET_HEADER_BARRIER;
-   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
-   header |= HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
+   header |= (hsa_fence_scope_t)(int)acq_fence << HSA_PACKET_HEADER_SCACQUIRE_FENCE_SCOPE;
+   header |= (hsa_fence_scope_t)(int)rel_fence << HSA_PACKET_HEADER_SCRELEASE_FENCE_SCOPE;
    //__atomic_store_n((uint8_t*)(&header), (uint8_t)type, __ATOMIC_RELEASE);
    return header;
 }
@@ -1309,7 +1311,8 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       set_task_state(task, ATMI_DISPATCHED);
       /*  Prepare and set the packet header */
       packet_store_release((uint32_t*) this_aql,
-          create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, stream_obj->ordered),
+          create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, stream_obj->ordered,
+                        task->acquire_scope, task->release_scope),
           this_aql->setup);
       /* Increment write index and ring doorbell to dispatch the kernel.  */
       //hsa_queue_store_write_index_relaxed(this_Q, index+1);
@@ -1382,7 +1385,8 @@ atmi_status_t dispatch_task(atl_task_t *task) {
          * inconsequential.
          */
         packet_store_release((uint32_t*) this_aql,
-            create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, stream_obj->ordered),
+            create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, stream_obj->ordered,
+                          task->acquire_scope, task->release_scope),
             this_aql->type);
 
       }
@@ -2040,6 +2044,10 @@ void set_task_params(atl_task_t *task_obj,
   ret->profilable = lparm->profilable;
   ret->groupable = lparm->groupable;
   ret->atmi_task = lparm->task_info;
+
+  // assign the memory scope
+  ret->acquire_scope = lparm->acquire_scope;
+  ret->release_scope = lparm->release_scope;
 
   // fill in from lparm
   for(int i = 0; i < 3 /* 3dims */; i++) {

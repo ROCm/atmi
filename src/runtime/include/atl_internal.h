@@ -314,6 +314,10 @@ typedef struct atl_task_s {
 
     atmi_place_t place;
 
+    // memory scope for the task
+    atmi_task_fence_scope_t acquire_scope;
+    atmi_task_fence_scope_t release_scope;
+
     atl_task_s() : num_predecessors(0), num_successors(0), atmi_task(0)
     {
         and_successors.clear();
@@ -447,7 +451,9 @@ void set_task_state(atl_task_t *t, atmi_state_t state);
 void set_task_metrics(atl_task_t *task);
 
 void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest);
-uint16_t create_header(hsa_packet_type_t type, int barrier);
+uint16_t create_header(hsa_packet_type_t type, int barrier, 
+                       atmi_task_fence_scope_t acq_fence = ATMI_FENCE_SCOPE_SYSTEM,
+                       atmi_task_fence_scope_t rel_fence = ATMI_FENCE_SCOPE_SYSTEM);
 
 bool try_dispatch_barrier_pkt(atl_task_t *ret);
 atl_task_t *get_task(atmi_task_handle_t t);

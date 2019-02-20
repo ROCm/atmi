@@ -337,6 +337,12 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
     ret->groupable = lparm->groupable;
     ret->atmi_task = lparm->task_info;
     ret->type = ATL_DATA_MOVEMENT;
+
+    // FIXME: assign the memory scope; change this if it makes sense to have an API for
+    // doing data copies in non-system scope
+    ret->acquire_scope = ATMI_FENCE_SCOPE_SYSTEM;
+    ret->release_scope = ATMI_FENCE_SCOPE_SYSTEM;
+
     ret->group = *stream;
     ret->stream_obj = stream_obj;
 

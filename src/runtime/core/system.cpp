@@ -880,7 +880,40 @@ namespace core {
     atlc.g_tasks_initialized = 1;
   }
 
+  hsa_status_t callbackEvent(const hsa_amd_event_t *event, void *data) {
+    if(event->event_type == GPU_MEMORY_FAULT_EVENT) {
+      hsa_amd_gpu_memory_fault_info_t memory_fault = event->memory_fault;
+      // memory_fault.agent
+      // memory_fault.virtual_address
+      // memory_fault.fault_reason_mask
+      //fprintf("[GPU Error at %p: Reason is ", memory_fault.virtual_address);
+      std::stringstream stream;
+      stream << std::hex << (uintptr_t)memory_fault.virtual_address;
+      std::string addr("0x" + stream.str());
 
+      std::string err_string = "[GPU Memory Error] Addr: " + addr;
+      err_string += " Reason: ";
+      if(!(memory_fault.fault_reason_mask & 0x00111111))
+        err_string += "No Idea! ";
+      else {
+        if(memory_fault.fault_reason_mask & 0x00000001)
+          err_string += "Page not present or supervisor privilege. ";
+        if(memory_fault.fault_reason_mask & 0x00000010)
+          err_string += "Write access to a read-only page. ";
+        if(memory_fault.fault_reason_mask & 0x00000100)
+          err_string += "Execute access to a page marked NX. ";
+        if(memory_fault.fault_reason_mask & 0x00001000)
+          err_string += "Host access only. ";
+        if(memory_fault.fault_reason_mask & 0x00010000)
+          err_string += "ECC failure (if supported by HW). ";
+        if(memory_fault.fault_reason_mask & 0x00100000)
+          err_string += "Can't determine the exact fault address. ";
+      }
+      fprintf(stderr, "%s\n", err_string.c_str());
+      return HSA_STATUS_ERROR;
+    }
+    return HSA_STATUS_SUCCESS;
+  }
 
   atmi_status_t atl_init_gpu_context() {
 
@@ -907,6 +940,9 @@ namespace core {
       clock_gettime(CLOCK_MONOTONIC_RAW,&context_init_time);
       context_init_time_init = 1;
     }
+
+    err = hsa_amd_register_system_event_handler(callbackEvent, NULL);
+    ErrorCheck(Registering the system for memory faults, err);
 
     init_tasks();
     atlc.g_gpu_initialized = 1;

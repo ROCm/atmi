@@ -33,40 +33,6 @@ class ATLData {
        atmi_mem_place_t _place;
        atmi_arg_type_t _arg_type;
 };
-//---
-struct ATLMemoryRange {
-    const void * _basePointer;
-    const void * _endPointer;
-    ATLMemoryRange(const void *basePointer, size_t sizeBytes) :
-        _basePointer(basePointer), _endPointer((const unsigned char*)basePointer + sizeBytes - 1) {}
-};
-
-// Functor to compare ranges:
-struct ATLMemoryRangeCompare {
-    // Return true is LHS range is less than RHS - used to order the ranges 
-    bool operator()(const ATLMemoryRange &lhs, const ATLMemoryRange &rhs) const
-    {
-        return lhs._endPointer < rhs._basePointer;
-    }
-};
-
-//-------------------------------------------------------------------------------------------------
-// This structure tracks information for each pointer.
-// Uses memory-range-based lookups - so pointers that exist anywhere in the range of hostPtr + size 
-// will find the associated ATLPointerInfo.
-// The insertions and lookups use a self-balancing binary tree and should support O(logN) lookup speed.
-// The structure is thread-safe - writers obtain a mutex before modifying the tree.  Multiple simulatenous readers are supported.
-class ATLPointerTracker {
-typedef std::map<ATLMemoryRange, ATLData *, ATLMemoryRangeCompare> MapTrackerType;
-public:
-    void insert(void *pointer, ATLData *data);
-    void remove(void *pointer);
-    ATLData *find(const void *pointer) ;
-private:
-    MapTrackerType  _tracker;
-    std::mutex      _mutex;
-    //std::shared_timed_mutex _mut;
-};
 
 enum {
     ATMI_H2D = 0,

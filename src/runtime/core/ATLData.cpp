@@ -25,7 +25,6 @@ extern hsa_signal_t IdentityCopySignal;
 namespace core {
 
 void allow_access_to_all_gpu_agents(void *ptr);
-ATLPointerTracker g_data_map;  // Track all am pointer allocations.
 //std::map<void *, ATLData *> MemoryMap;
 
 const char *getPlaceStr(atmi_devtype_t type) {
@@ -41,35 +40,9 @@ std::ostream &operator<<(std::ostream &os, const ATLData *ap)
 {
     atmi_mem_place_t place = ap->getPlace();
     os << "hostPointer:" << ap->getHostAliasPtr() << " devicePointer:"<< ap->getPtr() << " sizeBytes:" << ap->getSize()
-       << " place:(" << getPlaceStr(place.dev_type) << ", " << place.dev_id 
-       << ", " << place.mem_id << ")"; 
+       << " place:(" << getPlaceStr(place.dev_type) << ", " << place.dev_id
+       << ", " << place.mem_id << ")";
     return os;
-}
-
-void ATLPointerTracker::insert (void *pointer, ATLData *p)
-{
-    std::lock_guard<std::mutex> l (_mutex);
-
-    DEBUG_PRINT ("insert: %p + %zu\n", pointer, p->getSize());
-    _tracker.insert(std::make_pair(ATLMemoryRange(pointer, p->getSize()), p));
-}
-
-void ATLPointerTracker::remove (void *pointer)
-{
-    std::lock_guard<std::mutex> l (_mutex);
-    DEBUG_PRINT ("remove: %p\n", pointer);
-    _tracker.erase(ATLMemoryRange(pointer,1));
-}
-
-ATLData *ATLPointerTracker::find (const void *pointer)
-{
-    std::lock_guard<std::mutex> l (_mutex);
-    ATLData *ret = NULL;
-    auto iter = _tracker.find(ATLMemoryRange(pointer,1));
-    DEBUG_PRINT ("find: %p\n", pointer);
-    if(iter != _tracker.end()) // found
-        ret = iter->second;
-    return ret;
 }
 
 ATLProcessor &get_processor_by_compute_place(atmi_place_t place) {
@@ -77,22 +50,21 @@ ATLProcessor &get_processor_by_compute_place(atmi_place_t place) {
     switch(place.type) {
         case ATMI_DEVTYPE_CPU:
             return g_atl_machine.getProcessors<ATLCPUProcessor>()[dev_id];
-        case ATMI_DEVTYPE_GPU: 
+        case ATMI_DEVTYPE_GPU:
             return g_atl_machine.getProcessors<ATLGPUProcessor>()[dev_id];
-        case ATMI_DEVTYPE_DSP: 
+        case ATMI_DEVTYPE_DSP:
             return g_atl_machine.getProcessors<ATLDSPProcessor>()[dev_id];
     }
 }
-
 
 ATLProcessor &get_processor_by_mem_place(atmi_mem_place_t place) {
     int dev_id = place.dev_id;
     switch(place.dev_type) {
         case ATMI_DEVTYPE_CPU:
             return g_atl_machine.getProcessors<ATLCPUProcessor>()[dev_id];
-        case ATMI_DEVTYPE_GPU: 
+        case ATMI_DEVTYPE_GPU:
             return g_atl_machine.getProcessors<ATLGPUProcessor>()[dev_id];
-        case ATMI_DEVTYPE_DSP: 
+        case ATMI_DEVTYPE_DSP:
             return g_atl_machine.getProcessors<ATLDSPProcessor>()[dev_id];
     }
 }
@@ -278,13 +250,16 @@ atmi_status_t atmi_data_destroy_sync(atmi_data_t *data) {
     return ret;
 
 }
-#endif 
+#endif
 
 void register_allocation(void *ptr, size_t size, atmi_mem_place_t place) {
-    ATLData *data = new ATLData(ptr, NULL, size, place, ATMI_IN_OUT); 
-    g_data_map.insert(ptr, data);
+    ATLData *data = new ATLData(ptr, NULL, size, place, ATMI_IN_OUT);
+
+    hsa_status_t err = hsa_amd_pointer_info_set_userdata(ptr, data);
+    ErrorCheck(Setting pointer info with user data, err);
 
     if(place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(ptr);
+    // TODO: what if one GPU wants to access another GPU?
 }
 
 atmi_status_t Runtime::Malloc(void **ptr, size_t size, atmi_mem_place_t place) {
@@ -304,11 +279,19 @@ atmi_status_t Runtime::Memfree(void *ptr) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_status_t err = hsa_amd_memory_pool_free(ptr);
     ErrorCheck(atmi_free, err);
-    DEBUG_PRINT("Freed %p\n", ptr); 
-    
-    ATLData *data = g_data_map.find(ptr);
+    DEBUG_PRINT("Freed %p\n", ptr);
+
+    hsa_amd_pointer_info_t ptr_info;
+    ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+    err = hsa_amd_pointer_info((void *)ptr, &ptr_info,
+                               NULL, /* alloc fn ptr */
+                               NULL, /* num_agents_accessible */
+                               NULL);/* accessible agents */
+    ErrorCheck(Checking pointer info, err);
+
+    ATLData *data = (ATLData *)ptr_info.userData;
     if(data) {
-        g_data_map.remove(ptr);
+        // is there a way to unset a userdata with AMD pointer before deleting 'data'?
         delete data;
     }
     if(err != HSA_STATUS_SUCCESS || !data) ret = ATMI_STATUS_ERROR;
@@ -428,29 +411,43 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         DEBUG_PRINT("%lu\n", task->id);
     }
 
-    ATLData * volatile src_data = g_data_map.find(src);
-    ATLData * volatile dest_data = g_data_map.find(dest);
+    hsa_amd_pointer_info_t src_ptr_info;
+    hsa_amd_pointer_info_t dest_ptr_info;
+    src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+    dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+    err = hsa_amd_pointer_info((void *)src, &src_ptr_info,
+                               NULL, /* alloc fn ptr */
+                               NULL, /* num_agents_accessible */
+                               NULL);  /* accessible agents */
+    ErrorCheck(Checking src pointer info, err);
+    err = hsa_amd_pointer_info((void *)dest, &dest_ptr_info,
+                               NULL, /* alloc fn ptr */
+                               NULL, /* num_agents_accessible */
+                               NULL);  /* accessible agents */
+    ErrorCheck(Checking dest pointer info, err);
+    ATLData * volatile src_data = (ATLData *)src_ptr_info.userData;
+    ATLData * volatile dest_data = (ATLData *)dest_ptr_info.userData;
     bool is_src_host = (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     bool is_dest_host = (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
     hsa_agent_t cpu_agent = get_mem_agent(cpu);
     hsa_agent_t src_agent;
     hsa_agent_t dest_agent;
-    void *temp_host_ptr; 
+    void *temp_host_ptr;
     const void *src_ptr = src;
     void *dest_ptr = dest;
     volatile unsigned type;
     if(is_src_host && is_dest_host) {
         type = ATMI_H2H;
         src_agent = cpu_agent;
-        dest_agent = cpu_agent; 
+        dest_agent = cpu_agent;
         src_ptr = src;
         dest_ptr = dest;
     }
     else if(src_data && !dest_data) {
         type = ATMI_D2H;
         src_agent = get_mem_agent(src_data->getPlace());
-        dest_agent = src_agent; 
+        dest_agent = src_agent;
         src_ptr = src;
         dest_ptr = dest;
     }
@@ -541,22 +538,36 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
 
 atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     atmi_status_t ret;
-    hsa_status_t err; 
+    hsa_status_t err;
 
-    ATLData * volatile src_data = g_data_map.find(src);
-    ATLData * volatile dest_data = g_data_map.find(dest);
+    hsa_amd_pointer_info_t src_ptr_info;
+    hsa_amd_pointer_info_t dest_ptr_info;
+    src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+    dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+    err = hsa_amd_pointer_info((void *)src, &src_ptr_info,
+                               NULL, /* alloc fn ptr */
+                               NULL, /* num_agents_accessible */
+                               NULL);/* accessible agents */
+    ErrorCheck(Checking src pointer info, err);
+    err = hsa_amd_pointer_info((void *)dest, &dest_ptr_info,
+                               NULL, /* alloc fn ptr */
+                               NULL, /* num_agents_accessible */
+                               NULL);/* accessible agents */
+    ErrorCheck(Checking dest pointer info, err);
+    ATLData * volatile src_data = (ATLData *)src_ptr_info.userData;
+    ATLData * volatile dest_data = (ATLData *)dest_ptr_info.userData;
     atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
     hsa_agent_t cpu_agent = get_mem_agent(cpu);
     hsa_agent_t src_agent;
     hsa_agent_t dest_agent;
-    void *temp_host_ptr; 
+    void *temp_host_ptr;
     const void *src_ptr = src;
     void *dest_ptr = dest;
     volatile unsigned type;
     if(src_data && !dest_data) {
         type = ATMI_D2H;
         src_agent = get_mem_agent(src_data->getPlace());
-        dest_agent = src_agent; 
+        dest_agent = src_agent;
         //dest_agent = cpu_agent; // FIXME: can the two agents be the GPU agent itself?
         ret = atmi_malloc(&temp_host_ptr, size, cpu);
         //err = hsa_amd_agents_allow_access(1, &src_agent, NULL, temp_host_ptr);

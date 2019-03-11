@@ -305,7 +305,6 @@ typedef struct atl_task_s {
     atl_task_vector_t and_successors;
     atl_task_vector_t and_predecessors;
     atl_task_vector_t predecessors;
-    std::vector<hsa_signal_t> barrier_signals;
     std::vector<atmi_task_group_table_t *> pred_stream_objs;
     atmi_task_handle_t id;
     // flag to differentiate between a regular task and a continuation

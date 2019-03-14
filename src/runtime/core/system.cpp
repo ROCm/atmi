@@ -1630,6 +1630,12 @@ namespace core {
       ErrorCheck(Symbol info extraction, err);
       name[name_length] = 0;
 
+      if(KernelNameMap.find(std::string(name)) == KernelNameMap.end()) {
+        // did not find kernel name in the kernel map; this can happen only
+        // if the ROCr API for getting symbol info (name) is different from
+        // the comgr method of getting symbol info
+        ErrorCheck(Invalid kernel name, HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+      }
       // by now, the kernel info table should already have an entry
       // because the non-ROCr custom code object parsing is called before
       // iterating over the code object symbols using ROCr

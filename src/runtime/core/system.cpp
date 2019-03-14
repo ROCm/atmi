@@ -139,6 +139,8 @@ std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
 std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
 std::set<std::string> SymbolSet;
 
+static atl_dep_sync_t g_dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
+
 RealTimer SignalAddTimer("Signal Time");
 RealTimer HandleSignalTimer("Handle Signal Time");;
 RealTimer HandleSignalInvokeTimer("Handle Signal Invoke Time");
@@ -865,8 +867,17 @@ namespace core {
     int max_signals = core::Runtime::getInstance().getMaxSignals();
     for ( task_num = 0 ; task_num < max_signals; task_num++){
       hsa_signal_t new_signal;
-      err=hsa_signal_create(0, 0, NULL, &new_signal);
-      //err=hsa_signal_create(0, 1, &gpu_agents[0], &new_signal);
+      // For ATL_SYNC_CALLBACK, we need host to be interrupted 
+      // upon task completion to resolve dependencies on the host. 
+      // For ATL_SYNC_BARRIER_PKT, since barrier packets resolve
+      // dependencies within the GPU, they can be just agent signals 
+      // without host interrupts.
+      // TODO: for barrier packet with host tasks, should we create
+      // a separate list of free signals?
+      if(g_dep_sync_type == ATL_SYNC_CALLBACK)
+        err=hsa_signal_create(0, 0, NULL, &new_signal);
+      else
+        err=hsa_signal_create(0, gpu_count, &gpu_agents[0], &new_signal);
       ErrorCheck(Creating a HSA signal, err);
       FreeSignalPool.push(new_signal);
     }

@@ -266,7 +266,9 @@ typedef struct atl_task_s {
     atmi_task_t *atmi_task;
 
     // all encmopassing task packet
-    // hsa_kernel_dispatch_packet_t *packet;
+    hsa_kernel_dispatch_packet_t *aql;
+    hsa_queue_t *queue;
+
     atl_kernel_t *kernel;
     uint32_t kernel_id;
     void *kernarg_region; // malloced or acquired from a pool
@@ -436,8 +438,9 @@ void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);
 atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest, const void *src, const size_t size);
 atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
-hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag);
-void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype);
+void enqueue_barrier_tasks(atl_task_vector_t tasks);
+hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag, bool need_completion);
+void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype, bool need_completion = false);
 
 atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id);

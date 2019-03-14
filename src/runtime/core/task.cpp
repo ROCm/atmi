@@ -32,8 +32,6 @@ using namespace Global;
 
 pthread_mutex_t mutex_all_tasks_;
 pthread_mutex_t mutex_readyq_;
-atl_task_t *g_last_task = NULL;
-atl_task_t *g_last_dispatched_task = NULL;
 #define NANOSECS 1000000000L
 
 //  set NOTCOHERENT needs this include
@@ -53,6 +51,7 @@ std::vector<atl_kernel_metadata_t> AllMetadata;
 std::queue<atl_task_t *> ReadyTaskQueue;
 std::deque<atl_task_t *> TaskList;
 std::queue<hsa_signal_t> FreeSignalPool;
+std::set<atl_task_t *> SinkTasks;
 
 std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -167,7 +166,9 @@ atl_task_t *get_continuation_task(atmi_task_handle_t t) {
     return NULL;
 }
 
-hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag) {
+hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count,
+                                   atl_task_t **dep_task_list, int barrier_flag,
+                                   bool need_completion) {
     /* This routine will enqueue a barrier packet for all dependent packets to complete
        irrespective of their stream
      */
@@ -238,7 +239,8 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
         // TODO: have a separate barrier packet signal pool of interruptible signals if the
         // host wants to wait on just the barrier signal and not care about enqueueing more
         // tasks after the barrier packet
-        // barrier->completion_signal = signal;
+        if(need_completion)
+          barrier->completion_signal = identity_signal;
         /* Increment write index and ring doorbell to dispatch the kernel.  */
         hsa_queue_store_write_index_relaxed(queue, index+1);
         hsa_signal_store_relaxed(queue->doorbell_signal, index);
@@ -246,8 +248,12 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
     return last_signal;
 }
 
-void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype) {
-    hsa_signal_t last_signal = enqueue_barrier_async(task, queue, dep_task_count, dep_task_list, barrier_flag);
+void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count,
+                     atl_task_t **dep_task_list, int wait_flag, int barrier_flag,
+                     atmi_devtype_t devtype,
+                     bool need_completion) {
+    hsa_signal_t last_signal = enqueue_barrier_async(task, queue, dep_task_count,
+                                                     dep_task_list, barrier_flag, need_completion);
     if(devtype == ATMI_DEVTYPE_CPU) {
         signal_worker(queue, PROCESS_PKT);
     }
@@ -261,6 +267,31 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_co
 extern void atl_task_wait(atl_task_t *task) {
     TaskWaitTimer.Start();
     if(task != NULL) {
+        // if task is not yet ready, then it has not gotten all resources yet, so we wait
+        // for resources and then issue a callback; only then we can wait for the task to
+        // complete
+        if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+          while(task->state < ATMI_READY) {}
+          if(task->state < ATMI_EXECUTED) {
+            // Now, this task has the resources, so it can get dispatched any time.
+            // So, create a barrier packet for current sink tasks and add async handler
+            // for its completion.
+            // All dispatched tasks get signal from device-only signal pool. All async
+            // handlers are registered to interruptible signals
+            atl_task_vector_t tasks;
+            lock(&mutex_readyq_);
+            tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
+            SinkTasks.clear();
+            unlock(&mutex_readyq_);
+            enqueue_barrier_tasks(tasks);
+            if(!tasks.empty()) {
+              DEBUG_PRINT("Registering callback for task %lu\n", task->id);
+              hsa_status_t err = hsa_amd_signal_async_handler(IdentityANDSignal,
+                  HSA_SIGNAL_CONDITION_EQ, 0, handle_signal, (void *)task);
+              ErrorCheck(Creating signal handler, err);
+            }
+          }
+        }
         while(task->state != ATMI_COMPLETED) { }
 
         /* Flag this task as completed */
@@ -709,20 +740,18 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
   // list of signals that can be reclaimed at every iteration
   std::vector<hsa_signal_t> temp_list;
 
+  // since we attach barrier packet to sink tasks, at this point in the callback,
+  // we are guaranteed that all DispatchedTasks have completed execution.
   for (int i = 0; i < dispatched_tasks.size(); i++) {
     atl_task_t *task = dispatched_tasks[i];
     assert(task->groupable != ATMI_TRUE);
 
-    // This is where a set of last tasks will help -- you can just wait for those tasks
-    // Another optimization idea: peek into the signal state and dont block/wait; but
-    // then we may need a way to save the incomplete tasks and add them back to the
-    // DispatchedTasks list.
-    // Block/wait for each signal to actually complete, then reclaim its resources.
-    hsa_signal_wait_scacquire(task->signal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, HSA_WAIT_STATE_ACTIVE);
     // This dispatched task is now executed
     lock(&(task->mutex));
     set_task_state(task, ATMI_EXECUTED);
     unlock(&(task->mutex));
+
+    // now reclaim its resources (kernel args and signal)
     std::set<pthread_mutex_t *> mutexes;
     atl_kernel_t *kernel = task->kernel;
     atl_kernel_impl_t *kernel_impl = NULL;
@@ -732,10 +761,6 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     }
     mutexes.insert(&(task->mutex));
     mutexes.insert(&mutex_readyq_);
-    atl_task_vector_t &requires = task->and_predecessors;
-    for(int idx = 0; idx < requires.size(); idx++) {
-      mutexes.insert(&(requires[idx]->mutex));
-    }
 
     lock_set(mutexes);
 
@@ -743,29 +768,9 @@ void handle_signal_barrier_pkt(atl_task_t *task) {
     DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", task->kernarg_region_index);
     if(kernel) kernel_impl->free_kernarg_segments.push(task->kernarg_region_index);
 
+    // release the signal back to the signal pool
     DEBUG_PRINT("Task %lu completed\n", task->id);
-
-    // decrement each predecessor's num_successors
-    DEBUG_PRINT("Requires list of %lu [%lu]: ", task->id, requires.size());
-    temp_list.clear();
-    // if num_successors == 0 then we can reuse their signal.
-    for (atl_task_vector_t::iterator it = requires.begin(); it != requires.end(); it++) {
-      assert((*it)->state >= ATMI_DISPATCHED);
-      (*it)->num_successors--;
-      // For all parents of this task, decrement the number of successors
-      if ((*it)->state >= ATMI_EXECUTED && (*it)->num_successors == 0) {
-        // release signal because this predecessor is done waiting for
-        temp_list.push_back((*it)->signal);
-      }
-    }
-    if (task->num_successors == 0) {
-      temp_list.push_back(task->signal);
-    }
-    for (std::vector<hsa_signal_t>::iterator it = temp_list.begin();
-        it != temp_list.end(); it++) {
-      FreeSignalPool.push(*it);
-      DEBUG_PRINT("[Handle Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n", task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
-    }
+    FreeSignalPool.push(task->signal);
 
     set_task_metrics(task);
     set_task_state(task, ATMI_COMPLETED);
@@ -1192,6 +1197,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     else if(task->devtype == ATMI_DEVTYPE_CPU)
       this_Q = acquire_and_set_next_cpu_queue(stream_obj, task->place);
     if(!this_Q) return ATMI_STATUS_ERROR;
+    task->queue = this_Q;
 
     /* if stream is ordered and the devtype changed for this task,
      * enqueue a barrier to wait for previous device to complete */
@@ -1231,6 +1237,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       /* Find the queue index address to write the packet info into.  */
       const uint32_t queueMask = this_Q->size - 1;
       hsa_kernel_dispatch_packet_t* this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
+      task->aql = this_aql;
       //this_aql->header = create_header(HSA_PACKET_TYPE_INVALID, ATMI_FALSE);
       //memset(this_aql, 0, sizeof(hsa_kernel_dispatch_packet_t));
       /*  FIXME: We need to check for queue overflow here. */
@@ -1358,6 +1365,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         /* Find the queue index address to write the packet info into.  */
         const uint32_t queueMask = this_queue->size - 1;
         hsa_agent_dispatch_packet_t* this_aql = &(((hsa_agent_dispatch_packet_t*)(this_queue->base_address))[index&queueMask]);
+        task->aql = (hsa_kernel_dispatch_packet_t *)this_aql;
         memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
         /*  FIXME: We need to check for queue overflow here. Do we need
          *  to do this for CPU agents too? */
@@ -1407,9 +1415,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         signal_worker(this_queues[q], PROCESS_PKT);
       }
     }
-    //lock(&mutex_readyq_);
-    //g_last_dispatched_task = task;
-    //unlock(&mutex_readyq_);
     counter++;
     TryDispatchTimer.Stop();
     DEBUG_PRINT("Task %lu (%d) Dispatched\n", task->id, task->devtype);
@@ -1608,6 +1613,14 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     // is called in a different order? does it matter if the tasks are popped
     // out of order?
     TaskList.pop_front();
+    // save the current set of sink tasks
+    SinkTasks.insert(ret);
+    atl_task_vector_t::iterator it = ret->and_predecessors.begin();
+    for(; it != ret->and_predecessors.end(); it++) {
+      // The predecessors are no longer sink tasks (if they were until now). The current
+      // task will be the sink task for its predecessors
+      SinkTasks.erase(*it);
+    }
     set_task_state(ret, ATMI_READY);
   }
   else {
@@ -1835,14 +1848,14 @@ atl_task_t *get_new_task() {
   return ret;
 }
 
-bool isLastTask(atl_task_t *task) {
-  bool isReallyLastTask = false;
-  if(task) {
-    lock(&(mutex_readyq_));
-    isReallyLastTask = (task == g_last_task);
-    unlock(&(mutex_readyq_));
+void enqueue_barrier_tasks(atl_task_vector_t tasks) {
+  if(!tasks.empty()) {
+    hsa_signal_store_relaxed(IdentityANDSignal, 1);
+    atl_task_t *task = tasks[tasks.size() - 1];
+    // for all sink tasks, enqueue a barrier packet
+    enqueue_barrier(task, task->queue, tasks.size(), &(tasks[0]), SNK_NOWAIT, SNK_AND,
+        task->devtype, true);
   }
-  return isReallyLastTask;
 }
 
 bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
@@ -1863,23 +1876,12 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
       // perhaps?
       ret->atmi_task->handle = (void *)(&(ret->signal));
     }
-    // acquire_kernel_impl_segment
-    // update kernarg ptrs
     //direct_dispatch++;
     dispatch_task(ret);
 
-    //if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      // in try_dispatch_barrier_pkt this should be added if should_dispatch == true
-      //DispatchedTasks.push_back(ret);
-    //}
-
     RegisterCallbackTimer.Start();
     if (register_task_callback) {
-      if (synchronous || g_dep_sync_type == ATL_SYNC_CALLBACK ||
-          (g_dep_sync_type == ATL_SYNC_BARRIER_PKT && (isLastTask(ret)))) {
-        // FIXME/TODO: for barrier pkt, all dispatched tasks should get signal
-        // from device-only signal pool. All async
-        // handlers should register to interruptible signals
+      if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
         DEBUG_PRINT("Registering callback for task %lu\n", ret->id);
         hsa_status_t err = hsa_amd_signal_async_handler(ret->signal, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal, (void *)ret);
         ErrorCheck(Creating signal handler, err);
@@ -1895,21 +1897,24 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
   }
   else {
     if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      // We could not dispatch the packet because of lack of resources. So, we have to
-      // somehow add async handler to the last dispatched task
-      // FIXME/TODO: all dispatched tasks should get signal
-      // from device-only signal pool. All async
-      // handlers should register to interruptible signals
+      // We could not dispatch the packet because of lack of resources.
+      // So, create a barrier packet for current sink tasks and add async handler
+      // for its completion.
+      // All dispatched tasks get signal from device-only signal pool. All async
+      // handlers are registered to interruptible signals
       atl_task_t *last_dispatched_task = NULL;
+      atl_task_vector_t tasks;
       lock(&mutex_readyq_);
-      if(!DispatchedTasks.empty()) {
-        last_dispatched_task = DispatchedTasks.back();
+      if(!SinkTasks.empty()) {
+        tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
+        SinkTasks.clear();
+        last_dispatched_task = tasks[tasks.size() - 1];
       }
-      //last_dispatched_task = g_last_dispatched_task;
       unlock(&mutex_readyq_);
+      enqueue_barrier_tasks(tasks);
       if(last_dispatched_task) {
         hsa_amd_signal_async_handler(
-            last_dispatched_task->signal, HSA_SIGNAL_CONDITION_EQ, 0,
+            IdentityANDSignal, HSA_SIGNAL_CONDITION_EQ, 0,
             handle_signal, (void *)last_dispatched_task);
       }
       // else this task did not get the resources AND DispatchedTasks
@@ -2120,7 +2125,6 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
       lock(&mutex_readyq_);
       TaskList.push_back(ret);
-      g_last_task = ret;
       unlock(&mutex_readyq_);
     }
     try_dispatch(ret, args, lparm->synchronous);
@@ -2297,7 +2301,6 @@ atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
       }
       if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
         TaskList.push_back(ret_obj);
-        g_last_task = ret_obj;
       }
 
       set_task_state(ret_obj, ATMI_INITIALIZED);

@@ -1636,15 +1636,16 @@ namespace core {
         // the comgr method of getting symbol info
         ErrorCheck(Invalid kernel name, HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
       }
+      atl_kernel_info_t info;
+      std::string kernelName = KernelNameMap[std::string(name)];
       // by now, the kernel info table should already have an entry
       // because the non-ROCr custom code object parsing is called before
       // iterating over the code object symbols using ROCr
-      atl_kernel_info_t info;
-      std::string kernelName = KernelNameMap[std::string(name)];
-      if(KernelInfoTable[gpu].find(kernelName) != KernelInfoTable[gpu].end()) {
-        // found, so assign and update
-        info = KernelInfoTable[gpu][kernelName];
+      if(KernelInfoTable[gpu].find(kernelName) == KernelInfoTable[gpu].end()) {
+        ErrorCheck(Finding the entry kernel info table, HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
       }
+      // found, so assign and update
+      info = KernelInfoTable[gpu][kernelName];
 
       /* Extract dispatch information from the symbol */
       err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &(info.kernel_object));

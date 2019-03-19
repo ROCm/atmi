@@ -175,9 +175,6 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
 
     long t_barrier_wait = 0L;
     long t_barrier_dispatch = 0L;
-    /* Keep adding barrier packets in multiples of 5 because that is the maximum signals that
-       the HSA barrier packet can support today
-     */
     hsa_status_t err;
     hsa_signal_t last_signal;
     hsa_signal_t identity_signal;
@@ -188,6 +185,9 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
         identity_signal = IdentityANDSignal;
     atl_task_t **tasks = dep_task_list;
     int tasks_remaining = dep_task_count;
+    /* Keep adding barrier packets in multiples of 5 because that is the maximum signals that
+       the HSA barrier packet can support today
+     */
     const int HSA_BARRIER_MAX_DEPENDENT_TASKS = 5;
     /* round up */
     int barrier_pkt_count = (dep_task_count + HSA_BARRIER_MAX_DEPENDENT_TASKS - 1) / HSA_BARRIER_MAX_DEPENDENT_TASKS;
@@ -198,21 +198,24 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
     // guaranteed to have all its predecessor barrier packets completed.
     // All others will not have the barrier bit set.
     for(barrier_pkt_id = 0; barrier_pkt_id < barrier_pkt_count; barrier_pkt_id++) {
-        bool barrier_bit = (barrier_pkt_id == barrier_pkt_count - 1);
-        /* Obtain the write index for the command queue for this stream.  */
-        uint64_t index = hsa_queue_load_write_index_relaxed(queue);
+        bool last_bpkt = (barrier_pkt_id == barrier_pkt_count - 1);
+        /* Increment write index and get current write index for this queue/packet. */
+        uint64_t index = hsa_queue_add_write_index_relaxed(queue, 1);
+        // Wait until the queue is not full before writing the packet
+        while(index - hsa_queue_load_read_index_acquire(queue) >= queue->size);
+
         const uint32_t queueMask = queue->size - 1;
         hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
         assert(sizeof(hsa_barrier_or_packet_t) == sizeof(hsa_barrier_and_packet_t));
         if(barrier_flag == SNK_OR) {
             /* Define the barrier packet to be at the calculated queue index address.  */
             memset(barrier, 0, sizeof(hsa_barrier_or_packet_t));
-            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_OR, barrier_bit);
+            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_OR, last_bpkt);
         }
         else {
             /* Define the barrier packet to be at the calculated queue index address.  */
             memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
-            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_AND, barrier_bit);
+            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_AND, last_bpkt);
         }
         //Only set dep_signals when needed. Setting dep_signals without an actual
         //dependent task increases latency of the barrier packet processing. It is
@@ -235,15 +238,13 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
                 tasks_remaining--;
             }
         }
-        // no completion signal, just have barrier bit for next AQL packet to implicitly wait
-        // TODO: have a separate barrier packet signal pool of interruptible signals if the
-        // host wants to wait on just the barrier signal and not care about enqueueing more
-        // tasks after the barrier packet
-        if(need_completion)
+        // completion signal if needed for reclaiming resources,
+        // have barrier bit for next AQL packet to implicitly wait
+        if(need_completion && last_bpkt) {
           barrier->completion_signal = identity_signal;
-        /* Increment write index and ring doorbell to dispatch the kernel.  */
-        hsa_queue_store_write_index_relaxed(queue, index+1);
-        hsa_signal_store_relaxed(queue->doorbell_signal, index);
+          /* ring doorbell to dispatch the kernel.  */
+          hsa_signal_store_relaxed(queue->doorbell_signal, index);
+        }
     }
     return last_signal;
 }

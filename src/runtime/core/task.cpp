@@ -240,8 +240,9 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
         }
         // completion signal if needed for reclaiming resources,
         // have barrier bit for next AQL packet to implicitly wait
-        if(need_completion && last_bpkt) {
-          barrier->completion_signal = identity_signal;
+        if(last_bpkt) {
+          if(need_completion)
+            barrier->completion_signal = identity_signal;
           /* ring doorbell to dispatch the kernel.  */
           hsa_signal_store_relaxed(queue->doorbell_signal, index);
         }

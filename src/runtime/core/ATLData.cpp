@@ -277,23 +277,25 @@ atmi_status_t Runtime::Malloc(void **ptr, size_t size, atmi_mem_place_t place) {
 
 atmi_status_t Runtime::Memfree(void *ptr) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
-    hsa_status_t err = hsa_amd_memory_pool_free(ptr);
-    ErrorCheck(atmi_free, err);
-    DEBUG_PRINT("Freed %p\n", ptr);
-
     hsa_amd_pointer_info_t ptr_info;
     ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-    err = hsa_amd_pointer_info((void *)ptr, &ptr_info,
+    hsa_status_t err = hsa_amd_pointer_info((void *)ptr, &ptr_info,
                                NULL, /* alloc fn ptr */
                                NULL, /* num_agents_accessible */
                                NULL);/* accessible agents */
     ErrorCheck(Checking pointer info, err);
 
     ATLData *data = (ATLData *)ptr_info.userData;
-    if(data) {
-        // is there a way to unset a userdata with AMD pointer before deleting 'data'?
-        delete data;
-    }
+    if(!data)
+      ErrorCheck(Checking pointer info userData, HSA_STATUS_ERROR_INVALID_ALLOCATION);
+
+    // is there a way to unset a userdata with AMD pointer before deleting 'data'?
+    delete data;
+
+    err = hsa_amd_memory_pool_free(ptr);
+    ErrorCheck(atmi_free, err);
+    DEBUG_PRINT("Freed %p\n", ptr);
+
     if(err != HSA_STATUS_SUCCESS || !data) ret = ATMI_STATUS_ERROR;
     return ret;
 }

@@ -31,13 +31,6 @@ AMDGPU_TARGET_TRIPLE ?= amdgpu--amdhsa
 MCPU ?= $(shell ${ATMI_RUNTIME_PATH}/bin/mygpu)
 #$(info MCPU $(MCPU))
 
-# Kernel format
-BRIG ?= 0
-ifeq ($(BRIG),1)
-	BRIGCLOPTS=-brig
-	BRIGCPPOPTS=-DUSE_BRIG
-endif
-
 # Kernel compiler
 CLC ?= 1
 
@@ -124,7 +117,7 @@ all: $(OBJS)
 
 %.hsaco: %.cl $(INC_FILES)
 ifeq ($(CLC),1)
-	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} ${BRIGCLOPTS} -opt 2 -o $@ $<
+	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} -opt 2 -o $@ $<
 else
 ifeq ($(SAVETEMP),0)
 	$(CLCC) ${CLCFLAGS} -o $@ $<

@@ -2079,7 +2079,7 @@ namespace core {
   }
 
   atmi_status_t Runtime::AddGPUKernelImpl(atmi_kernel_t atmi_kernel, const char *impl, const unsigned int ID) {
-    if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;
+    if(!atl_is_atmi_initialized() || KernelInfoTable.empty()) return ATMI_STATUS_ERROR;
     uint64_t pif_id = atmi_kernel.handle;
     atl_kernel_t *kernel = KernelImplMap[pif_id];
     if(kernel->id_map.find(ID) != kernel->id_map.end()) {

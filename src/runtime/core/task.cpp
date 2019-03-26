@@ -822,7 +822,6 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     }
   }
 
-  //static int counter = 0;
   if(task->stream_obj->ordered) {
     lock(&(task->stream_obj->group_mutex));
     // does it matter which task was enqueued first, as long as we are
@@ -1174,7 +1173,6 @@ void *acquire_kernarg_segment(atl_kernel_impl_t *impl, int *segment_id) {
 atmi_status_t dispatch_task(atl_task_t *task) {
   //DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id, lparm->place.cpu_set, lparm->place.gpu_set);
 
-  static std::atomic<int> counter(0);
   if(task->type == ATL_DATA_MOVEMENT) {
     return dispatch_data_movement(task, task->data_dest_ptr, task->data_src_ptr,
         task->data_size);
@@ -1417,7 +1415,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         signal_worker(this_queues[q], PROCESS_PKT);
       }
     }
-    counter++;
     TryDispatchTimer.Stop();
     DEBUG_PRINT("Task %lu (%d) Dispatched\n", task->id, task->devtype);
     return ATMI_STATUS_SUCCESS;

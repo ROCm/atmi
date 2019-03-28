@@ -867,10 +867,10 @@ namespace core {
     int max_signals = core::Runtime::getInstance().getMaxSignals();
     for ( task_num = 0 ; task_num < max_signals; task_num++){
       hsa_signal_t new_signal;
-      // For ATL_SYNC_CALLBACK, we need host to be interrupted 
-      // upon task completion to resolve dependencies on the host. 
+      // For ATL_SYNC_CALLBACK, we need host to be interrupted
+      // upon task completion to resolve dependencies on the host.
       // For ATL_SYNC_BARRIER_PKT, since barrier packets resolve
-      // dependencies within the GPU, they can be just agent signals 
+      // dependencies within the GPU, they can be just agent signals
       // without host interrupts.
       // TODO: for barrier packet with host tasks, should we create
       // a separate list of free signals?
@@ -1337,7 +1337,8 @@ namespace core {
     return AMD_COMGR_STATUS_SUCCESS;
   }
 
-  hsa_status_t get_code_object_custom_metadata_v2(void *binary, size_t binSize, int gpu) {
+  hsa_status_t get_code_object_custom_metadata_v2(atmi_platform_type_t platform,
+                                                  void *binary, size_t binSize, int gpu) {
     amd_comgr_metadata_node_t programMD;
     amd_comgr_status_t status;
     amd_comgr_data_t binaryData;
@@ -1365,10 +1366,12 @@ namespace core {
 
     for (size_t i = 0; i < kernelsSize; i++) {
       std::string kernelName;
+      std::string languageName;
       amd_comgr_metadata_node_t nameMeta;
       amd_comgr_metadata_node_t kernelMD;
       amd_comgr_metadata_node_t argsMeta;
       amd_comgr_metadata_node_t codePropsMeta;
+      amd_comgr_metadata_node_t languageMeta;
       KernelMD kernelObj;
 
       status = amd_comgr_index_list_metadata(kernelsMD, i, &kernelMD);
@@ -1376,6 +1379,12 @@ namespace core {
 
       status = amd_comgr_metadata_lookup(kernelMD, "Name", &nameMeta);
       comgrErrorCheck(COMGR kernel name metadata lookup in kernel metadata, status);
+
+      status = amd_comgr_metadata_lookup(kernelMD, "Language", &languageMeta);
+      comgrErrorCheck(COMGR kernel language metadata lookup in kernel metadata, status);
+
+      status  = getMetaBuf(languageMeta, &languageName);
+      comgrErrorCheck(COMGR kernel language name lookup in language metadata, status);
 
       status  = getMetaBuf(nameMeta, &kernelName);
       comgrErrorCheck(COMGR kernel name lookup in name metadata, status);
@@ -1431,7 +1440,7 @@ namespace core {
         //  use offset with/instead of alignment
         offset = core::alignUp(offset, lcArg.mAlign);
         info.arg_offsets.push_back(offset);
-        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %lu)\n", i, lcArg.mName.c_str(), lcArg.mSize, offset);
+        DEBUG_PRINT("[%s:%lu] \"%s\" (%u, %lu)\n", kernelName.c_str(), i, lcArg.mName.c_str(), lcArg.mSize, offset);
         offset += lcArg.mSize;
       }
 
@@ -1445,7 +1454,14 @@ namespace core {
       info.kernel_segment_size = kernelObj.mCodeProps.mKernargSegmentSize;
 
       // add size of implicit args, e.g.: offset x, y and z and pipe pointer
-      info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
+      // FIXME: When compiler is fixed to support multiple language frontend info
+      // in the metadata, change the below comparison to the below
+      // if(languageName == std::to_string("HIP"))
+      if(platform == AMDGCN_HIP)
+        info.kernel_segment_size += sizeof(atmi_implicit_args_t);
+      else
+        info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
+      DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %lu)\n", kernelName.c_str(), kernelObj.mCodeProps.mKernargSegmentSize, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table
       KernelInfoTable[gpu][kernelName] = info;
@@ -1460,7 +1476,8 @@ namespace core {
     return HSA_STATUS_SUCCESS;
   }
 
-  hsa_status_t get_code_object_custom_metadata_v3(void *binary, size_t binSize, int gpu) {
+  hsa_status_t get_code_object_custom_metadata_v3(atmi_platform_type_t platform,
+                                                  void *binary, size_t binSize, int gpu) {
     // parse code object with different keys from v2
     // also, the kernel name is not the same as the symbol name -- so a symbol->name map is needed
     amd_comgr_metadata_node_t programMD;
@@ -1490,10 +1507,12 @@ namespace core {
 
     for (size_t i = 0; i < kernelsSize; i++) {
       std::string kernelName;
+      std::string languageName;
       std::string symbolName;
       std::string kernargSegSize;
       amd_comgr_metadata_node_t symbolMeta;
       amd_comgr_metadata_node_t nameMeta;
+      amd_comgr_metadata_node_t languageMeta;
       amd_comgr_metadata_node_t kernelMD;
       amd_comgr_metadata_node_t argsMeta;
       amd_comgr_metadata_node_t kernargSegSizeMeta;
@@ -1506,6 +1525,12 @@ namespace core {
 
       status  = getMetaBuf(nameMeta, &kernelName);
       comgrErrorCheck(COMGR kernel name lookup in name metadata, status);
+
+      status = amd_comgr_metadata_lookup(kernelMD, ".language", &languageMeta);
+      comgrErrorCheck(COMGR kernel language metadata lookup in kernel metadata, status);
+
+      status  = getMetaBuf(languageMeta, &languageName);
+      comgrErrorCheck(COMGR kernel language name lookup in language metadata, status);
 
       status = amd_comgr_metadata_lookup(kernelMD, ".symbol", &symbolMeta);
       comgrErrorCheck(COMGR kernel symbol metadata lookup in kernel metadata, status);
@@ -1537,7 +1562,13 @@ namespace core {
       info.kernel_segment_size = std::stoi(kernargSegSize);
 
       // add size of implicit args, e.g.: offset x, y and z and pipe pointer
-      info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
+      // FIXME: When compiler is fixed to support multiple language frontend info
+      // in the metadata, change the below comparison to the below
+      // if(languageName == std::to_string("HIP"))
+      if(platform == AMDGCN_HIP)
+        info.kernel_segment_size += sizeof(atmi_implicit_args_t);
+      else
+        info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
 
       for (size_t i = 0; i < argsSize; ++i) {
         KernelArgMD  lcArg;
@@ -1590,7 +1621,8 @@ namespace core {
     return HSA_STATUS_SUCCESS;
   }
 
-  hsa_status_t get_code_object_custom_metadata(void *binary, size_t binSize, int gpu) {
+  hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
+                                               void *binary, size_t binSize, int gpu) {
     int code_object_ver = 0;
     // Get the code object version by looking int the runtime metadata note
     // Begin the Elf image from memory
@@ -1652,9 +1684,9 @@ namespace core {
     }
 
     if(code_object_ver == 2)
-      return get_code_object_custom_metadata_v2(binary, binSize, gpu);
+      return get_code_object_custom_metadata_v2(platform, binary, binSize, gpu);
     else if(code_object_ver == 3)
-      return get_code_object_custom_metadata_v3(binary, binSize, gpu);
+      return get_code_object_custom_metadata_v3(platform, binary, binSize, gpu);
     else
       ELFErrorReturn(Error: Code object version invalid,
           HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
@@ -1822,12 +1854,12 @@ namespace core {
           err = hsa_executable_load_code_object(executable, agent, code_object, "");
           ErrorCheckAndContinue(Loading the code object, err);
         }
-        else if (types[i] == AMDGCN) {
+        else if (types[i] == AMDGCN || types[i] == AMDGCN_HIP) {
           // Some metadata info is not available through ROCr API, so use custom
           // code object metadata parsing to collect such metadata info
           void *tmp_module = malloc(module_size);
           memcpy(tmp_module, module_bytes, module_size);
-          err = get_code_object_custom_metadata(tmp_module, module_size, gpu);
+          err = get_code_object_custom_metadata(types[i], tmp_module, module_size, gpu);
           ErrorCheckAndContinue(Getting custom code object metadata, err);
           free(tmp_module);
 

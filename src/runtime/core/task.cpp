@@ -273,7 +273,7 @@ extern void atl_task_wait(atl_task_t *task) {
         // for resources and then issue a callback; only then we can wait for the task to
         // complete
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-          while(task->state < ATMI_READY) {}
+          while(task->state < ATMI_DISPATCHED) {}
           if(task->state < ATMI_EXECUTED) {
             // Now, this task has the resources, so it can get dispatched any time.
             // So, create a barrier packet for current sink tasks and add async handler

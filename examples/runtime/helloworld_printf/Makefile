@@ -55,7 +55,7 @@ CLOPTS += -save-temps
 endif
 
 # cloc options
-CLOCOPTS = -vv -hcc2 ${AMDLLVM} -triple ${AMDGPU_TARGET_TRIPLE} -libgcn ${ROCM_DEVICE_PATH}
+CLOCOPTS = -vv -aomp ${AMDLLVM} -triple ${AMDGPU_TARGET_TRIPLE} -libgcn ${ROCM_DEVICE_PATH}
 CLOCOPTS += -clopts "$(CLOPTS)"
 
 # ROCm-Device-lib

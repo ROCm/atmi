@@ -186,6 +186,7 @@ while [ $# -gt 0 ] ; do
       -bclib)		EXTRABCLIB=$2; shift ;; 
       -mcpu)            LC_MCPU=$2; shift ;;
       -aomp)            AOMP=$2; shift ;;
+      -hcc2)            AOMP=$2; shift ;;
       -triple)          TARGET_TRIPLE=$2; shift ;;
       -libgcn)          DEVICELIB=$2; shift ;;
       -atmipath)        ATMI_PATH=$2; shift ;;

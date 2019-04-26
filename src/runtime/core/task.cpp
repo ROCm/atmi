@@ -208,14 +208,20 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
         hsa_barrier_and_packet_t* barrier = &(((hsa_barrier_and_packet_t*)(queue->base_address))[index&queueMask]);
         assert(sizeof(hsa_barrier_or_packet_t) == sizeof(hsa_barrier_and_packet_t));
         if(barrier_flag == SNK_OR) {
-            /* Define the barrier packet to be at the calculated queue index address.  */
+            /* Define the barrier packet to be at the calculated queue index address.
+             * We set the memory scope to NONE because we assume that the right scopes
+             * have been set by the AQL kernels around these barriers */
             memset(barrier, 0, sizeof(hsa_barrier_or_packet_t));
-            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_OR, last_bpkt);
+            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_OR, last_bpkt,
+                                            ATMI_FENCE_SCOPE_NONE, ATMI_FENCE_SCOPE_NONE);
         }
         else {
-            /* Define the barrier packet to be at the calculated queue index address.  */
+            /* Define the barrier packet to be at the calculated queue index address.
+             * We set the memory scope to NONE because we assume that the right scopes
+             * have been set by the AQL kernels around these barriers */
             memset(barrier, 0, sizeof(hsa_barrier_and_packet_t));
-            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_AND, last_bpkt);
+            barrier->header = create_header(HSA_PACKET_TYPE_BARRIER_AND, last_bpkt,
+                                            ATMI_FENCE_SCOPE_NONE, ATMI_FENCE_SCOPE_NONE);
         }
         //Only set dep_signals when needed. Setting dep_signals without an actual
         //dependent task increases latency of the barrier packet processing. It is

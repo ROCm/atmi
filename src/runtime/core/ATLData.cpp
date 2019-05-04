@@ -21,6 +21,7 @@ using namespace std;
 
 extern ATLMachine g_atl_machine;
 extern hsa_signal_t IdentityCopySignal;
+extern std::deque<atl_task_t *> TaskList;
 
 namespace core {
 
@@ -366,9 +367,16 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
         ret->stream_obj->last_task = ret;
         unlock(&(ret->stream_obj->group_mutex));
     }
-    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->stream_obj);
-    (ret->stream_obj->task_count)++;
-
+    if(ret->groupable) {
+      DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->stream_obj);
+      (ret->stream_obj->task_count)++;
+    }
+    atl_dep_sync_t dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
+    if(dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+      lock(&mutex_readyq_);
+      TaskList.push_back(ret);
+      unlock(&mutex_readyq_);
+    }
     try_dispatch(ret, NULL, lparm->synchronous);
 
     return ret->id;

@@ -32,6 +32,7 @@ add_library(atmi_runtime SHARED
     atl_cputask.c    
     atl_profile.c    
     atl_rt.c         
+    atl_hostcall.c
     atl_synckernel.c 
     ATLData.cpp      
     ATLMachine.cpp   
@@ -42,6 +43,9 @@ include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../aomp-extras/hostcall/include)
+include_directories(${CMAKE_INSTALL_PREFIX}/include)
+find_package(Threads REQUIRED)
 
 ## CPack component info
 set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "ATMI Runtime Library")
@@ -51,7 +55,9 @@ target_link_libraries(
   atmi_runtime
   -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib -lhsa-runtime64 -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib
   -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsakmt -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}
+  -L${CMAKE_INSTALL_PREFIX}/lib -lhostcall -Wl,-rpath,${CMAKE_INSTALL_PREFIX}/lib
 )
+target_link_libraries( atmi_runtime Threads::Threads)
 
 # set output dir for .h files
 set (OUTPUT_INC_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../include)

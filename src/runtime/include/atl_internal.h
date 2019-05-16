@@ -308,6 +308,13 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
 atl_task_t *get_new_task();
 const char *get_error_string(hsa_status_t err);
 const char *get_atmi_error_string(atmi_status_t err);
+
+// ATMI Internal Support for hostcall
+unsigned long atl_hostcall_assign_buffer(uint32_t minpackets, 
+    hsa_queue_t * this_Q, hsa_amd_memory_pool_t atl_gpu_finegrain_pool);
+hsa_status_t atl_hostcall_init(hsa_agent_t * agent);
+void allow_access_to_all_gpu_agents(void *ptr) ;
+
 #define ATMIErrorCheck(msg, status) \
 if (status != ATMI_STATUS_SUCCESS) { \
     printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, get_atmi_error_string(status)); \

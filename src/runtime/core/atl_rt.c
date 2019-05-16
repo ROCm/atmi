@@ -131,6 +131,8 @@ hsa_ext_program_t atl_hsa_program;
 hsa_region_t atl_hsa_primary_region;
 hsa_region_t atl_gpu_kernarg_region;
 hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
+hsa_amd_memory_pool_t atl_gpu_finegrain_pool;
+uint32_t atl_hostcall_minpackets;
 hsa_region_t atl_cpu_kernarg_region;
 hsa_agent_t atl_gpu_agent;
 hsa_profile_t atl_gpu_agent_profile;
@@ -374,6 +376,7 @@ static hsa_status_t get_memory_pool_info(hsa_amd_memory_pool_t memory_pool, void
         if(HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED & global_flag) {
             ATLMemory new_mem(memory_pool, *proc, ATMI_MEMTYPE_FINE_GRAINED);
             proc->addMemory(new_mem);
+            atl_gpu_finegrain_pool = memory_pool;
             if(HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_KERNARG_INIT & global_flag) {
                 DEBUG_PRINT("GPU kernel args pool handle: %lu\n", memory_pool.handle);
                 atl_gpu_kernarg_pool = memory_pool;
@@ -415,6 +418,15 @@ static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
             err = hsa_amd_agent_iterate_memory_pools(agent, get_memory_pool_info, &new_proc);
             ErrorCheck(Iterate all memory pools, err);
             g_atl_machine.addProcessor(new_proc);
+            uint32_t numCu;
+            err = hsa_agent_get_info(agent, (hsa_agent_info_t)
+                HSA_AMD_AGENT_INFO_COMPUTE_UNIT_COUNT, &numCu);
+            ErrorCheck(Could not get number of cus, err);
+            uint32_t waverPerCu;
+            err = hsa_agent_get_info(agent, (hsa_agent_info_t)
+                HSA_AMD_AGENT_INFO_MAX_WAVES_PER_CU, &waverPerCu);
+            ErrorCheck(Could not get number of waves per cu, err);
+            atl_hostcall_minpackets = numCu * waverPerCu;
             }
             break;
         case HSA_DEVICE_TYPE_DSP:
@@ -1375,6 +1387,8 @@ atmi_status_t atl_init_gpu_context() {
     }
 
     init_tasks();
+    // Initiailze hostcall. Note: atl_gpu_agent was initialized by init_hsa
+    err=atl_hostcall_init(&atl_gpu_agent);
     atlc.g_gpu_initialized = 1;
     return ATMI_STATUS_SUCCESS;
 }
@@ -1619,7 +1633,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         err = hsa_executable_symbol_get_info(symbol, HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE, &(info.kernel_segment_size));
         ErrorCheck(Extracting the kernarg segment size from the executable, err);
 
-        // add size of implicit args, e.g.: offset x, y and z and pipe pointer
+        // add size of implicit args, e.g.: offset x, y and z and hostcall pointer
         info.kernel_segment_size += sizeof(atmi_implicit_args_t);
 
         DEBUG_PRINT("Kernel %s --> %lx symbol %u group segsize %u pvt segsize %u bytes kernarg\n", name,
@@ -1947,15 +1961,9 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
                         it != kernel->impls.end(); it++) {
         lock(&((*it)->mutex));
         if((*it)->devtype == ATMI_DEVTYPE_GPU) {
-            // free the pipe_ptrs data
-            // We create the pipe_ptrs region for all kernel instances
-            // combined, and each instance of the kernel
-            // invocation takes a piece of it. So, the first kernel instance
-            // (k=0) will have the pointer to the entire pipe region itself.
             atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(((char *)(*it)->kernarg_region) + (*it)->kernarg_segment_size - sizeof(atmi_implicit_args_t));
-            void *pipe_ptrs = (void *)impl_args->pipe_ptr;
-            DEBUG_PRINT("Freeing pipe ptr: %p\n", pipe_ptrs);
-            hsa_memory_free(pipe_ptrs);
+	    // FIXME: we may need to free hostcall buffers if/when hsa queue is destroyed
+	    //        Here, we only free resources specific to kernel
             hsa_memory_free((*it)->kernarg_region);
             free((*it)->kernel_objects);
             free((*it)->group_segment_sizes);
@@ -2090,7 +2098,6 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
 
                     // *** fill in implicit args for kernel enqueue ***
                     atmi_implicit_args_t *ke_impl_args = (atmi_implicit_args_t *)((char *)ke_kernargs + (((k + 1) * this_impl->kernarg_segment_size) - sizeof(atmi_implicit_args_t)));
-                    // SHARE the same pipe for printf etc
                     *ke_impl_args = *impl_args;
                 }
             }
@@ -2174,22 +2181,8 @@ atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel, const char *im
         ErrorCheck(Allocating memory for the executable-kernel, err);
         allow_access_to_all_gpu_agents(kernel_impl->kernarg_region);
 
-        void *pipe_ptrs;
-        // allocate pipe memory in the kernarg memory pool
-        // TODO: may be possible to allocate this on device specific
-        // memory but data movement will have to be done later by
-        // post-processing kernel on destination agent.
-        err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
-                MAX_PIPE_SIZE * MAX_NUM_KERNELS,
-                0,
-                &pipe_ptrs);
-        ErrorCheck(Allocating pipe memory region, err);
-        DEBUG_PRINT("Allocating pipe ptr: %p\n", pipe_ptrs);
-        allow_access_to_all_gpu_agents(pipe_ptrs);
-
         for(int k = 0; k < MAX_NUM_KERNELS; k++) {
             atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)((char *)kernel_impl->kernarg_region + (((k + 1) * kernel_impl->kernarg_segment_size) - sizeof(atmi_implicit_args_t)));
-            impl_args->pipe_ptr = (uint64_t)((char *)pipe_ptrs + (k * MAX_PIPE_SIZE));
             impl_args->offset_x = 0;
             impl_args->offset_y = 0;
             impl_args->offset_z = 0;
@@ -2442,7 +2435,8 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     atl_task_t *task = (atl_task_t *)arg;
     DEBUG_PRINT("Handle signal from task %lu\n", task->id);
 
-    // process printf buffer
+#if 0
+    // With hostcall, we no longer use pipe_ptr for registerd post-task processing
     {
       atl_kernel_impl_t *kernel_impl = NULL;
       if (task_process_fini_buffer) {
@@ -2461,6 +2455,8 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
         }
       }
     }
+#endif
+
 
     //static int counter = 0;
     if(task->stream_obj->ordered) {
@@ -2641,7 +2637,8 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
             kernel_impl = get_kernel_impl(kernel, task->kernel_id);
             mutexes.insert(&(kernel_impl->mutex));
 
-            // process printf buffer
+#if 0
+	    // With hostcall, we no longer use pipe_ptr for registerd post-task processing
             {
               atl_kernel_impl_t *kernel_impl = NULL;
               if (task_process_fini_buffer) {
@@ -2654,10 +2651,12 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
                       kernel_impl->kernel_type == AMDGCN) {
                     atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
                     (*task_process_fini_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
+
                   }
                 }
               }
             }
+#endif
 
         }
         if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
@@ -3013,10 +3012,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                 // char *pipe_ptr = impl_args->pipe_ptr;
             }
 
-            // initialize printf buffer
+            // assign a hostcall buffer for the selected Q
             {
               atl_kernel_impl_t *kernel_impl = NULL;
-              if (task_process_init_buffer) {
                 if(task->kernel) {
                   kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
                   //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
@@ -3025,11 +3023,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                       task->devtype == ATMI_DEVTYPE_GPU &&
                       kernel_impl->kernel_type == AMDGCN) {
                     atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
-
-                    // initalize printf buffer
-                    (*task_process_init_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
+                    impl_args->hostcall_ptr = atl_hostcall_assign_buffer(atl_hostcall_minpackets,
+				      this_Q ,atl_gpu_finegrain_pool);
                   }
-                }
               }
             }
 

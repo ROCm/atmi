@@ -1,9 +1,8 @@
  
 /*   
- *   atl_hostcall.c: Implementation of Linked List Queue in c with 
- *              key search and key delete feature for ATMI to implement
- *              the hostcall feature. hostcall buffers are placed on
- *              this queue with push.  
+ *   atl_hostcall.c: Implementation of Linked List Queue in c for ATMI to
+ *                   implement hostcall.  hostcall buffers and their consumer
+ *                    are placed on a linked list queue (hcb).
  *
  *   Written by Greg Rodgers
 
@@ -38,114 +37,62 @@ SOFTWARE.
 #include "hostcall_service_id.h"
 #include "atl_internal.h"
 
-typedef struct atl_hostcall_element_s atl_hostcall_element_t;
-struct atl_hostcall_element_s {
-  hostcall_buffer_t * hcb;
+typedef struct atl_hcq_element_s atl_hcq_element_t;
+struct atl_hcq_element_s {
+  hostcall_buffer_t *   hcb;
   hostcall_consumer_t * consumer;
-  void* key;
-  atl_hostcall_element_t * next_ptr;
-} ;
+  hsa_queue_t *       	hsa_q;
+  atl_hcq_element_t *   next_ptr;
+};
 
-void            atl_hostcall_pop();
-int             atl_hostcall_is_empty();
-void            atl_hostcall_create();
-int             atl_hostcall_size();
-void            atl_hostcall_delete_by_key(void* key);
-
-atl_hostcall_element_t * atl_hostcall_push(hostcall_buffer_t * buffer, hostcall_consumer_t * consumer, void*key);
-atl_hostcall_element_t * atl_hostcall_get_front();
-atl_hostcall_element_t * atl_hostcall_get_rear();
-atl_hostcall_element_t * atl_hostcall_find_by_key(void* key);
-
-/* Static "globals" for this module */
-atl_hostcall_element_t * atl_hostcall_front;
-atl_hostcall_element_t * atl_hostcall_rear;
-int atl_hostcall_count;
+/* Persistent static values for the hcq linked list */
+atl_hcq_element_t * atl_hcq_front;
+atl_hcq_element_t * atl_hcq_rear;
+int atl_hcq_count;
  
-void atl_hostcall_createq(){
-  atl_hostcall_count = 0; 
-  atl_hostcall_front = atl_hostcall_rear = NULL; 
-}
+static int atl_hcq_size() { return atl_hcq_count ;}
 
-int atl_hostcall_size() { return atl_hostcall_count ;}
-
-atl_hostcall_element_t * atl_hostcall_push(hostcall_buffer_t * hcb, hostcall_consumer_t * consumer, void* key) {
+atl_hcq_element_t * atl_hcq_push(hostcall_buffer_t * hcb, hostcall_consumer_t * consumer, hsa_queue_t * hsa_q) {
   // FIXME , check rc of these mallocs
-  if (atl_hostcall_rear == NULL) {
-    atl_hostcall_rear = (atl_hostcall_element_t *) malloc(sizeof(atl_hostcall_element_t));
-    atl_hostcall_front = atl_hostcall_rear;
+  if (atl_hcq_rear == NULL) {
+    atl_hcq_rear = (atl_hcq_element_t *) malloc(sizeof(atl_hcq_element_t));
+    atl_hcq_front = atl_hcq_rear;
   } else {
-    atl_hostcall_element_t * new_rear = (atl_hostcall_element_t *) malloc(sizeof(atl_hostcall_element_t));
-    atl_hostcall_rear->next_ptr = new_rear;
-    atl_hostcall_rear = new_rear;
+    atl_hcq_element_t * new_rear = (atl_hcq_element_t *) malloc(sizeof(atl_hcq_element_t));
+    atl_hcq_rear->next_ptr = new_rear;
+    atl_hcq_rear = new_rear;
   }
-  atl_hostcall_rear->next_ptr = NULL;
-  atl_hostcall_rear->hcb      = hcb; 
-  atl_hostcall_rear->key      = key;
-  atl_hostcall_rear->consumer = consumer;
-  atl_hostcall_count++;
-  return atl_hostcall_rear;
+  atl_hcq_rear->next_ptr = NULL;
+  atl_hcq_rear->hcb      = hcb; 
+  atl_hcq_rear->hsa_q    = hsa_q;
+  atl_hcq_rear->consumer = consumer;
+  atl_hcq_count++;
+  return atl_hcq_rear;
 }
  
-void atl_hostcall_pop() {
-  if (atl_hostcall_front  == NULL) {
+static void atl_hcq_pop() {
+  if (atl_hcq_front  == NULL) {
     printf("\n Error: Trying to pop an element from empty queue");
     return;
   } else {
-    if (atl_hostcall_front->next_ptr != NULL) {
-      atl_hostcall_element_t * new_front = atl_hostcall_front->next_ptr;
-      //printf("Freeing data at %p\n",(void*) atl_hostcall_front);
-      free(atl_hostcall_front);
-      atl_hostcall_front = new_front;
+    if (atl_hcq_front->next_ptr != NULL) {
+      atl_hcq_element_t * new_front = atl_hcq_front->next_ptr;
+      free(atl_hcq_front);
+      atl_hcq_front = new_front;
     } else {
-      //printf("Freeing data at %p\n QUEUE NOW EMPTY",(void*) atl_hostcall_front);
-      free(atl_hostcall_front);
-      atl_hostcall_front = NULL;
-      atl_hostcall_rear = NULL;
+      free(atl_hcq_front);
+      atl_hcq_front = NULL;
+      atl_hcq_rear = NULL;
     }
-    atl_hostcall_count--;
+    atl_hcq_count--;
   }
 }
  
-atl_hostcall_element_t * atl_hostcall_get_front() {return atl_hostcall_front;}
-atl_hostcall_element_t * atl_hostcall_get_rear() {return atl_hostcall_rear;}
-
-/* Returns the rear data of the atl_hostcall */
-hostcall_buffer_t * atl_hostcall_get_rear_data() {
-  if ((atl_hostcall_front != NULL) && (atl_hostcall_rear != NULL))
-    return(atl_hostcall_rear->hcb);
-  else {
-    hostcall_buffer_t* atl_hostcall_data_unknown;
-    return atl_hostcall_data_unknown;
-  }
-}
- 
-/* Returns 1 if empty 0 otherwise */
-int atl_hostcall_is_empty() {
-  if ((atl_hostcall_front == NULL) && (atl_hostcall_rear == NULL))
-    return(1);
-  else
-    return(0);
-}
-
-atl_hostcall_element_t  * atl_hostcall_find_by_key(void* key) {
-  atl_hostcall_element_t * this_front = atl_hostcall_front;
-  int reverse_counter = atl_hostcall_size();
+static atl_hcq_element_t  * atl_hcq_find_by_hsa_q(hsa_queue_t * hsa_q) {
+  atl_hcq_element_t * this_front = atl_hcq_front;
+  int reverse_counter = atl_hcq_size();
   while (reverse_counter) {
-    if (this_front->key == key)
-       return this_front;
-    this_front = this_front->next_ptr;
-    reverse_counter--;
-  }
-  //printf("key not found\n");
-  return NULL;
-}
-
-atl_hostcall_element_t  * atl_hostcall_find_by_index(int index) {
-  atl_hostcall_element_t * this_front = atl_hostcall_front;
-  int reverse_counter = atl_hostcall_size();
-  while (reverse_counter) {
-    if (reverse_counter == index)
+    if (this_front->hsa_q == hsa_q)
        return this_front;
     this_front = this_front->next_ptr;
     reverse_counter--;
@@ -153,30 +100,7 @@ atl_hostcall_element_t  * atl_hostcall_find_by_index(int index) {
   return NULL;
 }
 
-void atl_hostcall_delete_by_key(void* key) {
-  atl_hostcall_element_t * this_front = atl_hostcall_front;
-  atl_hostcall_element_t * last_front;
-  int reverse_counter = atl_hostcall_size();
-  while (reverse_counter) {
-    if (this_front->key == key) {
-      if (this_front == atl_hostcall_front) {
-        atl_hostcall_pop();
-      } else {
-        last_front->next_ptr = this_front->next_ptr;
-        //printf("DELETE: Freeing data at %p\n",(void*) this_front);
-        free(this_front);
-        atl_hostcall_count--;
-      }
-      return;
-    }
-    last_front = this_front;
-    this_front = this_front->next_ptr;
-    reverse_counter--;
-  }
-  return ;
-}
-
-static hostcall_buffer_t * atl_hostcall_create_buffer(unsigned int num_packets, 
+static hostcall_buffer_t * atl_hcq_create_buffer(unsigned int num_packets,
 	 hsa_amd_memory_pool_t finegrain_pool) {
     if (num_packets == 0) {
 	printf("num_packets cannot be zero \n");
@@ -198,6 +122,11 @@ static hostcall_buffer_t * atl_hostcall_create_buffer(unsigned int num_packets,
     return (hostcall_buffer_t *) newbuffer;
 }
 
+// ---------------------------- snip -------------------------------------------
+// FIXME: Move all these handlers into the hostcall repository and create an
+//  external API hostcall_register_all_handlers(hostcall_consumer_t c);
+//  that will register all handlers for a consumer
+//
 void handler_HOSTCALL_SERVICE_PRINTF(void *ignored, uint32_t service, uint64_t *payload) {
     *payload = *payload + 1;
     printf("=================== Printf Handler called\n");
@@ -220,34 +149,58 @@ void handler_HOSTCALL_SERVICE_FREE(void *ignored, uint32_t service, uint64_t *pa
 }
 void handler_HOSTCALL_SERVICE_DEMO(void *ignored, uint32_t service, uint64_t *payload) {
 }
+// ---------------------------- snip -------------------------------------------
 
 // ----   External functions start here  -----
 unsigned long atl_hostcall_assign_buffer(unsigned int minpackets, 
 		hsa_queue_t * this_Q, hsa_amd_memory_pool_t finegrain_pool) {
   void * hostcall_ptrs;
 
-    atl_hostcall_element_t * llq_elem ;
-    llq_elem  = atl_hostcall_find_by_key((void*) this_Q);
+    atl_hcq_element_t * llq_elem ;
+    llq_elem  = atl_hcq_find_by_hsa_q(this_Q);
     if (!llq_elem) {
        //  For now, we create one bufer and one consumer per hsa queue
-       hostcall_buffer_t * hcb  = atl_hostcall_create_buffer(minpackets,
+       hostcall_buffer_t * hcb  = atl_hcq_create_buffer(minpackets,
 		 finegrain_pool) ;
        
        hostcall_consumer_t * c;
        c = hostcall_create_consumer();
+       // FIXME  call hostcall_register_all_handlers(c) when hostcall gets this api
        hostcall_register_service(c,HOSTCALL_SERVICE_PRINTF, handler_HOSTCALL_SERVICE_PRINTF, nullptr);
        hostcall_register_service(c,HOSTCALL_SERVICE_MALLOC, handler_HOSTCALL_SERVICE_MALLOC, nullptr);
        hostcall_register_service(c,HOSTCALL_SERVICE_FREE, handler_HOSTCALL_SERVICE_FREE, nullptr);
        hostcall_register_service(c,HOSTCALL_SERVICE_DEMO, handler_HOSTCALL_SERVICE_DEMO, nullptr);
        hostcall_register_buffer(c,hcb);
        allow_access_to_all_gpu_agents(hcb);
-       llq_elem = atl_hostcall_push( hcb , c, (void*) this_Q);
+       // Now add a new hcq element to hcq
+       llq_elem = atl_hcq_push( hcb , c, this_Q);
        hostcall_launch_consumer(c);
     }
     return (unsigned long) llq_elem->hcb;
 }
 
-hsa_status_t atl_hostcall_init(hsa_agent_t * agent) {
-   void atl_hostcall_createq();
+hsa_status_t atl_hostcall_init() {
+   atl_hcq_count = 0;
+   atl_hcq_front = atl_hcq_rear = NULL;
+   return HSA_STATUS_SUCCESS;
+}
+
+hsa_status_t atl_hostcall_terminate() {
+   hostcall_consumer_t * c;
+   atl_hcq_element_t * this_front = atl_hcq_front;
+   atl_hcq_element_t * last_front;
+   int reverse_counter = atl_hcq_size();
+   while (reverse_counter) {
+      if (c = this_front->consumer) {
+        hostcall_destroy_consumer(c);
+      }
+      hsa_memory_free(this_front->hcb);
+      last_front = this_front;
+      this_front = this_front->next_ptr;
+      free(last_front);
+      reverse_counter--;
+   }
+   atl_hcq_count = 0;
+   atl_hcq_front = atl_hcq_rear = NULL;
    return HSA_STATUS_SUCCESS;
 }

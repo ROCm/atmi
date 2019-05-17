@@ -991,6 +991,7 @@ atmi_status_t atmi_init(atmi_devtype_t devtype) {
 atmi_status_t atmi_finalize() {
     // TODO: Finalize all processors, queues, signals, kernarg memory regions
     hsa_status_t err;
+    atl_hostcall_terminate();
     finalize_hsa();
     // free up the kernel enqueue related data
     for(int i = 0; i < g_ke_args.kernel_counter; i++) {
@@ -1388,7 +1389,7 @@ atmi_status_t atl_init_gpu_context() {
 
     init_tasks();
     // Initiailze hostcall. Note: atl_gpu_agent was initialized by init_hsa
-    err=atl_hostcall_init(&atl_gpu_agent);
+    err=atl_hostcall_init();
     atlc.g_gpu_initialized = 1;
     return ATMI_STATUS_SUCCESS;
 }

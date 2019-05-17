@@ -312,7 +312,8 @@ const char *get_atmi_error_string(atmi_status_t err);
 // ATMI Internal Support for hostcall
 unsigned long atl_hostcall_assign_buffer(uint32_t minpackets, 
     hsa_queue_t * this_Q, hsa_amd_memory_pool_t atl_gpu_finegrain_pool);
-hsa_status_t atl_hostcall_init(hsa_agent_t * agent);
+hsa_status_t atl_hostcall_init();
+hsa_status_t atl_hostcall_terminate();
 void allow_access_to_all_gpu_agents(void *ptr) ;
 
 #define ATMIErrorCheck(msg, status) \

@@ -194,7 +194,7 @@ static hostcall_buffer_t * atl_hostcall_create_buffer(unsigned int num_packets,
 	    printf("call to  hostcall_initialize_buffer failed \n");
 	    abort();
     }
-    printf("created hostcall buffer %p with %d packets \n", newbuffer, num_packets);
+    // printf("created hostcall buffer %p with %d packets \n", newbuffer, num_packets);
     return (hostcall_buffer_t *) newbuffer;
 }
 

@@ -266,8 +266,7 @@ typedef struct atl_task_s {
     atmi_task_t *atmi_task;
 
     // all encmopassing task packet
-    hsa_kernel_dispatch_packet_t *aql;
-    hsa_queue_t *queue;
+    std::vector<std::pair<hsa_queue_t *, uint64_t> > packets;
 
     atl_kernel_t *kernel;
     uint32_t kernel_id;

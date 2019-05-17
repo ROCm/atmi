@@ -333,12 +333,12 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
     ret->stream_obj = stream_obj;
 
     // TODO: performance fix if there are more CPU agents to improve locality
-    ret->place = ATMI_PLACE_CPU(0, 0);
+    ret->place = ATMI_PLACE_GPU(0, 0);
     
     ret->num_predecessors = 0;
     ret->num_successors = 0;
 
-    ret->devtype = ATMI_DEVTYPE_CPU;
+    ret->devtype = ATMI_DEVTYPE_GPU;
     ret->kernel = NULL;
     ret->kernarg_region = NULL;
     ret->kernarg_region_size = 0;
@@ -463,20 +463,25 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     if(type == ATMI_H2D || type == ATMI_D2H) {
       if(task->groupable == ATMI_TRUE) {
         lock(&(stream_obj->group_mutex));
-        hsa_signal_add_acq_rel(task->signal, 2);
+        // barrier pkt already sets the signal values when the signal resource
+        // is available
+        if(dep_sync_type == ATL_SYNC_CALLBACK)
+          hsa_signal_add_acq_rel(task->signal, 2);
         stream_obj->running_groupable_tasks.push_back(task);
         unlock(&(stream_obj->group_mutex));
       }
       else
-        hsa_signal_add_acq_rel(task->signal, 2);
-        //hsa_signal_store_release(task->signal, 2);
+        // barrier pkt already sets the signal values when the signal resource
+        // is available
+        if(dep_sync_type == ATL_SYNC_CALLBACK)
+          hsa_signal_add_acq_rel(task->signal, 2);
       // For malloc'ed buffers, additional atmi_malloc/memcpy/free
       // steps are needed. So, fire and forget a copy thread with
       // signal count = 2 (one for actual host-device copy and another
       // for H2H copy to setup the device copy.
       std::thread([](void* dst, const void* src, size_t size, hsa_agent_t agent,
             unsigned type, atmi_mem_place_t cpu, hsa_signal_t signal,
-            std::vector<hsa_signal_t> dep_signals) {
+            std::vector<hsa_signal_t> dep_signals, atl_task_t *task) {
           atmi_status_t ret;
           hsa_status_t err;
           atl_dep_sync_t dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
@@ -495,6 +500,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
           }
 
           if(dep_sync_type == ATL_SYNC_BARRIER_PKT && !dep_signals.empty()) {
+            DEBUG_PRINT("SDMA-host for %p (%lu) with %lu dependencies\n", task, task->id, dep_signals.size());
             err = hsa_amd_memory_async_copy(
                 dest_ptr, agent,
                 src_ptr, agent,
@@ -502,6 +508,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
                 dep_signals.size(), &(dep_signals[0]), signal);
             ErrorCheck(Copy async between memory pools, err);
           } else {
+            DEBUG_PRINT("SDMA-host for %p (%lu)\n", task, task->id);
             err = hsa_amd_memory_async_copy(
                 dest_ptr, agent,
                 src_ptr, agent,
@@ -509,6 +516,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
                 0, NULL, signal);
             ErrorCheck(Copy async between memory pools, err);
           }
+          set_task_state(task, ATMI_DISPATCHED);
           hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 1, UINT64_MAX, ATMI_WAIT_STATE);
           // cleanup for D2H and H2D
           if(type == ATMI_D2H) {
@@ -517,19 +525,29 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
           atmi_free(temp_host_ptr);
           hsa_signal_subtract_acq_rel(signal, 1);
       },
-            dest, src, size, src_agent, type, cpu, task->signal, dep_signals).detach();
+            dest, src, size, src_agent, type, cpu, task->signal, dep_signals, task).detach();
     }
     else {
       if(task->groupable == ATMI_TRUE) {
         lock(&(stream_obj->group_mutex));
-        hsa_signal_add_acq_rel(task->signal, 1);
+        // barrier pkt already sets the signal values when the signal resource
+        // is available
+        if(dep_sync_type == ATL_SYNC_CALLBACK)
+          hsa_signal_add_acq_rel(task->signal, 1);
         stream_obj->running_groupable_tasks.push_back(task);
         unlock(&(stream_obj->group_mutex));
       }
       else
-        hsa_signal_store_release(task->signal, 1);
-      //hsa_signal_add_acq_rel(task->signal, 1);
+        // barrier pkt already sets the signal values when the signal resource
+        // is available
+        if(dep_sync_type == ATL_SYNC_CALLBACK)
+          hsa_signal_add_acq_rel(task->signal, 1);
+
+      // set task state to dispatched; then dispatch
+      set_task_state(task, ATMI_DISPATCHED);
+
       if(dep_sync_type == ATL_SYNC_BARRIER_PKT && !dep_signals.empty()) {
+        DEBUG_PRINT("SDMA for %p (%lu) with %lu dependencies\n", task, task->id, dep_signals.size());
         err = hsa_amd_memory_async_copy(
             dest_ptr, dest_agent,
             src_ptr, src_agent,
@@ -537,6 +555,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
             dep_signals.size(), &(dep_signals[0]), task->signal);
         ErrorCheck(Copy async between memory pools, err);
       } else {
+        DEBUG_PRINT("SDMA for %p (%lu)\n", task, task->id);
         err = hsa_amd_memory_async_copy(
             dest_ptr, dest_agent,
             src_ptr, src_agent,

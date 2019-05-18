@@ -299,12 +299,14 @@ extern void atl_task_wait(atl_task_t *task) {
             dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(), DispatchedTasks.begin(), DispatchedTasks.end());
             DispatchedTasks.clear();
             unlock(&mutex_readyq_);
-            enqueue_barrier_tasks(tasks);
-            if(!tasks.empty()) {
-              DEBUG_PRINT("Registering callback for task %lu\n", task->id);
-              hsa_status_t err = hsa_amd_signal_async_handler(IdentityANDSignal,
-                  HSA_SIGNAL_CONDITION_EQ, 0, handle_signal, (void *)dispatched_tasks_ptr);
-              ErrorCheck(Creating signal handler, err);
+            if(dispatched_tasks_ptr) {
+              enqueue_barrier_tasks(tasks);
+              if(!tasks.empty()) {
+                DEBUG_PRINT("Registering callback for task %lu\n", task->id);
+                hsa_status_t err = hsa_amd_signal_async_handler(IdentityANDSignal,
+                    HSA_SIGNAL_CONDITION_EQ, 0, handle_signal, (void *)dispatched_tasks_ptr);
+                ErrorCheck(Creating signal handler, err);
+              }
             }
           }
         }
@@ -1049,21 +1051,39 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
 
 void do_progress(atmi_task_group_table_t *task_group, int progress_count) {
   if(g_dep_sync_type == ATL_SYNC_CALLBACK) {
-    lock(&mutex_readyq_);
-    size_t queue_sz = ReadyTaskQueue.size();
-    unlock(&mutex_readyq_);
-
-    for(int i = 0; i < queue_sz; i++) {
-      atl_task_t *ready_task = NULL;
+    if(task_group && task_group->ordered) {
+      // pop from front of ordered task list and try dispatch as many as possible
+      bool should_dispatch = false;
+      do {
+        atl_task_t *ready_task = NULL;
+        should_dispatch = false;
+        lock(&task_group->group_mutex);
+        if (!task_group->running_ordered_tasks.empty()) {
+          ready_task = task_group->running_ordered_tasks.front();
+        }
+        unlock(&task_group->group_mutex);
+        if (ready_task) {
+          should_dispatch = try_dispatch(ready_task, NULL, ready_task->synchronous);
+        }
+      } while(should_dispatch);
+    }
+    else {
       lock(&mutex_readyq_);
-      if(!ReadyTaskQueue.empty()) {
-        ready_task = ReadyTaskQueue.front();
-        ReadyTaskQueue.pop();
-      }
+      size_t queue_sz = ReadyTaskQueue.size();
       unlock(&mutex_readyq_);
 
-      if(ready_task) {
-        try_dispatch(ready_task, NULL, ATMI_FALSE);
+      for(int i = 0; i < queue_sz; i++) {
+        atl_task_t *ready_task = NULL;
+        lock(&mutex_readyq_);
+        if(!ReadyTaskQueue.empty()) {
+          ready_task = ReadyTaskQueue.front();
+          ReadyTaskQueue.pop();
+        }
+        unlock(&mutex_readyq_);
+
+        if(ready_task) {
+          try_dispatch(ready_task, NULL, ATMI_FALSE);
+        }
       }
     }
   }
@@ -1134,38 +1154,10 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       // TODO: best device of this type? pick 0 for now
       proc_id = 0;
     }
-    hsa_queue_t* this_Q = NULL;
-    if(!task->packets.empty()) {
-      this_Q = task->packets[0].first;
-      //printf("Task already populated with Q[%p, %lu]\n", this_Q, task->packets[0].second);
-      if(!this_Q) return ATMI_STATUS_ERROR;
-    }
-    else {
-      if(task->devtype == ATMI_DEVTYPE_GPU)
-        this_Q = acquire_and_set_next_gpu_queue(stream_obj, task->place);
-      else if(task->devtype == ATMI_DEVTYPE_CPU)
-        this_Q = acquire_and_set_next_cpu_queue(stream_obj, task->place);
-      if(!this_Q) return ATMI_STATUS_ERROR;
-      /* if stream is ordered and the devtype changed for this task,
-       * enqueue a barrier to wait for previous device to complete */
-      //check_change_in_device_type(task, stream_obj, this_Q, task->devtype);
+    hsa_queue_t* this_Q = task->packets[0].first;
+    //printf("Task already populated with Q[%p, %lu]\n", this_Q, task->packets[0].second);
+    if(!this_Q) return ATMI_STATUS_ERROR;
 
-      if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-        /* For dependent child tasks, add dependent parent kernels to barriers.  */
-        //DEBUG_PRINT("Pif requires %d tasks\n", lparm->predecessor.size());
-        if (!(task->and_predecessors.empty())) {
-          enqueue_barrier(task, this_Q, task->and_predecessors.size(), &(task->and_predecessors[0]), SNK_NOWAIT, SNK_AND, task->devtype);
-        }
-        DEBUG_PRINT("%lu\n", task->id);
-        /*else if ( lparm->num_needs_any > 0) {
-          std::vector<atl_task_t *> needs_any(lparm->num_needs_any);
-          for(int idx = 0; idx < lparm->num_needs_any; idx++) {
-          needs_any[idx] = PublicTaskMap[lparm->needs_any[idx]];
-          }
-          enqueue_barrier(task, this_Q, lparm->num_needs_any, &needs_any[0], SNK_NOWAIT, SNK_OR, task->devtype);
-          }*/
-      }
-    }
     int ndim = -1;
     if(task->gridDim[2] > 1)
       ndim = 3;
@@ -1176,26 +1168,12 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     if(task->devtype == ATMI_DEVTYPE_GPU) {
       hsa_kernel_dispatch_packet_t *this_aql = NULL;
       uint64_t index = 0ull;
-      if(!task->packets.empty()) {
-        index = task->packets[0].second;
-        /* Find the queue index address to write the packet info into.  */
-        const uint32_t queueMask = this_Q->size - 1;
-        this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
-        DEBUG_PRINT("K for %p (%lu) %p [%lu]\n", task, task->id, this_Q, index&queueMask);
-      }
-      else {
-        /*  Obtain the current queue write index. increases with each call to kernel  */
-        //uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
-        // Atomically request a new packet ID.
-        index = hsa_queue_add_write_index_relaxed(this_Q, 1);
-        // Wait until the queue is not full before writing the packet
-        DEBUG_PRINT("Queue %p ordered? %d task: %lu index: %lu\n", this_Q, stream_obj->ordered, task->id, index);
-        //printf("%lu, %lu, K\n", task->id, index);
-        while(index - hsa_queue_load_read_index_acquire(this_Q) >= this_Q->size);
-        /* Find the queue index address to write the packet info into.  */
-        const uint32_t queueMask = this_Q->size - 1;
-        this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
-      }
+      index = task->packets[0].second;
+      /* Find the queue index address to write the packet info into.  */
+      const uint32_t queueMask = this_Q->size - 1;
+      this_aql = &(((hsa_kernel_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
+      DEBUG_PRINT("K for %p (%lu) %p [%lu]\n", task, task->id, this_Q, index&queueMask);
+
       atl_kernel_impl_t *kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
       //this_aql->header = create_header(HSA_PACKET_TYPE_INVALID, ATMI_FALSE);
       //memset(this_aql, 0, sizeof(hsa_kernel_dispatch_packet_t));
@@ -1203,14 +1181,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       //SignalAddTimer.Start();
       if(task->groupable == ATMI_TRUE) {
         lock(&(stream_obj->group_mutex));
-        if(g_dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, 1);
         stream_obj->running_groupable_tasks.push_back(task);
         unlock(&(stream_obj->group_mutex));
       }
-      else
-        if(g_dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, 1);
       //SignalAddTimer.Stop();
       this_aql->completion_signal = task->signal;
 
@@ -1289,23 +1262,6 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       int thread_count = task->gridDim[0] * task->gridDim[1] * task->gridDim[2];
       std::vector<hsa_queue_t *> this_queues = get_cpu_queues(task->place);
       int q_count = this_queues.size();
-      if(task->packets.empty()) {
-        if(thread_count == 0) {
-          fprintf(stderr, "WARNING: one of the dimensionsions is set to 0 threads. \
-              Choosing 1 thread by default. \n");
-          thread_count = 1;
-        }
-        if(thread_count == 1) {
-          int q;
-          for(q = 0; q < q_count; q++) {
-            if(this_queues[q] == this_Q)
-              break;
-          }
-          hsa_queue_t *tmp = this_queues[0];
-          this_queues[0] = this_queues[q];
-          this_queues[q] = tmp;
-        }
-      }
       struct timespec dispatch_time;
       clock_gettime(CLOCK_MONOTONIC_RAW,&dispatch_time);
       /* this "virtual" task encompasses thread_count number of ATMI CPU tasks performing
@@ -1313,33 +1269,18 @@ atmi_status_t dispatch_task(atl_task_t *task) {
        */
       if(task->groupable == ATMI_TRUE) {
         lock(&(stream_obj->group_mutex));
-        if(g_dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, thread_count);
         stream_obj->running_groupable_tasks.push_back(task);
         unlock(&(stream_obj->group_mutex));
       }
-      else
-        if(g_dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, thread_count);
       for(int tid = 0; tid < thread_count; tid++) {
         hsa_agent_dispatch_packet_t *this_aql = NULL;
         uint64_t index = 0ull;
-        if(!task->packets.empty()) {
-          hsa_queue_t *this_Q = task->packets[tid].first;
-          index = task->packets[tid].second;
-          /* Find the queue index address to write the packet info into.  */
-          const uint32_t queueMask = this_Q->size - 1;
-          this_aql = &(((hsa_agent_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
-        }
-        else {
-          hsa_queue_t *this_queue = this_queues[tid % q_count];
-          /*  Obtain the current queue write index. increases with each call to kernel  */
-          index = hsa_queue_add_write_index_relaxed(this_queue, 1);
-          while(index - hsa_queue_load_read_index_acquire(this_queue) >= this_queue->size);
-          /* Find the queue index address to write the packet info into.  */
-          const uint32_t queueMask = this_queue->size - 1;
-          this_aql = &(((hsa_agent_dispatch_packet_t*)(this_queue->base_address))[index&queueMask]);
-        }
+        hsa_queue_t *this_Q = task->packets[tid].first;
+        index = task->packets[tid].second;
+        /* Find the queue index address to write the packet info into.  */
+        const uint32_t queueMask = this_Q->size - 1;
+        this_aql = &(((hsa_agent_dispatch_packet_t*)(this_Q->base_address))[index&queueMask]);
+
         memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
         /*  FIXME: We need to check for queue overflow here. Do we need
          *  to do this for CPU agents too? */
@@ -1443,6 +1384,114 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
     DEBUG_PRINT("Arg[%d] = %p\n",
                 i,
                 *(void **)((char *)thisKernargAddress + kernel_impl->arg_offsets[i]));
+  }
+}
+
+void acquire_aql_packet(atl_task_t *task) {
+  atmi_task_group_table_t *stream_obj = task->stream_obj;
+  if(task->type == ATL_KERNEL_EXECUTION) {
+    // get AQL queue for GPU tasks and CPU tasks
+    hsa_queue_t* this_Q = NULL;
+    if(task->devtype == ATMI_DEVTYPE_GPU)
+      this_Q = acquire_and_set_next_gpu_queue(stream_obj, task->place);
+    else if(task->devtype == ATMI_DEVTYPE_CPU)
+      this_Q = acquire_and_set_next_cpu_queue(stream_obj, task->place);
+    if(!this_Q) ATMIErrorCheck(Getting queue for dispatch, ATMI_STATUS_ERROR);
+    if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+      // enqueue barrier if and_predecessors is not empty
+      if (!(task->and_predecessors.empty())) {
+        enqueue_barrier(task, this_Q, task->and_predecessors.size(), &(task->and_predecessors[0]),
+            SNK_NOWAIT, SNK_AND, task->devtype);
+      }
+    }
+
+    if(task->devtype == ATMI_DEVTYPE_GPU) {
+      hsa_signal_add_acq_rel(task->signal, 1);
+      /*  Obtain the current queue write index. increases with each call to kernel  */
+      //uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
+      // Atomically request a new packet ID.
+      uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
+      // Wait until the queue is not full before writing the packet
+      DEBUG_PRINT("Queue %p ordered? %d task: %lu index: %lu\n", this_Q, stream_obj->ordered, task->id, index);
+      //printf("%lu, %lu, K\n", task->id, index);
+      while(index - hsa_queue_load_read_index_acquire(this_Q) >= this_Q->size);
+      task->packets.push_back(std::make_pair(this_Q, index));
+    }
+    else if(task->devtype == ATMI_DEVTYPE_CPU) {
+      std::vector<hsa_queue_t *> this_queues = get_cpu_queues(task->place);
+      int q_count = this_queues.size();
+      int thread_count = task->gridDim[0] * task->gridDim[1] * task->gridDim[2];
+      if(thread_count == 0) {
+        fprintf(stderr, "WARNING: one of the dimensionsions is set to 0 threads. \
+            Choosing 1 thread by default. \n");
+        thread_count = 1;
+      }
+      if(thread_count == 1) {
+        int q;
+        for(q = 0; q < q_count; q++) {
+          if(this_queues[q] == this_Q)
+            break;
+        }
+        hsa_queue_t *tmp = this_queues[0];
+        this_queues[0] = this_queues[q];
+        this_queues[q] = tmp;
+      }
+      hsa_signal_add_acq_rel(task->signal, thread_count);
+      for(int tid = 0; tid < thread_count; tid++) {
+        hsa_queue_t *this_queue = this_queues[tid % q_count];
+        /*  Obtain the current queue write index. increases with each call to kernel  */
+        uint64_t index = hsa_queue_add_write_index_relaxed(this_queue, 1);
+        while(index - hsa_queue_load_read_index_acquire(this_queue) >= this_queue->size);
+        /* Find the queue index address to write the packet info into.  */
+        task->packets.push_back(std::make_pair(this_queue, index));
+      }
+    }
+  }
+  else {
+    // get signal for SDMA and increment it accordingly
+    hsa_status_t err;
+    void *src = task->data_src_ptr;
+    void *dest = task->data_dest_ptr;
+    size_t size = task->data_size;
+    hsa_amd_pointer_info_t src_ptr_info;
+    hsa_amd_pointer_info_t dest_ptr_info;
+    src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+    dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+    err = hsa_amd_pointer_info((void *)src, &src_ptr_info,
+        NULL, /* alloc fn ptr */
+        NULL, /* num_agents_accessible */
+        NULL);  /* accessible agents */
+    ErrorCheck(Checking src pointer info, err);
+    err = hsa_amd_pointer_info((void *)dest, &dest_ptr_info,
+        NULL, /* alloc fn ptr */
+        NULL, /* num_agents_accessible */
+        NULL);  /* accessible agents */
+    ErrorCheck(Checking dest pointer info, err);
+    ATLData * volatile src_data = (ATLData *)src_ptr_info.userData;
+    ATLData * volatile dest_data = (ATLData *)dest_ptr_info.userData;
+    bool is_src_host = (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+    bool is_dest_host = (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+    void *temp_host_ptr;
+    const void *src_ptr = src;
+    void *dest_ptr = dest;
+    volatile unsigned type;
+    if(is_src_host && is_dest_host) {
+      type = ATMI_H2H;
+    }
+    else if(src_data && !dest_data) {
+      type = ATMI_D2H;
+    }
+    else if(!src_data && dest_data) {
+      type = ATMI_H2D;
+    }
+    else {
+      type = ATMI_D2D;
+    }
+
+    if(type == ATMI_H2D || type == ATMI_D2H)
+      hsa_signal_add_acq_rel(task->signal, 2);
+    else
+      hsa_signal_add_acq_rel(task->signal, 1);
   }
 }
 
@@ -1619,108 +1668,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
       }
     }
 
-    if(ret->type == ATL_KERNEL_EXECUTION) {
-      // get AQL queue for GPU tasks and CPU tasks
-      hsa_queue_t* this_Q = NULL;
-      if(ret->devtype == ATMI_DEVTYPE_GPU)
-        this_Q = acquire_and_set_next_gpu_queue(stream_obj, ret->place);
-      else if(ret->devtype == ATMI_DEVTYPE_CPU)
-        this_Q = acquire_and_set_next_cpu_queue(stream_obj, ret->place);
-      if(!this_Q) ATMIErrorCheck(Getting queue for dispatch, ATMI_STATUS_ERROR);
-      // enqueue barrier if and_predecessors is not empty
-      if (!(ret->and_predecessors.empty())) {
-        enqueue_barrier(ret, this_Q, ret->and_predecessors.size(), &(ret->and_predecessors[0]),
-                        SNK_NOWAIT, SNK_AND, ret->devtype);
-      }
-
-      if(ret->devtype == ATMI_DEVTYPE_GPU) {
-        hsa_signal_add_acq_rel(ret->signal, 1);
-        /*  Obtain the current queue write index. increases with each call to kernel  */
-        //uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
-        // Atomically request a new packet ID.
-        uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
-        // Wait until the queue is not full before writing the packet
-        DEBUG_PRINT("Queue %p ordered? %d ret: %lu index: %lu\n", this_Q, stream_obj->ordered, ret->id, index);
-        //printf("%lu, %lu, K\n", ret->id, index);
-        while(index - hsa_queue_load_read_index_acquire(this_Q) >= this_Q->size);
-        ret->packets.push_back(std::make_pair(this_Q, index));
-      }
-      else if(ret->devtype == ATMI_DEVTYPE_CPU) {
-        std::vector<hsa_queue_t *> this_queues = get_cpu_queues(ret->place);
-        int q_count = this_queues.size();
-        int thread_count = ret->gridDim[0] * ret->gridDim[1] * ret->gridDim[2];
-        if(thread_count == 0) {
-          fprintf(stderr, "WARNING: one of the dimensionsions is set to 0 threads. \
-              Choosing 1 thread by default. \n");
-          thread_count = 1;
-        }
-        if(thread_count == 1) {
-          int q;
-          for(q = 0; q < q_count; q++) {
-            if(this_queues[q] == this_Q)
-              break;
-          }
-          hsa_queue_t *tmp = this_queues[0];
-          this_queues[0] = this_queues[q];
-          this_queues[q] = tmp;
-        }
-        hsa_signal_add_acq_rel(ret->signal, thread_count);
-        for(int tid = 0; tid < thread_count; tid++) {
-          hsa_queue_t *this_queue = this_queues[tid % q_count];
-          /*  Obtain the current queue write index. increases with each call to kernel  */
-          uint64_t index = hsa_queue_add_write_index_relaxed(this_queue, 1);
-          while(index - hsa_queue_load_read_index_acquire(this_queue) >= this_queue->size);
-          /* Find the queue index address to write the packet info into.  */
-          ret->packets.push_back(std::make_pair(this_queue, index));
-        }
-      }
-    }
-    else {
-      // get signal for SDMA and increment it accordingly
-      hsa_status_t err;
-      void *src = ret->data_src_ptr;
-      void *dest = ret->data_dest_ptr;
-      size_t size = ret->data_size;
-      hsa_amd_pointer_info_t src_ptr_info;
-      hsa_amd_pointer_info_t dest_ptr_info;
-      src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-      dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-      err = hsa_amd_pointer_info((void *)src, &src_ptr_info,
-          NULL, /* alloc fn ptr */
-          NULL, /* num_agents_accessible */
-          NULL);  /* accessible agents */
-      ErrorCheck(Checking src pointer info, err);
-      err = hsa_amd_pointer_info((void *)dest, &dest_ptr_info,
-          NULL, /* alloc fn ptr */
-          NULL, /* num_agents_accessible */
-          NULL);  /* accessible agents */
-      ErrorCheck(Checking dest pointer info, err);
-      ATLData * volatile src_data = (ATLData *)src_ptr_info.userData;
-      ATLData * volatile dest_data = (ATLData *)dest_ptr_info.userData;
-      bool is_src_host = (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
-      bool is_dest_host = (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
-      void *temp_host_ptr;
-      const void *src_ptr = src;
-      void *dest_ptr = dest;
-      volatile unsigned type;
-      if(is_src_host && is_dest_host) {
-        type = ATMI_H2H;
-      }
-      else if(src_data && !dest_data) {
-        type = ATMI_D2H;
-      }
-      else if(!src_data && dest_data) {
-        type = ATMI_H2D;
-      }
-      else {
-        type = ATMI_D2D;
-      }
-
-      if(type == ATMI_H2D || type == ATMI_D2H)
-        hsa_signal_add_acq_rel(ret->signal, 2);
-      else
-        hsa_signal_add_acq_rel(ret->signal, 1);
-    }
+    acquire_aql_packet(ret);
 
     // now the task (kernel/data movement) has the signal/kernarg resource
     // and can be set to the "ready" state
@@ -1774,7 +1722,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
   // do not add predecessor-successor link if task is already initialized using
   // create-activate pattern
   if(ret->state < ATMI_INITIALIZED && should_try_dispatch) {
-    if(ret->predecessors.size() > 0) {
+    if(!ret->predecessors.empty()) {
       // add to its predecessor's dependents list and return
       for(int idx = 0; idx < ret->predecessors.size(); idx++) {
         atl_task_t *pred_task = ret->predecessors[idx];
@@ -1815,21 +1763,44 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     }
   }
 
-  if(ret->state < ATMI_INITIALIZED && should_try_dispatch) {
-    if(ret->prev_ordered_task) {
-      DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ",
-          ret->id, ret->prev_ordered_task->id);
-      if(ret->prev_ordered_task->state < ATMI_DISPATCHED) {
-        should_try_dispatch = false;
-        predecessors_complete = false;
-        DEBUG_PRINT("(waiting)\n");
-        waiting_count++;
-      }
-      else {
-        DEBUG_PRINT("(dispatched)\n");
-      }
+  if(ret->prev_ordered_task && should_try_dispatch) {
+    DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ",
+        ret->id, ret->prev_ordered_task->id);
+    // if this task is of a certain type and its previous task was also of the same type,
+    // then we can dispatch this task if the previous task has also been dispatched
+    // (received task signal and set its value)
+    if(ret->prev_ordered_task->state < ATMI_READY && (
+        (ret->prev_ordered_task->type == ATL_DATA_MOVEMENT && ret->type == ATL_DATA_MOVEMENT)
+        || (ret->prev_ordered_task->type==ATL_KERNEL_EXECUTION && ret->type==ATL_KERNEL_EXECUTION
+          && ((ret->prev_ordered_task->devtype==ATMI_DEVTYPE_CPU && ret->devtype==ATMI_DEVTYPE_CPU)
+          || (ret->prev_ordered_task->devtype==ATMI_DEVTYPE_GPU && ret->devtype==ATMI_DEVTYPE_GPU)))
+    )) {
+      should_try_dispatch = false;
+      predecessors_complete = false;
+      DEBUG_PRINT("(waiting)\n");
+      waiting_count++;
     }
-
+    // if this task is of a certain type and its previous task is of a different type,
+    // then we can dispatch this task ONLY if the previous task has been at least
+    // executed; and also add the previous task as a predecessor
+    else if(ret->prev_ordered_task->state < ATMI_EXECUTED && (
+         (ret->prev_ordered_task->type == ATL_DATA_MOVEMENT && ret->type == ATL_KERNEL_EXECUTION)
+         || (ret->prev_ordered_task->type == ATL_KERNEL_EXECUTION && ret->type == ATL_DATA_MOVEMENT)
+         || (ret->prev_ordered_task->devtype==ATMI_DEVTYPE_GPU && ret->devtype==ATMI_DEVTYPE_CPU)
+         || (ret->prev_ordered_task->devtype==ATMI_DEVTYPE_CPU && ret->devtype==ATMI_DEVTYPE_GPU))
+    ){
+      should_try_dispatch = false;
+      predecessors_complete = false;
+      if(ret->state < ATMI_INITIALIZED) {
+        ret->prev_ordered_task->and_successors.push_back(ret);
+        ret->num_predecessors++;
+      }
+      DEBUG_PRINT("(waiting)\n");
+      waiting_count++;
+    }
+    else {
+      DEBUG_PRINT("(dispatched)\n");
+    }
   }
 
   if(should_try_dispatch) {
@@ -1891,6 +1862,14 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
         set_kernarg_region(ret, args);
       }
     }
+
+    if(stream_obj->ordered)
+      stream_obj->running_ordered_tasks.pop_front();
+
+    acquire_aql_packet(ret);
+
+    // now the task (kernel/data movement) has the signal/kernarg resource
+    // and can be set to the "ready" state
     set_task_state(ret, ATMI_READY);
   }
   else {
@@ -2016,11 +1995,13 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
         last_dispatched_task = tasks[tasks.size() - 1];
       }
       unlock(&mutex_readyq_);
-      enqueue_barrier_tasks(tasks);
-      if(last_dispatched_task) {
-        hsa_amd_signal_async_handler(
-            IdentityANDSignal, HSA_SIGNAL_CONDITION_EQ, 0,
-            handle_signal, (void *)dispatched_tasks_ptr);
+      if(dispatched_tasks_ptr) {
+        enqueue_barrier_tasks(tasks);
+        if(last_dispatched_task) {
+          hsa_amd_signal_async_handler(
+              IdentityANDSignal, HSA_SIGNAL_CONDITION_EQ, 0,
+              handle_signal, (void *)dispatched_tasks_ptr);
+        }
       }
       // else this task did not get the resources AND DispatchedTasks
       // is already being processed, so this task will be taken care of
@@ -2442,10 +2423,26 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
       } while(should_dispatch);
     }
     else {
+      if(ret_obj->stream_obj && ret_obj->stream_obj->ordered) {
+        // pop from front of ordered task list and try dispatch as many as possible
+        bool should_dispatch = false;
+        do {
+          atl_task_t *ready_task = NULL;
+          should_dispatch = false;
+          lock(&ret_obj->stream_obj->group_mutex);
+          if (!ret_obj->stream_obj->running_ordered_tasks.empty()) {
+            ready_task = ret_obj->stream_obj->running_ordered_tasks.front();
+          }
+          unlock(&ret_obj->stream_obj->group_mutex);
+          if (ready_task) {
+            should_dispatch = try_dispatch(ready_task, NULL, ready_task->synchronous);
+          }
+        } while(should_dispatch);
+      }
       // If the task has predecessors then you cannot activate this task. Task
       // activation is supported only for tasks without predecessors.
-      if(ret_obj->predecessors.size() <= 0)
-          try_dispatch(ret_obj, NULL, ret_obj->synchronous);
+      else if(ret_obj->predecessors.size() <= 0)
+        try_dispatch(ret_obj, NULL, ret_obj->synchronous);
       DEBUG_PRINT("[Returned Task: %lu]\n", ret);
     }
     return ret;

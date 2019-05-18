@@ -465,16 +465,9 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         lock(&(stream_obj->group_mutex));
         // barrier pkt already sets the signal values when the signal resource
         // is available
-        if(dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, 2);
         stream_obj->running_groupable_tasks.push_back(task);
         unlock(&(stream_obj->group_mutex));
       }
-      else
-        // barrier pkt already sets the signal values when the signal resource
-        // is available
-        if(dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, 2);
       // For malloc'ed buffers, additional atmi_malloc/memcpy/free
       // steps are needed. So, fire and forget a copy thread with
       // signal count = 2 (one for actual host-device copy and another
@@ -532,16 +525,9 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         lock(&(stream_obj->group_mutex));
         // barrier pkt already sets the signal values when the signal resource
         // is available
-        if(dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, 1);
         stream_obj->running_groupable_tasks.push_back(task);
         unlock(&(stream_obj->group_mutex));
       }
-      else
-        // barrier pkt already sets the signal values when the signal resource
-        // is available
-        if(dep_sync_type == ATL_SYNC_CALLBACK)
-          hsa_signal_add_acq_rel(task->signal, 1);
 
       // set task state to dispatched; then dispatch
       set_task_state(task, ATMI_DISPATCHED);

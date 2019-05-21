@@ -26,6 +26,7 @@
 #include <sys/syscall.h>
 #include <malloc.h>
 #include "RealTimerClass.h"
+#include "atmi_hostcall.h"
 using namespace Global;
 
 pthread_mutex_t mutex_all_tasks_;
@@ -991,7 +992,7 @@ atmi_status_t atmi_init(atmi_devtype_t devtype) {
 atmi_status_t atmi_finalize() {
     // TODO: Finalize all processors, queues, signals, kernarg memory regions
     hsa_status_t err;
-    atl_hostcall_terminate();
+    atmi_hostcall_terminate();
     finalize_hsa();
     // free up the kernel enqueue related data
     for(int i = 0; i < g_ke_args.kernel_counter; i++) {
@@ -1389,7 +1390,7 @@ atmi_status_t atl_init_gpu_context() {
 
     init_tasks();
     // Initiailze hostcall. Note: atl_gpu_agent was initialized by init_hsa
-    err=atl_hostcall_init();
+    err=atmi_hostcall_init();
     atlc.g_gpu_initialized = 1;
     return ATMI_STATUS_SUCCESS;
 }
@@ -1963,8 +1964,6 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
         lock(&((*it)->mutex));
         if((*it)->devtype == ATMI_DEVTYPE_GPU) {
             atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(((char *)(*it)->kernarg_region) + (*it)->kernarg_segment_size - sizeof(atmi_implicit_args_t));
-	    // FIXME: we may need to free hostcall buffers if/when hsa queue is destroyed
-	    //        Here, we only free resources specific to kernel
             hsa_memory_free((*it)->kernarg_region);
             free((*it)->kernel_objects);
             free((*it)->group_segment_sizes);
@@ -3024,8 +3023,10 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                       task->devtype == ATMI_DEVTYPE_GPU &&
                       kernel_impl->kernel_type == AMDGCN) {
                     atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
-                    impl_args->hostcall_ptr = atl_hostcall_assign_buffer(atl_hostcall_minpackets,
-				      this_Q ,atl_gpu_finegrain_pool);
+                    impl_args->hostcall_ptr = atmi_hostcall_assign_buffer(atl_hostcall_minpackets,
+				      this_Q, atl_gpu_finegrain_pool, proc_id);
+		    // FIXME: we only need to do this for new buffers
+		    allow_access_to_all_gpu_agents((void*) impl_args->hostcall_ptr);
                   }
               }
             }

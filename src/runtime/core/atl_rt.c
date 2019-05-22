@@ -26,7 +26,7 @@
 #include <sys/syscall.h>
 #include <malloc.h>
 #include "RealTimerClass.h"
-#include "atmi_hostcall.h"
+#include "amd_hostcall.h"
 using namespace Global;
 
 pthread_mutex_t mutex_all_tasks_;
@@ -3023,10 +3023,11 @@ atmi_status_t dispatch_task(atl_task_t *task) {
                       task->devtype == ATMI_DEVTYPE_GPU &&
                       kernel_impl->kernel_type == AMDGCN) {
                     atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+		    int is_new_buffer;
                     impl_args->hostcall_ptr = atmi_hostcall_assign_buffer(atl_hostcall_minpackets,
-				      this_Q, atl_gpu_finegrain_pool, proc_id);
-		    // FIXME: we only need to do this for new buffers
-		    allow_access_to_all_gpu_agents((void*) impl_args->hostcall_ptr);
+				      this_Q, atl_gpu_finegrain_pool, proc_id, &is_new_buffer);
+		    if(is_new_buffer)
+                      allow_access_to_all_gpu_agents((void*) impl_args->hostcall_ptr);
                   }
               }
             }

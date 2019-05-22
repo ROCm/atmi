@@ -52,7 +52,7 @@ target_link_libraries(
   atmi_runtime
   -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib -lhsa-runtime64 -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}/../hsa/lib
   -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsakmt -Wl,-rpath,${ATMI_DEP_LIBHSA_LIBRARIES_DIRS}
-  -L${CMAKE_INSTALL_PREFIX}/lib -lhostcall -Wl,-rpath,${CMAKE_INSTALL_PREFIX}/lib
+  -L${CMAKE_INSTALL_PREFIX}/lib -lamd_hostcall -Wl,-rpath,${CMAKE_INSTALL_PREFIX}/lib
 )
 
 # set output dir for .h files

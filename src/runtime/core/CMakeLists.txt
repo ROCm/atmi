@@ -23,7 +23,8 @@ include_directories(${LIBELF_INCLUDE_DIRS})
 # libatmi_runtime_say("LIBELF: ${LIBELF_INCLUDE_DIRS} ${LIBELF_LIBRARIES} and ${LIBELF_FOUND}")
 
 # Find comgr
-find_package(amd_comgr REQUIRED CONFIG)
+find_package(amd_comgr REQUIRED CONFIG
+             HINTS ${ROC_DIR})
 find_path (amd_comgr_INCLUDE_DIRS
     NAMES
     amd_comgr.h

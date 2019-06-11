@@ -133,7 +133,8 @@ hsa_region_t atl_hsa_primary_region;
 hsa_region_t atl_gpu_kernarg_region;
 hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
 hsa_amd_memory_pool_t atl_gpu_finegrain_pool;
-uint32_t atl_hostcall_minpackets;
+static uint32_t atl_hostcall_minpackets;
+static bool atl_hostcall_is_required;
 hsa_region_t atl_cpu_kernarg_region;
 hsa_agent_t atl_gpu_agent;
 hsa_profile_t atl_gpu_agent_profile;
@@ -992,7 +993,8 @@ atmi_status_t atmi_init(atmi_devtype_t devtype) {
 atmi_status_t atmi_finalize() {
     // TODO: Finalize all processors, queues, signals, kernarg memory regions
     hsa_status_t err;
-    atmi_hostcall_terminate();
+    if (atl_hostcall_is_required)
+       atmi_hostcall_terminate();
     finalize_hsa();
     // free up the kernel enqueue related data
     for(int i = 0; i < g_ke_args.kernel_counter; i++) {
@@ -1390,6 +1392,7 @@ atmi_status_t atl_init_gpu_context() {
 
     init_tasks();
     // Initiailze hostcall. Note: atl_gpu_agent was initialized by init_hsa
+    atl_hostcall_is_required = false;
     err=atmi_hostcall_init();
     atlc.g_gpu_initialized = 1;
     return ATMI_STATUS_SUCCESS;
@@ -1672,6 +1675,11 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable, hsa_executable_s
         atmi_mem_place_t place = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, gpu, 0);
         register_allocation((void *)info.addr, (size_t)info.size, place);
         SymbolInfoTable[gpu][std::string(name)] = info;
+	if (strcmp(name,"needs_hostcall_buffer")==0) {
+          atl_hostcall_is_required = true;
+          unsigned int truevalue = 1;
+          atmi_status_t err = atmi_memcpy((void*) info.addr, &truevalue, (size_t) info.size);
+	}
         DEBUG_PRINT("Symbol %s = %p (%u bytes)\n", name, (void *)info.addr, info.size);
         free(name);
     }
@@ -3013,7 +3021,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
             }
 
             // assign a hostcall buffer for the selected Q
-            {
+            if (atl_hostcall_is_required) {
               atl_kernel_impl_t *kernel_impl = NULL;
                 if(task->kernel) {
                   kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);

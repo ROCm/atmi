@@ -311,22 +311,26 @@ namespace core {
   }
 
   atmi_status_t Runtime::Initialize(atmi_devtype_t devtype) {
-    atmi_status_t status = ATMI_STATUS_SUCCESS;
     if(atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
 
     task_process_init_buffer = NULL;
     task_process_fini_buffer = NULL;
 
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU)
-      status = atl_init_gpu_context();
+      ATMIErrorCheck(GPU context init, atl_init_gpu_context());
 
     if(devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_CPU)
-      status = atl_init_cpu_context();
+      ATMIErrorCheck(CPU context init, atl_init_cpu_context());
 
-    status = atmi_ke_init();
+    // create default taskgroup obj
+    atmi_task_group_handle_t tghandle;
+    ATMIErrorCheck(Create default taskgroup, TaskGroupCreate(&tghandle));
+    atl_default_taskgroup_obj = reinterpret_cast<atmi_task_group_t *>(tghandle.handle);
 
-    if(status == ATMI_STATUS_SUCCESS) atl_set_atmi_initialized();
-    return status;
+    ATMIErrorCheck(Device enqueue init, atmi_ke_init());
+
+    atl_set_atmi_initialized();
+    return ATMI_STATUS_SUCCESS;
   }
 
   atmi_status_t Runtime::Finalize() {
@@ -858,11 +862,11 @@ namespace core {
       gpu_agents.push_back(proc.getAgent());
     }
     /* Initialize all preallocated tasks and signals */
-    for ( task_num = 0 ; task_num < ATMI_MAX_STREAMS; task_num++){
+    for ( task_num = 0 ; task_num < ATMI_MAX_TASK_GROUPS; task_num++){
       hsa_signal_t new_signal;
       err=hsa_signal_create(0, 0, NULL, &new_signal);
       ErrorCheck(Creating a HSA signal, err);
-      StreamCommonSignalPool[task_num] = new_signal;
+      TaskgroupCommonSignalPool[task_num] = new_signal;
     }
     int max_signals = core::Runtime::getInstance().getMaxSignals();
     for ( task_num = 0 ; task_num < max_signals; task_num++){
@@ -1461,7 +1465,7 @@ namespace core {
         info.kernel_segment_size += sizeof(atmi_implicit_args_t);
       else
         info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
-      DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %lu)\n", kernelName.c_str(), kernelObj.mCodeProps.mKernargSegmentSize, info.kernel_segment_size);
+      DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(), kernelObj.mCodeProps.mKernargSegmentSize, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table
       KernelInfoTable[gpu][kernelName] = info;
@@ -1605,7 +1609,7 @@ namespace core {
         //  use offset with/instead of alignment
         // offset = lcArg.mAlign;
         info.arg_offsets.push_back(lcArg.mAlign);
-        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %lu)\n",
+        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %u)\n",
                     i, lcArg.mName.c_str(), lcArg.mSize, lcArg.mAlign);
       }
 

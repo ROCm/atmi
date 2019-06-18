@@ -44,7 +44,7 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
                                  const size_t *arg_sizes, const int num_impls, ...) {
   va_list arguments;
   va_start(arguments, num_impls);
-  return core::Runtime::getInstance().CreateKernel(atmi_kernel, num_args, arg_sizes, num_impls, 
+  return core::Runtime::getInstance().CreateKernel(atmi_kernel, num_args, arg_sizes, num_impls,
                                                    arguments);
   va_end(arguments);
 }
@@ -71,8 +71,8 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
 /*
  * Synchronize
  */
-atmi_status_t atmi_task_group_sync(atmi_task_group_t *stream) {
-  return core::Runtime::getInstance().TaskGroupSync(stream);
+atmi_status_t atmi_task_group_sync(atmi_task_group_handle_t group_handle) {
+  return core::Runtime::getInstance().TaskGroupSync(group_handle);
 }
 
 atmi_status_t atmi_task_wait(atmi_task_handle_t task) {
@@ -115,6 +115,30 @@ atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task) {
 atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,
                                     void **args/*, more params for place info? */) {
   return core::Runtime::getInstance().LaunchTask(lparm, atmi_kernel, args);
+}
+
+/*
+ * Task groups
+ */
+atmi_status_t atmi_task_group_create(atmi_task_group_handle_t *group_handle,
+                                     bool ordered,
+                                     atmi_place_t place) {
+  return core::Runtime::getInstance().TaskGroupCreate(group_handle, ordered, place);
+}
+
+atmi_status_t atmi_task_group_release(atmi_task_group_handle_t group_handle) {
+  return core::Runtime::getInstance().TaskGroupRelease(group_handle);
+}
+
+atmi_status_t atmi_task_group_get_info(atmi_task_group_handle_t group_handle,
+                                            atmi_task_group_t *group_info) {
+  atmi_status_t status = ATMI_STATUS_ERROR;
+  atmi_task_group_t *tg_info = core::Runtime::getInstance().TaskGroupGetInfo(group_handle);
+  if(group_info) {
+    *group_info = *tg_info;
+    status = ATMI_STATUS_SUCCESS;
+  }
+  return status;
 }
 
 /*

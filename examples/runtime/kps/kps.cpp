@@ -41,10 +41,33 @@ int main(int argc, char *argv[]) {
 
    kcalls = 32 * 1024;// (128 * 1024);
 
-   ATMI_LPARM_STREAM(lparm1,stream1);
-   ATMI_LPARM_STREAM(lparm2,stream2);
-   ATMI_LPARM_STREAM(lparm3,stream3);
-   ATMI_LPARM_STREAM(lparm4,stream4);
+   ATMI_LPARM(lparm1);
+   ATMI_LPARM(lparm2);
+   ATMI_LPARM(lparm3);
+   ATMI_LPARM(lparm4);
+
+   atmi_task_group_handle_t stream1_ordered;
+   atmi_task_group_handle_t stream1_unordered;
+   atmi_task_group_handle_t stream2_ordered;
+   atmi_task_group_handle_t stream2_unordered;
+   atmi_task_group_handle_t stream3_ordered;
+   atmi_task_group_handle_t stream3_unordered;
+   atmi_task_group_handle_t stream4_ordered;
+   atmi_task_group_handle_t stream4_unordered;
+
+   err = atmi_task_group_create(&stream1_ordered);
+   err = atmi_task_group_create(&stream2_ordered);
+   err = atmi_task_group_create(&stream3_ordered);
+   err = atmi_task_group_create(&stream4_ordered);
+   err = atmi_task_group_create(&stream1_unordered);
+   err = atmi_task_group_create(&stream2_unordered);
+   err = atmi_task_group_create(&stream3_unordered);
+   err = atmi_task_group_create(&stream4_unordered);
+
+   lparm1->group = stream1_ordered;
+   lparm2->group = stream2_ordered;
+   lparm3->group = stream3_ordered;
+   lparm4->group = stream4_ordered;
 
    lparm1->kernel_id = GPU_IMPL;
    lparm2->kernel_id = GPU_IMPL;
@@ -56,10 +79,10 @@ int main(int argc, char *argv[]) {
    lparm3->WORKITEMS=64;
    lparm4->WORKITEMS=64;
 
-   lparm1->groupable=ATMI_TRUE;
-   lparm2->groupable=ATMI_TRUE;
-   lparm3->groupable=ATMI_TRUE;
-   lparm4->groupable=ATMI_TRUE;
+   //lparm1->groupable=ATMI_TRUE;
+   //lparm2->groupable=ATMI_TRUE;
+   //lparm3->groupable=ATMI_TRUE;
+   //lparm4->groupable=ATMI_TRUE;
 
    /* Initialize the Kernel */
    lparm1->synchronous=ATMI_TRUE;
@@ -70,26 +93,26 @@ int main(int argc, char *argv[]) {
    lparm1->synchronous=ATMI_FALSE;
 
 #if 1
-   stream1->ordered=ATMI_TRUE;
+   lparm1->group = stream1_ordered;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
    for(int i=0; i<kcalls; i++) atmi_task_launch(lparm1, kernel, NULL);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-   atmi_task_group_sync(stream1);
+   atmi_task_group_sync(stream1_ordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
 #if 1
-   stream1->ordered = ATMI_FALSE;
+   lparm1->group = stream1_unordered;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[4]);
    for(int i=0; i<kcalls; i++) atmi_task_launch(lparm1, kernel, NULL);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
-   atmi_task_group_sync(stream1);
+   atmi_task_group_sync(stream1_unordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
 #endif
 #if 1
-   stream1->ordered=ATMI_TRUE;
-   stream2->ordered=ATMI_TRUE;
+   lparm1->group = stream1_ordered;
+   lparm2->group = stream2_ordered;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[5]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[6]);
    for(int i=0; i<kcalls/2; i++) {
@@ -97,12 +120,12 @@ int main(int argc, char *argv[]) {
       atmi_task_launch(lparm2, kernel, NULL);
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[5]);
-   atmi_task_group_sync(stream1);
-   atmi_task_group_sync(stream2);
+   atmi_task_group_sync(stream1_ordered);
+   atmi_task_group_sync(stream2_ordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[6]);
 
-   stream1->ordered=ATMI_FALSE;
-   stream2->ordered=ATMI_FALSE;
+   lparm1->group = stream1_unordered;
+   lparm2->group = stream2_unordered;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[7]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[8]);
    for(int i=0; i<kcalls/2; i++) {
@@ -110,8 +133,8 @@ int main(int argc, char *argv[]) {
       atmi_task_launch(lparm2, kernel, NULL);
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[7]);
-   atmi_task_group_sync(stream1);
-   atmi_task_group_sync(stream2);
+   atmi_task_group_sync(stream1_unordered);
+   atmi_task_group_sync(stream2_unordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[8]);
 #endif
 #if 0

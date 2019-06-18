@@ -40,11 +40,11 @@ pthread_mutex_t mutex_readyq_;
 extern bool handle_signal(hsa_signal_value_t value, void *arg);
 
 void print_atl_kernel(const char * str, const int i);
-/* Stream table to hold the runtime state of the
- * stream and its tasks. Which was the latest
+/* Taskgroup table to hold the runtime state of the
+ * taskgroup and its tasks. Which was the latest
  * device used, latest queue used and also a
  * pool of tasks for synchronization if need be */
-std::map<int, atmi_task_group_table_t *> StreamTable;
+std::map<int, atmi_task_group_table_t *> TaskGroupTable;
 
 std::vector<atl_task_t *> AllTasks;
 std::vector<atl_kernel_metadata_t> AllMetadata;
@@ -55,16 +55,18 @@ std::set<atl_task_t *> SinkTasks;
 
 std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
-hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
-static std::atomic<unsigned int> StreamCommonSignalIdx(0);
+hsa_signal_t TaskgroupCommonSignalPool[ATMI_MAX_TASK_GROUPS];
 std::vector<atl_task_t *> DispatchedTasks;
 bool setCallbackToggle = false;
 
 static atl_dep_sync_t g_dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
-/* Stream specific globals */
-atmi_task_group_t atl_default_stream_obj = {0, ATMI_FALSE};
+/* Taskgroup specific globals */
+atmi_task_group_t *atl_default_taskgroup_obj = NULL;
 
 atmi_task_handle_t ATMI_NULL_TASK_HANDLE = ATMI_TASK_HANDLE(0xFFFFFFFFFFFFFFFF);
+atmi_task_group_handle_t ATMI_NULL_TASK_GROUP_HANDLE = {0ull};
+atmi_place_t ATMI_DEFAULT_PLACE = {0, ATMI_DEVTYPE_GPU, 0, 0xFFFFFFFFFFFFFFFF};
+atmi_mem_place_t ATMI_DEFAULT_MEM_PLACE = {0, ATMI_DEVTYPE_GPU, 0, 0};
 
 extern RealTimer SignalAddTimer;
 extern RealTimer HandleSignalTimer;
@@ -91,6 +93,12 @@ extern atmi_context_t atmi_context_data;
 extern atmi_context_t * atmi_context;
 extern atl_context_t atlc;
 extern atl_context_t * atlc_p;
+
+bool operator==(const atmi_task_group_handle_t& lhs, const atmi_task_group_handle_t& rhs) {
+  // compare two atmi_task_group_handle_t structures
+  return (reinterpret_cast<atmi_task_group_t *>(lhs.handle) ==
+                                              reinterpret_cast<atmi_task_group_t *>(rhs.handle));
+}
 
 namespace core {
 extern void lock_set(std::set<pthread_mutex_t *> &mutexes);
@@ -172,7 +180,7 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const i
                                    atl_task_t **dep_task_list, int barrier_flag,
                                    bool need_completion) {
     /* This routine will enqueue a barrier packet for all dependent packets to complete
-       irrespective of their stream
+       irrespective of their taskgroup
      */
 
     long t_barrier_wait = 0L;
@@ -335,7 +343,7 @@ atmi_status_t queue_sync(hsa_queue_t *queue) {
     hsa_signal_t signal;
     hsa_signal_create(1, 0, NULL, &signal);
 
-    /* Obtain the write index for the command queue for this stream.  */
+    /* Obtain the write index for the command queue for this taskgroup.  */
     uint64_t index = hsa_queue_load_write_index_relaxed(queue);
     const uint32_t queueMask = queue->size - 1;
 
@@ -420,36 +428,99 @@ void set_task_metrics(atl_task_t *task) {
     }
 }
 
-extern void atl_stream_sync(atmi_task_group_table_t *stream_obj) {
-    while(stream_obj->task_count.load() != 0) {}
-    if(stream_obj->ordered == ATMI_TRUE) {
-        atl_task_wait(stream_obj->last_task);
-        lock(&(stream_obj->group_mutex));
-        stream_obj->last_task = NULL;
-        unlock(&(stream_obj->group_mutex));
+atmi_status_t register_taskgroup(atmi_task_group_t *taskgroup) {
+  static unsigned int taskgroup_signal_id = 0;
+  // add this taskgroup to the taskgroup table.
+  DEBUG_PRINT("Taskgroup %p registered\n", taskgroup);
+  atmi_task_group_table_t *taskgroup_entry = new atmi_task_group_table_t;
+  taskgroup_entry->last_task = NULL;
+  taskgroup_entry->running_groupable_tasks.clear();
+  taskgroup_entry->and_successors.clear();
+  taskgroup_entry->cpu_queue = NULL;
+  taskgroup_entry->gpu_queue = NULL;
+  assert(taskgroup_signal_id < ATMI_MAX_TASK_GROUPS);
+  taskgroup_entry->group_queue_id = taskgroup_signal_id++;
+  // get the next free signal from the taskgroup common signal pool
+  taskgroup_entry->group_signal = TaskgroupCommonSignalPool[taskgroup_entry->group_queue_id];
+  taskgroup_entry->task_count.store(0);
+  taskgroup_entry->callback_started.clear();
+  taskgroup_entry->ordered = taskgroup->ordered;
+  pthread_mutex_init(&(taskgroup_entry->group_mutex), NULL);
+  TaskGroupTable[taskgroup->id] = taskgroup_entry;
+
+  return ATMI_STATUS_SUCCESS;
+}
+
+atmi_status_t Runtime::TaskGroupCreate(atmi_task_group_handle_t *group_handle,
+                              bool ordered,
+                              atmi_place_t place) {
+  static int counter = 0;
+  atmi_status_t status = ATMI_STATUS_ERROR;
+  if(group_handle) {
+    atmi_task_group_t *taskgroup = new atmi_task_group_t;
+    taskgroup->id = counter++;
+    taskgroup->ordered = ordered;
+    taskgroup->place = place;
+
+    group_handle->handle = reinterpret_cast<uint64_t>(taskgroup);
+
+    // add row in taskgroup table
+    register_taskgroup(taskgroup);
+
+    status = ATMI_STATUS_SUCCESS;
+  }
+  return status;
+}
+
+atmi_status_t Runtime::TaskGroupRelease(atmi_task_group_handle_t group_handle) {
+  atmi_task_group_t *taskgroup = reinterpret_cast<atmi_task_group_t *>(group_handle.handle);
+  atmi_status_t status = ATMI_STATUS_ERROR;
+  if(taskgroup) {
+    atmi_task_group_table_t *taskgroup_entry = TaskGroupTable[taskgroup->id];
+    taskgroup_entry->running_groupable_tasks.clear();
+    taskgroup_entry->and_successors.clear();
+    delete taskgroup_entry;
+    delete taskgroup;
+    status = ATMI_STATUS_SUCCESS;
+  }
+  return status;
+}
+
+atmi_task_group_t* Runtime::TaskGroupGetInfo(atmi_task_group_handle_t group_handle) {
+  return reinterpret_cast<atmi_task_group_t *>(group_handle.handle);
+}
+
+extern void atl_taskgroup_sync(atmi_task_group_table_t *taskgroup_obj) {
+    while(taskgroup_obj->task_count.load() != 0) {}
+    if(taskgroup_obj->ordered == ATMI_TRUE) {
+        atl_task_wait(taskgroup_obj->last_task);
+        lock(&(taskgroup_obj->group_mutex));
+        taskgroup_obj->last_task = NULL;
+        unlock(&(taskgroup_obj->group_mutex));
     }
-    clear_saved_tasks(stream_obj);
+    clear_saved_tasks(taskgroup_obj);
 }
 
-atmi_status_t Runtime::TaskGroupSync(atmi_task_group_t *stream) {
-    atmi_task_group_t *str = (stream == NULL) ? &atl_default_stream_obj : stream;
-    atmi_task_group_table_t *stream_obj = StreamTable[str->id];
-    TaskWaitTimer.Start();
-    if(stream_obj) atl_stream_sync(stream_obj);
-    else DEBUG_PRINT("Waiting for invalid task group signal!\n");
-    TaskWaitTimer.Stop();
-    return ATMI_STATUS_SUCCESS;
+atmi_status_t Runtime::TaskGroupSync(atmi_task_group_handle_t group_handle) {
+  atmi_task_group_t *taskgroup = reinterpret_cast<atmi_task_group_t *>(group_handle.handle);
+  atmi_task_group_t *tg = (taskgroup) ? taskgroup : atl_default_taskgroup_obj;
+  atmi_task_group_table_t *taskgroup_obj = TaskGroupTable[tg->id];
+  TaskWaitTimer.Start();
+  if(taskgroup_obj) atl_taskgroup_sync(taskgroup_obj);
+  else DEBUG_PRINT("Waiting for invalid task group signal!\n");
+  TaskWaitTimer.Stop();
+  return ATMI_STATUS_SUCCESS;
 }
 
-hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
+hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *taskgroup_obj, atmi_place_t place) {
     hsa_queue_t *queue = NULL;
-    atmi_scheduler_t sched = stream_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
+    atmi_scheduler_t sched = taskgroup_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
     ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-    if(stream_obj->ordered) {
-        if(stream_obj->cpu_queue == NULL) {
-            stream_obj->cpu_queue = proc.getQueue(stream_obj->group_queue_id);
+    if(taskgroup_obj->ordered) {
+        if(taskgroup_obj->cpu_queue == NULL) {
+            taskgroup_obj->cpu_queue = proc.getQueue(taskgroup_obj->group_queue_id);
         }
-        queue = stream_obj->cpu_queue;
+        queue = taskgroup_obj->cpu_queue;
     }
     else {
         queue = proc.getBestQueue(sched);
@@ -463,15 +534,15 @@ std::vector<hsa_queue_t *> get_cpu_queues(atmi_place_t place) {
     return proc.getQueues();
 }
 
-hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place) {
+hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *taskgroup_obj, atmi_place_t place) {
     hsa_queue_t *queue = NULL;
-    atmi_scheduler_t sched = stream_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
+    atmi_scheduler_t sched = taskgroup_obj->ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
     ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    if(stream_obj->ordered) {
-        if(stream_obj->gpu_queue == NULL) {
-            stream_obj->gpu_queue = proc.getQueue(stream_obj->group_queue_id);
+    if(taskgroup_obj->ordered) {
+        if(taskgroup_obj->gpu_queue == NULL) {
+            taskgroup_obj->gpu_queue = proc.getQueue(taskgroup_obj->group_queue_id);
         }
-        queue = stream_obj->gpu_queue;
+        queue = taskgroup_obj->gpu_queue;
     }
     else {
         queue = proc.getBestQueue(sched);
@@ -480,24 +551,24 @@ hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj,
     return queue;
 }
 
-atmi_status_t clear_saved_tasks(atmi_task_group_table_t *stream_obj) {
+atmi_status_t clear_saved_tasks(atmi_task_group_table_t *taskgroup_obj) {
     atmi_status_t err = ATMI_STATUS_SUCCESS;
-    lock(&(stream_obj->group_mutex));
-    stream_obj->running_ordered_tasks.clear();
-    stream_obj->running_groupable_tasks.clear();
-    unlock(&(stream_obj->group_mutex));
+    lock(&(taskgroup_obj->group_mutex));
+    taskgroup_obj->running_ordered_tasks.clear();
+    taskgroup_obj->running_groupable_tasks.clear();
+    unlock(&(taskgroup_obj->group_mutex));
     return err;
 }
 
-atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type) {
-    if(stream_obj->ordered != ATMI_ORDERED) return ATMI_STATUS_SUCCESS;
+atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_table_t *taskgroup_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type) {
+    if(taskgroup_obj->ordered != ATMI_ORDERED) return ATMI_STATUS_SUCCESS;
 
-    if(stream_obj->last_device_type != new_task_device_type) {
-        if(stream_obj->last_task != NULL) {
-            DEBUG_PRINT("Devtype: %d waiting for task %p\n", new_task_device_type, stream_obj->last_task);
-            /* device changed. introduce a dependency here for ordered streams */
+    if(taskgroup_obj->last_device_type != new_task_device_type) {
+        if(taskgroup_obj->last_task != NULL) {
+            DEBUG_PRINT("Devtype: %d waiting for task %p\n", new_task_device_type, taskgroup_obj->last_task);
+            /* device changed. introduce a dependency here for ordered taskgroups */
             int num_required = 1;
-            atl_task_t *requires = stream_obj->last_task;
+            atl_task_t *requires = taskgroup_obj->last_task;
 
             if(new_task_device_type == ATMI_DEVTYPE_GPU) {
                 if(queue) {
@@ -514,66 +585,38 @@ atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_tabl
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t register_task(atmi_task_group_table_t *stream_obj, atl_task_t *task) {
+atmi_status_t register_task(atmi_task_group_table_t *taskgroup_obj, atl_task_t *task) {
     if(task->groupable)
-        stream_obj->running_groupable_tasks.push_back(task);
-    stream_obj->last_device_type = task->devtype;
+        taskgroup_obj->running_groupable_tasks.push_back(task);
+    taskgroup_obj->last_device_type = task->devtype;
     //DEBUG_PRINT("Registering %s task %p Profilable? %s\n",
     //            (devtype == ATMI_DEVTYPE_GPU) ? "GPU" : "CPU",
     //            task, (profilable == ATMI_TRUE) ? "Yes" : "No");
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t get_stream_signal(atmi_task_group_table_t *stream_obj, hsa_signal_t *signal) {
-    *signal = stream_obj->group_signal;
+atmi_status_t get_taskgroup_signal(atmi_task_group_table_t *taskgroup_obj, hsa_signal_t *signal) {
+    *signal = taskgroup_obj->group_signal;
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t set_stream_signal(atmi_task_group_table_t *stream_obj, hsa_signal_t signal) {
-    stream_obj->group_signal = signal;
+atmi_status_t set_taskgroup_signal(atmi_task_group_table_t *taskgroup_obj, hsa_signal_t signal) {
+    taskgroup_obj->group_signal = signal;
     return ATMI_STATUS_SUCCESS;
 }
 
 /*
  * do not use the below because they will not work if we want to sort mutexes
-atmi_status_t get_stream_mutex(atmi_task_group_table_t *stream_obj, pthread_mutex_t *m) {
-    *m = stream_obj->group_mutex;
+atmi_status_t get_taskgroup_mutex(atmi_task_group_table_t *taskgroup_obj, pthread_mutex_t *m) {
+    *m = taskgroup_obj->group_mutex;
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t set_stream_mutex(atmi_task_group_table_t *stream_obj, pthread_mutex_t *m) {
-    stream_obj->group_mutex = *m;
+atmi_status_t set_taskgroup_mutex(atmi_task_group_table_t *taskgroup_obj, pthread_mutex_t *m) {
+    taskgroup_obj->group_mutex = *m;
     return ATMI_STATUS_SUCCESS;
 }
 */
-atmi_status_t register_stream(atmi_task_group_t *stream) {
-    /* Check if the stream exists in the stream table.
-     * If no, then add this stream to the stream table.
-     */
-    DEBUG_PRINT("Stream %p registered\n", stream);
-    if(StreamTable.find(stream->id) == StreamTable.end()) {
-        atmi_task_group_table_t *stream_entry = new atmi_task_group_table_t;
-        stream_entry->last_task = NULL;
-        stream_entry->running_groupable_tasks.clear();
-        stream_entry->and_successors.clear();
-        stream_entry->cpu_queue = NULL;
-        stream_entry->gpu_queue = NULL;
-        assert(StreamCommonSignalIdx < ATMI_MAX_STREAMS);
-        stream_entry->group_queue_id = StreamCommonSignalIdx++;
-        // get the next free signal from the stream common signal pool
-        stream_entry->group_signal = StreamCommonSignalPool[stream_entry->group_queue_id];
-        stream_entry->task_count.store(0);
-        stream_entry->callback_started.clear();
-        pthread_mutex_init(&(stream_entry->group_mutex), NULL);
-        StreamTable[stream->id] = stream_entry;
-    }
-    lock(&(StreamTable[stream->id]->group_mutex));
-    StreamTable[stream->id]->ordered = stream->ordered;
-    unlock(&(StreamTable[stream->id]->group_mutex));
-
-    return ATMI_STATUS_SUCCESS;
-}
-
 // function pointers
 task_process_init_buffer_t task_process_init_buffer;
 task_process_fini_buffer_t task_process_fini_buffer;
@@ -745,7 +788,7 @@ void handle_signal_callback(atl_task_t *task) {
   DEBUG_PRINT("\n");
   for(atl_task_vector_t::iterator it = temp_list.begin();
       it != temp_list.end(); it++) {
-    // FIXME: if groupable task, push it in the right stream
+    // FIXME: if groupable task, push it in the right taskgroup
     // else push it to readyqueue
     ReadyTaskQueue.push(*it);
   }
@@ -761,7 +804,7 @@ void handle_signal_callback(atl_task_t *task) {
   set_task_metrics(task);
   set_task_state(task, ATMI_COMPLETED);
   unlock(&(task->mutex));
-  do_progress(task->stream_obj);
+  do_progress(task->taskgroup_obj);
   //dispatch_ready_task_for_free_signal();
   //dispatch_ready_task_or_release_signal(task);
 }
@@ -1032,7 +1075,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       lock(&mutex_readyq_);
       for(atl_task_vector_t::iterator it = temp_list.begin();
           it != temp_list.end(); it++) {
-        // FIXME: if groupable task, push it in the right stream
+        // FIXME: if groupable task, push it in the right taskgroup
         // else push it to readyqueue
         ReadyTaskQueue.push(*it);
       }
@@ -1142,9 +1185,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
   }
   else {
     TryDispatchTimer.Start();
-    atmi_task_group_table_t *stream_obj = task->stream_obj;
-    /* get this stream's HSA queue (could be dynamically mapped or round robin
-     * if it is an unordered stream */
+    atmi_task_group_table_t *taskgroup_obj = task->taskgroup_obj;
+    /* get this taskgroup's HSA queue (could be dynamically mapped or round robin
+     * if it is an unordered taskgroup */
     // FIXME: round robin for now, but may use some other load balancing algo
     // enqueue task's packet to that queue
 
@@ -1180,9 +1223,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       /*  FIXME: We need to check for queue overflow here. */
       //SignalAddTimer.Start();
       if(task->groupable == ATMI_TRUE) {
-        lock(&(stream_obj->group_mutex));
-        stream_obj->running_groupable_tasks.push_back(task);
-        unlock(&(stream_obj->group_mutex));
+        lock(&(taskgroup_obj->group_mutex));
+        taskgroup_obj->running_groupable_tasks.push_back(task);
+        unlock(&(taskgroup_obj->group_mutex));
       }
       //SignalAddTimer.Stop();
       this_aql->completion_signal = task->signal;
@@ -1251,7 +1294,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       set_task_state(task, ATMI_DISPATCHED);
       /*  Prepare and set the packet header */
       packet_store_release((uint32_t*) this_aql,
-          create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, stream_obj->ordered,
+          create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH, taskgroup_obj->ordered,
                         task->acquire_scope, task->release_scope),
           this_aql->setup);
       /* Increment write index and ring doorbell to dispatch the kernel.  */
@@ -1268,9 +1311,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
        * data parallel SPMD style of processing
        */
       if(task->groupable == ATMI_TRUE) {
-        lock(&(stream_obj->group_mutex));
-        stream_obj->running_groupable_tasks.push_back(task);
-        unlock(&(stream_obj->group_mutex));
+        lock(&(taskgroup_obj->group_mutex));
+        taskgroup_obj->running_groupable_tasks.push_back(task);
+        unlock(&(taskgroup_obj->group_mutex));
       }
       for(int tid = 0; tid < thread_count; tid++) {
         hsa_agent_dispatch_packet_t *this_aql = NULL;
@@ -1308,7 +1351,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
          * inconsequential.
          */
         packet_store_release((uint32_t*) this_aql,
-            create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, stream_obj->ordered,
+            create_header(HSA_PACKET_TYPE_AGENT_DISPATCH, taskgroup_obj->ordered,
                           task->acquire_scope, task->release_scope),
             this_aql->type);
 
@@ -1388,14 +1431,14 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
 }
 
 void acquire_aql_packet(atl_task_t *task) {
-  atmi_task_group_table_t *stream_obj = task->stream_obj;
+  atmi_task_group_table_t *taskgroup_obj = task->taskgroup_obj;
   if(task->type == ATL_KERNEL_EXECUTION) {
     // get AQL queue for GPU tasks and CPU tasks
     hsa_queue_t* this_Q = NULL;
     if(task->devtype == ATMI_DEVTYPE_GPU)
-      this_Q = acquire_and_set_next_gpu_queue(stream_obj, task->place);
+      this_Q = acquire_and_set_next_gpu_queue(taskgroup_obj, task->place);
     else if(task->devtype == ATMI_DEVTYPE_CPU)
-      this_Q = acquire_and_set_next_cpu_queue(stream_obj, task->place);
+      this_Q = acquire_and_set_next_cpu_queue(taskgroup_obj, task->place);
     if(!this_Q) ATMIErrorCheck(Getting queue for dispatch, ATMI_STATUS_ERROR);
     if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
       // enqueue barrier if and_predecessors is not empty
@@ -1412,7 +1455,7 @@ void acquire_aql_packet(atl_task_t *task) {
       // Atomically request a new packet ID.
       uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
       // Wait until the queue is not full before writing the packet
-      DEBUG_PRINT("Queue %p ordered? %d task: %lu index: %lu\n", this_Q, stream_obj->ordered, task->id, index);
+      DEBUG_PRINT("Queue %p ordered? %d task: %lu index: %lu\n", this_Q, taskgroup_obj->ordered, task->id, index);
       //printf("%lu, %lu, K\n", task->id, index);
       while(index - hsa_queue_load_read_index_acquire(this_Q) >= this_Q->size);
       task->packets.push_back(std::make_pair(this_Q, index));
@@ -1521,7 +1564,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
     if(kernel_impl) req_mutexes.insert(&(kernel_impl->mutex));
   }
-  atmi_task_group_table_t *stream_obj = ret->stream_obj;
+  atmi_task_group_table_t *taskgroup_obj = ret->taskgroup_obj;
 
   lock_set(req_mutexes);
   // assert that this task is TaskList.front() because there should be no other scenario
@@ -1581,14 +1624,14 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
 
   if(should_dispatch) {
     if(ret->groupable != ATMI_TRUE) {
-      // this is a task that uses individual signals (not stream-signals)
+      // this is a task that uses individual signals (not taskgroup-signals)
       new_signal = FreeSignalPool.front();
       FreeSignalPool.pop();
       ret->signal = new_signal;
     }
     else {
       hsa_signal_t signal;
-      get_stream_signal(stream_obj, &signal);
+      get_taskgroup_signal(taskgroup_obj, &signal);
       ret->signal = signal;
     }
     if(ret->kernel) {
@@ -1652,7 +1695,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
       // and_predecessors (from SDMA to GPU or CPU to GPU or CPU to GPU or SDMA to CPU).
       // Later, enqueue barrier SDMA or CPU/GPU to GPU/CPU. If CPU/GPU to SDMA, then
       // ROCr SDMA API handles dependencies separately.
-      if(stream_obj->ordered && ret->prev_ordered_task) {
+      if(taskgroup_obj->ordered && ret->prev_ordered_task) {
         if((ret->prev_ordered_task->type == ATL_DATA_MOVEMENT && ret->type == ATL_KERNEL_EXECUTION)
            || (ret->prev_ordered_task->type == ATL_KERNEL_EXECUTION && ret->type == ATL_DATA_MOVEMENT)
            || (ret->prev_ordered_task->devtype==ATMI_DEVTYPE_GPU && ret->devtype==ATMI_DEVTYPE_CPU)
@@ -1705,8 +1748,8 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
   req_mutexes.insert((pthread_mutex_t *)&(ret->mutex));
   req_mutexes.insert(&mutex_readyq_);
   if(ret->prev_ordered_task) req_mutexes.insert(&(ret->prev_ordered_task->mutex));
-  atmi_task_group_table_t *stream_obj = ret->stream_obj;
-  req_mutexes.insert(&(stream_obj->group_mutex));
+  atmi_task_group_table_t *taskgroup_obj = ret->taskgroup_obj;
+  req_mutexes.insert(&(taskgroup_obj->group_mutex));
   atl_kernel_impl_t *kernel_impl = NULL;
   if(ret->kernel) {
     kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
@@ -1741,11 +1784,11 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
         }
       }
     }
-    if(ret->pred_stream_objs.size() > 0) {
+    if(ret->pred_taskgroup_objs.size() > 0) {
       // add to its predecessor's dependents list and return
-      DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret->id, ret->pred_stream_objs.size());
-      for(int idx = 0; idx < ret->pred_stream_objs.size(); idx++) {
-        atmi_task_group_table_t *pred_tg = ret->pred_stream_objs[idx];
+      DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret->id, ret->pred_taskgroup_objs.size());
+      for(int idx = 0; idx < ret->pred_taskgroup_objs.size(); idx++) {
+        atmi_task_group_table_t *pred_tg = ret->pred_taskgroup_objs[idx];
         DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
             ret, pred_tg);
         if(pred_tg && pred_tg->task_count.load() > 0) {
@@ -1819,7 +1862,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     // to launch if you have a free signal at hand
     if(ret->groupable == ATMI_TRUE) {
       hsa_signal_t signal;
-      get_stream_signal(stream_obj, &signal);
+      get_taskgroup_signal(taskgroup_obj, &signal);
       ret->signal = signal;
     }
     else {
@@ -1863,8 +1906,8 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
       }
     }
 
-    if(stream_obj->ordered)
-      stream_obj->running_ordered_tasks.pop_front();
+    if(taskgroup_obj->ordered)
+      taskgroup_obj->running_ordered_tasks.pop_front();
 
     acquire_aql_packet(ret);
 
@@ -1883,7 +1926,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
   }
   if(predecessors_complete == true &&
       resources_available == false  &&
-      ret->stream_obj->ordered == false) {
+      ret->taskgroup_obj->ordered == false) {
     // Ready task but no resources available. So, we push it to a
     // ready queue
     ReadyTaskQueue.push(ret);
@@ -1912,7 +1955,7 @@ atl_task_t *get_new_task() {
   ret->and_predecessors.clear();
   ret->predecessors.clear();
   ret->continuation_task = NULL;
-  ret->pred_stream_objs.clear();
+  ret->pred_taskgroup_objs.clear();
   pthread_mutex_init(&(ret->mutex), NULL);
   return ret;
 }
@@ -1930,7 +1973,7 @@ void enqueue_barrier_tasks(atl_task_vector_t tasks) {
     if(!task->packets.empty())
       queue = task->packets[0].first;
     else
-      queue = acquire_and_set_next_gpu_queue(task->stream_obj, task->place);
+      queue = acquire_and_set_next_gpu_queue(task->taskgroup_obj, task->place);
     enqueue_barrier(task, queue, tasks.size(), &(tasks[0]), SNK_NOWAIT, SNK_AND,
         task->devtype, true);
   }
@@ -1965,9 +2008,9 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
         ErrorCheck(Creating signal handler, err);
       }
     } else {
-      if (!ret->stream_obj->callback_started.test_and_set()) {
+      if (!ret->taskgroup_obj->callback_started.test_and_set()) {
         DEBUG_PRINT("Registering callback for task groups\n");
-        hsa_status_t err = hsa_amd_signal_async_handler(ret->signal, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,(void *)(ret->stream_obj));
+        hsa_status_t err = hsa_amd_signal_async_handler(ret->signal, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,(void *)(ret->taskgroup_obj));
         ErrorCheck(Creating signal handler, err);
       }
     }
@@ -2015,7 +2058,7 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
       atl_task_wait(ret);
     }
     else {
-      atl_stream_sync(ret->stream_obj);
+      atl_taskgroup_sync(ret->taskgroup_obj);
     }
     set_task_metrics(ret);
     set_task_state(ret, ATMI_COMPLETED);
@@ -2024,9 +2067,9 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
     //std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
   }
   else {
-    /* add task to the corresponding row in the stream table */
+    /* add task to the corresponding row in the taskgroup table */
     if(ret->groupable != ATMI_TRUE)
-      register_task(ret->stream_obj, ret);
+      register_task(ret->taskgroup_obj, ret);
   }
   return should_dispatch;
 }
@@ -2057,15 +2100,14 @@ void set_task_params(atl_task_t *task_obj,
        */
     is_called = true;
   }
-  atmi_task_group_t *stream = NULL;
-  if(lparm->group == NULL) {
-    stream = &atl_default_stream_obj;
+  atmi_task_group_t *taskgroup = NULL;
+  if(lparm->group == ATMI_NULL_TASK_GROUP_HANDLE) {
+    taskgroup = atl_default_taskgroup_obj;
   } else {
-    stream = lparm->group;
+    taskgroup = reinterpret_cast<atmi_task_group_t *>(lparm->group.handle);
   }
-  /* Add row to stream table for purposes of future synchronizations */
-  register_stream(stream);
-  atmi_task_group_table_t *stream_obj = StreamTable[stream->id];
+  /* Add row to taskgroup table for purposes of future synchronizations */
+  atmi_task_group_table_t *taskgroup_obj = TaskGroupTable[taskgroup->id];
 
   uint16_t i;
   atl_task_t *ret = task_obj;
@@ -2148,11 +2190,15 @@ void set_task_params(atl_task_t *task_obj,
   //DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires, lparm->requires);
   //DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n", ret->lparm.task_info, lparm->task_info);
 
-  ret->group = *stream;
-  ret->stream_obj = stream_obj;
+  ret->group.id = taskgroup->id;
+  ret->group.ordered = taskgroup->ordered;
+  ret->group.place = taskgroup->place;
+  ret->group.maxsize = taskgroup->maxsize;
+  ret->taskgroup_obj = taskgroup_obj;
+
   ret->place = lparm->place;
   ret->synchronous = lparm->synchronous;
-  //DEBUG_PRINT("Stream LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);
+  //DEBUG_PRINT("Taskgroup LHS: %p and RHS: %p\n", ret->lparm.group, lparm->group);
   ret->num_predecessors = 0;
   ret->num_successors = 0;
 
@@ -2169,15 +2215,19 @@ void set_task_params(atl_task_t *task_obj,
       ret->predecessors.push_back(pred_task);
     }
   }
-  ret->pred_stream_objs.clear();
-  ret->pred_stream_objs.resize(lparm->num_required_groups);
+  ret->pred_taskgroup_objs.clear();
+  ret->pred_taskgroup_objs.resize(lparm->num_required_groups);
   for(int idx = 0; idx < lparm->num_required_groups; idx++) {
-    std::map<int, atmi_task_group_table_t *>::iterator map_it = StreamTable.find(lparm->required_groups[idx]->id);
-    if(map_it != StreamTable.end()) {
-      atmi_task_group_table_t *pred_tg = map_it->second;
-      assert(pred_tg != NULL);
-      DEBUG_PRINT("Task %p adding %p task group as predecessor\n", ret, pred_tg);
-      ret->pred_stream_objs[idx] = pred_tg;
+    atmi_task_group_t *tg =
+                  reinterpret_cast<atmi_task_group_t *>(lparm->required_groups[idx].handle);
+    if(tg) {
+      std::map<int, atmi_task_group_table_t *>::iterator map_it = TaskGroupTable.find(tg->id);
+      if(map_it != TaskGroupTable.end()) {
+        atmi_task_group_table_t *pred_tg = map_it->second;
+        assert(pred_tg != NULL);
+        DEBUG_PRINT("Task %p adding %p task group as predecessor\n", ret, pred_tg);
+        ret->pred_taskgroup_objs[idx] = pred_tg;
+      }
     }
   }
 
@@ -2186,16 +2236,16 @@ void set_task_params(atl_task_t *task_obj,
   ret->data_dest_ptr = NULL;
   ret->data_size = 0;
 
-  if(ret->stream_obj->ordered) {
-    lock(&(ret->stream_obj->group_mutex));
-    ret->stream_obj->running_ordered_tasks.push_back(ret);
-    ret->prev_ordered_task = ret->stream_obj->last_task;
-    ret->stream_obj->last_task = ret;
-    unlock(&(ret->stream_obj->group_mutex));
+  if(ret->taskgroup_obj->ordered) {
+    lock(&(ret->taskgroup_obj->group_mutex));
+    ret->taskgroup_obj->running_ordered_tasks.push_back(ret);
+    ret->prev_ordered_task = ret->taskgroup_obj->last_task;
+    ret->taskgroup_obj->last_task = ret;
+    unlock(&(ret->taskgroup_obj->group_mutex));
   }
   if(ret->groupable) {
-    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->stream_obj);
-    (ret->stream_obj->task_count)++;
+    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
+    (ret->taskgroup_obj->task_count)++;
   }
   TryLaunchInitTimer.Stop();
 }
@@ -2330,8 +2380,8 @@ atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
       if(ret_obj->prev_ordered_task)
         req_mutexes.insert(&(ret_obj->prev_ordered_task->mutex));
 #endif
-      atmi_task_group_table_t *stream_obj = ret_obj->stream_obj;
-      req_mutexes.insert(&(stream_obj->group_mutex));
+      atmi_task_group_table_t *taskgroup_obj = ret_obj->taskgroup_obj;
+      req_mutexes.insert(&(taskgroup_obj->group_mutex));
       lock_set(req_mutexes);
       // populate its predecessors' successor list
       // similar to a double linked list
@@ -2354,11 +2404,11 @@ atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
           }
         }
       }
-      if(ret_obj->pred_stream_objs.size() > 0) {
+      if(ret_obj->pred_taskgroup_objs.size() > 0) {
         // add to its predecessor's dependents list and ret_objurn
-        DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret_obj->id, ret_obj->pred_stream_objs.size());
-        for(int idx = 0; idx < ret_obj->pred_stream_objs.size(); idx++) {
-          atmi_task_group_table_t *pred_tg = ret_obj->pred_stream_objs[idx];
+        DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret_obj->id, ret_obj->pred_taskgroup_objs.size());
+        for(int idx = 0; idx < ret_obj->pred_taskgroup_objs.size(); idx++) {
+          atmi_task_group_table_t *pred_tg = ret_obj->pred_taskgroup_objs[idx];
           DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
               ret_obj, pred_tg);
           if(pred_tg && pred_tg->task_count.load() > 0) {
@@ -2423,17 +2473,17 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
       } while(should_dispatch);
     }
     else {
-      if(ret_obj->stream_obj && ret_obj->stream_obj->ordered) {
+      if(ret_obj->taskgroup_obj && ret_obj->taskgroup_obj->ordered) {
         // pop from front of ordered task list and try dispatch as many as possible
         bool should_dispatch = false;
         do {
           atl_task_t *ready_task = NULL;
           should_dispatch = false;
-          lock(&ret_obj->stream_obj->group_mutex);
-          if (!ret_obj->stream_obj->running_ordered_tasks.empty()) {
-            ready_task = ret_obj->stream_obj->running_ordered_tasks.front();
+          lock(&ret_obj->taskgroup_obj->group_mutex);
+          if (!ret_obj->taskgroup_obj->running_ordered_tasks.empty()) {
+            ready_task = ret_obj->taskgroup_obj->running_ordered_tasks.front();
           }
-          unlock(&ret_obj->stream_obj->group_mutex);
+          unlock(&ret_obj->taskgroup_obj->group_mutex);
           if (ready_task) {
             should_dispatch = try_dispatch(ready_task, NULL, ready_task->synchronous);
           }

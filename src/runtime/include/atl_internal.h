@@ -36,12 +36,12 @@ extern "C" {
 #define _CPPSTRING_
 #endif
 
-#define ATMI_MAX_STREAMS            8
-#define ATMI_MAX_TASKS_PER_STREAM   125
+#define ATMI_MAX_TASK_GROUPS            8
+#define ATMI_MAX_TASKS_PER_TASK_GROUP   125
 
 #define SNK_MAX_FUNCTIONS   100
 
-//#define SNK_MAX_TASKS 32 //100000 //((ATMI_MAX_STREAMS) * (ATMI_MAX_TASKS_PER_STREAM))
+//#define SNK_MAX_TASKS 32 //100000 //((ATMI_MAX_TASK_GROUPS) * (ATMI_MAX_TASKS_PER_TASK_GROUP))
 
 #define SNK_WAIT    1
 #define SNK_NOWAIT  0
@@ -258,7 +258,7 @@ typedef enum atl_dep_sync_s {
 extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
-extern atmi_task_group_t atl_default_stream_obj;
+extern atmi_task_group_t *atl_default_taskgroup_obj;
 
 typedef struct atl_task_s {
     // reference to HSA signal and the applications task structure
@@ -284,7 +284,7 @@ typedef struct atl_task_s {
     void *data_dest_ptr;
     size_t data_size;
 
-    atmi_task_group_table_t *stream_obj;
+    atmi_task_group_table_t *taskgroup_obj;
     atmi_task_group_t group;
     boolean groupable;
     boolean synchronous;
@@ -306,7 +306,7 @@ typedef struct atl_task_s {
     atl_task_vector_t and_successors;
     atl_task_vector_t and_predecessors;
     atl_task_vector_t predecessors;
-    std::vector<atmi_task_group_table_t *> pred_stream_objs;
+    std::vector<atmi_task_group_table_t *> pred_taskgroup_objs;
     atmi_task_handle_t id;
     // flag to differentiate between a regular task and a continuation
     // FIXME: probably make this a class hierarchy?
@@ -335,12 +335,12 @@ typedef struct atl_task_s {
 #endif
 } atl_task_t;
 
-extern std::map<int, atmi_task_group_table_t *> StreamTable;
+extern std::map<int, atmi_task_group_table_t *> TaskGroupTable;
 //atmi_task_table_t TaskTable[SNK_MAX_TASKS];
 extern std::vector<atl_task_t *> AllTasks;
 extern std::queue<atl_task_t *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
-extern hsa_signal_t StreamCommonSignalPool[ATMI_MAX_STREAMS];
+extern hsa_signal_t TaskgroupCommonSignalPool[ATMI_MAX_TASK_GROUPS];
 /*
 typedef struct atmi_task_table_s {
     atmi_task_t *task;
@@ -348,6 +348,8 @@ typedef struct atmi_task_table_s {
 } atmi_task_table_t;
 */
 extern int           SNK_NextTaskId;
+
+bool operator==(const atmi_task_group_handle_t& lhs, const atmi_task_group_handle_t& rhs);
 
 namespace core {
 atmi_status_t atl_init_context();
@@ -422,7 +424,7 @@ extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place
 extern bool atl_is_atmi_initialized();
 
 extern void atl_task_wait(atl_task_t *task);
-extern void atl_stream_sync(atmi_task_group_table_t *stream_obj);
+extern void atl_taskgroup_sync(atmi_task_group_table_t *taskgroup_obj);
 
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
@@ -436,19 +438,19 @@ void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);
 atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest, const void *src, const size_t size);
-atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_table_t *stream_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
+atmi_status_t check_change_in_device_type(atl_task_t *task, atmi_task_group_table_t *taskgroup_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
 void enqueue_barrier_tasks(atl_task_vector_t tasks);
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag, bool need_completion);
 void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype, bool need_completion = false);
 
 atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id);
-int get_stream_id(atmi_task_group_table_t *stream_obj);
-hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
-hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *stream_obj, atmi_place_t place);
-atmi_status_t clear_saved_tasks(atmi_task_group_table_t *stream_obj);
-atmi_status_t register_task(atmi_task_group_table_t *stream_obj, atl_task_t *task);
-atmi_status_t register_stream(atmi_task_group_t *stream_obj);
+int get_taskgroup_id(atmi_task_group_table_t *taskgroup_obj);
+hsa_queue_t *acquire_and_set_next_cpu_queue(atmi_task_group_table_t *taskgroup_obj, atmi_place_t place);
+hsa_queue_t *acquire_and_set_next_gpu_queue(atmi_task_group_table_t *taskgroup_obj, atmi_place_t place);
+atmi_status_t clear_saved_tasks(atmi_task_group_table_t *taskgroup_obj);
+atmi_status_t register_task(atmi_task_group_table_t *taskgroup_obj, atl_task_t *task);
+atmi_status_t register_taskgroup(atmi_task_group_t *taskgroup_obj);
 void set_task_state(atl_task_t *t, atmi_state_t state);
 void set_task_metrics(atl_task_t *task);
 

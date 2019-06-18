@@ -11,7 +11,7 @@
 /*----------------------------------------------------------------------------*/
 #define ATMI_VERSION 0
 #define ATMI_RELEASE 1
-#define ATMI_PATCH   0  
+#define ATMI_PATCH   0
 #define ATMI_VRM ((ATMI_VERSION*65536) + (ATMI_RELEASE*256) + ATMI_PATCH)
 
 /*----------------------------------------------------------------------------*/
@@ -19,7 +19,7 @@
 /*----------------------------------------------------------------------------*/
 #define ATMI_ORDERED    1
 #define ATMI_UNORDERED  0
-#define ATMI_TRUE       1 
+#define ATMI_TRUE       1
 #define ATMI_FALSE      0
 
 /** \defgroup enumerations Enumerated Types
@@ -52,9 +52,9 @@ typedef enum {
      */
     BRIG = 0,
     /**
-     * Target Platform is AMD GCN (default) 
+     * Target Platform is AMD GCN (default)
      */
-    AMDGCN, 
+    AMDGCN,
     /*
      * Target Platform is AMD GCN from HIP Language frontend
      * FIXME: when LLVM backend supports putting this info
@@ -63,10 +63,10 @@ typedef enum {
      * tell the runtime the language type
      */
     AMDGCN_HIP,
-    /* -- support in the future? -- 
+    /* -- support in the future? --
     HSAIL,
     CL,
-    x86, 
+    x86,
     PTX
     */
 } atmi_platform_type_t;
@@ -75,7 +75,7 @@ typedef enum {
  * @brief Device Types.
  */
 typedef enum atmi_devtype_s {
-    ATMI_DEVTYPE_CPU  = 0x0001,  /**< CPU */ 
+    ATMI_DEVTYPE_CPU  = 0x0001,  /**< CPU */
     ATMI_DEVTYPE_iGPU = 0x0010,  /**< Integrated GPU */
     ATMI_DEVTYPE_dGPU = 0x0100,  /**< Discrete GPU */
     ATMI_DEVTYPE_GPU  = ATMI_DEVTYPE_iGPU | ATMI_DEVTYPE_dGPU, /**< Any GPU */
@@ -90,7 +90,7 @@ typedef enum atmi_memtype_s {
     ATMI_MEMTYPE_FINE_GRAINED   = 0, /**< Fine grained memory type */
     ATMI_MEMTYPE_COARSE_GRAINED = 1, /**< Coarse grained memory type */
     ATMI_MEMTYPE_ANY                 /**< Any memory type */
-    // ATMI should not be concerned about kernarg region, which should 
+    // ATMI should not be concerned about kernarg region, which should
     // be handled by HSA and not by the end application user
 } atmi_memtype_t;
 
@@ -122,7 +122,7 @@ typedef enum atmi_arg_type_s {
     ATMI_IN, /**< Input argument */
     ATMI_OUT,/**< Output argument */
     ATMI_IN_OUT /** In/out argument */
-} atmi_arg_type_t;    
+} atmi_arg_type_t;
 
 /**
  * @brief ATMI Memory Fences for Tasks.
@@ -165,31 +165,31 @@ typedef enum atmi_full_policy_s {
     ATMI_FAIL        = 1,
     ATMI_DISCARD     = 2
 } atmi_full_policy_t;
-#endif 
+#endif
 /** @} */
-typedef char boolean; 
+typedef char boolean;
 //#define ATMI_MAX_NODES  1024
 //#define ATMI_MAX_CUS    64
 
 /** \defgroup common Common ATMI Structures
  *  @{
  */
-/**                                                                            
- * @brief ATMI Task Profile Data Structure                          
+/**
+ * @brief ATMI Task Profile Data Structure
  */
 typedef struct atmi_tprofile_s {
    unsigned long int dispatch_time;  /**< Timestamp of task dispatch.         */
-   unsigned long int ready_time;     /**< Timestamp when the task's dependencies 
-                                          were all met and ready to be 
+   unsigned long int ready_time;     /**< Timestamp when the task's dependencies
+                                          were all met and ready to be
                                           dispatched.                         */
-   unsigned long int start_time;     /**< Timstamp when the task started 
+   unsigned long int start_time;     /**< Timstamp when the task started
                                           execution.                          */
    unsigned long int end_time;       /**< TImestamp when the task completed
                                           execution.                          */
 } atmi_tprofile_t;
 
-/**                                                                            
- * @brief ATMI Compute Place                          
+/**
+ * @brief ATMI Compute Place
  */
 typedef struct atmi_place_s {
     unsigned int node_id;           /**< node_id = 0 for local computations     */
@@ -198,8 +198,8 @@ typedef struct atmi_place_s {
     unsigned long cu_mask;          /**< Compute Unit Mask (advanced feature)   */
 } atmi_place_t;
 
-/**                                                                            
- * @brief ATMI Memory Place                          
+/**
+ * @brief ATMI Memory Place
  */
 typedef struct atmi_mem_place_s {
     unsigned int node_id;           /**< node_id = 0 for local computations     */
@@ -217,27 +217,41 @@ typedef struct atmi_memory_s {
     atmi_memtype_t  type;
 } atmi_memory_t;
 
-/**                                                                            
+/**
  * @brief ATMI Device Structure
  */
 typedef struct atmi_device_s {
     atmi_devtype_t type;            /**< Device type */
     unsigned int core_count;        /**< Number of compute cores */
-    unsigned int memory_count;      /**< Number of memory regions that are 
+    unsigned int memory_count;      /**< Number of memory regions that are
                                          accessible from this device. */
-    atmi_memory_t *memories;        /**< The memory regions that are 
+    atmi_memory_t *memories;        /**< The memory regions that are
                                          accessible from this device. */
 } atmi_device_t;
 
-/**                                                                            
+/**
  * @brief ATMI Machine Structure
  */
 typedef struct atmi_machine_s {
-    unsigned int device_count_by_type[ATMI_DEVTYPE_ALL];   /**< The number of devices categorized 
+    unsigned int device_count_by_type[ATMI_DEVTYPE_ALL];   /**< The number of devices categorized
                                                                 by the device type */
-    atmi_device_t *devices_by_type[ATMI_DEVTYPE_ALL];      /**< The device structures categorized 
+    atmi_device_t *devices_by_type[ATMI_DEVTYPE_ALL];      /**< The device structures categorized
                                                                 by the device type */
 } atmi_machine_t;
+
+/**
+ * @brief Opaque handle representing an ATMI Task Group.
+ *
+ * @details ATMI task groups can be a collection of compute and memory tasks. They can have
+ * different properties that are described in the structure @p atmi_task_group_t.
+ *
+ */
+typedef struct atmi_task_group_handle_s {
+    /**
+     * Opaque handle.
+     */
+    unsigned long int handle;
+} atmi_task_group_handle_t;
 
 /**
  * @brief ATMI Task Group Data Structure
@@ -254,7 +268,7 @@ typedef struct atmi_task_group_s {
  * @brief ATMI Task info structure
  */
 typedef void* atmi_handle_t;
-typedef struct atmi_task_s { 
+typedef struct atmi_task_s {
    atmi_handle_t    handle;   /**< Temp storage location for current task handle for DP*/
    atmi_state_t     state;    /**< Previously consistent state of task    */
    atmi_tprofile_t  profile;  /**< Previously consistent profile information */
@@ -265,7 +279,7 @@ typedef struct atmi_task_info_s {
    atmi_state_t     state;    /* Eventually consistent state of task    */
    atmi_tprofile_t  profile;  /* Profile if reqeusted by lparm          */
 } atmi_task_info_t;
-#endif 
+#endif
 #if 0
 typedef struct atmi_task_handle_s {
     union {
@@ -285,9 +299,11 @@ typedef struct atmi_task_handle_s {
 typedef unsigned long int atmi_task_handle_t;
 #endif
 /**
- * @brief The special NULL task handle. 
+ * @brief The special NULL task handle.
  */
 extern atmi_task_handle_t ATMI_NULL_TASK_HANDLE;
+extern atmi_task_group_handle_t ATMI_NULL_TASK_GROUP_HANDLE;
+extern atmi_place_t ATMI_DEFAULT_PLACE;
 
 /**
  * @brief The ATMI Launch Parameter Data Structure
@@ -306,7 +322,7 @@ typedef struct atmi_lparm_s {
     unsigned long    gridDim[3];     /**< # of global threads for each dimension */
 #endif
     unsigned long    groupDim[3];    /**< Thread group size for each dimension   */
-    atmi_task_group_t*   group;      /**< Group for this task, Default= NULL     */
+    atmi_task_group_handle_t   group;      /**< Group for this task, Default= NULL     */
     boolean          groupable;      /**< Create signal for task, default = F    */
     boolean          synchronous;    /**< Async or Sync,  default = F (async)    */
     atmi_task_fence_scope_t acquire_scope;  /**< Memory model, default = 2       */
@@ -314,14 +330,14 @@ typedef struct atmi_lparm_s {
     int              num_required;   /**< # of required parent tasks, default 0  */
     atmi_task_handle_t*    requires; /**< Array of required parent tasks         */
     int              num_required_groups;  /**< # of required parent task groups       */
-    atmi_task_group_t**    required_groups;/**< Array of required parent task groups   */
-    boolean          profilable;     /**< Points to tprofile if metrics desired  */ 
+    atmi_task_group_handle_t*    required_groups;/**< Array of required parent task groups   */
+    boolean          profilable;     /**< Points to tprofile if metrics desired  */
     int              atmi_id;        /**< Constant that PIFs can check for       */
     int              kernel_id;      /**< Kernel ID if more than one kernel per task */
     atmi_place_t     place;          /**< Compute location to launch this task. */
-    atmi_task_t*     task_info;      /**< Optional user-created structure to store 
+    atmi_task_t*     task_info;      /**< Optional user-created structure to store
                                           executed task's information */
-    atmi_task_handle_t     continuation_task; /**< The continuation task of 
+    atmi_task_handle_t     continuation_task; /**< The continuation task of
                                                    this current task */
 } atmi_lparm_t ;
 
@@ -329,14 +345,14 @@ typedef struct atmi_lparm_s {
  * @brief The ATMI Data Copy Parameter Data Structure
  */
 typedef struct atmi_cparm_s {
-    atmi_task_group_t*   group;      /**< Group for this task, Default= NULL     */
+    atmi_task_group_handle_t   group;      /**< Group for this task, Default= NULL     */
     boolean          groupable;      /**< Create signal for task, default = F    */
-    boolean          profilable;     /**< Points to tprofile if metrics desired  */ 
+    boolean          profilable;     /**< Points to tprofile if metrics desired  */
     boolean          synchronous;    /**< Async or Sync,  default = F (async)    */
     int                 num_required;/**< # of required parent tasks, default 0  */
     atmi_task_handle_t* requires;    /**< Array of required parent tasks         */
     int              num_required_groups;  /**< # of required parent task groups       */
-    atmi_task_group_t**    required_groups;/**< Array of required parent task groups   */
+    atmi_task_group_handle_t*    required_groups;/**< Array of required parent task groups   */
     atmi_task_t*     task_info;      /**< Optional user-created structure to store
                                           executed task's information */
 } atmi_cparm_t;
@@ -355,66 +371,62 @@ typedef struct atmi_data_s {
 
 #define ATMI_TASK_HANDLE(low) (low)
 
-#define ATMI_PLACE_ANY(node) {.node_id=node, .type=ATMI_DEVTYPE_ALL, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
-#define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
-#define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .type=ATMI_DEVTYPE_GPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF} 
-#define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=cpu_id, .cu_mask=0xFFFFFFFFFFFFFFFF} 
-#define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .type=ATMI_DEVTYPE_GPU, .device_id=gpu_id, .cu_mask=0xFFFFFFFFFFFFFFFF} 
-#define ATMI_PLACE_CPU_MASK(node, cpu_id, cpu_mask) {.node_id=node, .type=ATMI_DEVTYPE_CPU, device_id=cpu_id, .cu_mask=(0x0|cpu_mask)} 
-#define ATMI_PLACE_GPU_MASK(node, gpu_id, gpu_mask) {.node_id=node, .type=ATMI_DEVTYPE_GPU, device_id=gpu_id, .cu_mask=(0x0|gpu_mask)} 
-#define ATMI_PLACE(node, dev_type, dev_id, mask) {.node_id=node, .type=dev_type, .device_id=dev_id, .cu_mask=mask} 
+#define ATMI_PLACE_ANY(node) {.node_id=node, .type=ATMI_DEVTYPE_ALL, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF}
+#define ATMI_PLACE_ANY_CPU(node) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF}
+#define ATMI_PLACE_ANY_GPU(node) {.node_id=node, .type=ATMI_DEVTYPE_GPU, .device_id=-1, .cu_mask=0xFFFFFFFFFFFFFFFF}
+#define ATMI_PLACE_CPU(node, cpu_id) {.node_id=node, .type=ATMI_DEVTYPE_CPU, .device_id=cpu_id, .cu_mask=0xFFFFFFFFFFFFFFFF}
+#define ATMI_PLACE_GPU(node, gpu_id) {.node_id=node, .type=ATMI_DEVTYPE_GPU, .device_id=gpu_id, .cu_mask=0xFFFFFFFFFFFFFFFF}
+#define ATMI_PLACE_CPU_MASK(node, cpu_id, cpu_mask) {.node_id=node, .type=ATMI_DEVTYPE_CPU, device_id=cpu_id, .cu_mask=(0x0|cpu_mask)}
+#define ATMI_PLACE_GPU_MASK(node, gpu_id, gpu_mask) {.node_id=node, .type=ATMI_DEVTYPE_GPU, device_id=gpu_id, .cu_mask=(0x0|gpu_mask)}
+#define ATMI_PLACE(node, dev_type, dev_id, mask) {.node_id=node, .type=dev_type, .device_id=dev_id, .cu_mask=mask}
 
 
-#define ATMI_MEM_PLACE_ANY(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_ALL, .dev_id=-1, .mem_id=-1} 
-#define ATMI_MEM_PLACE_ANY_CPU(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=-1, .mem_id=-1} 
-#define ATMI_MEM_PLACE_ANY_GPU(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=-1, .mem_id=-1} 
-#define ATMI_MEM_PLACE_CPU(node, cpu_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=cpu_id, .mem_id=-1} 
-#define ATMI_MEM_PLACE_GPU(node, gpu_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=gpu_id, .mem_id=-1} 
-#define ATMI_MEM_PLACE_CPU_MEM(node, cpu_id, cpu_mem_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=cpu_id, .mem_id=cpu_mem_id} 
-#define ATMI_MEM_PLACE_GPU_MEM(node, gpu_id, gpu_mem_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=gpu_id, .mem_id=gpu_mem_id} 
-#define ATMI_MEM_PLACE(d_type, d_id, m_id) {.node_id=0, .dev_type=d_type, .dev_id=d_id, .mem_id=m_id} 
-#define ATMI_MEM_PLACE_NODE(node, d_type, d_id, m_id) {.node_id=node, .dev_type=d_type, .dev_id=d_id, .mem_id=m_id} 
+#define ATMI_MEM_PLACE_ANY(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_ALL, .dev_id=-1, .mem_id=-1}
+#define ATMI_MEM_PLACE_ANY_CPU(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=-1, .mem_id=-1}
+#define ATMI_MEM_PLACE_ANY_GPU(node) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=-1, .mem_id=-1}
+#define ATMI_MEM_PLACE_CPU(node, cpu_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=cpu_id, .mem_id=-1}
+#define ATMI_MEM_PLACE_GPU(node, gpu_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=gpu_id, .mem_id=-1}
+#define ATMI_MEM_PLACE_CPU_MEM(node, cpu_id, cpu_mem_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_CPU, .dev_id=cpu_id, .mem_id=cpu_mem_id}
+#define ATMI_MEM_PLACE_GPU_MEM(node, gpu_id, gpu_mem_id) {.node_id=node, .dev_type=ATMI_DEVTYPE_GPU, .dev_id=gpu_id, .mem_id=gpu_mem_id}
+#define ATMI_MEM_PLACE(d_type, d_id, m_id) {.node_id=0, .dev_type=d_type, .dev_id=d_id, .mem_id=m_id}
+#define ATMI_MEM_PLACE_NODE(node, d_type, d_id, m_id) {.node_id=node, .dev_type=d_type, .dev_id=d_id, .mem_id=m_id}
 
 
 
 #define ATMI_DATA(X, PTR, COUNT, PLACE) atmi_data_t X; X.ptr=PTR; X.size=COUNT; X.place=PLACE;
 
-#define WORKITEMS gridDim[0] 
-#define WORKITEMS2D gridDim[1] 
-#define WORKITEMS3D gridDim[2] 
+#define WORKITEMS gridDim[0]
+#define WORKITEMS2D gridDim[1]
+#define WORKITEMS3D gridDim[2]
 
-/* String macros to initialize popular default launch parameters.             */ 
-#define ATMI_CPARM(X) atmi_cparm_t * X ; atmi_cparm_t  _ ## X ={.group=NULL,.groupable=ATMI_FALSE,.profilable=ATMI_FALSE,.synchronous=ATMI_FALSE,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.task_info=NULL} ; X = &_ ## X ;
+/* String macros to initialize popular default launch parameters.             */
+#define ATMI_CPARM(X) atmi_cparm_t * X ; atmi_cparm_t  _ ## X ={.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.profilable=ATMI_FALSE,.synchronous=ATMI_FALSE,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.task_info=NULL} ; X = &_ ## X ;
 
-#ifndef __OPENCL_C_VERSION__ 
+#ifndef __OPENCL_C_VERSION__
 #define CONCATENATE_DETAIL(x, y) x##y
 #define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
 #define MAKE_UNIQUE(x) CONCATENATE(x, __LINE__)
 #define ATMI_PARM_SET_NAMED_DEPENDENCIES(X, HANDLES, ...) \
     atmi_task_handle_t (HANDLES)[] = { __VA_ARGS__ }; \
     (X)->num_required = sizeof(HANDLES)/sizeof(HANDLES[0]); \
-    (X)->requires = HANDLES; 
+    (X)->requires = HANDLES;
 
 #define ATMI_PARM_SET_DEPENDENCIES(X, ...) ATMI_PARM_SET_NAMED_DEPENDENCIES(X, MAKE_UNIQUE(handles), __VA_ARGS__)
 #endif
 
-#define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={1,1,1},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+#define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={1,1,1},.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
-#define ATMI_LPARM_STREAM(X,Y) atmi_task_group_t * Y; atmi_task_group_t _ ## Y ={.id=0,.ordered=ATMI_TRUE} ; Y = &_ ## Y ; atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={64,1,1},.group=Y,.groupable=ATMI_TRUE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+#define ATMI_LPARM_CPU(X,CPU) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={1,1,1},.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_CPU(0, CPU)} ; X = &_ ## X ;
 
-#define ATMI_LPARM_CPU(X,CPU) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={1,1,1},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_CPU(0, CPU)} ; X = &_ ## X ;
+#define ATMI_LPARM_CPU_1D(X,CPU,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={1,1,1},.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_CPU(0, CPU)} ; X = &_ ## X ;
 
-#define ATMI_LPARM_CPU_1D(X,CPU,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={1,1,1},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_CPU(0, CPU)} ; X = &_ ## X ;
+#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={64,1,1},.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
-#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={64,1,1},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+#define ATMI_LPARM_GPU_1D(X,GPU,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={64,1,1},.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_GPU(0, GPU)} ; X = &_ ## X ;
 
-#define ATMI_LPARM_GPU_1D(X,GPU,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={64,1,1},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_GPU(0, GPU)} ; X = &_ ## X ;
- 
-#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,1},.groupDim={64,8,1},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
- 
-#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,V},.groupDim={8,8,8},.group=NULL,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,1},.groupDim={64,8,1},.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
-#define ATMI_STREAM(NAME) atmi_task_group_t * NAME; atmi_task_group_t _ ## NAME ={.ordered=ATMI_TRUE} ; NAME = &_ ## NAME ; 
+#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,V},.groupDim={8,8,8},.group=ATMI_NULL_TASK_GROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
 
 #define ATMI_PROFILE(NAME) NAME = malloc(sizeof(atmi_tprofile_t));
 
@@ -434,13 +446,13 @@ extern atmi_context_t* atmi_context;
 
 /*----------------------------------------------------------------------------*/
 /* String macros that look like an API, but actually implement feature by     */
-/* calling a null kernel under specific conditions.                           */ 
+/* calling a null kernel under specific conditions.                           */
 /*----------------------------------------------------------------------------*/
 #ifdef __cplusplus
-#define _CPPSTRING_ "C" 
+#define _CPPSTRING_ "C"
 #endif
 #ifndef __cplusplus
-#define _CPPSTRING_ 
+#define _CPPSTRING_
 #endif
 extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t *lparm);
 

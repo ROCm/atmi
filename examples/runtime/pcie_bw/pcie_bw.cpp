@@ -54,13 +54,12 @@ int main(int argc, char **argv) {
   atmi_mem_place_t gpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, gpu_id, 0);
   atmi_mem_place_t cpu = ATMI_MEM_PLACE(ATMI_DEVTYPE_CPU, cpu_id, 0);
   void *d_input, *d_output;
-  atmi_task_group_t group;
-  group.id = 0;
-  group.ordered = ATMI_FALSE;
+  atmi_taskgroup_handle_t group;
+  ErrorCheck(atmi_taskgroup_create(&group));
 
   ATMI_CPARM(cparm);
   cparm->groupable = ATMI_TRUE;
-  cparm->group = &group;
+  cparm->group = group;
 
   printf("Size (MB)\t");
 #ifdef BIBW
@@ -85,7 +84,7 @@ int main(int argc, char **argv) {
     }
     // wait for all tasks to complete
 #ifndef BIBW
-    ErrorCheck(atmi_task_group_sync(&group));
+    ErrorCheck(atmi_taskgroup_sync(group));
 #endif
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 
@@ -94,7 +93,7 @@ int main(int argc, char **argv) {
       atmi_memcpy_async(cparm, d_input, d_output, size);
     }
     // wait for all tasks to complete
-    ErrorCheck(atmi_task_group_sync(&group));
+    ErrorCheck(atmi_taskgroup_sync(group));
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
 

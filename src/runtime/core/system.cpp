@@ -323,9 +323,9 @@ namespace core {
       ATMIErrorCheck(CPU context init, atl_init_cpu_context());
 
     // create default taskgroup obj
-    atmi_task_group_handle_t tghandle;
+    atmi_taskgroup_handle_t tghandle;
     ATMIErrorCheck(Create default taskgroup, TaskGroupCreate(&tghandle));
-    atl_default_taskgroup_obj = reinterpret_cast<atmi_task_group_t *>(tghandle.handle);
+    atl_default_taskgroup_obj = reinterpret_cast<atmi_taskgroup_t *>(tghandle.handle);
 
     ATMIErrorCheck(Device enqueue init, atmi_ke_init());
 
@@ -862,7 +862,7 @@ namespace core {
       gpu_agents.push_back(proc.getAgent());
     }
     /* Initialize all preallocated tasks and signals */
-    for ( task_num = 0 ; task_num < ATMI_MAX_TASK_GROUPS; task_num++){
+    for ( task_num = 0 ; task_num < ATMI_MAX_TASKGROUPS; task_num++){
       hsa_signal_t new_signal;
       err=hsa_signal_create(0, 0, NULL, &new_signal);
       ErrorCheck(Creating a HSA signal, err);

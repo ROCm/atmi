@@ -76,7 +76,7 @@ namespace core {
       atmi_status_t AddGPUKernelImpl(atmi_kernel_t, const char*, const unsigned int);
       atmi_status_t AddCPUKernelImpl(atmi_kernel_t, atmi_generic_fp, const unsigned int);
       // sync
-      atmi_status_t TaskGroupSync(atmi_task_group_handle_t);
+      atmi_status_t TaskGroupSync(atmi_taskgroup_handle_t);
       atmi_status_t TaskWait(atmi_task_handle_t);
       // print buffers/pipes
       atmi_status_t RegisterTaskInitBuffer(task_process_init_buffer_t);
@@ -88,11 +88,11 @@ namespace core {
       atmi_task_handle_t ActivateTask(atmi_task_handle_t);
       atmi_task_handle_t LaunchTask(atmi_lparm_t*, atmi_kernel_t, void**);
       // taskgroups
-      atmi_status_t TaskGroupCreate(atmi_task_group_handle_t *,
+      atmi_status_t TaskGroupCreate(atmi_taskgroup_handle_t *,
                                     bool ordered = false,
                                     atmi_place_t place = ATMI_DEFAULT_PLACE);
-      atmi_status_t TaskGroupRelease(atmi_task_group_handle_t);
-      atmi_task_group_t *TaskGroupGetInfo(atmi_task_group_handle_t);
+      atmi_status_t TaskGroupRelease(atmi_taskgroup_handle_t);
+      atmi_taskgroup_t *TaskGroupGetInfo(atmi_taskgroup_handle_t);
       // data
       atmi_status_t Memcpy(void *, const void *, size_t);
       atmi_task_handle_t MemcpyAsync(atmi_cparm_t *, void *, const void *, size_t);

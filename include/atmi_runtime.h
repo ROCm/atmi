@@ -468,7 +468,7 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_task_group_create(atmi_task_group_handle_t *group_handle,
+ atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
                                       bool ordered = false,
                                       atmi_place_t place = ATMI_DEFAULT_PLACE);
 
@@ -486,7 +486,7 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_task_group_release(atmi_task_group_handle_t group_handle);
+ atmi_status_t atmi_taskgroup_release(atmi_taskgroup_handle_t group_handle);
 
 /**
  * @brief Retrieve the task group information from the opaque handle.
@@ -503,8 +503,8 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_task_group_get_info(atmi_task_group_handle_t group_handle,
-                                        atmi_task_group_t *group_info);
+ atmi_status_t atmi_taskgroup_get_info(atmi_taskgroup_handle_t group_handle,
+                                        atmi_taskgroup_t *group_info);
 
 /**
  * @brief Wait for the launched task group, which could be a group of compute
@@ -519,7 +519,7 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_task_group_sync(atmi_task_group_handle_t group_handle);
+ atmi_status_t atmi_taskgroup_sync(atmi_taskgroup_handle_t group_handle);
 
 /** @} */
 
@@ -645,7 +645,7 @@ atmi_task_handle_t get_atmi_task_handle();
  * @return A pointer to the task group of the ATMI CPU task.
  *
  */
-atmi_task_group_t *get_atmi_task_group();
+atmi_taskgroup_t *get_atmi_taskgroup();
 
 /**
  * @brief Retrieve the global thread ID of

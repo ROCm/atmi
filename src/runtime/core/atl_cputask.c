@@ -869,7 +869,7 @@ atmi_task_handle_t get_atmi_task_handle() {
 }
 
 
-atmi_task_group_t *get_atmi_task_group() {
+atmi_taskgroup_t *get_atmi_taskgroup() {
     atl_task_t *task = get_cur_thread_task_impl();
     if(task) {
         DEBUG_PRINT("Returning task group with ID: %d\n", task->group.id);

@@ -303,15 +303,15 @@ atmi_status_t Runtime::Memfree(void *ptr) {
 
 atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const void *src, size_t size) {
     // TODO: Reuse code in atl_rt for setting up default task params
-    atmi_task_group_t *taskgroup = NULL;
-    if(lparm->group == ATMI_NULL_TASK_GROUP_HANDLE) {
+    atmi_taskgroup_t *taskgroup = NULL;
+    if(lparm->group == ATMI_DEFAULT_TASKGROUP_HANDLE) {
         taskgroup = atl_default_taskgroup_obj;
     } else {
-        taskgroup = reinterpret_cast<atmi_task_group_t *>(lparm->group.handle);
+        taskgroup = reinterpret_cast<atmi_taskgroup_t *>(lparm->group.handle);
     }
     /* Add row to taskgroup table for purposes of future synchronizations */
-    register_taskgroup(taskgroup);
-    atmi_task_group_table_t *taskgroup_obj = TaskGroupTable[taskgroup->id];
+    //register_taskgroup(taskgroup);
+    atl_taskgroup_t *taskgroup_obj = TaskGroupTable[taskgroup->id];
 
     atl_task_t *ret = get_new_task();
 
@@ -356,12 +356,12 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
     ret->pred_taskgroup_objs.clear();
     ret->pred_taskgroup_objs.resize(lparm->num_required_groups);
     for(int idx = 0; idx < lparm->num_required_groups; idx++) {
-        atmi_task_group_t *tg =
-                  reinterpret_cast<atmi_task_group_t *>(lparm->required_groups[idx].handle);
+        atmi_taskgroup_t *tg =
+                  reinterpret_cast<atmi_taskgroup_t *>(lparm->required_groups[idx].handle);
         if(tg){
-          std::map<int, atmi_task_group_table_t *>::iterator map_it = TaskGroupTable.find(tg->id);
+          std::map<int, atl_taskgroup_t *>::iterator map_it = TaskGroupTable.find(tg->id);
           assert(map_it != TaskGroupTable.end());
-          atmi_task_group_table_t *pred_tg = map_it->second;
+          atl_taskgroup_t *pred_tg = map_it->second;
           assert(pred_tg != NULL);
           ret->pred_taskgroup_objs[idx] = pred_tg;
         }
@@ -395,7 +395,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     atmi_status_t ret;
     hsa_status_t err; 
 
-    atmi_task_group_table_t *taskgroup_obj = task->taskgroup_obj;
+    atl_taskgroup_t *taskgroup_obj = task->taskgroup_obj;
     atl_dep_sync_t dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
     std::vector<hsa_signal_t> dep_signals;
     int val = 0;

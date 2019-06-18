@@ -46,23 +46,23 @@ int main(int argc, char *argv[]) {
    ATMI_LPARM(lparm3);
    ATMI_LPARM(lparm4);
 
-   atmi_task_group_handle_t stream1_ordered;
-   atmi_task_group_handle_t stream1_unordered;
-   atmi_task_group_handle_t stream2_ordered;
-   atmi_task_group_handle_t stream2_unordered;
-   atmi_task_group_handle_t stream3_ordered;
-   atmi_task_group_handle_t stream3_unordered;
-   atmi_task_group_handle_t stream4_ordered;
-   atmi_task_group_handle_t stream4_unordered;
+   atmi_taskgroup_handle_t stream1_ordered;
+   atmi_taskgroup_handle_t stream1_unordered;
+   atmi_taskgroup_handle_t stream2_ordered;
+   atmi_taskgroup_handle_t stream2_unordered;
+   atmi_taskgroup_handle_t stream3_ordered;
+   atmi_taskgroup_handle_t stream3_unordered;
+   atmi_taskgroup_handle_t stream4_ordered;
+   atmi_taskgroup_handle_t stream4_unordered;
 
-   err = atmi_task_group_create(&stream1_ordered);
-   err = atmi_task_group_create(&stream2_ordered);
-   err = atmi_task_group_create(&stream3_ordered);
-   err = atmi_task_group_create(&stream4_ordered);
-   err = atmi_task_group_create(&stream1_unordered);
-   err = atmi_task_group_create(&stream2_unordered);
-   err = atmi_task_group_create(&stream3_unordered);
-   err = atmi_task_group_create(&stream4_unordered);
+   err = atmi_taskgroup_create(&stream1_ordered);
+   err = atmi_taskgroup_create(&stream2_ordered);
+   err = atmi_taskgroup_create(&stream3_ordered);
+   err = atmi_taskgroup_create(&stream4_ordered);
+   err = atmi_taskgroup_create(&stream1_unordered);
+   err = atmi_taskgroup_create(&stream2_unordered);
+   err = atmi_taskgroup_create(&stream3_unordered);
+   err = atmi_taskgroup_create(&stream4_unordered);
 
    lparm1->group = stream1_ordered;
    lparm2->group = stream2_ordered;
@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
    for(int i=0; i<kcalls; i++) atmi_task_launch(lparm1, kernel, NULL);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
-   atmi_task_group_sync(stream1_ordered);
+   atmi_taskgroup_sync(stream1_ordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
 #if 1
@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[4]);
    for(int i=0; i<kcalls; i++) atmi_task_launch(lparm1, kernel, NULL);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
-   atmi_task_group_sync(stream1_unordered);
+   atmi_taskgroup_sync(stream1_unordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
 #endif
 #if 1
@@ -120,8 +120,8 @@ int main(int argc, char *argv[]) {
       atmi_task_launch(lparm2, kernel, NULL);
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[5]);
-   atmi_task_group_sync(stream1_ordered);
-   atmi_task_group_sync(stream2_ordered);
+   atmi_taskgroup_sync(stream1_ordered);
+   atmi_taskgroup_sync(stream2_ordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[6]);
 
    lparm1->group = stream1_unordered;
@@ -133,8 +133,8 @@ int main(int argc, char *argv[]) {
       atmi_task_launch(lparm2, kernel, NULL);
    }
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[7]);
-   atmi_task_group_sync(stream1_unordered);
-   atmi_task_group_sync(stream2_unordered);
+   atmi_taskgroup_sync(stream1_unordered);
+   atmi_taskgroup_sync(stream2_unordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[8]);
 #endif
 #if 0

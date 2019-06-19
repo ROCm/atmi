@@ -1855,11 +1855,6 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
     //std::cout << "Task Wait Interim Timer " << TaskWaitTimer << std::endl;
     //std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
   }
-  else {
-    /* add task to the corresponding row in the taskgroup table */
-    if(ret->groupable != ATMI_TRUE)
-      ret->taskgroup_obj->registerTask(ret);
-  }
   return should_dispatch;
 }
 
@@ -2005,13 +2000,16 @@ void set_task_params(atl_task_t *task_obj,
   ret->data_dest_ptr = NULL;
   ret->data_size = 0;
 
+  lock(&(ret->taskgroup_obj->_group_mutex));
   if(ret->taskgroup_obj->_ordered) {
-    lock(&(ret->taskgroup_obj->_group_mutex));
     ret->taskgroup_obj->_running_ordered_tasks.push_back(ret);
     ret->prev_ordered_task = ret->taskgroup_obj->_last_task;
     ret->taskgroup_obj->_last_task = ret;
-    unlock(&(ret->taskgroup_obj->_group_mutex));
   }
+  else {
+    ret->taskgroup_obj->_running_default_tasks.push_back(ret);
+  }
+  unlock(&(ret->taskgroup_obj->_group_mutex));
   if(ret->groupable) {
     DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
     (ret->taskgroup_obj->_task_count)++;

@@ -85,7 +85,7 @@ hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place) {
 }
 #if 0
 atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place, atmi_arg_type_t arg_type, void **mapped_ptr) {
-    if(!mapped_ptr || !ptr) return ATMI_STATUS_ERROR; 
+    if(!mapped_ptr || !ptr) return ATMI_STATUS_ERROR;
     hsa_status_t err;
     #if 1
     hsa_amd_memory_pool_t dev_pool = get_memory_pool_by_mem_place(place);
@@ -93,7 +93,7 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
     ErrorCheck(Host staging buffer alloc, err);
 
     if(arg_type != ATMI_OUT) {
-        atmi_mem_place_t cpu_place = {0, ATMI_DEVTYPE_CPU, 0, 0}; 
+        atmi_mem_place_t cpu_place = {0, ATMI_DEVTYPE_CPU, 0, 0};
         void *host_ptr;
         hsa_amd_memory_pool_t host_pool = get_memory_pool_by_mem_place(cpu_place);
         err = hsa_amd_memory_pool_allocate(host_pool, size, 0, &host_ptr);
@@ -103,7 +103,7 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
         hsa_signal_add_acq_rel(IdentityCopySignal, 1);
         err = hsa_amd_memory_async_copy(*mapped_ptr, get_mem_agent(place),
                 host_ptr, get_mem_agent(cpu_place),
-                size, 
+                size,
                 0, NULL, IdentityCopySignal);
         ErrorCheck(Copy async between memory pools, err);
         hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
@@ -113,29 +113,29 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
     }
     #else
     // 1) Lock ptr to a host mem pool -- get a staging buffer
-    // 2a) allow access to dest mem pool? 
+    // 2a) allow access to dest mem pool?
     // 2b) Copy it to dest mem pool
-    // 3) delete staging buffer? 
+    // 3) delete staging buffer?
     //
     // OR
-    
-    void *agent_ptr; 
+
+    void *agent_ptr;
     hsa_agent_t dest_agent = get_mem_agent(place);
     // 1) Lock ptr to dest mem pool (poorer performance via PCIe)
     err = hsa_amd_memory_lock(ptr, data->size, &dest_agent, 1, &agent_ptr);
     ErrorCheck(Locking the host ptr, err);
     // 2) Copy to dest mem pool
-    // 3) unlock ptr? 
+    // 3) unlock ptr?
     data->ptr = agent_ptr;
     #endif
-    // TODO: register ptr in a pointer map 
+    // TODO: register ptr in a pointer map
     ATLData *m = new ATLData(*mapped_ptr, ptr, size, place, arg_type);
     MemoryMap[*mapped_ptr] = m;
 
 }
 
 atmi_status_t atmi_data_unmap_sync(void *ptr, void *mapped_ptr) {
-    if(!mapped_ptr || !ptr) return ATMI_STATUS_ERROR; 
+    if(!mapped_ptr || !ptr) return ATMI_STATUS_ERROR;
     ATLData *m = MemoryMap[mapped_ptr];
     if(m->getHostAliasPtr() != ptr) return ATMI_STATUS_ERROR;
     if(m->getSize() == 0) return ATMI_STATUS_ERROR;
@@ -148,7 +148,7 @@ atmi_status_t atmi_data_unmap_sync(void *ptr, void *mapped_ptr) {
         // OR
         //
         void *host_ptr;
-        atmi_mem_place_t cpu_place = {0, ATMI_DEVTYPE_CPU, 0, 0}; 
+        atmi_mem_place_t cpu_place = {0, ATMI_DEVTYPE_CPU, 0, 0};
         hsa_amd_memory_pool_t host_pool = get_memory_pool_by_mem_place(cpu_place);
         err = hsa_amd_memory_pool_allocate(host_pool, m->getSize(), 0, &host_ptr);
         ErrorCheck(Host staging buffer alloc, err);
@@ -156,7 +156,7 @@ atmi_status_t atmi_data_unmap_sync(void *ptr, void *mapped_ptr) {
         hsa_signal_add_acq_rel(IdentityCopySignal, 1);
         err = hsa_amd_memory_async_copy(host_ptr, get_mem_agent(cpu_place),
                 mapped_ptr, get_mem_agent(m->getPlace()),
-                m->getSize(), 
+                m->getSize(),
                 0, NULL, IdentityCopySignal);
         ErrorCheck(Copy async between memory pools, err);
         hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
@@ -186,15 +186,15 @@ atmi_status_t atmi_data_copy_sync(atmi_data_t *dest, const atmi_data_t *src) {
     hsa_signal_add_acq_rel(IdentityCopySignal, 1);
     err = hsa_amd_memory_async_copy(dest->ptr, get_mem_agent(dest_place),
                               src->ptr, get_mem_agent(src_place),
-                              src->size, 
+                              src->size,
                               0, NULL, IdentityCopySignal);
 	ErrorCheck(Copy async between memory pools, err);
     hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
     return ATMI_STATUS_SUCCESS;
-}                             
+}
 
 atmi_status_t atmi_data_copy_h2d_sync(atmi_data_t *dest, void *src, size_t size) {
-    void *agent_ptr; 
+    void *agent_ptr;
     hsa_status_t err;
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
     hsa_agent_t dest_agent = get_mem_agent(dest->place);
@@ -204,7 +204,7 @@ atmi_status_t atmi_data_copy_h2d_sync(atmi_data_t *dest, void *src, size_t size)
     hsa_signal_add_acq_rel(IdentityCopySignal, 1);
     err = hsa_amd_memory_async_copy(dest->ptr, dest_agent,
                               agent_ptr, dest_agent,
-                              size, 
+                              size,
                               0, NULL, IdentityCopySignal);
 	ErrorCheck(Copy async between memory pools, err);
     hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
@@ -222,7 +222,7 @@ atmi_status_t atmi_data_create_sync(atmi_data_t **data, void *host_ptr, size_t s
     hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
     hsa_status_t err = hsa_amd_memory_pool_allocate(pool, size, 0, &d_ptr);
     ErrorCheck(atmi_data_create_sync, err);
-   
+
     ret = atmi_data_copy_h2d_sync(*data, host_ptr, size);
     *data = new atmi_data_t;
     *data->ptr = d_ptr;
@@ -269,7 +269,7 @@ atmi_status_t Runtime::Malloc(void **ptr, size_t size, atmi_mem_place_t place) {
     hsa_amd_memory_pool_t pool = get_memory_pool_by_mem_place(place);
     hsa_status_t err = hsa_amd_memory_pool_allocate(pool, size, 0, ptr);
     ErrorCheck(atmi_malloc, err);
-    DEBUG_PRINT("Malloced [%s %d] %p\n", place.dev_type == ATMI_DEVTYPE_CPU ? "CPU":"GPU", place.dev_id, *ptr); 
+    DEBUG_PRINT("Malloced [%s %d] %p\n", place.dev_type == ATMI_DEVTYPE_CPU ? "CPU":"GPU", place.dev_id, *ptr);
     if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
 
     register_allocation(*ptr, size, place);
@@ -327,7 +327,7 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
 
     // TODO: performance fix if there are more CPU agents to improve locality
     ret->place = ATMI_PLACE_GPU(0, 0);
-    
+
     ret->num_predecessors = 0;
     ret->num_successors = 0;
 
@@ -349,13 +349,16 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
         ret->pred_taskgroup_objs[idx] = get_taskgroup_impl(lparm->required_groups[idx]);
     }
 
+    lock(&(ret->taskgroup_obj->_group_mutex));
     if(ret->taskgroup_obj->_ordered) {
-        lock(&(ret->taskgroup_obj->_group_mutex));
         ret->taskgroup_obj->_running_ordered_tasks.push_back(ret);
         ret->prev_ordered_task = ret->taskgroup_obj->_last_task;
         ret->taskgroup_obj->_last_task = ret;
-        unlock(&(ret->taskgroup_obj->_group_mutex));
     }
+    else {
+        ret->taskgroup_obj->_running_default_tasks.push_back(ret);
+    }
+    unlock(&(ret->taskgroup_obj->_group_mutex));
     if(ret->groupable) {
       DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
       (ret->taskgroup_obj->_task_count)++;
@@ -371,11 +374,11 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
     return ret->id;
 }
 
-atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest, 
+atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         const void *src, const size_t size) {
 
     atmi_status_t ret;
-    hsa_status_t err; 
+    hsa_status_t err;
 
     TaskgroupImpl *taskgroup_obj = task->taskgroup_obj;
     atl_dep_sync_t dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();

@@ -70,49 +70,31 @@ atmi_status_t Runtime::TaskGroupSync(atmi_taskgroup_handle_t group_handle) {
 
 void TaskgroupImpl::sync() {
   DEBUG_PRINT("Waiting for %u group tasks to complete\n", _task_count.load());
+  // if tasks are groupable
   while(_task_count.load() != 0) {}
+
   if(_ordered == ATMI_TRUE) {
+    // if tasks are ordered, just wait for the last launched/created task in this group
     atl_task_wait(_last_task);
     lock(&(_group_mutex));
     _last_task = NULL;
     unlock(&(_group_mutex));
   }
+  else {
+    // if tasks are neither groupable or ordered, wait for every task in the taskgroup
+    for(atl_task_t *task : _running_default_tasks) {
+      atl_task_wait(task);
+    }
+  }
   clearSavedTasks();
 }
-
-#if 0
-hsa_queue_t *acquire_and_set_next_cpu_queue(atl_taskgroup_t *taskgroup_obj, atmi_place_t place) {
-    hsa_queue_t *queue = NULL;
-    atmi_scheduler_t sched = _ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
-    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-    if(_ordered) {
-        if(_cpu_queue == NULL) {
-            _cpu_queue = proc.getQueue(_group_queue_id);
-        }
-        queue = _cpu_queue;
-    }
-    else {
-        queue = proc.getBestQueue(sched);
-    }
-    DEBUG_PRINT("Returned Queue: %p\n", queue);
-    return queue;
-}
-#endif
 
 atmi_status_t TaskgroupImpl::clearSavedTasks() {
     lock(&_group_mutex);
     _running_ordered_tasks.clear();
+    _running_default_tasks.clear();
     _running_groupable_tasks.clear();
     unlock(&_group_mutex);
-    return ATMI_STATUS_SUCCESS;
-}
-
-atmi_status_t TaskgroupImpl::registerTask(atl_task_t *task) {
-    if(task->groupable)
-        _running_groupable_tasks.push_back(task);
-    //DEBUG_PRINT("Registering %s task %p Profilable? %s\n",
-    //            (devtype == ATMI_DEVTYPE_GPU) ? "GPU" : "CPU",
-    //            task, (profilable == ATMI_TRUE) ? "Yes" : "No");
     return ATMI_STATUS_SUCCESS;
 }
 
@@ -142,6 +124,7 @@ core::TaskgroupImpl::TaskgroupImpl(bool ordered, atmi_place_t place) :
 
   _running_groupable_tasks.clear();
   _running_ordered_tasks.clear();
+  _running_default_tasks.clear();
   _and_successors.clear();
   _task_count.store(0);
   _callback_started.clear();
@@ -162,6 +145,7 @@ core::TaskgroupImpl::~TaskgroupImpl() {
 
   _running_groupable_tasks.clear();
   _running_ordered_tasks.clear();
+  _running_default_tasks.clear();
   _and_successors.clear();
 }
 

@@ -18,7 +18,6 @@ namespace core {
       TaskgroupImpl(bool, atmi_place_t);
       ~TaskgroupImpl();
       void sync();
-      atmi_status_t registerTask(atl_task_t *task);
       atmi_status_t clearSavedTasks();
 
       template<typename ProcType>
@@ -62,6 +61,7 @@ namespace core {
       std::atomic<unsigned int> _task_count;
       pthread_mutex_t _group_mutex;
       std::deque<atl_task_t *> _running_ordered_tasks;
+      std::vector<atl_task_t *> _running_default_tasks;
       std::vector<atl_task_t *> _running_groupable_tasks;
       // TODO: for now, all waiting tasks (groupable and individual) are placed in a
       // single queue. does it make sense to have groupable waiting tasks separately

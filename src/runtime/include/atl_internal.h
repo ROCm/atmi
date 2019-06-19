@@ -36,8 +36,8 @@ extern "C" {
 #define _CPPSTRING_
 #endif
 
-#define ATMI_MAX_TASKGROUPS            8
-#define ATMI_MAX_TASKS_PER_TASKGROUP   125
+//#define ATMI_MAX_TASKGROUPS            8
+//#define ATMI_MAX_TASKS_PER_TASKGROUP   125
 
 #define SNK_MAX_FUNCTIONS   100
 
@@ -216,31 +216,6 @@ extern std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 typedef struct atl_task_s atl_task_t;
 typedef std::vector<atl_task_t *> atl_task_vector_t;
 
-typedef struct atl_taskgroup_s {
-    boolean ordered;
-    atl_task_t *last_task;
-    hsa_queue_t *gpu_queue;
-    hsa_queue_t *cpu_queue;
-    atmi_devtype_t last_device_type;
-    atmi_place_t place;
-//    int next_gpu_qid;
-//    int next_cpu_qid;
-    // dependent tasks for the entire task group
-    atl_task_vector_t and_successors;
-    unsigned int group_queue_id;
-    hsa_signal_t group_signal;
-    std::atomic<unsigned int> task_count;
-    pthread_mutex_t group_mutex;
-    std::deque<atl_task_t *> running_ordered_tasks;
-    std::vector<atl_task_t *> running_groupable_tasks;
-    // TODO: for now, all waiting tasks (groupable and individual) are placed in a
-    // single queue. does it make sense to have groupable waiting tasks separately
-    // waiting in their own queue? perhaps not for now. should revisit if there
-    // are more than one callback threads
-    // std::vector<atl_task_t *> waiting_groupable_tasks;
-    std::atomic_flag callback_started;
-}atl_taskgroup_t;
-
 typedef enum atl_task_type_s {
     ATL_KERNEL_EXECUTION    = 0,
     ATL_DATA_MOVEMENT       = 1
@@ -254,7 +229,9 @@ typedef enum atl_dep_sync_s {
 extern struct timespec context_init_time;
 extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
-extern atmi_taskgroup_t *atl_default_taskgroup_obj;
+namespace core {
+class TaskgroupImpl;
+}
 
 typedef struct atl_task_s {
     // reference to HSA signal and the applications task structure
@@ -280,8 +257,9 @@ typedef struct atl_task_s {
     void *data_dest_ptr;
     size_t data_size;
 
-    atl_taskgroup_t *taskgroup_obj;
-    atmi_taskgroup_t group;
+    core::TaskgroupImpl *taskgroup_obj;
+    atmi_taskgroup_handle_t taskgroup;
+    //atmi_taskgroup_t group;
     boolean groupable;
     boolean synchronous;
 
@@ -302,7 +280,7 @@ typedef struct atl_task_s {
     atl_task_vector_t and_successors;
     atl_task_vector_t and_predecessors;
     atl_task_vector_t predecessors;
-    std::vector<atl_taskgroup_t *> pred_taskgroup_objs;
+    std::vector<core::TaskgroupImpl *> pred_taskgroup_objs;
     atmi_task_handle_t id;
     // flag to differentiate between a regular task and a continuation
     // FIXME: probably make this a class hierarchy?
@@ -331,21 +309,11 @@ typedef struct atl_task_s {
 #endif
 } atl_task_t;
 
-extern std::map<int, atl_taskgroup_t *> TaskGroupTable;
+extern std::vector<core::TaskgroupImpl *> AllTaskgroups;
 //atmi_task_table_t TaskTable[SNK_MAX_TASKS];
 extern std::vector<atl_task_t *> AllTasks;
 extern std::queue<atl_task_t *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
-extern hsa_signal_t TaskgroupCommonSignalPool[ATMI_MAX_TASKGROUPS];
-/*
-typedef struct atmi_task_table_s {
-    atmi_task_t *task;
-    hsa_signal_t handle;
-} atmi_task_table_t;
-*/
-extern int           SNK_NextTaskId;
-
-bool operator==(const atmi_taskgroup_handle_t& lhs, const atmi_taskgroup_handle_t& rhs);
 
 namespace core {
 atmi_status_t atl_init_context();
@@ -420,7 +388,6 @@ extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place
 extern bool atl_is_atmi_initialized();
 
 extern void atl_task_wait(atl_task_t *task);
-extern void atl_taskgroup_sync(atl_taskgroup_t *taskgroup_obj);
 
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
@@ -429,34 +396,28 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg);
 extern task_process_init_buffer_t task_process_init_buffer;
 extern task_process_fini_buffer_t task_process_fini_buffer;
 
-void do_progress(atl_taskgroup_t *taskgroup, int progress_count = 0);
+void do_progress(core::TaskgroupImpl *taskgroup, int progress_count = 0);
 void dispatch_ready_task_for_free_signal();
 void dispatch_ready_task_or_release_signal(atl_task_t *task);
 atmi_status_t dispatch_task(atl_task_t *task);
 atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest, const void *src, const size_t size);
-atmi_status_t check_change_in_device_type(atl_task_t *task, atl_taskgroup_t *taskgroup_obj, hsa_queue_t *queue, atmi_devtype_t new_task_device_type);
 void enqueue_barrier_tasks(atl_task_vector_t tasks);
 hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int barrier_flag, bool need_completion);
 void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue, const int dep_task_count, atl_task_t **dep_task_list, int wait_flag, int barrier_flag, atmi_devtype_t devtype, bool need_completion = false);
 
 atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel, unsigned int kernel_id);
 int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id);
-int get_taskgroup_id(atl_taskgroup_t *taskgroup_obj);
-hsa_queue_t *acquire_and_set_next_cpu_queue(atl_taskgroup_t *taskgroup_obj, atmi_place_t place);
-hsa_queue_t *acquire_and_set_next_gpu_queue(atl_taskgroup_t *taskgroup_obj, atmi_place_t place);
-atmi_status_t clear_saved_tasks(atl_taskgroup_t *taskgroup_obj);
-atmi_status_t register_task(atl_taskgroup_t *taskgroup_obj, atl_task_t *task);
-atmi_status_t register_taskgroup(atmi_taskgroup_t *taskgroup_obj);
 void set_task_state(atl_task_t *t, atmi_state_t state);
 void set_task_metrics(atl_task_t *task);
 
 void packet_store_release(uint32_t* packet, uint16_t header, uint16_t rest);
-uint16_t create_header(hsa_packet_type_t type, int barrier, 
+uint16_t create_header(hsa_packet_type_t type, int barrier,
                        atmi_task_fence_scope_t acq_fence = ATMI_FENCE_SCOPE_SYSTEM,
                        atmi_task_fence_scope_t rel_fence = ATMI_FENCE_SCOPE_SYSTEM);
 
 bool try_dispatch_barrier_pkt(atl_task_t *ret);
 atl_task_t *get_task(atmi_task_handle_t t);
+core::TaskgroupImpl *get_taskgroup_impl(atmi_taskgroup_handle_t t);
 bool try_dispatch_callback(atl_task_t *t, void **args);
 bool try_dispatch_barrier_pkt(atl_task_t *t, void **args);
 void set_task_handle_ID(atmi_task_handle_t *t, int ID);

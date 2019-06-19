@@ -71,7 +71,7 @@ atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel, atmi_generic_f
 /*
  * Synchronize
  */
-atmi_status_t atmi_taskgroup_sync(atmi_taskgroup_handle_t group_handle) {
+atmi_status_t atmi_taskgroup_wait(atmi_taskgroup_handle_t group_handle) {
   return core::Runtime::getInstance().TaskGroupSync(group_handle);
 }
 
@@ -128,17 +128,6 @@ atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
 
 atmi_status_t atmi_taskgroup_release(atmi_taskgroup_handle_t group_handle) {
   return core::Runtime::getInstance().TaskGroupRelease(group_handle);
-}
-
-atmi_status_t atmi_taskgroup_get_info(atmi_taskgroup_handle_t group_handle,
-                                            atmi_taskgroup_t *group_info) {
-  atmi_status_t status = ATMI_STATUS_ERROR;
-  atmi_taskgroup_t *tg_info = core::Runtime::getInstance().TaskGroupGetInfo(group_handle);
-  if(group_info) {
-    *group_info = *tg_info;
-    status = ATMI_STATUS_SUCCESS;
-  }
-  return status;
 }
 
 /*

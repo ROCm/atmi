@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
 //   for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
-   //atmi_taskgroup_sync(stream1);
+   //atmi_taskgroup_wait(stream1);
 
    lparm1->synchronous=ATMI_FALSE;
    lparm1->group = stream1_ordered;
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
    //SYNC_STREAM(stream1); 
-   atmi_taskgroup_sync(stream1_ordered);
+   atmi_taskgroup_wait(stream1_ordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
 #if 1
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
    //SYNC_STREAM(stream1); 
-   atmi_taskgroup_sync(stream1_unordered);
+   atmi_taskgroup_wait(stream1_unordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
 #endif
 #if 0

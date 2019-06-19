@@ -325,7 +325,6 @@ namespace core {
     // create default taskgroup obj
     atmi_taskgroup_handle_t tghandle;
     ATMIErrorCheck(Create default taskgroup, TaskGroupCreate(&tghandle));
-    atl_default_taskgroup_obj = reinterpret_cast<atmi_taskgroup_t *>(tghandle.handle);
 
     ATMIErrorCheck(Device enqueue init, atmi_ke_init());
 
@@ -860,13 +859,6 @@ namespace core {
       atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
       ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
       gpu_agents.push_back(proc.getAgent());
-    }
-    /* Initialize all preallocated tasks and signals */
-    for ( task_num = 0 ; task_num < ATMI_MAX_TASKGROUPS; task_num++){
-      hsa_signal_t new_signal;
-      err=hsa_signal_create(0, 0, NULL, &new_signal);
-      ErrorCheck(Creating a HSA signal, err);
-      TaskgroupCommonSignalPool[task_num] = new_signal;
     }
     int max_signals = core::Runtime::getInstance().getMaxSignals();
     for ( task_num = 0 ; task_num < max_signals; task_num++){

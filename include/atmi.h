@@ -240,31 +240,6 @@ typedef struct atmi_machine_s {
 } atmi_machine_t;
 
 /**
- * @brief Opaque handle representing an ATMI Task Group.
- *
- * @details ATMI task groups can be a collection of compute and memory tasks. They can have
- * different properties that are described in the structure @p atmi_taskgroup_t.
- *
- */
-typedef struct atmi_taskgroup_handle_s {
-    /**
-     * Opaque handle.
-     */
-    unsigned long int handle;
-} atmi_taskgroup_handle_t;
-
-/**
- * @brief ATMI Task Group Data Structure
- */
-typedef struct atmi_taskgroup_s {
-   int                id;           /**< Unique task group identifier           */
-   boolean            ordered;      /**<                                        */
-   atmi_place_t       place;        /**< CUs to execute tasks; default: any     */
-   int                maxsize;      /**< Number of tasks allowed in group       */
-   //atmi_full_policy_t full_policy;/**< What to do if maxsize reached          */
-} atmi_taskgroup_t;
-
-/**
  * @brief ATMI Task info structure
  */
 typedef void* atmi_handle_t;
@@ -299,10 +274,25 @@ typedef struct atmi_task_handle_s {
 typedef unsigned long int atmi_task_handle_t;
 #endif
 /**
+ * @brief The ATMI taskgroup handle.
+ *
+ * @details ATMI task groups can be a collection of compute and memory tasks. They can have
+ * different properties like being ordered or belonging to the same compute/memory place.
+ *
+ */
+typedef unsigned long int atmi_taskgroup_handle_t;
+
+/**
  * @brief The special NULL task handle.
  */
 extern atmi_task_handle_t ATMI_NULL_TASK_HANDLE;
+/**
+ * @brief The special default taskgroup handle.
+ */
 extern atmi_taskgroup_handle_t ATMI_DEFAULT_TASKGROUP_HANDLE;
+/**
+ * @brief The special default compute place (GPU 0).
+ */
 extern atmi_place_t ATMI_DEFAULT_PLACE;
 
 /**

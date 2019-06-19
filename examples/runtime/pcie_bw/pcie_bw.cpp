@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     }
     // wait for all tasks to complete
 #ifndef BIBW
-    ErrorCheck(atmi_taskgroup_sync(group));
+    ErrorCheck(atmi_taskgroup_wait(group));
 #endif
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
       atmi_memcpy_async(cparm, d_input, d_output, size);
     }
     // wait for all tasks to complete
-    ErrorCheck(atmi_taskgroup_sync(group));
+    ErrorCheck(atmi_taskgroup_wait(group));
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
 

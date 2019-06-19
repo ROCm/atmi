@@ -66,6 +66,7 @@ add_library(atmi_runtime SHARED
     atl_cputask.c
     atl_profile.c
     task.cpp
+    taskgroup.cpp
     atl_synckernel.c
     ATLData.cpp
     ATLMachine.cpp

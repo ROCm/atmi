@@ -12,10 +12,11 @@
 #include <vector>
 #include <iostream>
 #include "atmi_runtime.h"
-#include "atl_internal.h"
 #include "rt.h"
 #include <cassert>
 #include <thread>
+#include "atl_internal.h"
+#include "taskgroup.h"
 
 using namespace std;
 
@@ -303,17 +304,12 @@ atmi_status_t Runtime::Memfree(void *ptr) {
 
 atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const void *src, size_t size) {
     // TODO: Reuse code in atl_rt for setting up default task params
-    atmi_taskgroup_t *taskgroup = NULL;
-    if(lparm->group == ATMI_DEFAULT_TASKGROUP_HANDLE) {
-        taskgroup = atl_default_taskgroup_obj;
-    } else {
-        taskgroup = reinterpret_cast<atmi_taskgroup_t *>(lparm->group.handle);
-    }
-    /* Add row to taskgroup table for purposes of future synchronizations */
-    //register_taskgroup(taskgroup);
-    atl_taskgroup_t *taskgroup_obj = TaskGroupTable[taskgroup->id];
 
     atl_task_t *ret = get_new_task();
+
+    /* Add row to taskgroup table for purposes of future synchronizations */
+    ret->taskgroup = lparm->group;
+    ret->taskgroup_obj = get_taskgroup_impl(ret->taskgroup);
 
     ret->data_dest_ptr = dest;
     ret->data_src_ptr = (void *)src;
@@ -328,12 +324,6 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
     // doing data copies in non-system scope
     ret->acquire_scope = ATMI_FENCE_SCOPE_SYSTEM;
     ret->release_scope = ATMI_FENCE_SCOPE_SYSTEM;
-
-    ret->group.id = taskgroup->id;
-    ret->group.ordered = taskgroup->ordered;
-    ret->group.place = taskgroup->place;
-    ret->group.maxsize = taskgroup->maxsize;
-    ret->taskgroup_obj = taskgroup_obj;
 
     // TODO: performance fix if there are more CPU agents to improve locality
     ret->place = ATMI_PLACE_GPU(0, 0);
@@ -356,27 +346,19 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest, const v
     ret->pred_taskgroup_objs.clear();
     ret->pred_taskgroup_objs.resize(lparm->num_required_groups);
     for(int idx = 0; idx < lparm->num_required_groups; idx++) {
-        atmi_taskgroup_t *tg =
-                  reinterpret_cast<atmi_taskgroup_t *>(lparm->required_groups[idx].handle);
-        if(tg){
-          std::map<int, atl_taskgroup_t *>::iterator map_it = TaskGroupTable.find(tg->id);
-          assert(map_it != TaskGroupTable.end());
-          atl_taskgroup_t *pred_tg = map_it->second;
-          assert(pred_tg != NULL);
-          ret->pred_taskgroup_objs[idx] = pred_tg;
-        }
+        ret->pred_taskgroup_objs[idx] = get_taskgroup_impl(lparm->required_groups[idx]);
     }
 
-    if(ret->taskgroup_obj->ordered) {
-        lock(&(ret->taskgroup_obj->group_mutex));
-        ret->taskgroup_obj->running_ordered_tasks.push_back(ret);
-        ret->prev_ordered_task = ret->taskgroup_obj->last_task;
-        ret->taskgroup_obj->last_task = ret;
-        unlock(&(ret->taskgroup_obj->group_mutex));
+    if(ret->taskgroup_obj->_ordered) {
+        lock(&(ret->taskgroup_obj->_group_mutex));
+        ret->taskgroup_obj->_running_ordered_tasks.push_back(ret);
+        ret->prev_ordered_task = ret->taskgroup_obj->_last_task;
+        ret->taskgroup_obj->_last_task = ret;
+        unlock(&(ret->taskgroup_obj->_group_mutex));
     }
     if(ret->groupable) {
       DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
-      (ret->taskgroup_obj->task_count)++;
+      (ret->taskgroup_obj->_task_count)++;
     }
     atl_dep_sync_t dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
     if(dep_sync_type == ATL_SYNC_BARRIER_PKT) {
@@ -395,7 +377,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     atmi_status_t ret;
     hsa_status_t err; 
 
-    atl_taskgroup_t *taskgroup_obj = task->taskgroup_obj;
+    TaskgroupImpl *taskgroup_obj = task->taskgroup_obj;
     atl_dep_sync_t dep_sync_type = (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
     std::vector<hsa_signal_t> dep_signals;
     int val = 0;
@@ -469,11 +451,11 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
 
     if(type == ATMI_H2D || type == ATMI_D2H) {
       if(task->groupable == ATMI_TRUE) {
-        lock(&(taskgroup_obj->group_mutex));
+        lock(&(taskgroup_obj->_group_mutex));
         // barrier pkt already sets the signal values when the signal resource
         // is available
-        taskgroup_obj->running_groupable_tasks.push_back(task);
-        unlock(&(taskgroup_obj->group_mutex));
+        taskgroup_obj->_running_groupable_tasks.push_back(task);
+        unlock(&(taskgroup_obj->_group_mutex));
       }
       // For malloc'ed buffers, additional atmi_malloc/memcpy/free
       // steps are needed. So, fire and forget a copy thread with
@@ -529,11 +511,11 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     }
     else {
       if(task->groupable == ATMI_TRUE) {
-        lock(&(taskgroup_obj->group_mutex));
+        lock(&(taskgroup_obj->_group_mutex));
         // barrier pkt already sets the signal values when the signal resource
         // is available
-        taskgroup_obj->running_groupable_tasks.push_back(task);
-        unlock(&(taskgroup_obj->group_mutex));
+        taskgroup_obj->_running_groupable_tasks.push_back(task);
+        unlock(&(taskgroup_obj->_group_mutex));
       }
 
       // set task state to dispatched; then dispatch

@@ -469,8 +469,8 @@ atmi_task_handle_t atmi_task_activate(
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
  atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
-                                      bool ordered = false,
-                                      atmi_place_t place = ATMI_DEFAULT_PLACE);
+                                     bool ordered = false,
+                                     atmi_place_t place = ATMI_DEFAULT_PLACE);
 
 
 /**
@@ -489,24 +489,6 @@ atmi_task_handle_t atmi_task_activate(
  atmi_status_t atmi_taskgroup_release(atmi_taskgroup_handle_t group_handle);
 
 /**
- * @brief Retrieve the task group information from the opaque handle.
- *
- * @param[in] group_handle The task group handle of already launched tasks or an in-flight data
- * movement operations.
- *
- * @param[out] group_info The task group structure that has (read-only) attributes of the
- * task group.
- *
- * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
- *
- * @retval ::ATMI_STATUS_ERROR The function encountered errors.
- *
- * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
- */
- atmi_status_t atmi_taskgroup_get_info(atmi_taskgroup_handle_t group_handle,
-                                        atmi_taskgroup_t *group_info);
-
-/**
  * @brief Wait for the launched task group, which could be a group of compute
  * tasks and data movement tasks.
  *
@@ -519,7 +501,7 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_taskgroup_sync(atmi_taskgroup_handle_t group_handle);
+ atmi_status_t atmi_taskgroup_wait(atmi_taskgroup_handle_t group_handle);
 
 /** @} */
 
@@ -638,14 +620,14 @@ atmi_task_handle_t atmi_memcpy_async(
 atmi_task_handle_t get_atmi_task_handle();
 
 /**
- * @brief Retrieve the pointer to the task group object
+ * @brief Retrieve the handle to the taskgroup object
  * of the currently running task. This function is valid
  * only within the body of a CPU task.
  *
- * @return A pointer to the task group of the ATMI CPU task.
+ * @return A handle to the taskgroup of the ATMI CPU task.
  *
  */
-atmi_taskgroup_t *get_atmi_taskgroup();
+atmi_taskgroup_handle_t get_atmi_taskgroup_handle();
 
 /**
  * @brief Retrieve the global thread ID of

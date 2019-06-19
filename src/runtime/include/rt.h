@@ -92,7 +92,6 @@ namespace core {
                                     bool ordered = false,
                                     atmi_place_t place = ATMI_DEFAULT_PLACE);
       atmi_status_t TaskGroupRelease(atmi_taskgroup_handle_t);
-      atmi_taskgroup_t *TaskGroupGetInfo(atmi_taskgroup_handle_t);
       // data
       atmi_status_t Memcpy(void *, const void *, size_t);
       atmi_task_handle_t MemcpyAsync(atmi_cparm_t *, void *, const void *, size_t);

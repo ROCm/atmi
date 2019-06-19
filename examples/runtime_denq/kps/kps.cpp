@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
     void *args[] = { &kcalls };
     atmi_task_launch(lparm, main_kernel, args);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    //atmi_taskgroup_sync(stream);
+    //atmi_taskgroup_wait(stream);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
     print_timing("Synchronous Flat Execution (DP)", 
             kcalls, &start_time, 

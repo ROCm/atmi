@@ -23,18 +23,24 @@ namespace core {
       template<typename ProcType>
       hsa_queue_t *chooseQueueFromPlace(atmi_place_t place) {
         hsa_queue_t *ret_queue = NULL;
-        hsa_queue_t *_queue = NULL;
         atmi_scheduler_t sched = _ordered ? ATMI_SCHED_NONE : ATMI_SCHED_RR;
         ProcType &proc = get_processor<ProcType>(place);
-        if(place.type == ATMI_DEVTYPE_GPU)
-          _queue = _gpu_queue;
-        else if(place.type == ATMI_DEVTYPE_CPU)
-          _queue = _cpu_queue;
         if(_ordered) {
-          if(_queue == NULL) {
-            _queue = proc.getQueue(_id);
+          // Get the taskgroup's CPU or GPU queue depending on the task. If taskgroup is
+          // ordered, it will have just one GPU queue for its GPU tasks and just one CPU
+          // queue for its CPU tasks. If a taskgroup has interleaved CPU and GPU tasks, then
+          // a corresponding barrier packet or dependency edge will capture the relationship
+          // between the two queues.
+          hsa_queue_t *generic_queue = (place.type == ATMI_DEVTYPE_GPU) ? _gpu_queue : _cpu_queue;
+          if(generic_queue == NULL) {
+            generic_queue = proc.getQueue(_id);
+            // put the chosen queue as the taskgroup's designated CPU or GPU queue
+            if(place.type == ATMI_DEVTYPE_GPU)
+              _gpu_queue = generic_queue;
+            else if(place.type == ATMI_DEVTYPE_CPU)
+              _cpu_queue = generic_queue;
           }
-          ret_queue = _queue;
+          ret_queue = generic_queue;
         }
         else {
           ret_queue = proc.getBestQueue(sched);

@@ -888,7 +888,11 @@ namespace core {
   }
 
   hsa_status_t callbackEvent(const hsa_amd_event_t *event, void *data) {
+#if ROCM_VERSION_MAJOR >= 2 && ROCM_VERSION_MINOR >= 3
     if(event->event_type == HSA_AMD_GPU_MEMORY_FAULT_EVENT) {
+#else
+    if(event->event_type == GPU_MEMORY_FAULT_EVENT) {
+#endif
       hsa_amd_gpu_memory_fault_info_t memory_fault = event->memory_fault;
       // memory_fault.agent
       // memory_fault.virtual_address

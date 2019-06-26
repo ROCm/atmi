@@ -18,7 +18,6 @@ namespace core {
       TaskgroupImpl(bool, atmi_place_t);
       ~TaskgroupImpl();
       void sync();
-      atmi_status_t clearSavedTasks();
 
       template<typename ProcType>
       hsa_queue_t *chooseQueueFromPlace(atmi_place_t place) {
@@ -43,7 +42,7 @@ namespace core {
           ret_queue = generic_queue;
         }
         else {
-          ret_queue = proc.getBestQueue(sched);
+          ret_queue = proc.getQueue(getBestQueueID(sched));
         }
         DEBUG_PRINT("Returned Queue: %p\n", ret_queue);
         return ret_queue;
@@ -51,6 +50,9 @@ namespace core {
 
       hsa_signal_t getSignal() const { return _group_signal; }
 
+    private:
+      atmi_status_t clearSavedTasks();
+      int getBestQueueID(atmi_scheduler_t sched);
     public:
       uint32_t _id;
       bool _ordered;
@@ -58,6 +60,7 @@ namespace core {
       hsa_queue_t* _gpu_queue;
       hsa_queue_t* _cpu_queue;
       atmi_devtype_t _last_device_type;
+      int _next_best_queue_id;
       atmi_place_t _place;
       //    int next_gpu_qid;
       //    int next_cpu_qid;

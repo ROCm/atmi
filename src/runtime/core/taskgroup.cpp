@@ -98,6 +98,19 @@ atmi_status_t TaskgroupImpl::clearSavedTasks() {
     return ATMI_STATUS_SUCCESS;
 }
 
+int TaskgroupImpl::getBestQueueID(atmi_scheduler_t sched) {
+  int ret = 0;
+  switch(sched) {
+    case ATMI_SCHED_NONE:
+      ret = __atomic_load_n(&_next_best_queue_id, __ATOMIC_ACQUIRE);
+      break;
+    case ATMI_SCHED_RR:
+      ret = __atomic_fetch_add(&_next_best_queue_id, 1, __ATOMIC_ACQ_REL);
+      break;
+  }
+  return ret;
+}
+
 /*
  * do not use the below because they will not work if we want to sort mutexes
 atmi_status_t get_taskgroup_mutex(atl_taskgroup_t *taskgroup_obj, pthread_mutex_t *m) {
@@ -115,6 +128,7 @@ atmi_status_t set_taskgroup_mutex(atl_taskgroup_t *taskgroup_obj, pthread_mutex_
 core::TaskgroupImpl::TaskgroupImpl(bool ordered, atmi_place_t place) :
   _ordered(ordered),
   _place(place),
+  _next_best_queue_id(0),
   _last_task(NULL),
   _cpu_queue(NULL),
   _gpu_queue(NULL)

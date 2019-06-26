@@ -55,6 +55,8 @@ else()
   add_definitions(-O2)
 endif()
 add_definitions(-c)
+add_definitions(-DROCM_VERSION_MAJOR=${ROCM_VERSION_MAJOR})
+add_definitions(-DROCM_VERSION_MINOR=${ROCM_VERSION_MINOR})
 add_definitions(-fpic)
 
 # set output dir for the .so file

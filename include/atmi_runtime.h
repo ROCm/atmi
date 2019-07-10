@@ -9,6 +9,9 @@
 #include "atmi.h"
 #include <inttypes.h>
 #include <stdlib.h>
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
 
 
 /** \defgroup kernel Kernel Handles
@@ -469,9 +472,14 @@ atmi_task_handle_t atmi_task_activate(
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
  atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
+#ifdef __cplusplus
                                      bool ordered = false,
-                                     atmi_place_t place = ATMI_DEFAULT_PLACE);
-
+                                     atmi_place_t place = ATMI_DEFAULT_PLACE
+#else 
+                                     bool ordered,
+                                     atmi_place_t place
+#endif
+                                     );
 
 /**
  * @brief Release the task group structure, which could be a group of compute

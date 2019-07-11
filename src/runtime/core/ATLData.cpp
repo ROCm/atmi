@@ -25,7 +25,9 @@ extern hsa_signal_t IdentityCopySignal;
 extern std::deque<atl_task_t *> TaskList;
 
 namespace core {
-
+#ifndef USE_ROCR_PTR_INFO
+ATLPointerTracker g_data_map;  // Track all am pointer allocations.
+#endif
 void allow_access_to_all_gpu_agents(void *ptr);
 //std::map<void *, ATLData *> MemoryMap;
 
@@ -46,6 +48,34 @@ std::ostream &operator<<(std::ostream &os, const ATLData *ap)
        << ", " << place.mem_id << ")";
     return os;
 }
+
+#ifndef USE_ROCR_PTR_INFO
+void ATLPointerTracker::insert (void *pointer, ATLData *p)
+{
+    std::lock_guard<std::mutex> l (_mutex);
+
+    DEBUG_PRINT ("insert: %p + %zu\n", pointer, p->getSize());
+    _tracker.insert(std::make_pair(ATLMemoryRange(pointer, p->getSize()), p));
+}
+
+void ATLPointerTracker::remove (void *pointer)
+{
+    std::lock_guard<std::mutex> l (_mutex);
+    DEBUG_PRINT ("remove: %p\n", pointer);
+    _tracker.erase(ATLMemoryRange(pointer,1));
+}
+
+ATLData *ATLPointerTracker::find (const void *pointer)
+{
+    std::lock_guard<std::mutex> l (_mutex);
+    ATLData *ret = NULL;
+    auto iter = _tracker.find(ATLMemoryRange(pointer,1));
+    DEBUG_PRINT ("find: %p\n", pointer);
+    if(iter != _tracker.end()) // found
+        ret = iter->second;
+    return ret;
+}
+#endif
 
 ATLProcessor &get_processor_by_compute_place(atmi_place_t place) {
     int dev_id = place.device_id;
@@ -255,11 +285,15 @@ atmi_status_t atmi_data_destroy_sync(atmi_data_t *data) {
 #endif
 
 void register_allocation(void *ptr, size_t size, atmi_mem_place_t place) {
+#ifndef USE_ROCR_PTR_INFO
+    ATLData *data = new ATLData(ptr, NULL, size, place, ATMI_IN_OUT);
+    g_data_map.insert(ptr, data);
+#else
     ATLData *data = new ATLData(ptr, NULL, size, place, ATMI_IN_OUT);
 
     hsa_status_t err = hsa_amd_pointer_info_set_userdata(ptr, data);
     ErrorCheck(Setting pointer info with user data, err);
-
+#endif
     if(place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(ptr);
     // TODO: what if one GPU wants to access another GPU?
 }
@@ -279,19 +313,28 @@ atmi_status_t Runtime::Malloc(void **ptr, size_t size, atmi_mem_place_t place) {
 
 atmi_status_t Runtime::Memfree(void *ptr) {
     atmi_status_t ret = ATMI_STATUS_SUCCESS;
+    hsa_status_t err;
+#ifndef USE_ROCR_PTR_INFO
+    ATLData *data = g_data_map.find(ptr);
+#else
     hsa_amd_pointer_info_t ptr_info;
     ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-    hsa_status_t err = hsa_amd_pointer_info((void *)ptr, &ptr_info,
+    err = hsa_amd_pointer_info((void *)ptr, &ptr_info,
                                NULL, /* alloc fn ptr */
                                NULL, /* num_agents_accessible */
                                NULL);/* accessible agents */
     ErrorCheck(Checking pointer info, err);
 
     ATLData *data = (ATLData *)ptr_info.userData;
+#endif
     if(!data)
       ErrorCheck(Checking pointer info userData, HSA_STATUS_ERROR_INVALID_ALLOCATION);
 
+#ifndef USE_ROCR_PTR_INFO
+    g_data_map.remove(ptr);
+#else
     // is there a way to unset a userdata with AMD pointer before deleting 'data'?
+#endif
     delete data;
 
     err = hsa_amd_memory_pool_free(ptr);
@@ -395,6 +438,10 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     DEBUG_PRINT(")\n");
     if(val > 0) DEBUG_PRINT("Task[%lu] has %d not-dispatched predecessor tasks\n", task->id, val);
 
+#ifndef USE_ROCR_PTR_INFO
+    ATLData * volatile src_data = g_data_map.find(src);
+    ATLData * volatile dest_data = g_data_map.find(dest);
+#else
     hsa_amd_pointer_info_t src_ptr_info;
     hsa_amd_pointer_info_t dest_ptr_info;
     src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
@@ -411,6 +458,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     ErrorCheck(Checking dest pointer info, err);
     ATLData * volatile src_data = (ATLData *)src_ptr_info.userData;
     ATLData * volatile dest_data = (ATLData *)dest_ptr_info.userData;
+#endif
     bool is_src_host = (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     bool is_dest_host = (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
@@ -549,6 +597,10 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     atmi_status_t ret;
     hsa_status_t err;
 
+#ifndef USE_ROCR_PTR_INFO
+    ATLData * volatile src_data = g_data_map.find(src);
+    ATLData * volatile dest_data = g_data_map.find(dest);
+#else
     hsa_amd_pointer_info_t src_ptr_info;
     hsa_amd_pointer_info_t dest_ptr_info;
     src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
@@ -565,6 +617,7 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     ErrorCheck(Checking dest pointer info, err);
     ATLData * volatile src_data = (ATLData *)src_ptr_info.userData;
     ATLData * volatile dest_data = (ATLData *)dest_ptr_info.userData;
+#endif
     atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
     hsa_agent_t cpu_agent = get_mem_agent(cpu);
     hsa_agent_t src_agent;

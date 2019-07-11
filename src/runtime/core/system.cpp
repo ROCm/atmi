@@ -1769,9 +1769,9 @@ namespace core {
       ErrorCheck(Symbol info size extraction, err);
 
       atmi_mem_place_t place = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, gpu, 0);
+      DEBUG_PRINT("Symbol %s = %p (%u bytes)\n", name, (void *)info.addr, info.size);
       register_allocation((void *)info.addr, (size_t)info.size, place);
       SymbolInfoTable[gpu][std::string(name)] = info;
-      DEBUG_PRINT("Symbol %s = %p (%u bytes)\n", name, (void *)info.addr, info.size);
       free(name);
     }
     else {
@@ -1876,9 +1876,10 @@ namespace core {
           err = hsa_executable_load_code_object(executable, agent, code_object, NULL);
           ErrorCheckAndContinue(Loading the code object, err);
 
-          err = hsa_executable_iterate_agent_symbols(executable, agent,
-              create_kernarg_memory_agent, &gpu);
-          ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+          //cannot iterate over symbols until executable is frozen
+          //err = hsa_executable_iterate_agent_symbols(executable, agent,
+          //    create_kernarg_memory_agent, &gpu);
+          //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
         }
         module_load_success = 1;
@@ -1889,8 +1890,8 @@ namespace core {
       err = hsa_executable_freeze(executable, "");
       ErrorCheckAndContinue(Freeze the executable, err);
 
-      //err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu);
-      //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+      err = hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu);
+      ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
       //err = hsa_executable_iterate_program_symbols(executable, iterate_program_symbols, &gpu);
       //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);

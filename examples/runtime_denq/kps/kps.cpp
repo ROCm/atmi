@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     long int nanosecs;
     float kps;
 
-    long int kcalls = 1024 * 128;
+    long int kcalls = 16;
 
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
     if(err != ATMI_STATUS_SUCCESS) return -1;
@@ -74,12 +74,12 @@ int main(int argc, char *argv[]) {
     lparm->synchronous = ATMI_TRUE;
     lparm->place = ATMI_PLACE_GPU(0, 0);
     lparm->groupable = ATMI_TRUE;
-    lparm->kernel_id = K_ID_subTask_gpu; 
+    //lparm->kernel_id = K_ID_subTask_gpu;
     atmi_task_launch(lparm, sub_kernel, NULL);
 
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-    lparm->WORKITEMS = 512;//kcalls * 64;
-    lparm->kernel_id = K_ID_mainTask_gpu;
+    lparm->WORKITEMS = kcalls * 64;
+    //lparm->kernel_id = K_ID_mainTask_gpu;
     void *args[] = { &kcalls };
     atmi_task_launch(lparm, main_kernel, args);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
             &end_launch_time, &end_time);
 
     lparm->WORKITEMS = 64;
-    lparm->kernel_id = K_ID_subTask_gpu; 
+    //lparm->kernel_id = K_ID_subTask_gpu;
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
     for(int i=0; i<kcalls; i++) atmi_task_launch(lparm, sub_kernel, NULL);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);

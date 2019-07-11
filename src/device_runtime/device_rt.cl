@@ -125,7 +125,7 @@ void agent_dispatch(atmi_lparm_t *lparm, global hsa_queue_t *this_Q, void *kerna
     __ockl_hsa_signal_store(*worker_sig, 0, __ockl_memory_order_release); 
 }
 
-void atmi_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region, 
+void atmid_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region,
                                    size_t args_region_size) {
     constant atmi_implicit_args_t *impl_args = (constant atmi_implicit_args_t *)__llvm_amdgcn_implicitarg_ptr();
 

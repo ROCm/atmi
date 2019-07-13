@@ -41,7 +41,7 @@ typedef struct atmi_kernel_enqueue_template_s {
     void *kernarg_regions;
 } atmi_kernel_enqueue_template_t;
 
-extern void atmi_task_launch(atmi_lparm_t *lp, unsigned long kernel_id, void *args_region, 
+extern void atmid_task_launch(atmi_lparm_t *lp, unsigned long kernel_id, void *args_region,
                                    size_t args_region_size);
 
 #endif

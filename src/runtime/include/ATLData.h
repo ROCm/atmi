@@ -11,6 +11,11 @@
 #include <stdlib.h>
 #include <map>
 #include <mutex>
+//#define USE_ROCR_PTR_INFO
+// There seems to be a bug with ROCr's hsa_amd_pointer_info_set_userdata for variable
+// symbols. If/when that bug is fixed, we can uncomment the above line to USE_ROCR_PTR_INFO.
+// Until then, we maintain our own mapping of device addr to a user specified data object
+namespace core {
 class ATLData {
     public: 
         ATLData(void *ptr, size_t size, atmi_mem_place_t place, atmi_arg_type_t type) : 
@@ -32,6 +37,8 @@ class ATLData {
        atmi_mem_place_t _place;
        atmi_arg_type_t _arg_type;
 };
+
+#ifndef USE_ROCR_PTR_INFO
 //---
 struct ATLMemoryRange {
     const void * _basePointer;
@@ -67,6 +74,9 @@ private:
     //std::shared_timed_mutex _mut;
 };
 
+extern ATLPointerTracker g_data_map;  // Track all am pointer allocations.
+#endif
+
 enum {
     ATMI_H2D = 0,
     ATMI_D2H = 1,
@@ -76,5 +86,5 @@ enum {
 
 hsa_agent_t get_mem_agent(atmi_mem_place_t place);
 hsa_agent_t get_compute_agent(atmi_place_t place);
-
+} // namespace core
 #endif // __ATL_DATA__

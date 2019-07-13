@@ -23,7 +23,7 @@ kernel void subTask_gpu(long int taskId) {
     args_t args;
     args.arg1 = taskId;
     
-    atmi_task_launch(lparm, K_ID_print_taskId_cpu, (void *)&args, sizeof(args_t));
+    atmid_task_launch(lparm, K_ID_print_taskId_cpu, (void *)&args, sizeof(args_t));
 }
 
 __kernel void mainTask_gpu(long int numTasks) {
@@ -35,7 +35,7 @@ __kernel void mainTask_gpu(long int numTasks) {
         args_t args;
         args.arg1 = gid;
 
-        atmi_task_launch(lparm, K_ID_subTask_gpu, (void *)&args, sizeof(args_t));
+        atmid_task_launch(lparm, K_ID_subTask_gpu, (void *)&args, sizeof(args_t));
     }
 }
 

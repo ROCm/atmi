@@ -15,6 +15,8 @@
 #include <iostream>
 #include <RealTimerClass.h>
 
+using namespace core;
+
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;
 
@@ -867,15 +869,14 @@ atmi_task_handle_t get_atmi_task_handle() {
 }
 
 
-atmi_task_group_t *get_atmi_task_group() {
+atmi_taskgroup_handle_t get_atmi_taskgroup() {
     atl_task_t *task = get_cur_thread_task_impl();
+    atmi_taskgroup_handle_t ret;
     if(task) {
-        DEBUG_PRINT("Returning task group with ID: %d\n", task->group.id);
-        return &(task->group);
+        DEBUG_PRINT("Returning task group with ID: %lu\n", task->taskgroup);
+        ret = task->taskgroup;
     }
-    else {
-        return NULL;
-    }
+    return ret;
 }
 
 unsigned long get_global_size(unsigned int dim) {

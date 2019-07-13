@@ -7,7 +7,7 @@
 #define ATMI_PROFILING_H
 
 #include "atmi.h"
-#include "atl_rt.h"
+#include "atl_internal.h"
 
 //#define ATMI_HAVE_PROFILE
 

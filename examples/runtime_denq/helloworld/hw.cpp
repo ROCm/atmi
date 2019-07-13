@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
                        1,
                        ATMI_DEVTYPE_GPU, "subTask_gpu");
 
-    unsigned long int numTasks = 16;
+    unsigned long int numTasks = 4;
     ATMI_LPARM_1D(lparm, 64 * numTasks);
     //lparm->WORKITEMS = numTasks;
     //lparm->groupDim[0] = numTasks;

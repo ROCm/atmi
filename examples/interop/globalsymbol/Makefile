@@ -48,7 +48,7 @@ INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I${HSA_RUNTIME_PATH}/incl
 
 # CLOC
 CLOC_PATH ?= ${ATMI_RUNTIME_PATH}/bin
-CLOCOPTS = -vv -hcc2 ${AMDLLVM} -triple ${AMDGPU_TARGET_TRIPLE} -libgcn ${ROCM_DEVICE_PATH}
+CLOCOPTS = -vv -aomp ${AMDLLVM} -triple ${AMDGPU_TARGET_TRIPLE} -libgcn ${ROCM_DEVICE_PATH}
 CLOCOPTS += -clopts "$(INC_FLAGS) -O2 -v"
 
 # ROCm-Device-lib

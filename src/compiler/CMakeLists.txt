@@ -10,8 +10,8 @@ if(NOT ATMI_C_EXTENSION_VAR MATCHES on )
   return()
 endif()
 
-if(ATMI_DEP_LIBHSA_FOUND)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
+if(ROCM_FOUND)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)|(aarch64)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
         set (EXECUTE_COMMAND ${CMAKE_C_COMPILER} -print-file-name=plugin)
         execute_process(COMMAND ${EXECUTE_COMMAND} RESULT_VARIABLE rv OUTPUT_VARIABLE ov)
         # run the command <GCC C compiler> -print-file-name=plugin to determine
@@ -58,7 +58,7 @@ if(ATMI_DEP_LIBHSA_FOUND)
                 atl_pifgen_plugin.c
                 )
 
-            include_directories(${ATMI_DEP_LIBHSA_INCLUDE_DIRS})
+            include_directories(${ROCM_INCLUDE_DIRS})
             include_directories(${CMAKE_CURRENT_SOURCE_DIR})
             include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
             include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include)
@@ -77,8 +77,9 @@ if(ATMI_DEP_LIBHSA_FOUND)
 
             target_link_libraries(
                 atmi_cplugin
-                "-Wl,--as-needed"
-                -L${ATMI_DEP_LIBHSA_LIBRARIES_DIRS} -lhsa-runtime64 
+                ${ROCM_LIBRARIES}
+                -L${ROCM_LIBRARIES_DIR}/../hsa/lib -L${ROCM_LIBRARIES_DIR}
+                -Wl,-rpath,${ROCM_LIBRARIES_DIR}/../hsa/lib -Wl,-rpath,${ROCM_LIBRARIES_DIR}
             )
        else()
             libatmi_runtime_say("Not building ATMI C Extension: GCC Plugin not found.")

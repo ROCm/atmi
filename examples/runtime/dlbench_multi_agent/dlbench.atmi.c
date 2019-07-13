@@ -374,7 +374,7 @@ int main(int argc, char **argv) {
     }
 
     double t = mysecond();
-    atmi_task_group_sync(NULL);
+    atmi_taskgroup_wait(ATMI_DEFAULT_TASKGROUP_HANDLE);
     t = 1.0E6 * (mysecond() - t);
 
 #ifdef DEVMEM

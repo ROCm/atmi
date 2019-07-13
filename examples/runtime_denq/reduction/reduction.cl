@@ -33,6 +33,6 @@ kernel void reduction_gpu(__global int* in, unsigned long length) {
         args_t args;
         args.in = in;
         args.length = length;
-        atmi_task_launch(lparm, reduction_task, (void *)&args, sizeof(args_t));
+        atmid_task_launch(lparm, reduction_task, (void *)&args, sizeof(args_t));
     }
 }

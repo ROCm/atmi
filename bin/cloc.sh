@@ -8,9 +8,9 @@
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #
-PROGVERSION="0.3-7"
+PROGVERSION="0.6-0"
 #
-# Copyright (c) 2017 ADVANCED MICRO DEVICES, INC.  
+# Copyright (c) 2018 ADVANCED MICRO DEVICES, INC.  
 # 
 # AMD is granting you permission to use this software and documentation (if any) (collectively, the 
 # Materials) pursuant to the terms and conditions of the Software License Agreement included with the 
@@ -52,10 +52,9 @@ function usage(){
 /bin/cat 2>&1 <<"EOF" 
 
    cloc.sh: Compile a cl or cu file into an HSA Code object file (.hsaco)  
-            using the HCC2 compiler. An hsaco file contains the amdgpu 
+            using the AOMP compiler. An hsaco file contains the amdgpu 
             isa that can be loaded by the HSA Runtime.
-            As of amdcloc 1.3.1, use of cuda is only experimental.  
-            Generated kernels from cuda will not execute. 
+            The creation of hsaco for cuda kernels is experimental.
 
    Usage: cloc.sh [ options ] filename.cl
 
@@ -72,9 +71,10 @@ function usage(){
     -k        Keep temporary files
 
    Options with values:
-    -hcc2      <path>           $HCC2 or /opt/rocm/hcc2
-    -libgcn    <path>           $LIBAMDGCN or /opt/rocm/libamdgcn  
+    -aomp      <path>           $AOMP, $HOME/rocm/aomp, or /opt/rocm/aomp
+    -libgcn    <path>           $DEVICELIB or $AOMP/lib/libdevice
     -cuda-path <path>           $CUDA_PATH or /usr/local/cuda
+    -atmipath  <path>           $ATMI_PATH or /opt/rocm/atmi
     -mcpu      <cputype>        Default= value returned by mygpu
     -bclib     <bcfile>         Add a bc library for llvm-link
     -clopts    <compiler opts>  Addtional options for cl frontend
@@ -89,10 +89,9 @@ function usage(){
     cloc.sh whybother.cu      /* creates whybother.hsaco             */
 
    Note: Instead of providing these command line options:
-   -hcc2, -libgcn, -cuda-path, -mcpu, or -clopts
-
-   You may set these environment variables, respectively:
-   HCC2, LIBAMDGCN, CUDA_PATH, LC_MCPU, or CLOPTS
+     -aomp, -libgcn, -cuda-path, -atmipath -mcpu, -clopts, or -cuopts
+     you may set these environment variables, respectively:
+     AOMP, DEVICELIB, CUDA_PATH, ATMI_PATH, LC_MCPU, CLOPTS, or CUOPTS
 
    Command line options will take precedence over environment variables. 
 
@@ -186,9 +185,10 @@ while [ $# -gt 0 ] ; do
       -t)		TMPDIR=$2; shift ;; 
       -bclib)		EXTRABCLIB=$2; shift ;; 
       -mcpu)            LC_MCPU=$2; shift ;;
-      -hcc2)            HCC2=$2; shift ;;
+      -aomp)            AOMP=$2; shift ;;
+      -hcc2)            AOMP=$2; shift ;;
       -triple)          TARGET_TRIPLE=$2; shift ;;
-      -libgcn)          LIBAMDGCN=$2; shift ;;
+      -libgcn)          DEVICELIB=$2; shift ;;
       -atmipath)        ATMI_PATH=$2; shift ;;
       -cuda-path)       CUDA_PATH=$2; shift ;;
       -h) 	        usage ;; 
@@ -225,11 +225,20 @@ fi
 cdir=$(getdname $0)
 [ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
 
-HCC2=${HCC2:-/opt/rocm/hcc2}
-TARGET_TRIPLE=${TARGET_TRIPLE:-amdgcn--cuda}
-LIBAMDGCN=${LIBAMDGCN:-/opt/rocm/libamdgcn}
+AOMP=${AOMP:-$HOME/rocm/aomp}
+if [ ! -d $AOMP ] ; then
+   AOMP="/opt/rocm/aomp"
+fi
+if [ ! -d $AOMP ] ; then
+   echo "ERROR: AOMP not found at $AOMP"
+   echo "       Please install AOMP or correctly set env-var AOMP"
+   exit 1
+fi
+
+DEVICELIB=${DEVICELIB:-$AOMP/lib/libdevice}
+TARGET_TRIPLE=${TARGET_TRIPLE:-amdgcn-amd-amdhsa}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
-#ATMI_PATH=${ATMI_PATH:-/opt/rocm/atmi}
+ATMI_PATH=${ATMI_PATH:-/opt/rocm/atmi}
 
 # Determine which gfx processor to use, default to Fiji (gfx803)
 if [ ! $LC_MCPU ] ; then 
@@ -242,8 +251,7 @@ fi
 
 LLVMOPT=${LLVMOPT:-2}
 
-CUOPTS=${CUOPTS:- -S -emit-llvm --cuda-device-only -nocudalib -O$LLVMOP --cuda-gpu-arch=$LC_MCPU --cuda-path=$CUDA_PATH -include $HCC2/lib/clang/6.0.0/include/__clang_cuda_builtin_vars.h}
-
+CUOPTS=${CUOPTS:- -fcuda-rdc --cuda-device-only -Wno-unused-value --hip-auto-headers=cuda_open -O$LLVMOPT --cuda-gpu-arch=$LC_MCPU}
 
 if [ $VV ]  ; then 
    VERBOSE=true
@@ -251,7 +259,13 @@ fi
 
 BCFILES=""
 
-ROCMDEVICE=`echo $LIBAMDGCN | grep amdgcn`
+ROCMDEVICE=`echo $DEVICELIB | grep amdgcn`
+ROCMVERSION=${ROCMVERSION:-2}
+rocm_ver_var=`cat /opt/rocm/.info/version* | cut -d'.' -f1`
+rc=$?
+if [ $rc == 0 ] ; then
+  ROCMVERSION=$rocm_ver_var
+fi
 
 if [ -z $ROCMDEVICE ]; then
   #This is a temporary setting
@@ -259,31 +273,31 @@ if [ -z $ROCMDEVICE ]; then
     BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc"
   fi
   gpunum=`$cdir/mygpu -n`
-  BCFILES="$BCFILES $LIBAMDGCN/lib/opencl.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/lib/ocml.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/lib/ockl.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/lib/oclc_isa_version_${gpunum}.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/lib/irif.amdgcn.bc"
+  BCFILES="$BCFILES $DEVICELIB/lib/opencl.amdgcn.bc"
+  BCFILES="$BCFILES $DEVICELIB/lib/ocml.amdgcn.bc"
+  BCFILES="$BCFILES $DEVICELIB/lib/ockl.amdgcn.bc"
+  BCFILES="$BCFILES $DEVICELIB/lib/oclc_isa_version_${gpunum}.amdgcn.bc"
+  if [ "$ROCMVERSION" -lt "2" ] ; then
+    BCFILES="$BCFILES $DEVICELIB/lib/irif.amdgcn.bc"
+  fi
 else
-  if [ -f $ATMI_PATH/lib/libdevice/libatmi-$LC_MCPU.bc ]; then
-    BCFILES="$BCFILES $ATMI_PATH/lib/libdevice/libatmi-$LC_MCPU.bc"
-  fi
-  #when atmi is built, the hcc2-rt may not be built yet,
-  if [ -f $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc ]; then
-    BCFILES="$BCFILES $HCC2/lib/libdevice/libicuda2gcn-$LC_MCPU.bc"
-  fi
-  #make the cuda lib optional at this stage, it is configured when build libamdgcn
-  if [ -f $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc ]; then
-    BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/cuda2gcn.amdgcn.bc"
-  fi
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/opencl.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ocml.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/ockl.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/oclc_isa_version.amdgcn.bc"
-  BCFILES="$BCFILES $LIBAMDGCN/$LC_MCPU/lib/irif.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/cuda2gcn.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/hip.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/hc.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/opencl.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/ocml.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/ockl.amdgcn.bc"
+if [ $ROCMVERSION -lt 2 ] ; then
+  BCFILES="$BCFILES $DEVICELIB/irif.amdgcn.bc"
 fi
-
-#LINKOPTS="-Xclang -mlink-bitcode-file -Xclang $LIBAMDGCN/lib/libamdgcn.$LC_MCPU.bc"
+if [ -f $ATMI_PATH/lib/libdevice/libatmi.bc ]; then
+    BCFILES="$BCFILES $ATMI_PATH/lib/libdevice/libatmi.bc"
+else 
+  if [ -f $DEVICELIB/libatmi.bc ]; then
+    BCFILES="$BCFILES $DEVICELIB/libatmi.bc"
+  fi
+fi
+fi
 
 if [ $EXTRABCLIB ] ; then 
    if [ -f $EXTRABCLIB ] ; then 
@@ -315,18 +329,14 @@ if [ $CUDACLANG ] ; then
    INCLUDES="-I $CUDA_PATH/include ${INCLUDES}"
    CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
 else
-  if [ -z $ROCMDEVICE ]; then
-    INCLUDES="-I ${LIBAMDGCN}/include ${INCLUDES}"
-  else
-    INCLUDES="-I ${LIBAMDGCN}/$LC_MCPU/include ${INCLUDES}"
-  fi
-  CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE} -mcpu=$LC_MCPU }
+  INCLUDES="-I ${DEVICELIB}/include ${INCLUDES}"
+  CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}
 CMD_LLL=${CMD_LLL:-llvm-link}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -mcpu=$LC_MCPU -amdgpu-annotate-kernel-features}
-CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -mcpu=$LC_MCPU -filetype=obj}
+CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -filetype=obj -mattr=-code-object-v3 -mcpu=$LC_MCPU}
 
 RUNDATE=`date`
 
@@ -389,8 +399,8 @@ fi
 #  Print Header block
 if [ $VERBOSE ] ; then 
    echo "#   "
-   echo "#Info:  HCC2 Version:	$PROGVERSION" 
-   echo "#Info:  HCC2 Path:	$HCC2"
+   echo "#Info:  AOMP Version:	$PROGVERSION" 
+   echo "#Info:  AOMP Path:	$AOMP"
    echo "#Info:  Run date:	$RUNDATE" 
    echo "#Info:  Input file:	$INDIR/$FILENAME"
    echo "#Info:  Code object:	$OUTDIR/$OUTFILE"
@@ -421,27 +431,24 @@ rc=0
 
       [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:  Compile cl	cl --> hsaco ..."
-      runcmd "$HCC2/bin/$CMD_CLC -o $OUTDIR/$OUTFILE $INDIR/$FILENAME"
+      runcmd "$AOMP/bin/$CMD_CLC -o $OUTDIR/$OUTFILE $INDIR/$FILENAME"
 
    else 
       # Run 4 steps, clang,link,opt,llc
       if [ $CUDACLANG ] ; then 
          [ $VV ] && echo 
-         [ $VERBOSE ] && echo "#Step:  cuda-clang	cu --> ll  ..."
-         runcmd "$HCC2/bin/$CMD_CLC -o $TMPDIR/$FNAME.ll $INDIR/$FILENAME"
-         [ $VV ] && echo 
-         [ $VERBOSE ] && echo "#Step:  LLVMIR assemble  ll --> bc ..."
-         runcmd "$HCC2/bin/$CMD_ASM -o $TMPDIR/$FNAME.bc $TMPDIR/$FNAME.ll"
+         [ $VERBOSE ] && echo "#Step:  cuda-clang	cu --> bc  ..."
+         runcmd "$AOMP/bin/$CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
       else 
          [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Compile cl	cl --> bc ..."
-         runcmd "$HCC2/bin/$CMD_CLC -c -emit-llvm -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
+         runcmd "$AOMP/bin/$CMD_CLC -c -emit-llvm -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
       fi
 
       if [ $GENLL ] ; then
          [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Disassemble	bc --> ll ..."
-         runcmd "$HCC2/bin/$CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc"
+         runcmd "$AOMP/bin/$CMD_LLA -o $TMPDIR/$FNAME.ll $TMPDIR/$FNAME.bc"
          if [ "$OUTDIR" != "$TMPDIR" ] ; then
             runcmd "cp $TMPDIR/$FNAME.ll $OUTDIR/$FNAME.ll"
          fi
@@ -449,12 +456,12 @@ rc=0
 
       [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:  Link(llvm-link)	bc --> lnkd.bc ..."
-      runcmd "$HCC2/bin/$CMD_LLL $TMPDIR/$FNAME.bc $BCFILES -o $TMPDIR/$FNAME.lnkd.bc" 
+      runcmd "$AOMP/bin/$CMD_LLL $TMPDIR/$FNAME.bc $BCFILES -o $TMPDIR/$FNAME.lnkd.bc" 
 
       if [ $GENLL ] ; then
          [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Disassemble	lnkd.bc --> lnkd.ll ..."
-         runcmd "$HCC2/bin/$CMD_LLA -o $TMPDIR/$FNAME.lnkd.ll $TMPDIR/$FNAME.lnkd.bc"
+         runcmd "$AOMP/bin/$CMD_LLA -o $TMPDIR/$FNAME.lnkd.ll $TMPDIR/$FNAME.lnkd.bc"
          if [ "$OUTDIR" != "$TMPDIR" ] ; then
             runcmd "cp $TMPDIR/$FNAME.lnkd.ll $OUTDIR/$FNAME.lnkd.ll"
          fi
@@ -463,12 +470,12 @@ rc=0
       if [ $LLVMOPT != 0 ] ; then 
          [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Optimize(opt)	lnkd.bc --> final.bc -O$LLVMOPT ..."
-         runcmd "$HCC2/bin/$CMD_OPT -o $TMPDIR/$FNAME.final.bc $TMPDIR/$FNAME.lnkd.bc"
+         runcmd "$AOMP/bin/$CMD_OPT -o $TMPDIR/$FNAME.final.bc $TMPDIR/$FNAME.lnkd.bc"
 
          if [ $GENLL ] ; then
             [ $VV ] && echo 
             [ $VERBOSE ] && echo "#Step:  Disassemble	final.bc --> final.ll ..."
-            runcmd "$HCC2/bin/$CMD_LLA -o $TMPDIR/$FNAME.final.ll $TMPDIR/$FNAME.final.bc"
+            runcmd "$AOMP/bin/$CMD_LLA -o $TMPDIR/$FNAME.final.ll $TMPDIR/$FNAME.final.bc"
             if [ "$OUTDIR" != "$TMPDIR" ] ; then
                runcmd "cp $TMPDIR/$FNAME.final.ll $OUTDIR/$FNAME.final.ll"
             fi 
@@ -481,7 +488,7 @@ rc=0
 
       [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:  llc mcpu=$LC_MCPU	$LLC_BC.bc --> amdgcn ..."
-      runcmd "$HCC2/bin/$CMD_LLC -o $TMPDIR/$FNAME.gcn $TMPDIR/$FNAME.$LLC_BC.bc"
+      runcmd "$AOMP/bin/$CMD_LLC -o $TMPDIR/$FNAME.gcn $TMPDIR/$FNAME.$LLC_BC.bc"
 
       [ $VV ] && echo 
       [ $VERBOSE ] && echo "#Step:	ld.lld		gcn --> hsaco ..."
@@ -491,7 +498,7 @@ rc=0
            SHAREDARG="-shared"
       fi
       #  FIXME:  Why does shared sometimes cause the -fPIC problem ?
-      runcmd "$HCC2/bin/ld.lld $TMPDIR/$FNAME.gcn --no-undefined $SHAREDARG -o $OUTDIR/$OUTFILE"
+      runcmd "$AOMP/bin/ld.lld $TMPDIR/$FNAME.gcn --no-undefined $SHAREDARG -o $OUTDIR/$OUTFILE"
  
 
    fi # end of if quickpath then ... else  ...
@@ -505,7 +512,7 @@ rc=0
       textsz=$((0x$textszhex))
       countclause=" count=$textsz skip=$textstart"
       dd if=$OUTDIR/$OUTFILE of=$OUTDIR/$FNAME.raw bs=1 $countclause 2>/dev/null
-      hexdump -v -e '/1 "0x%02X "' $OUTDIR/$FNAME.raw | $HCC2/bin/llvm-mc -arch=amdgcn -mcpu=$LC_MCPU -disassemble >$OUTDIR/$FNAME.s 2>$OUTDIR/$FNAME.s.err
+      hexdump -v -e '/1 "0x%02X "' $OUTDIR/$FNAME.raw | $AOMP/bin/llvm-mc -arch=amdgcn -mcpu=$LC_MCPU -disassemble >$OUTDIR/$FNAME.s 2>$OUTDIR/$FNAME.s.err
       rm $OUTDIR/$FNAME.raw
       if [ "$LC_MCPU" == "kaveri" ] ; then 
          echo "WARNING:  Disassembly not supported for Kaveri. See $FNAME.s.err"

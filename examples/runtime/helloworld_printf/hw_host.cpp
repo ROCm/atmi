@@ -17,15 +17,21 @@
 
 using namespace std;
 
-enum {
-  CPU_IMPL = 10565,
-  GPU_IMPL = 42
-};
+#define ErrorCheck(status) \
+  if (status != ATMI_STATUS_SUCCESS) { \
+    printf("Error at [%s:%d]\n", __FILE__, __LINE__); \
+    exit(1); \
+  }
 
 extern _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlength, char **extra);
 
 int main(int argc, char **argv) {
-  atmi_init(ATMI_DEVTYPE_ALL);
+  ErrorCheck(atmi_init(ATMI_DEVTYPE_ALL));
+
+  // gpu kernel module
+  const char *module = "hw_gpu.hsaco";
+  atmi_platform_type_t module_type = AMDGCN;
+  ErrorCheck(atmi_module_register(&module, &module_type, 1));
 
   //input
   const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
@@ -41,22 +47,12 @@ int main(int argc, char **argv) {
 
   // create kernel
   atmi_kernel_t kernel;
-  atmi_kernel_create_empty(&kernel, num_args, arg_sizes);
+  ErrorCheck(atmi_kernel_create(&kernel, num_args, arg_sizes,
+        2,
+        ATMI_DEVTYPE_CPU, (atmi_generic_fp)decode_cpu,
+        ATMI_DEVTYPE_GPU, "decode_gpu"));
 
   {
-    // gpu kernel implementation
-    {
-#ifndef USE_BRIG
-      const char *module = "hw_gpu.hsaco";
-      atmi_platform_type_t module_type = AMDGCN;
-#else
-      const char *module = "hw_gpu.brig";
-      atmi_platform_type_t module_type = BRIG;
-#endif
-      atmi_module_register(&module, &module_type, 1);
-
-      atmi_kernel_add_gpu_impl(kernel, "decode_gpu", GPU_IMPL);
-    }
 
     //output on gpu
     char *output_gpu = (char*) calloc(strlength + 1, sizeof(char));
@@ -78,9 +74,9 @@ int main(int argc, char **argv) {
     void *d_input, *d_output;
     void *extra;
     {
-      atmi_malloc(&d_input, strlength+1, gpu);
-      atmi_malloc(&d_output, strlength+1, gpu);
-      atmi_malloc(&extra, BUFFER_SIZE, gpu);
+      ErrorCheck(atmi_malloc(&d_input, strlength+1, gpu));
+      ErrorCheck(atmi_malloc(&d_output, strlength+1, gpu));
+      ErrorCheck(atmi_malloc(&extra, BUFFER_SIZE, gpu));
     }
 
     /* Run HelloWorld on GPU */
@@ -108,7 +104,7 @@ int main(int argc, char **argv) {
 
         atmi_task_handle_t d2h_gpu_p = atmi_memcpy_async(cparm_gpu_p, buffer, extra, BUFFER_SIZE);
 
-        atmi_task_wait(d2h_gpu_p);
+        ErrorCheck(atmi_task_wait(d2h_gpu_p));
 
         if (buffer[0] != '\0') {
           printf("Out put the buffer\n");
@@ -121,7 +117,7 @@ int main(int argc, char **argv) {
         // copy from
         atmi_task_handle_t d2h_gpu = atmi_memcpy_async(cparm_gpu, output_gpu, d_output, strlength+1);
 
-        atmi_task_wait(d2h_gpu);
+        ErrorCheck(atmi_task_wait(d2h_gpu));
 
         if (1) {
           output_gpu[strlength] = '\0';
@@ -132,9 +128,9 @@ int main(int argc, char **argv) {
 
     // Free
     {
-      atmi_free(extra);
-      atmi_free(d_output);
-      atmi_free(d_input);
+      ErrorCheck(atmi_free(extra));
+      ErrorCheck(atmi_free(d_output));
+      ErrorCheck(atmi_free(d_input));
     }
 
     /* cleanup */
@@ -143,10 +139,6 @@ int main(int argc, char **argv) {
 
   {
     // cpu kernel implementation
-    {
-      atmi_kernel_add_cpu_impl(kernel, (atmi_generic_fp)decode_cpu, CPU_IMPL);
-    }
-
     //output on cpu
     char *output_cpu = (char*) calloc(strlength + 1, sizeof(char));
 
@@ -158,9 +150,9 @@ int main(int argc, char **argv) {
     void *h_input, *h_output;
     void *extra;
     {
-      atmi_malloc(&h_input, strlength+1, cpu);
-      atmi_malloc(&h_output, strlength+1, cpu);
-      atmi_malloc(&extra, BUFFER_SIZE, cpu);
+      ErrorCheck(atmi_malloc(&h_input, strlength+1, cpu));
+      ErrorCheck(atmi_malloc(&h_output, strlength+1, cpu));
+      ErrorCheck(atmi_malloc(&extra, BUFFER_SIZE, cpu));
     }
 
     /* Run HelloWorld on CPU */
@@ -189,7 +181,7 @@ int main(int argc, char **argv) {
         // copy from
         atmi_task_handle_t d2h_cpu = atmi_memcpy_async(cparm_cpu, output_cpu, h_output, strlength+1);
 
-        atmi_task_wait(d2h_cpu);
+        ErrorCheck(atmi_task_wait(d2h_cpu));
 
         if (1) {
           output_cpu[strlength] = '\0';
@@ -200,16 +192,16 @@ int main(int argc, char **argv) {
 
     // Free
     {
-      atmi_free(extra);
-      atmi_free(h_output);
-      atmi_free(h_input);
+      ErrorCheck(atmi_free(extra));
+      ErrorCheck(atmi_free(h_output));
+      ErrorCheck(atmi_free(h_input));
     }
 
     /* cleanup */
     free(output_cpu);
   }
 
-  atmi_kernel_release(kernel);
-  atmi_finalize();
+  ErrorCheck(atmi_kernel_release(kernel));
+  ErrorCheck(atmi_finalize());
   return 0;
 }

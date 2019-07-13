@@ -4,8 +4,8 @@
 #  This file is distributed under the MIT License. See LICENSE.txt for details.
 # ===--------------------------------------------------------------------------
 
-if(ATMI_DEP_LIBHSA_FOUND)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
+if(ROCM_FOUND)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)|(aarch64)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
         libatmi_runtime_say("Preparing to build runtime/core")
         add_subdirectory(core) 
         add_subdirectory(interop) 

@@ -12,8 +12,8 @@
 #include <sys/time.h>
 #include <string>
 #include <sstream>
+#include "rt.h"
 #ifdef DEBUG
-static const char* profile_mode=getenv("ATMI_PROFILE");
 #define USE_PROFILE
 #endif
 
@@ -68,6 +68,7 @@ private:
   double elapsed;
   bool isRunning;
   int count;
+  int profile_mode;
 };
 
 /// Timer stream insertion operator
@@ -86,6 +87,7 @@ inline RealTimer::RealTimer(const std::string& desc)
     count(0)
 {
   time_offset=(int)CurrentTime();
+  profile_mode = core::Runtime::getInstance().getProfileMode();
 }
 
 inline RealTimer::~RealTimer()

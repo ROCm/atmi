@@ -26,10 +26,33 @@ int main(int argc, char *argv[]) {
 
    kcalls = (128*1024);
 
-   ATMI_LPARM_STREAM(lparm1,stream1);
-   ATMI_LPARM_STREAM(lparm2,stream2);
-   ATMI_LPARM_STREAM(lparm3,stream3);
-   ATMI_LPARM_STREAM(lparm4,stream4);
+   ATMI_LPARM(lparm1);
+   ATMI_LPARM(lparm2);
+   ATMI_LPARM(lparm3);
+   ATMI_LPARM(lparm4);
+
+   atmi_taskgroup_handle_t stream1_ordered;
+   atmi_taskgroup_handle_t stream1_unordered;
+   atmi_taskgroup_handle_t stream2_ordered;
+   atmi_taskgroup_handle_t stream2_unordered;
+   atmi_taskgroup_handle_t stream3_ordered;
+   atmi_taskgroup_handle_t stream3_unordered;
+   atmi_taskgroup_handle_t stream4_ordered;
+   atmi_taskgroup_handle_t stream4_unordered;
+
+   err = atmi_taskgroup_create(&stream1_ordered);
+   err = atmi_taskgroup_create(&stream2_ordered);
+   err = atmi_taskgroup_create(&stream3_ordered);
+   err = atmi_taskgroup_create(&stream4_ordered);
+   err = atmi_taskgroup_create(&stream1_unordered);
+   err = atmi_taskgroup_create(&stream2_unordered);
+   err = atmi_taskgroup_create(&stream3_unordered);
+   err = atmi_taskgroup_create(&stream4_unordered);
+
+   lparm1->group = stream1_ordered;
+   lparm2->group = stream2_ordered;
+   lparm3->group = stream3_ordered;
+   lparm4->group = stream4_ordered;
 
    lparm1->kernel_id = K_ID_nullKernel_impl;
    lparm2->kernel_id = K_ID_nullKernel_impl;
@@ -42,35 +65,34 @@ int main(int argc, char *argv[]) {
    lparm4->WORKITEMS=64;
 
    /* Initialize the Kernel */
-   stream1->ordered=ATMI_TRUE;
-   lparm1->groupable=ATMI_TRUE;
+   lparm1->groupable=ATMI_FALSE;
    lparm1->synchronous=ATMI_TRUE;
    nullKernel(lparm1, kcalls);
 #if 1
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[0]);
 //   for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[0]);
-   //atmi_task_group_sync(stream1);
+   //atmi_taskgroup_wait(stream1);
 
    lparm1->synchronous=ATMI_FALSE;
-   stream1->ordered=ATMI_TRUE;
+   lparm1->group = stream1_ordered;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[1]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[2]);
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[1]);
    //SYNC_STREAM(stream1); 
-   atmi_task_group_sync(stream1);
+   atmi_taskgroup_wait(stream1_ordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[2]);
 #endif
 #if 1
-   stream1->ordered = ATMI_FALSE;
+   lparm1->group = stream1_unordered;
    lparm1->synchronous = ATMI_FALSE;
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[3]);
    clock_gettime(CLOCK_MONOTONIC_RAW,&start_time[4]);
    for(int i=0; i<kcalls; i++) nullKernel(lparm1, kcalls); 
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[3]);
    //SYNC_STREAM(stream1); 
-   atmi_task_group_sync(stream1);
+   atmi_taskgroup_wait(stream1_unordered);
    clock_gettime(CLOCK_MONOTONIC_RAW,&end_time[4]);
 #endif
 #if 0

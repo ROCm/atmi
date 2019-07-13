@@ -6,6 +6,7 @@
 #include "atmi_interop_hsa.h"
 #include "atl_internal.h"
 #include "atmi_kl.h"
+using namespace core;
 
 atmi_status_t atmi_interop_hsa_get_agent(atmi_place_t proc, hsa_agent_t *agent) {
     if(!atl_is_atmi_initialized()) return ATMI_STATUS_ERROR;

@@ -165,7 +165,7 @@ macro(add_bc_library name dir)
   endif()
 
   set(device_libs)
-  if(ATMI_WITH_HCC2_VAR)
+  if(ATMI_WITH_AOMP_VAR)
   else()
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/opencl.amdgcn.bc)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/ocml.amdgcn.bc)
@@ -175,7 +175,10 @@ macro(add_bc_library name dir)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_finite_only_off.amdgcn.bc)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_isa_version_${GFXNUM}.amdgcn.bc)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_unsafe_math_off.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/irif.amdgcn.bc)
+    if(${ROCM_VERSION} VERSION_LESS "2.0.0")
+      # this file is no longer linked from ROCm 2.0 onwards
+      list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/irif.amdgcn.bc)
+    endif()
   endif()
 
   add_custom_command(
@@ -189,7 +192,7 @@ macro(add_bc_library name dir)
     DEPENDS linkout.${mcpu}.bc
     )
 
-  if(ATMI_WITH_HCC2_VAR)
+  if(ATMI_WITH_AOMP_VAR)
     add_custom_command(
       OUTPUT lib${name}-${mcpu}.bc
       COMMAND ${CLANG_BINDIR}/prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc

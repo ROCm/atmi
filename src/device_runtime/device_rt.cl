@@ -10,6 +10,8 @@
 //#include "irif/inc/irif.h"
 #include "atmi_kl.h"
 
+atmi_taskgroup_handle_t ATMI_DEFAULT_TASKGROUP_HANDLE = {0ull};
+
 extern __attribute__((const)) __constant void *__llvm_amdgcn_dispatch_ptr(void) __asm("llvm.amdgcn.dispatch.ptr");
 extern __attribute__((const)) __constant void *__llvm_amdgcn_implicitarg_ptr(void) __asm("llvm.amdgcn.implicitarg.ptr");
 
@@ -125,7 +127,7 @@ void agent_dispatch(atmi_lparm_t *lparm, global hsa_queue_t *this_Q, void *kerna
     __ockl_hsa_signal_store(*worker_sig, 0, __ockl_memory_order_release); 
 }
 
-void atmi_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region, 
+void atmid_task_launch(atmi_lparm_t *lp, ulong kernel_id, void *args_region,
                                    size_t args_region_size) {
     constant atmi_implicit_args_t *impl_args = (constant atmi_implicit_args_t *)__llvm_amdgcn_implicitarg_ptr();
 

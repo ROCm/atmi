@@ -22,7 +22,7 @@ __kernel void mainTask_gpu(long int numTasks) {
         lparm->place = (atmi_place_t)ATMI_PLACE_GPU(0, 0);
         // default case for kernel enqueue: lparm->groupable = ATMI_TRUE;
         for(long int i = 0; i < numTasks/num_wavefronts; i++)
-            atmi_task_launch(lparm, K_ID_subTask, NULL, 0);
+            atmid_task_launch(lparm, K_ID_subTask, NULL, 0);
     }
 }
 

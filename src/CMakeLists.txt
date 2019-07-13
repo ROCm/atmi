@@ -13,6 +13,10 @@ include (FindPackageHandleStandardArgs)
 
 project (atmi)
 
+macro(libatmi_runtime_say_and_exit message_to_user)
+  message(FATAL_ERROR "ATMI: ${message_to_user}")
+endmacro()
+
 macro(libatmi_runtime_say message_to_user)
   message(STATUS "ATMI: ${message_to_user}")
 endmacro()
@@ -33,50 +37,29 @@ endif()
 ################################################################################
 #pkg_check_modules(ATMI_SEARCH_LIBHSA QUIET libhsa-runtime64)
 
-find_file (
-  ATMI_DEP_LIBHSA_INCLUDE
-  hsa/hsa.h
-  PATHS
-  ${HSA_DIR}/include
-  /opt/rocm/include
-  /usr/local/include
-  NO_DEFAULT_PATH
-  )
-get_filename_component (ATMI_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DEP_LIBHSA_INCLUDE} DIRECTORY)
-
-find_package_handle_standard_args(
-  ATMI_DEP_INCHSA
-  DEFAULT_MSG
-  ATMI_DEP_LIBHSA_INCLUDE_DIRS)
-
-find_file (
-  ATMI_DEP_LIBHSA_LIBRARIES
-  libhsa-runtime64.so
-  PATHS
-  ${HSA_DIR}/lib
-  /opt/rocm/lib
-  /usr/local/lib
-  NO_DEFAULT_PATH
-  )
-get_filename_component (ATMI_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DEP_LIBHSA_LIBRARIES} DIRECTORY)
-
-find_package_handle_standard_args(
-  ATMI_DEP_LIBHSA
-  DEFAULT_MSG
-  ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
-
-mark_as_advanced(
-  ATMI_DEP_LIBHSA_INCLUDE_DIRS
-  ATMI_DEP_LIBHSA_LIBRARIES_DIRS)
-
-string(TOLOWER "${ATMI_WITH_HCC2}" ATMI_WITH_HCC2_STR)
-if(ATMI_WITH_HCC2_STR MATCHES on)
-  set(ATMI_WITH_HCC2_VAR TRUE)
+string(TOLOWER "${ATMI_WITH_AOMP}" ATMI_WITH_AOMP_STR)
+if(ATMI_WITH_AOMP_STR MATCHES on)
+  set(ATMI_WITH_AOMP_VAR TRUE)
+  set(ROC_DIR ${CMAKE_INSTALL_PREFIX})
+else()
+  if(HSA_DIR)
+    set(ROC_DIR ${HSA_DIR})
+  else()
+    set(ROC_DIR "/opt/rocm")
+  endif()
 endif()
 
-add_subdirectory(runtime) 
-add_subdirectory(compiler) 
-add_subdirectory(device_runtime) 
+# Find ROCm
+find_package(ROCm REQUIRED)
+libatmi_runtime_say("ROCm version: ${ROCM_VERSION_STRING}")
+set(ATMI_RUNTIME_PATH ${CMAKE_CURRENT_BINARY_DIR})
+
+# create configure file
+file(WRITE ${ATMI_RUNTIME_PATH}/atmi-config.mak "ATMI_RUNTIME_PATH=${ATMI_RUNTIME_PATH}\n")
+
+add_subdirectory(runtime)
+add_subdirectory(compiler)
+add_subdirectory(device_runtime)
 
 # make examples available in local build
 add_custom_command(

@@ -49,8 +49,7 @@ int main(int argc, char *argv[]) {
 
     long int kcalls = 64*64*16;
 
-    ATMI_LPARM_STREAM(lparm, stream);
-    stream->ordered = ATMI_FALSE;
+    ATMI_LPARM(lparm);
     lparm->groupable=ATMI_TRUE;
 
     lparm->WORKITEMS=1;
@@ -63,7 +62,7 @@ int main(int argc, char *argv[]) {
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
     mainTask(lparm, kcalls); 
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    //atmi_task_group_sync(stream);
+    //atmi_taskgroup_wait(ATMI_DEFAULT_TASKGROUP_HANDLE);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
     print_timing("Synchronous Flat Execution (DP)", 
             kcalls, &start_time, 
@@ -87,7 +86,7 @@ int main(int argc, char *argv[]) {
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
     mainTask(lparm, kcalls/lparm->WORKITEMS); 
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    atmi_task_group_sync(stream);
+    atmi_taskgroup_wait(ATMI_DEFAULT_TASKGROUP_HANDLE);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
     print_timing("Asynchronous Execution (DP)", 
             kcalls, &start_time, 
@@ -108,7 +107,7 @@ int main(int argc, char *argv[]) {
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
     mainTask(lparm, (kcalls/lparm->WORKITEMS)); 
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    atmi_task_group_sync(stream);
+    atmi_taskgroup_wait(ATMI_DEFAULT_TASKGROUP_HANDLE);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
     print_timing("Asynchronous Binary Tree Execution (DP)", 
             kcalls, &start_time, 
@@ -119,7 +118,7 @@ int main(int argc, char *argv[]) {
       clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
       mainTask(lparm, (kcalls/lparm->WORKITEMS)/4); 
       clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-      atmi_task_group_sync(stream);
+      atmi_taskgroup_wait(ATMI_DEFAULT_TASKGROUP_HANDLE);
       clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
       print_timing("Asynchronous 4-ary Tree Execution (DP)", 
       kcalls, &start_time, 
@@ -142,7 +141,7 @@ int main(int argc, char *argv[]) {
     clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
     for(int i=0; i<kcalls; i++) subTask(lparm); 
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_launch_time);
-    atmi_task_group_sync(stream);
+    atmi_taskgroup_wait(ATMI_DEFAULT_TASKGROUP_HANDLE);
     clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
     print_timing("Asynchronous Task Loop (Ordered)", 
             kcalls, &start_time, 

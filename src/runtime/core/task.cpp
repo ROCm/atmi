@@ -1289,6 +1289,10 @@ void acquire_aql_packet(atl_task_t *task) {
     void *src = task->data_src_ptr;
     void *dest = task->data_dest_ptr;
     size_t size = task->data_size;
+#ifndef USE_ROCR_PTR_INFO
+    ATLData * volatile src_data = g_data_map.find(src);
+    ATLData * volatile dest_data = g_data_map.find(dest);
+#else
     hsa_amd_pointer_info_t src_ptr_info;
     hsa_amd_pointer_info_t dest_ptr_info;
     src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
@@ -1305,6 +1309,7 @@ void acquire_aql_packet(atl_task_t *task) {
     ErrorCheck(Checking dest pointer info, err);
     ATLData * volatile src_data = (ATLData *)src_ptr_info.userData;
     ATLData * volatile dest_data = (ATLData *)dest_ptr_info.userData;
+#endif
     bool is_src_host = (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     bool is_dest_host = (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
     void *temp_host_ptr;

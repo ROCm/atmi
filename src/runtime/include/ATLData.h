@@ -73,6 +73,8 @@ private:
     std::mutex      _mutex;
     //std::shared_timed_mutex _mut;
 };
+
+extern ATLPointerTracker g_data_map;  // Track all am pointer allocations.
 #endif
 
 enum {

@@ -404,19 +404,48 @@ typedef struct atmi_data_s {
 #define ATMI_PARM_SET_DEPENDENCIES(X, ...) ATMI_PARM_SET_NAMED_DEPENDENCIES(X, MAKE_UNIQUE(handles), __VA_ARGS__)
 #endif
 
-#define ATMI_LPARM(X) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={1,1,1},.group=ATMI_DEFAULT_TASKGROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+#define ATMI_LPARM(X) \
+  atmi_lparm_t *X; \
+  atmi_lparm_t _ ## X; \
+  _ ## X.gridDim[0]=1; \
+  _ ## X.gridDim[1]=1; \
+  _ ## X.gridDim[2]=1; \
+  _ ## X.groupDim[0]=1; \
+  _ ## X.groupDim[1]=1; \
+  _ ## X.groupDim[2]=1; \
+  _ ## X.group=0ull; \
+  _ ## X.groupable=ATMI_FALSE; \
+  _ ## X.synchronous=ATMI_FALSE; \
+  _ ## X.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM; \
+  _ ## X.release_scope=ATMI_FENCE_SCOPE_SYSTEM; \
+  _ ## X.num_required=0; \
+  _ ## X.requires=NULL; \
+  _ ## X.num_required_groups=0; \
+  _ ## X.required_groups=NULL; \
+  _ ## X.profilable=ATMI_FALSE; \
+  _ ## X.atmi_id=ATMI_VRM; \
+  _ ## X.kernel_id=-1; \
+  _ ## X.place=(atmi_place_t)ATMI_PLACE_ANY(0); \
+  _ ## X.task_info = NULL; \
+  X = &_ ## X ;
 
-#define ATMI_LPARM_CPU(X,CPU) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={1,1,1},.groupDim={1,1,1},.group=ATMI_DEFAULT_TASKGROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_CPU(0, CPU)} ; X = &_ ## X ;
+#define ATMI_LPARM_1D(X,Y) \
+  ATMI_LPARM(X); \
+  X->gridDim[0] = Y; \
+  X->groupDim[0] = 64;
 
-#define ATMI_LPARM_CPU_1D(X,CPU,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={1,1,1},.group=ATMI_DEFAULT_TASKGROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_CPU(0, CPU)} ; X = &_ ## X ;
+#define ATMI_LPARM_GPU_1D(X,GPU,Y) \
+  ATMI_LPARM_1D(X,Y); \
+  X->place=(atmi_place_t)ATMI_PLACE_GPU(0, GPU);
 
-#define ATMI_LPARM_1D(X,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={64,1,1},.group=ATMI_DEFAULT_TASKGROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+#define ATMI_LPARM_CPU(X,CPU) \
+  ATMI_LPARM(X); \
+  X->place=(atmi_place_t)ATMI_PLACE_CPU(0, CPU);
 
-#define ATMI_LPARM_GPU_1D(X,GPU,Y) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,1,1},.groupDim={64,1,1},.group=ATMI_DEFAULT_TASKGROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_GPU(0, GPU)} ; X = &_ ## X ;
-
-#define ATMI_LPARM_2D(X,Y,Z) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,1},.groupDim={64,8,1},.group=ATMI_DEFAULT_TASKGROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
-
-#define ATMI_LPARM_3D(X,Y,Z,V) atmi_lparm_t * X ; atmi_lparm_t  _ ## X ={.gridDim={Y,Z,V},.groupDim={8,8,8},.group=ATMI_DEFAULT_TASKGROUP_HANDLE,.groupable=ATMI_FALSE,.synchronous=ATMI_FALSE,.acquire_scope=ATMI_FENCE_SCOPE_SYSTEM,.release_scope=ATMI_FENCE_SCOPE_SYSTEM,.num_required=0,.requires=NULL,.num_required_groups=0,.required_groups=NULL,.profilable=ATMI_FALSE,.atmi_id=ATMI_VRM,.kernel_id=-1,.place=ATMI_PLACE_ANY(0)} ; X = &_ ## X ;
+#define ATMI_LPARM_CPU_1D(X,CPU,Y) \
+  ATMI_LPARM(X); \
+  X->gridDim[0] = Y; \
+  X->place=(atmi_place_t)ATMI_PLACE_CPU(0, CPU);
 
 #define ATMI_PROFILE(NAME) NAME = malloc(sizeof(atmi_tprofile_t));
 

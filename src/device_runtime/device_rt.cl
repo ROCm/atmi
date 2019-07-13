@@ -10,6 +10,8 @@
 //#include "irif/inc/irif.h"
 #include "atmi_kl.h"
 
+atmi_taskgroup_handle_t ATMI_DEFAULT_TASKGROUP_HANDLE = {0ull};
+
 extern __attribute__((const)) __constant void *__llvm_amdgcn_dispatch_ptr(void) __asm("llvm.amdgcn.dispatch.ptr");
 extern __attribute__((const)) __constant void *__llvm_amdgcn_implicitarg_ptr(void) __asm("llvm.amdgcn.implicitarg.ptr");
 

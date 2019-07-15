@@ -81,6 +81,7 @@ include_directories(${ROCM_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
+include_directories(${CMAKE_INSTALL_PREFIX}/include)
 
 ## CPack component info
 set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "ATMI Runtime Library")
@@ -96,6 +97,7 @@ target_link_libraries(
   -L${ROCM_LIBRARIES_DIR}
   -Wl,-rpath,${ROCM_LIBRARIES_DIR}/../hsa/lib
   -Wl,-rpath,${ROCM_LIBRARIES_DIR}
+  -L${CMAKE_INSTALL_PREFIX}/lib -lamd_hostcall -Wl,-rpath,${CMAKE_INSTALL_PREFIX}/lib
 )
 
 # set output dir for .h files

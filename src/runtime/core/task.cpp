@@ -29,6 +29,7 @@
 #include <malloc.h>
 #include "RealTimerClass.h"
 #include "taskgroup.h"
+#include "amd_hostcall.h"
 using namespace Global;
 
 pthread_mutex_t mutex_all_tasks_;
@@ -47,6 +48,9 @@ std::queue<atl_task_t *> ReadyTaskQueue;
 std::deque<atl_task_t *> TaskList;
 std::queue<hsa_signal_t> FreeSignalPool;
 std::set<atl_task_t *> SinkTasks;
+
+extern uint32_t atl_hostcall_minpackets;
+extern bool atl_hostcall_is_required;
 
 std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 //std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -516,7 +520,8 @@ void handle_signal_callback(atl_task_t *task) {
   // tasks without atmi_task handle should not be added to callbacks anyway
   assert(task->groupable != ATMI_TRUE);
 
-  // process printf buffer
+#if 0
+  // With hostcall, we no longer use pipe_ptr for registerd post-task processing
   {
     atl_kernel_impl_t *kernel_impl = NULL;
     if (task_process_fini_buffer) {
@@ -535,6 +540,7 @@ void handle_signal_callback(atl_task_t *task) {
       }
     }
   }
+#endif
 
   lock(&(task->mutex));
   set_task_state(task, ATMI_EXECUTED);
@@ -608,7 +614,8 @@ void handle_signal_barrier_pkt(atl_task_t *task, atl_task_vector_t *dispatched_t
   for (auto task : dispatched_tasks) {
     assert(task->groupable != ATMI_TRUE);
 
-    // process printf buffer
+#if 0
+    // With hostcall, we no longer use pipe_ptr for registerd post-task processing
     {
       atl_kernel_impl_t *kernel_impl = NULL;
       if (task_process_fini_buffer) {
@@ -627,6 +634,7 @@ void handle_signal_barrier_pkt(atl_task_t *task, atl_task_vector_t *dispatched_t
         }
       }
     }
+#endif
 
     // This dispatched task is now executed
     lock(&(task->mutex));
@@ -758,7 +766,8 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       kernel_impl = get_kernel_impl(kernel, task->kernel_id);
       mutexes.insert(&(kernel_impl->mutex));
 
-      // process printf buffer
+#if 0
+      // With hostcall, we no longer use pipe_ptr for registerd post-task processing
       {
         atl_kernel_impl_t *kernel_impl = NULL;
         if (task_process_fini_buffer) {
@@ -775,6 +784,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
           }
         }
       }
+#endif
 
     }
     if(g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
@@ -1037,22 +1047,20 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         // char *pipe_ptr = impl_args->pipe_ptr;
       }
 
-      // initialize printf buffer
-      {
+      // assign a hostcall buffer for the selected Q
+      if (atl_hostcall_is_required) {
         atl_kernel_impl_t *kernel_impl = NULL;
-        if (task_process_init_buffer) {
-          if(task->kernel) {
-            kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
-            //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
-            char *kargs = (char *)(task->kernarg_region);
-            if(task->type == ATL_KERNEL_EXECUTION &&
-                task->devtype == ATMI_DEVTYPE_GPU &&
-                kernel_impl->kernel_type == AMDGCN) {
-              atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+        if(task->kernel) {
+          kernel_impl = get_kernel_impl(task->kernel, task->kernel_id);
+          //printf("Task Id: %lu, kernel name: %s\n", task->id, kernel_impl->kernel_name.c_str());
+          char *kargs = (char *)(task->kernarg_region);
+          if(task->type == ATL_KERNEL_EXECUTION &&
+              task->devtype == ATMI_DEVTYPE_GPU &&
+              kernel_impl->kernel_type == AMDGCN) {
+            atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
 
-              // initalize printf buffer
-              (*task_process_init_buffer)((void *)impl_args->pipe_ptr, MAX_PIPE_SIZE);
-            }
+            impl_args->hostcall_ptr = atmi_hostcall_assign_buffer(atl_hostcall_minpackets,
+                this_Q, proc_id);
           }
         }
       }

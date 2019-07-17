@@ -110,8 +110,8 @@ uint16_t create_header(hsa_packet_type_t type, int barrier,
                        atmi_task_fence_scope_t rel_fence) {
    uint16_t header = type << HSA_PACKET_HEADER_TYPE;
    header |= barrier << HSA_PACKET_HEADER_BARRIER;
-   header |= (hsa_fence_scope_t)(int)acq_fence << HSA_PACKET_HEADER_SCACQUIRE_FENCE_SCOPE;
-   header |= (hsa_fence_scope_t)(int)rel_fence << HSA_PACKET_HEADER_SCRELEASE_FENCE_SCOPE;
+   header |= (hsa_fence_scope_t)(int)acq_fence << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE;
+   header |= (hsa_fence_scope_t)(int)rel_fence << HSA_PACKET_HEADER_RELEASE_FENCE_SCOPE;
    //__atomic_store_n((uint8_t*)(&header), (uint8_t)type, __ATOMIC_RELEASE);
    return header;
 }

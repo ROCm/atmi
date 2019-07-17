@@ -85,6 +85,41 @@ static const std::map<std::string,ArgField> ArgFieldMap =
   {".name",         ArgField::Name}
 };
 
+static const std::map<std::string,ValueKind> ArgValueKind =
+{
+  {"ByValue",                 ValueKind::ByValue},
+  {"GlobalBuffer",            ValueKind::GlobalBuffer},
+  {"DynamicSharedPointer",    ValueKind::DynamicSharedPointer},
+  {"Sampler",                 ValueKind::Sampler},
+  {"Image",                   ValueKind::Image},
+  {"Pipe",                    ValueKind::Pipe},
+  {"Queue",                   ValueKind::Queue},
+  {"HiddenGlobalOffsetX",     ValueKind::HiddenGlobalOffsetX},
+  {"HiddenGlobalOffsetY",     ValueKind::HiddenGlobalOffsetY},
+  {"HiddenGlobalOffsetZ",     ValueKind::HiddenGlobalOffsetZ},
+  {"HiddenNone",              ValueKind::HiddenNone},
+  {"HiddenPrintfBuffer",      ValueKind::HiddenPrintfBuffer},
+  {"HiddenDefaultQueue",      ValueKind::HiddenDefaultQueue},
+  {"HiddenCompletionAction",  ValueKind::HiddenCompletionAction},
+  // {"HiddenMultiGridSyncArg",  ValueKind::HiddenMultiGridSyncArg},
+  // v3
+  {"by_value",                  ValueKind::ByValue},
+  {"global_buffer",             ValueKind::GlobalBuffer},
+  {"dynamic_shared_pointer",    ValueKind::DynamicSharedPointer},
+  {"sampler",                   ValueKind::Sampler},
+  {"image",                     ValueKind::Image},
+  {"pipe",                      ValueKind::Pipe},
+  {"queue",                     ValueKind::Queue},
+  {"hidden_global_offset_x",    ValueKind::HiddenGlobalOffsetX},
+  {"hidden_global_offset_y",    ValueKind::HiddenGlobalOffsetY},
+  {"hidden_global_offset_z",    ValueKind::HiddenGlobalOffsetZ},
+  {"hidden_none",               ValueKind::HiddenNone},
+  {"hidden_printf_buffer",      ValueKind::HiddenPrintfBuffer},
+  {"hidden_default_queue",      ValueKind::HiddenDefaultQueue},
+  {"hidden_completion_action",  ValueKind::HiddenCompletionAction}
+  //,{"hidden_multigrid_sync_arg", ValueKind::HiddenMultiGridSyncArg}
+};
+
 enum class CodePropField : uint8_t {
   KernargSegmentSize      = 0,
   GroupSegmentFixedSize   = 1,
@@ -1098,6 +1133,22 @@ namespace core {
     return ATMI_STATUS_SUCCESS;
   }
 
+  bool isImplicit(ValueKind value_kind) {
+    switch(value_kind) {
+      case ValueKind::HiddenGlobalOffsetX:
+      case ValueKind::HiddenGlobalOffsetY:
+      case ValueKind::HiddenGlobalOffsetZ:
+      case ValueKind::HiddenNone:
+      case ValueKind::HiddenPrintfBuffer:
+      case ValueKind::HiddenDefaultQueue:
+      case ValueKind::HiddenCompletionAction:
+      //case ValueKind::HiddenMultiGridSyncArg:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   hsa_status_t validate_code_object(hsa_code_object_t code_object, hsa_code_symbol_t symbol, void *data) {
     hsa_status_t retVal = HSA_STATUS_SUCCESS;
     int gpu = *(int *)data;
@@ -1193,8 +1244,6 @@ namespace core {
         // mAlign to store the offset; minor "workaround"
         lcArg->mAlign = atoi(buf.c_str());
         break;
-      // TODO: If we are interested in parsing other fields, then uncomment them from below
-#if 0
       case ArgField::ValueKind:
         {
           auto itValueKind = ArgValueKind.find(buf);
@@ -1204,6 +1253,8 @@ namespace core {
           lcArg->mValueKind = itValueKind->second;
         }
         break;
+      // TODO: If we are interested in parsing other fields, then uncomment them from below
+#if 0
       case ArgField::ValueType:
         {
           auto itValueType = ArgValueType.find(buf);
@@ -1395,54 +1446,9 @@ namespace core {
       // the kernel symbol->name map, but the key for v2 will be the kernel name itself.
       KernelNameMap[kernelName] = kernelName;
 
-      size_t offset = 0;
-      size_t argsSize;
-
-      status =  amd_comgr_metadata_lookup(kernelMD, "Args", &argsMeta);
-      comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
-
-      status = amd_comgr_get_metadata_list_size(argsMeta, &argsSize);
-      comgrErrorCheck(COMGR kernel args size lookup in kernel args metadata, status);
-
       atl_kernel_info_t info;
-      info.num_args = argsSize;
-
-      for (size_t i = 0; i < argsSize; ++i) {
-        KernelArgMD  lcArg;
-
-        amd_comgr_metadata_node_t argsNode;
-        amd_comgr_metadata_kind_t kind;
-
-        status = amd_comgr_index_list_metadata(argsMeta, i, &argsNode);
-        comgrErrorCheck(COMGR list args node in kernel args metadata, status);
-
-        status = amd_comgr_get_metadata_kind(argsNode, &kind);
-        comgrErrorCheck(COMGR args kind in kernel args metadata, status);
-
-        if (kind != AMD_COMGR_METADATA_KIND_MAP) {
-          status = AMD_COMGR_STATUS_ERROR;
-        }
-        comgrErrorCheck(COMGR check args kind in kernel args metadata, status);
-
-        status = amd_comgr_iterate_map_metadata(argsNode, populateArgs, static_cast<void*>(&lcArg));
-        comgrErrorCheck(COMGR iterate args map in kernel args metadata, status);
-
-        amd_comgr_destroy_metadata(argsNode);
-
-        if (status != AMD_COMGR_STATUS_SUCCESS) {
-          amd_comgr_destroy_metadata(argsMeta);
-          return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
-        }
-
-        // populate info with num args, their sizes and alignments
-        info.arg_sizes.push_back(lcArg.mSize);
-        info.arg_alignments.push_back(lcArg.mAlign);
-        //  use offset with/instead of alignment
-        offset = core::alignUp(offset, lcArg.mAlign);
-        info.arg_offsets.push_back(offset);
-        DEBUG_PRINT("[%s:%lu] \"%s\" (%u, %lu)\n", kernelName.c_str(), i, lcArg.mName.c_str(), lcArg.mSize, offset);
-        offset += lcArg.mSize;
-      }
+      size_t kernel_segment_size = 0;
+      size_t kernel_explicit_args_size = 0;
 
       // extract the code properties metadata
       status = amd_comgr_metadata_lookup(kernelMD, "CodeProps", &codePropsMeta);
@@ -1451,23 +1457,77 @@ namespace core {
       status = amd_comgr_iterate_map_metadata(codePropsMeta, populateCodeProps,
           static_cast<void*>(&kernelObj));
       comgrErrorCheck(COMGR code props iterate, status);
-      info.kernel_segment_size = kernelObj.mCodeProps.mKernargSegmentSize;
+      kernel_segment_size = kernelObj.mCodeProps.mKernargSegmentSize;
 
-      // add size of implicit args, e.g.: offset x, y and z and pipe pointer
-      // FIXME: When compiler is fixed to support multiple language frontend info
-      // in the metadata, change the below comparison to the below
-      // if(languageName == std::to_string("HIP"))
-      if(platform == AMDGCN_HIP)
-        info.kernel_segment_size += sizeof(atmi_implicit_args_t);
-      else
-        info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
+      if(kernel_segment_size > 0) {
+        // this kernel has some arguments
+        size_t offset = 0;
+        size_t argsSize;
+
+        status =  amd_comgr_metadata_lookup(kernelMD, "Args", &argsMeta);
+        comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
+
+        status = amd_comgr_get_metadata_list_size(argsMeta, &argsSize);
+        comgrErrorCheck(COMGR kernel args size lookup in kernel args metadata, status);
+
+        info.num_args = argsSize;
+
+        for (size_t i = 0; i < argsSize; ++i) {
+          KernelArgMD  lcArg;
+
+          amd_comgr_metadata_node_t argsNode;
+          amd_comgr_metadata_kind_t kind;
+
+          status = amd_comgr_index_list_metadata(argsMeta, i, &argsNode);
+          comgrErrorCheck(COMGR list args node in kernel args metadata, status);
+
+          status = amd_comgr_get_metadata_kind(argsNode, &kind);
+          comgrErrorCheck(COMGR args kind in kernel args metadata, status);
+
+          if (kind != AMD_COMGR_METADATA_KIND_MAP) {
+            status = AMD_COMGR_STATUS_ERROR;
+          }
+          comgrErrorCheck(COMGR check args kind in kernel args metadata, status);
+
+          status = amd_comgr_iterate_map_metadata(argsNode, populateArgs, static_cast<void*>(&lcArg));
+          comgrErrorCheck(COMGR iterate args map in kernel args metadata, status);
+
+          amd_comgr_destroy_metadata(argsNode);
+
+          if (status != AMD_COMGR_STATUS_SUCCESS) {
+            amd_comgr_destroy_metadata(argsMeta);
+            return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
+          }
+
+          // TODO: should the below population actions be done only for 
+          // non-implicit args?
+          // populate info with num args, their sizes and alignments
+          info.arg_sizes.push_back(lcArg.mSize);
+          info.arg_alignments.push_back(lcArg.mAlign);
+          //  use offset with/instead of alignment
+          offset = core::alignUp(offset, lcArg.mAlign);
+          info.arg_offsets.push_back(offset);
+          DEBUG_PRINT("[%s:%lu] \"%s\" (%u, %lu)\n", kernelName.c_str(), i, lcArg.mName.c_str(), lcArg.mSize, offset);
+          offset += lcArg.mSize;
+
+          // check if the arg is a hidden/implicit arg
+          if(!isImplicit(lcArg.mValueKind)) {
+            kernel_explicit_args_size += lcArg.mSize;
+          }
+        }
+        amd_comgr_destroy_metadata(argsMeta);
+      }
+
+      // add size of implicit args, e.g.: offset x, y and z and pipe pointer, but
+      // in ATMI, do not count the compiler set implicit args, but set your own
+      // implicit args by discounting the compiler set implicit args
+      info.kernel_segment_size = kernel_explicit_args_size + sizeof(atmi_implicit_args_t);
       DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(), kernelObj.mCodeProps.mKernargSegmentSize, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table
       KernelInfoTable[gpu][kernelName] = info;
 
       amd_comgr_destroy_metadata(codePropsMeta);
-      amd_comgr_destroy_metadata(argsMeta);
       amd_comgr_destroy_metadata(nameMeta);
       amd_comgr_destroy_metadata(kernelMD);
     }
@@ -1549,70 +1609,78 @@ namespace core {
                   symbolName.c_str(), kernelName.c_str(), kernargSegSize.c_str());
       KernelNameMap[symbolName] = kernelName;
 
-      size_t argsSize;
-
-      status =  amd_comgr_metadata_lookup(kernelMD, ".args", &argsMeta);
-      comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
-
-      status = amd_comgr_get_metadata_list_size(argsMeta, &argsSize);
-      comgrErrorCheck(COMGR kernel args size lookup in kernel args metadata, status);
-
       atl_kernel_info_t info;
-      info.num_args = argsSize;
-      info.kernel_segment_size = std::stoi(kernargSegSize);
+      size_t kernel_explicit_args_size = 0;
+      size_t kernel_segment_size = std::stoi(kernargSegSize);
 
-      // add size of implicit args, e.g.: offset x, y and z and pipe pointer
-      // FIXME: When compiler is fixed to support multiple language frontend info
-      // in the metadata, change the below comparison to the below
-      // if(languageName == std::to_string("HIP"))
-      if(platform == AMDGCN_HIP)
-        info.kernel_segment_size += sizeof(atmi_implicit_args_t);
-      else
-        info.kernel_segment_size += sizeof(atmi_implicit_args_t) - sizeof(opencl_implicit_args_t);
+      if(kernel_segment_size > 0) {
+        size_t argsSize;
 
-      for (size_t i = 0; i < argsSize; ++i) {
-        KernelArgMD  lcArg;
+        status =  amd_comgr_metadata_lookup(kernelMD, ".args", &argsMeta);
+        comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
 
-        amd_comgr_metadata_node_t argsNode;
-        amd_comgr_metadata_kind_t kind;
+        status = amd_comgr_get_metadata_list_size(argsMeta, &argsSize);
+        comgrErrorCheck(COMGR kernel args size lookup in kernel args metadata, status);
 
-        status = amd_comgr_index_list_metadata(argsMeta, i, &argsNode);
-        comgrErrorCheck(COMGR list args node in kernel args metadata, status);
+        info.num_args = argsSize;
 
-        status = amd_comgr_get_metadata_kind(argsNode, &kind);
-        comgrErrorCheck(COMGR args kind in kernel args metadata, status);
+        for (size_t i = 0; i < argsSize; ++i) {
+          KernelArgMD  lcArg;
 
-        if (kind != AMD_COMGR_METADATA_KIND_MAP) {
-          status = AMD_COMGR_STATUS_ERROR;
+          amd_comgr_metadata_node_t argsNode;
+          amd_comgr_metadata_kind_t kind;
+
+          status = amd_comgr_index_list_metadata(argsMeta, i, &argsNode);
+          comgrErrorCheck(COMGR list args node in kernel args metadata, status);
+
+          status = amd_comgr_get_metadata_kind(argsNode, &kind);
+          comgrErrorCheck(COMGR args kind in kernel args metadata, status);
+
+          if (kind != AMD_COMGR_METADATA_KIND_MAP) {
+            status = AMD_COMGR_STATUS_ERROR;
+          }
+          comgrErrorCheck(COMGR check args kind in kernel args metadata, status);
+
+          status = amd_comgr_iterate_map_metadata(argsNode, populateArgs, static_cast<void*>(&lcArg));
+          comgrErrorCheck(COMGR iterate args map in kernel args metadata, status);
+
+          amd_comgr_destroy_metadata(argsNode);
+
+          if (status != AMD_COMGR_STATUS_SUCCESS) {
+            amd_comgr_destroy_metadata(argsMeta);
+            return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
+          }
+
+          // TODO: should the below population actions be done only for 
+          // non-implicit args?
+          // populate info with sizes and offsets
+          info.arg_sizes.push_back(lcArg.mSize);
+          // FIXME: KernelArgMD does not have the mOffset field; until that changes, we use
+          // mAlign to store the offset; minor "workaround"
+          //info.arg_alignments.push_back(lcArg.mAlign);
+          //  use offset with/instead of alignment
+          // offset = lcArg.mAlign;
+          info.arg_offsets.push_back(lcArg.mAlign);
+          DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %u)\n",
+              i, lcArg.mName.c_str(), lcArg.mSize, lcArg.mAlign);
+
+          // check if the arg is a hidden/implicit arg
+          if(!isImplicit(lcArg.mValueKind)) {
+            kernel_explicit_args_size += lcArg.mSize;
+          }
         }
-        comgrErrorCheck(COMGR check args kind in kernel args metadata, status);
-
-        status = amd_comgr_iterate_map_metadata(argsNode, populateArgs, static_cast<void*>(&lcArg));
-        comgrErrorCheck(COMGR iterate args map in kernel args metadata, status);
-
-        amd_comgr_destroy_metadata(argsNode);
-
-        if (status != AMD_COMGR_STATUS_SUCCESS) {
-          amd_comgr_destroy_metadata(argsMeta);
-          return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
-        }
-
-        // populate info with sizes and offsets
-        info.arg_sizes.push_back(lcArg.mSize);
-        // FIXME: KernelArgMD does not have the mOffset field; until that changes, we use
-        // mAlign to store the offset; minor "workaround"
-        //info.arg_alignments.push_back(lcArg.mAlign);
-        //  use offset with/instead of alignment
-        // offset = lcArg.mAlign;
-        info.arg_offsets.push_back(lcArg.mAlign);
-        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %u)\n",
-                    i, lcArg.mName.c_str(), lcArg.mSize, lcArg.mAlign);
+        amd_comgr_destroy_metadata(argsMeta);
       }
+
+      // add size of implicit args, e.g.: offset x, y and z and pipe pointer, but
+      // in ATMI, do not count the compiler set implicit args, but set your own
+      // implicit args by discounting the compiler set implicit args
+      info.kernel_segment_size = kernel_explicit_args_size + sizeof(atmi_implicit_args_t);
+      DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(), kernel_segment_size, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table
       KernelInfoTable[gpu][kernelName] = info;
 
-      amd_comgr_destroy_metadata(argsMeta);
       amd_comgr_destroy_metadata(nameMeta);
       amd_comgr_destroy_metadata(kernelMD);
     }

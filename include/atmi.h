@@ -54,18 +54,16 @@ typedef enum {
     /**
      * Target Platform is AMD GCN (default)
      */
-    AMDGCN,
+    AMDGCN = 1,
     /*
-     * Target Platform is AMD GCN from HIP Language frontend
-     * FIXME: when LLVM backend supports putting this info
-     * in the kernel language metadata, we can remove this field.
-     * Until then, this is one way in which the programmer can
-     * tell the runtime the language type
+     * Target Platform is AMD GCN compiled either from HIP, CL or OpenMP Language frontends.
+     * ATMI runtime treats the target platform in the same way irrespective of the
+     * high level language used to generate the code object.
      */
-    AMDGCN_HIP,
+    AMDGCN_HIP = 1,
+    AMDGCN_CL = 1,
+    AMDGCN_OMP = 1,
     /* -- support in the future? --
-    HSAIL,
-    CL,
     x86,
     PTX
     */
@@ -446,6 +444,22 @@ typedef struct atmi_data_s {
   ATMI_LPARM(X); \
   X->gridDim[0] = Y; \
   X->place=(atmi_place_t)ATMI_PLACE_CPU(0, CPU);
+
+#define ATMI_LPARM_2D(X,Y,Z) \
+  ATMI_LPARM(X); \
+  X->gridDim[0] = Y;\
+  X->gridDim[1] = Z;\
+  X->groupDim[0] = 64;\
+  X->groupDim[1] = 8;
+
+#define ATMI_LPARM_3D(X,Y,Z,V) \
+  ATMI_LPARM(X); \
+  X->gridDim[0] = Y;\
+  X->gridDim[1] = Z;\
+  X->gridDim[2] = V;\
+  X->groupDim[0] = 8;\
+  X->groupDim[1] = 8;\
+  X->groupDim[2] = 8;
 
 #define ATMI_PROFILE(NAME) NAME = malloc(sizeof(atmi_tprofile_t));
 

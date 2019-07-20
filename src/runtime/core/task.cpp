@@ -1025,17 +1025,13 @@ atmi_status_t dispatch_task(atl_task_t *task) {
 
       /* pass this task handle to the kernel as an argument */
       char *kargs = (char *)(task->kernarg_region);
-      if(kernel_impl->kernel_type == BRIG) {
-        const int dummy_arg_count = 6;
-        kargs += (dummy_arg_count * sizeof(uint64_t));
-      }
-      else if(kernel_impl->kernel_type == AMDGCN) {
-        atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
-        impl_args->offset_x = 0;
-        impl_args->offset_y = 0;
-        impl_args->offset_z = 0;
-        // char *pipe_ptr = impl_args->pipe_ptr;
-      }
+      // AMDGCN device libs assume that first three args beyond the kernel args are grid
+      // offsets in X, Y and Z dimensions
+      atmi_implicit_args_t *impl_args = (atmi_implicit_args_t *)(kargs + (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+      impl_args->offset_x = 0;
+      impl_args->offset_y = 0;
+      impl_args->offset_z = 0;
+      // char *pipe_ptr = impl_args->pipe_ptr;
 
       // initialize printf buffer
       {
@@ -1193,21 +1189,7 @@ void set_kernarg_region(atl_task_t *ret, void **args) {
     fprintf(stderr, "Unable to allocate/find free kernarg segment\n");
   }
   atl_kernel_impl_t *kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
-  if(kernel_impl->kernel_type == BRIG) {
-    if(ret->devtype == ATMI_DEVTYPE_GPU) {
-      /* zero out all the dummy arguments */
-      for(int dummy_idx = 0; dummy_idx < 3; dummy_idx++) {
-        *(uint64_t *)thisKernargAddress = 0;
-        thisKernargAddress += sizeof(uint64_t);
-      }
-      //*(uint64_t *)thisKernargAddress = (uint64_t)PifKlistMap[ret->kernel->pif_id];
-      thisKernargAddress += sizeof(uint64_t);
-      for(int dummy_idx = 0; dummy_idx < 2; dummy_idx++) {
-        *(uint64_t *)thisKernargAddress = 0;
-        thisKernargAddress += sizeof(uint64_t);
-      }
-    }
-  }
+
   // Argument references will be copied to a contiguous memory region here
   // TODO: resolve all data affinities before copying, depending on
   // atmi_data_affinity_policy_t: ATMI_COPY, ATMI_NOCOPY

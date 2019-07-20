@@ -43,9 +43,6 @@ while [ $# -gt 0 ]; do
     -c|--copy)
       copy="COPY"
 			;;
-    -b|--brig)
-      module_type="MODULE_BRIG"
-            ;;
     -v|--verbose)
       verbose="VERBOSE"
 			;;

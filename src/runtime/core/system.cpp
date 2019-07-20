@@ -1056,83 +1056,6 @@ namespace core {
     return raw_code_object;
   }
 
-  atmi_status_t atl_gpu_create_program() {
-    hsa_status_t err;
-    /* Create hsa program.  */
-    memset(&atl_hsa_program,0,sizeof(hsa_ext_program_t));
-    err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, atl_gpu_agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &atl_hsa_program);
-    ErrorCheck(Create the program, err);
-    return ATMI_STATUS_SUCCESS;
-  }
-
-  atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]) {
-    hsa_status_t err;
-    /* Add the BRIG module to hsa program.  */
-    err = hsa_ext_program_add_module(atl_hsa_program, (hsa_ext_module_t)_CN__HSA_BrigMem);
-    ErrorCheck(Adding the brig module to the program, err);
-    return ATMI_STATUS_SUCCESS;
-  }
-
-  atmi_status_t atl_gpu_create_executable(hsa_executable_t *executable) {
-    /* Create the empty executable.  */
-    hsa_status_t err = hsa_executable_create(atl_gpu_agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
-    ErrorCheck(Create the executable, err);
-    return ATMI_STATUS_SUCCESS;
-  }
-
-  atmi_status_t atl_gpu_freeze_executable(hsa_executable_t *executable) {
-    /* Freeze the executable; it can now be queried for symbols.  */
-    hsa_status_t err = hsa_executable_freeze(*executable, "");
-    ErrorCheck(Freeze the executable, err);
-    return ATMI_STATUS_SUCCESS;
-  }
-
-  atmi_status_t atl_gpu_add_finalized_module(hsa_executable_t *executable, char *module, const size_t module_sz) {
-    // Deserialize code object.
-    hsa_code_object_t code_object = {0};
-    hsa_status_t err = hsa_code_object_deserialize(module, module_sz, NULL, &code_object);
-    ErrorCheck(Code Object Deserialization, err);
-    assert(0 != code_object.handle);
-
-    /* Load the code object.  */
-    err = hsa_executable_load_code_object(*executable, atl_gpu_agent, code_object, "");
-    ErrorCheck(Loading the code object, err);
-    return ATMI_STATUS_SUCCESS;
-  }
-
-  atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable) {
-    hsa_status_t err;
-    /* Determine the agents ISA.  */
-    hsa_isa_t isa;
-    err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_ISA, &isa);
-    ErrorCheck(Query the agents isa, err);
-
-    /* * Finalize the program and extract the code object.  */
-    hsa_ext_control_directives_t control_directives;
-    memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
-    hsa_code_object_t code_object;
-    err = hsa_ext_program_finalize(atl_hsa_program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
-    ErrorCheck(Finalizing the program, err);
-
-    /* Destroy the program, it is no longer needed.  */
-    err=hsa_ext_program_destroy(atl_hsa_program);
-    ErrorCheck(Destroying the program, err);
-
-    /* Create the empty executable.  */
-    err = hsa_executable_create(atl_gpu_agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", executable);
-    ErrorCheck(Create the executable, err);
-
-    /* Load the code object.  */
-    err = hsa_executable_load_code_object(*executable, atl_gpu_agent, code_object, "");
-    ErrorCheck(Loading the code object, err);
-
-    /* Freeze the executable; it can now be queried for symbols.  */
-    err = hsa_executable_freeze(*executable, "");
-    ErrorCheck(Freeze the executable, err);
-
-    return ATMI_STATUS_SUCCESS;
-  }
-
   bool isImplicit(ValueKind value_kind) {
     switch(value_kind) {
       case ValueKind::HiddenGlobalOffsetX:
@@ -1459,6 +1382,7 @@ namespace core {
       comgrErrorCheck(COMGR code props iterate, status);
       kernel_segment_size = kernelObj.mCodeProps.mKernargSegmentSize;
 
+      bool hasHiddenArgs = false;
       if(kernel_segment_size > 0) {
         // this kernel has some arguments
         size_t offset = 0;
@@ -1505,15 +1429,22 @@ namespace core {
           info.arg_sizes.push_back(lcArg.mSize);
           info.arg_alignments.push_back(lcArg.mAlign);
           //  use offset with/instead of alignment
-          offset = core::alignUp(offset, lcArg.mAlign);
+          size_t new_offset = core::alignUp(offset, lcArg.mAlign);
+          size_t padding = new_offset - offset;
+          offset = new_offset;
           info.arg_offsets.push_back(offset);
           DEBUG_PRINT("[%s:%lu] \"%s\" (%u, %lu)\n", kernelName.c_str(), i, lcArg.mName.c_str(), lcArg.mSize, offset);
           offset += lcArg.mSize;
 
           // check if the arg is a hidden/implicit arg
+          // this logic assumes that all hidden args are 8-byte aligned
           if(!isImplicit(lcArg.mValueKind)) {
             kernel_explicit_args_size += lcArg.mSize;
           }
+          else {
+            hasHiddenArgs = true;
+          }
+          kernel_explicit_args_size += padding;
         }
         amd_comgr_destroy_metadata(argsMeta);
       }
@@ -1521,7 +1452,8 @@ namespace core {
       // add size of implicit args, e.g.: offset x, y and z and pipe pointer, but
       // in ATMI, do not count the compiler set implicit args, but set your own
       // implicit args by discounting the compiler set implicit args
-      info.kernel_segment_size = kernel_explicit_args_size + sizeof(atmi_implicit_args_t);
+      info.kernel_segment_size = (hasHiddenArgs ? kernel_explicit_args_size : kernelObj.mCodeProps.mKernargSegmentSize)
+                                 + sizeof(atmi_implicit_args_t);
       DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(), kernelObj.mCodeProps.mKernargSegmentSize, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table
@@ -1613,8 +1545,10 @@ namespace core {
       size_t kernel_explicit_args_size = 0;
       size_t kernel_segment_size = std::stoi(kernargSegSize);
 
+      bool hasHiddenArgs = false;
       if(kernel_segment_size > 0) {
         size_t argsSize;
+        size_t offset = 0;
 
         status =  amd_comgr_metadata_lookup(kernelMD, ".args", &argsMeta);
         comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
@@ -1660,14 +1594,23 @@ namespace core {
           //info.arg_alignments.push_back(lcArg.mAlign);
           //  use offset with/instead of alignment
           // offset = lcArg.mAlign;
+          size_t new_offset = lcArg.mAlign;
+          size_t padding = new_offset - offset;
+          offset = new_offset;
           info.arg_offsets.push_back(lcArg.mAlign);
           DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %u)\n",
               i, lcArg.mName.c_str(), lcArg.mSize, lcArg.mAlign);
+          offset += lcArg.mSize;
 
           // check if the arg is a hidden/implicit arg
+          // this logic assumes that all hidden args are 8-byte aligned
           if(!isImplicit(lcArg.mValueKind)) {
             kernel_explicit_args_size += lcArg.mSize;
           }
+          else {
+            hasHiddenArgs = true;
+          }
+          kernel_explicit_args_size += padding;
         }
         amd_comgr_destroy_metadata(argsMeta);
       }
@@ -1675,7 +1618,8 @@ namespace core {
       // add size of implicit args, e.g.: offset x, y and z and pipe pointer, but
       // in ATMI, do not count the compiler set implicit args, but set your own
       // implicit args by discounting the compiler set implicit args
-      info.kernel_segment_size = kernel_explicit_args_size + sizeof(atmi_implicit_args_t);
+      info.kernel_segment_size = (hasHiddenArgs ? kernel_explicit_args_size : kernel_segment_size)
+                                 + sizeof(atmi_implicit_args_t);
       DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(), kernel_segment_size, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table
@@ -1878,7 +1822,7 @@ namespace core {
 
       err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
       ErrorCheckAndContinue(Query the agent profile, err);
-      // FIXME: Assume that every profile is FULL until we understand how to build BRIG with base profile
+      // FIXME: Assume that every profile is FULL until we understand how to build GCN with base profile
       agent_profile = HSA_PROFILE_FULL;
       /* Create the empty executable.  */
       err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "", &executable);
@@ -1890,39 +1834,7 @@ namespace core {
       for(int i = 0; i < num_modules; i++) {
         void *module_bytes = modules[i];
         size_t module_size = module_sizes[i];
-        if(types[i] == BRIG) {
-          hsa_ext_module_t module = (hsa_ext_module_t)module_bytes;
-
-          hsa_ext_program_t program;
-          /* Create hsa program.  */
-          memset(&program,0,sizeof(hsa_ext_program_t));
-          err = hsa_ext_program_create(HSA_MACHINE_MODEL_LARGE, agent_profile, HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL, &program);
-          ErrorCheckAndContinue(Create the program, err);
-
-          /* Add the BRIG module to hsa program.  */
-          err = hsa_ext_program_add_module(program, module);
-          ErrorCheckAndContinue(Adding the brig module to the program, err);
-          /* Determine the agents ISA.  */
-          hsa_isa_t isa;
-          err = hsa_agent_get_info(agent, HSA_AGENT_INFO_ISA, &isa);
-          ErrorCheckAndContinue(Query the agents isa, err);
-
-          /* * Finalize the program and extract the code object.  */
-          hsa_ext_control_directives_t control_directives;
-          memset(&control_directives, 0, sizeof(hsa_ext_control_directives_t));
-          hsa_code_object_t code_object;
-          err = hsa_ext_program_finalize(program, isa, 0, control_directives, "-O2", HSA_CODE_OBJECT_TYPE_PROGRAM, &code_object);
-          ErrorCheckAndContinue(Finalizing the program, err);
-
-          /* Destroy the program, it is no longer needed.  */
-          err=hsa_ext_program_destroy(program);
-          ErrorCheckAndContinue(Destroying the program, err);
-
-          /* Load the code object.  */
-          err = hsa_executable_load_code_object(executable, agent, code_object, "");
-          ErrorCheckAndContinue(Loading the code object, err);
-        }
-        else if (types[i] == AMDGCN || types[i] == AMDGCN_HIP) {
+        if (types[i] == AMDGCN) {
           // Some metadata info is not available through ROCr API, so use custom
           // code object metadata parsing to collect such metadata info
           void *tmp_module = malloc(module_size);
@@ -1949,6 +1861,9 @@ namespace core {
           //    create_kernarg_memory_agent, &gpu);
           //ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
+        }
+        else {
+          ErrorCheckAndContinue(Loading non-AMDGCN code object, HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
         }
         module_load_success = 1;
       }
@@ -2188,9 +2103,6 @@ namespace core {
       return ATMI_STATUS_ERROR;
     }
     std::string hsaco_name = std::string(impl );
-    std::string brig_name = std::string("&__OpenCL_");
-    brig_name += std::string(impl );
-    brig_name += std::string("_kernel");
 
     atl_kernel_impl_t *kernel_impl = new atl_kernel_impl_t;
     kernel_impl->kernel_id = ID;
@@ -2213,15 +2125,9 @@ namespace core {
         kernel_type = AMDGCN;
         some_success = true;
       }
-      else if(KernelInfoTable[gpu].find(brig_name) != KernelInfoTable[gpu].end()) {
-        kernel_name = brig_name;
-        kernel_type = BRIG;
-        some_success = true;
-      }
       else {
-        DEBUG_PRINT("Did NOT find kernel %s or %s for GPU %d\n",
+        DEBUG_PRINT("Did NOT find kernel %s for GPU %d\n",
             hsaco_name.c_str(),
-            brig_name.c_str(),
             gpu);
         continue;
       }

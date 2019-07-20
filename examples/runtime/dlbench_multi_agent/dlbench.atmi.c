@@ -80,13 +80,8 @@ int main(int argc, char **argv) {
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
     check(Initializing the ATMI runtime, err);
     
-#ifdef MODULE_BRIG
-    const char *module = "grayscale.brig";
-    atmi_platform_type_t module_type = BRIG;
-#else
     const char *module = "grayscale.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
-#endif
     err = atmi_module_register(&module, &module_type, 1);
     check(Registering modules, err);
 

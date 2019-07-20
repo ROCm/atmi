@@ -46,13 +46,8 @@ int main(int argc, char **argv) {
     return -1;
 
   // Register module
-#ifndef USE_BRIG
   const char *module = "hw.hsaco";
   atmi_platform_type_t module_type = AMDGCN;
-#else
-  const char *module = "hw.brig";
-  atmi_platform_type_t module_type = BRIG;
-#endif
   atmi_module_register(&module, &module_type, 1);
 
   {

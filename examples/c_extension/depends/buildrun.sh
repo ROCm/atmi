@@ -38,8 +38,6 @@ export LD_LIBRARY_PATH=$HSA_RUNTIME_PATH/lib:$ATMI_RUNTIME_PATH/lib:$LD_LIBRARY_
 # Do not compile accelerated functions separately. This script will be invoked by the GCC plugin itself.
 echo 
 #if [ -f csquares_kernels.o ] ; then rm csquares_kernels.o ; fi
-#echo $ATMI_RUNTIME_PATH/bin/cl2brigh.sh -gccopt 3 csquares_kernels.cl 
-#$ATMI_RUNTIME_PATH/bin/cl2brigh.sh -gccopt 3 csquares_kernels.cl 
 
 # Compile Main and generate the PIF definitions for host and accelerated functions in csquares.cpp.pifdefs.c
 echo 

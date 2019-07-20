@@ -31,13 +31,6 @@ AMDGPU_TARGET_TRIPLE ?= amdgpu--amdhsa
 MCPU ?= $(shell ${ATMI_RUNTIME_PATH}/bin/mygpu)
 #$(info MCPU $(MCPU))
 
-# Kernel format
-BRIG ?= 0
-ifeq ($(BRIG),1)
-	BRIGCLOPTS=-brig
-	BRIGCPPOPTS=-DUSE_BRIG
-endif
-
 # Kernel compiler
 CLC ?= 1
 
@@ -77,14 +70,14 @@ all: $(OBJS)
 
 fibonacci: fibonacci.cpp  
 #ifeq ($(CLC),1)
-#	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} ${BRIGCLOPTS} -opt 2 fibonacci.cl
+#	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} -opt 2 fibonacci.cl
 #else
 #	$(CLCC) ${CLCFLAGS} -o fibonacci.hsaco fibonacci.cl
 #endif
-	$(CXX) -o $@ fibonacci.cpp $(BRIGCPPOPTS) $(CXXFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
+	$(CXX) -o $@ fibonacci.cpp $(CXXFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
-	rm -rf *.o *.brig *.hsaco $(OBJS)
+	rm -rf *.o *.hsaco $(OBJS)
 
 test:
 	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./fibonacci

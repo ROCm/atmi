@@ -30,13 +30,6 @@ AMDGPU_TARGET_TRIPLE ?= amdgpu--amdhsa
 #MCPU
 MCPU ?= $(shell mymcpu)
 
-# Kernel format
-BRIG ?= 0
-ifeq ($(BRIG),1)
-	BRIGCLOPTS=-brig
-	BRIGCPPOPTS=-DUSE_BRIG
-endif
-
 # Kernel compiler
 CLC ?= 1
 
@@ -76,14 +69,14 @@ all: $(OBJS)
 
 reduction: reduction.cpp reduction.cl 
 ifeq ($(CLC),1)
-	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} ${BRIGCLOPTS} -opt 2 reduction.cl
+	$(CLOC_PATH)/cloc.sh ${CLOCOPTS} -opt 2 reduction.cl
 else
 	$(CLCC) ${CLCFLAGS} -o reduction.hsaco reduction.cl
 endif
-	$(CXX) -o $@ reduction.cpp $(BRIGCPPOPTS) $(CXXFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
+	$(CXX) -o $@ reduction.cpp $(CXXFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
-	rm -rf *.o *.brig *.hsaco $(OBJS)
+	rm -rf *.o *.hsaco $(OBJS)
 
 test:
 	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./reduction

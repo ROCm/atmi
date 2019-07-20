@@ -338,37 +338,6 @@ void clear_container(T &q) {
 
 bool is_valid_kernel_id(atl_kernel_t *kernel, unsigned int kernel_id);
 
-atmi_status_t atl_gpu_create_program();
-atmi_status_t atl_gpu_add_brig_module(char _CN__HSA_BrigMem[]);
-atmi_status_t atl_gpu_build_executable(hsa_executable_t *executable);
-
-atmi_status_t atl_gpu_create_executable(hsa_executable_t *executable);
-atmi_status_t atl_gpu_add_finalized_module(hsa_executable_t *executable, char *module,
-                const size_t module_sz);
-atmi_status_t atl_gpu_freeze_executable(hsa_executable_t *executable);
-
-atmi_status_t atl_gpu_memory_allocate(const atmi_lparm_t *lparm,
-                 hsa_executable_t executable,
-                 const char *pif_name,
-                 void **thisKernargAddress);
-
-atmi_status_t atl_init_kernel(
-                             const char *pif_name,
-                             const atmi_devtype_t devtype,
-                             const int num_params,
-                             const char *cpu_kernel_name,
-                             atmi_generic_fp fn_ptr,
-                             const char *gpu_kernel_name);
-//atmi_status_t atl_pif_init(atl_pif_kernel_table_t pif_fn_table[], int sz);
-atmi_status_t atl_get_gpu_kernel_info(
-                            hsa_executable_t executable,
-                            const char *kernel_symbol_name,
-                            uint64_t                         *_KN__Kernel_Object,
-                            uint32_t                         *_KN__Group_Segment_Size,
-                            uint32_t                         *_KN__Private_Segment_Size,
-                            uint32_t                         *_KN__Kernarg_Size
-                            );
-
 long int get_nanosecs( struct timespec start_time, struct timespec end_time);
 
 extern void register_allocation(void *addr, size_t size, atmi_mem_place_t place);

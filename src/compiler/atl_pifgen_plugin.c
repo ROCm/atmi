@@ -66,7 +66,6 @@ std::string main_input_filename_str;
 static std::vector<std::string> g_cl_modules;
 static std::vector<std::string> g_all_pifdecls;
 static std::vector<std::string> g_cl_files;
-static std::vector<std::string> g_brig_files;
 // format of the pif_table
 // "PIF name", (pif_index_in_table, kernels_for_this_pif_count)
 static std::map<std::string, std::pair<int,int> > pif_table;
@@ -205,21 +204,6 @@ std::string exec(const char* cmd) {
     }
     pclose(pipe);
     return result;
-}
-
-void brig2brigh(const char *brigfilename, const char *cl_module_name) {
-    // FIXME: Ideally we should use cloc_wrapper.sh for this too
-    std::string outfile(cl_module_name);
-    if(g_hsa_offline_finalize == 1) {
-        // hof -o cl_module_name.o -b brigfile
-        std::string hof_cmd("hof -o ");
-        hof_cmd += (std::string(outfile) + ".hof -b " + std::string(brigfilename));
-        std::string hof_str = exec(hof_cmd.c_str());
-        if(hof_str == "" || hof_str == "ERROR") {
-            fprintf(stderr, "HSA Offline Finalized failed with command: %s\n", hof_cmd.c_str());
-            exit(-1);
-        }
-    }
 }
 
 void cloc_wrapper(const char *clfilename, const char *symbolname) {
@@ -672,26 +656,6 @@ handle_task_impl_attribute (tree *node, tree name, tree args,
         kl_init(); \n",
                 g_cl_modules.size());
             }
-            else {
-                pp_printf((pif_printers[pif_index].pifdefs), "\n\
-        const char *modules[%lu];\n\
-        atmi_platform_type_t module_types[%lu]; \n",
-                g_cl_modules.size(),
-                g_cl_modules.size());
-        
-                for(int idx = 0; idx < g_cl_modules.size(); idx++) {
-                    pp_printf((pif_printers[pif_index].pifdefs), "\
-        modules[%d] = \"%s.brig\"; \n\
-        module_types[%d] = BRIG; \n",
-                    idx, g_cl_modules[idx].c_str(),
-                    idx);
-                }
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        err = atmi_module_register(modules, module_types, %lu);\n\
-        ErrorCheck(Building Executable, err); \n\
-        kl_init(); \n",
-                g_cl_modules.size());
-            }
         }
         pp_printf((pif_printers[pif_index].pifdefs), "\
         g_initialized = 1;\n\
@@ -874,13 +838,7 @@ register_finish_unit (void *event_data, void *data) {
     //write_cpp_get_gpu_agent(fp_pifdefs_genw);
     write_globals(fp_pifdefs_genw);
 #if 0
-    if(g_hsa_offline_finalize == 0) {
-        for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
-                it != g_cl_modules.end(); it++) {
-            fprintf(fp_pifdefs_genw, "#include \"%s_brig.h\"\n", it->c_str());
-        }
-    }
-    else {
+    if(g_hsa_offline_finalize == 1) {
         for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
                 it != g_cl_modules.end(); it++) {
             fprintf(fp_pifdefs_genw, "#include \"%s_hof.h\"\n", it->c_str());
@@ -1144,11 +1102,6 @@ int plugin_init(struct plugin_name_args *plugin_info,
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             const char *clfilename = plugin_info->argv[i].value;
 
-            /* compile CL to BRIG header file with char array */
-            // Compile to brig at end of current compilation so that the PIF declarations can be 
-            // embedded into the CL code. This is useful if GPU kernels need to invoke PIFs
-            // in the same way as CPU code invokes PIFs
-            // cloc_wrapper(clfilename);
             g_cl_files.push_back(std::string(clfilename));
 
             /* remove .cl extension */
@@ -1164,44 +1117,6 @@ int plugin_init(struct plugin_name_args *plugin_info,
              */
             g_cl_modules.push_back(tokens[0]);
         }
-        else if(strcmp(plugin_info->argv[i].key, "brigfile") == 0) {
-            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
-            const char *brigfilename = plugin_info->argv[i].value;
-
-            g_brig_files.push_back(std::string(brigfilename));
-            /* remove ._brig.h */
-            vector<string> tokens = split(brigfilename, '.');
-            //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
-            for(std::vector<std::string>::iterator it = tokens.begin(); 
-                    it != tokens.end(); it++) {
-                DEBUG_PRINT("Brig File token: %s\n", it->c_str());
-            }
-            /* saving just the first token to the left of a dot. 
-             * Ideal solution should be to concatenate all tokens 
-             * except the cl with _ as the glue insted of dot
-             */
-            g_cl_modules.push_back(tokens[0]);
-            
-            /* compile CL to BRIG header file with char array */
-            brig2brigh(brigfilename, tokens[0].c_str());
-        }        
-        else if(strcmp(plugin_info->argv[i].key, "brighfile") == 0) {
-            DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
-            const char *brighfilename = plugin_info->argv[i].value;
-
-            /* remove ._brig.h */
-            vector<string> tokens = split(brighfilename, '_');
-            //DEBUG_PRINT("Plugin Help String %s\n", plugin_info->help);
-            for(std::vector<std::string>::iterator it = tokens.begin(); 
-                    it != tokens.end(); it++) {
-                DEBUG_PRINT("Brig H File token: %s\n", it->c_str());
-            }
-            /* saving just the first token to the left of a dot. 
-             * Ideal solution should be to concatenate all tokens 
-             * except the cl with _ as the glue insted of dot
-             */
-            g_cl_modules.push_back(tokens[0]);
-        }   
         else if(strcmp(plugin_info->argv[i].key, "pifgenfile") == 0) {
             DEBUG_PRINT("Plugin Arg %d: (%s, %s)\n", i, plugin_info->argv[i].key, plugin_info->argv[i].value);
             g_output_pifdefs_filename = std::string(plugin_info->argv[i].value);
@@ -1210,7 +1125,7 @@ int plugin_init(struct plugin_name_args *plugin_info,
             /* This case already taken care of before the start of this loop */
         }
         else {
-            fprintf(stderr, "Unknown plugin argument pair (%s %s).\nAllowed plugin arguments are clfile, brigfile, jitcompile and pifgenfile.\n", plugin_info->argv[i].key, plugin_info->argv[i].value);
+            fprintf(stderr, "Unknown plugin argument pair (%s %s).\nAllowed plugin arguments are clfile, jitcompile and pifgenfile.\n", plugin_info->argv[i].key, plugin_info->argv[i].value);
             exit(-1);
         }
     }
@@ -1346,45 +1261,6 @@ extern _CPPSTRING_ void %s_kl_init() {\n\n", pif_name);
     atmi_malloc((void **)&(atmi_klist[pif_id].kernel_packets_heap), sizeof(atmi_kernel_packet_t) * MAX_NUM_KERNELS, packets_place); \n\
     atmi_klist[pif_id].kernel_packets_offset = 0;\n\n");
 
-#if 0
-        if(g_hsa_offline_finalize == 1) {
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(g_gpu_initialized == 0) { \n\
-        atmi_status_t err;\n\
-        snk_init_context(); \n\
-        snk_init_gpu_context(); \n\
-        snk_gpu_create_executable(&g_executable); \n");
-            for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
-                it != g_cl_modules.end(); it++) {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        snk_gpu_add_finalized_module(&g_executable, %s_HSA_HofMem, %s_HSA_HofMemSz); \n", 
-                    it->c_str(), it->c_str());
-            }
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-        err = snk_gpu_freeze_executable(&g_executable);\n\
-        ErrorCheck(Freezing Executable, err); \n\
-        g_gpu_initialized = 1;\n\
-    }\n\n");
-        }
-        else {
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-    if(g_gpu_initialized == 0) { \n\
-        atmi_status_t err;\n\
-        snk_init_context(); \n\
-        snk_init_gpu_context(); \n\
-        snk_gpu_create_program(); \n");
-            for(std::vector<std::string>::iterator it = g_cl_modules.begin(); 
-                it != g_cl_modules.end(); it++) {
-                pp_printf((pif_printers[pif_index].pifdefs), "\
-        snk_gpu_add_brig_module(%s_HSA_BrigMem); \n", it->c_str());
-            }
-            pp_printf((pif_printers[pif_index].pifdefs), "\
-        err = snk_gpu_build_executable(&g_executable);\n\
-        ErrorCheck(Building Executable, err); \n\
-        g_gpu_initialized = 1;\n\
-    }\n\n");
-        }
-#endif        
 #if 0
     pp_printf((pif_printers[pif_index].pifdefs), "\
     if(g_cpu_initialized == 0) {\n\

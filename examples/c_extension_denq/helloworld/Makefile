@@ -36,12 +36,8 @@ all: $(OBJS)
 
 hello: HelloWorld.cpp hw.cl 
 	HSA_LLVM_PATH=$(HOME)/git/CLOC/bin $(CC) -c -o HelloWorld.o $^ -fplugin=$(PLUGIN_LIB) -fplugin-arg-atmi_pifgen-clfile=hw.cl -fplugin-arg-atmi_pifgen-pifgenfile=pifdefs.cpp $(CFLAGS) $(INC_FLAGS)
-	#/opt/rocm/hlc3.2/bin/HSAILasm -disassemble hw.brig
-	#${HOME}/git/atmi/bin/cloc_wrapper.sh test.cl
-	#/opt/rocm/hlc3.2/bin/HSAILasm -disassemble test.brig
-	#mv test.brig hw.brig
 	$(CC) -o $@ HelloWorld.o pifdefs.cpp $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
-	rm -rf *.o *.brig *.hsaco $(OBJS)
+	rm -rf *.o *.hsaco $(OBJS)
 

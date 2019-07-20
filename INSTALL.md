@@ -58,7 +58,7 @@ The examples here use OpenCL kernel language and ATMI as the host runtime, but A
 kernel language like HIP or OpenMP as long as they are compiled to AMD GCN code objects.
 In this example set, the host code and device code are compiled separately,
 and the ATMI host runtime explicitly loads the device module before launching tasks.
-ATMI currently supports loading both AMD GCN (HSA code object) or BRIG/HSAIL, but support for BRIG/HSAIL will go away in future releases.
+ATMI currently supports loading AMD GCN (HSA code objects).
 ATMI ships with it the CLOC (CL Offline Compiler) utility script, which is a thin wrapper around Clang to help compile CL kernels.
 
 ```

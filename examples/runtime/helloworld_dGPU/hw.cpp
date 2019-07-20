@@ -23,13 +23,13 @@ using namespace std;
     exit(1); \
   }
 
-extern _CPPSTRING_ void decode_cpu_fn(const char *in, char *out, size_t strlength) {
+extern _CPPSTRING_ void decode_cpu_fn(const char *in, char *out, int strlength) {
   int num = get_global_id(0);
   if(num < strlength)
     out[num] = in[num] + 1;
 }
 
-extern _CPPSTRING_ void decode_cpu(const char **in, char **out, size_t *strlength) {
+extern _CPPSTRING_ void decode_cpu(const char **in, int *strlength, char **out) {
   decode_cpu_fn(*in, *out, *strlength);
 }
 
@@ -45,14 +45,14 @@ int main(int argc, char **argv) {
 
   atmi_kernel_t kernel;
   const unsigned int num_args = 3;
-  size_t arg_sizes[] = {sizeof(const char *), sizeof(char *), sizeof(size_t)};
+  size_t arg_sizes[] = {sizeof(const char *), sizeof(int), sizeof(char *)};
   ErrorCheck(atmi_kernel_create(&kernel, num_args, arg_sizes,
         2,
         ATMI_DEVTYPE_CPU, (atmi_generic_fp)decode_cpu,
         ATMI_DEVTYPE_GPU, "decode_gpu"));
 
   const char* input = "Gdkkn\x1FGR@\x1FVnqkc";
-  size_t strlength = strlen(input);
+  int strlength = strlen(input);
   char *output_cpu = (char*) malloc(strlength + 1);
   char *output_gpu = (char*) malloc(strlength + 1);
 
@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
   void *h_output;
   ErrorCheck(atmi_malloc(&h_output, strlength+1, cpu));
 
-  void *gpu_args[] = {&d_input, &d_output, &strlength};
-  void *cpu_args[] = {&h_input, &h_output, &strlength};
+  void *gpu_args[] = {&d_input, &strlength, &d_output};
+  void *cpu_args[] = {&h_input, &strlength, &h_output};
 
   ATMI_LPARM_1D(lparm, strlength);
   lparm->synchronous = ATMI_TRUE;

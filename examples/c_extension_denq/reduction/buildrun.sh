@@ -22,8 +22,6 @@ set -e
 ATMI_INC=$ATMI_RUNTIME_PATH/include
 
 # Do not compile accelerated functions separately. This script will be invoked by the GCC plugin itself.
-#echo cl2brigh.sh -v -gccopt 3 hw.cl
-#cl2brigh.sh -v -gccopt 3 hw.cl
 
 # Compile Main and generate the PIF definitions for host and accelerated functions
 # in Reduction.cpp.pifdefs.c

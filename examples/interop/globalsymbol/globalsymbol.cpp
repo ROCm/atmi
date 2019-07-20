@@ -25,13 +25,8 @@ enum {
 int main(int argc, char **argv) {
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
     if(err != ATMI_STATUS_SUCCESS) return -1;
-#ifndef USE_BRIG
     const char *module = "globalsymbol.hsaco";
     atmi_platform_type_t module_type = AMDGCN;
-#else
-    const char *module = "globalsymbol.brig";
-    atmi_platform_type_t module_type = BRIG;
-#endif
     atmi_module_register(&module, &module_type, 1);
 
     atmi_kernel_t kernel;

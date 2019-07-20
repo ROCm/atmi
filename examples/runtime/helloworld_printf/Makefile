@@ -142,7 +142,7 @@ hello: hw_gpu.hsaco hw_cpu.o hw_host.o
 	$(CXX) -o $@ hw_host.o hw_cpu.o $(LIBS) $(LIB_FLAGS)
 
 clean:
-	rm -rf *.o *.brig *.i *.bc *.hsaco $(OBJS)
+	rm -rf *.o *.i *.bc *.hsaco $(OBJS)
 
 test:
 	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./hello

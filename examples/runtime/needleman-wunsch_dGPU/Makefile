@@ -77,7 +77,7 @@ endif
 	$(CXX) -o $@ nw.cpp $(CXXFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
-	rm -rf *.o *.brig *.hsaco $(OBJS)
+	rm -rf *.o *.hsaco $(OBJS)
 
 test:
 	env LD_LIBRARY_PATH=${ATMI_RUNTIME_PATH}/lib:${HSA_RUNTIME_PATH}/lib:${LD_LIBRARY_PATH} ./nw 512 10 10

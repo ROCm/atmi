@@ -447,6 +447,22 @@ typedef struct atmi_data_s {
   X->gridDim[0] = Y; \
   X->place=(atmi_place_t)ATMI_PLACE_CPU(0, CPU);
 
+#define ATMI_LPARM_2D(X,Y,Z) \
+  ATMI_LPARM(X); \
+  X->gridDim[0] = Y;\
+  X->gridDim[1] = Z;\
+  X->groupDim[0] = 64;\
+  X->groupDim[1] = 8;
+
+#define ATMI_LPARM_3D(X,Y,Z,V) \
+  ATMI_LPARM(X); \
+  X->gridDim[0] = Y;\
+  X->gridDim[1] = Z;\
+  X->gridDim[2] = V;\
+  X->groupDim[0] = 8;\
+  X->groupDim[1] = 8;\
+  X->groupDim[2] = 8;
+
 #define ATMI_PROFILE(NAME) NAME = malloc(sizeof(atmi_tprofile_t));
 
 #define ATMI_PROFILE_NEW(NAME) atmi_tprofile_t * NAME ; atmi_tprofile_t _ ## NAME ={.dispatch_time=0,.ready_time=0,.start_time=0,.end_time=0} ; NAME = &_ ## NAME;

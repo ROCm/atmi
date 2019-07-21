@@ -54,18 +54,16 @@ typedef enum {
     /**
      * Target Platform is AMD GCN (default)
      */
-    AMDGCN,
+    AMDGCN = 1,
     /*
-     * Target Platform is AMD GCN from HIP Language frontend
-     * FIXME: when LLVM backend supports putting this info
-     * in the kernel language metadata, we can remove this field.
-     * Until then, this is one way in which the programmer can
-     * tell the runtime the language type
+     * Target Platform is AMD GCN compiled either from HIP, CL or OpenMP Language frontends.
+     * ATMI runtime treats the target platform in the same way irrespective of the
+     * high level language used to generate the code object.
      */
-    AMDGCN_HIP,
+    AMDGCN_HIP = 1,
+    AMDGCN_CL = 1,
+    AMDGCN_OMP = 1,
     /* -- support in the future? --
-    HSAIL,
-    CL,
     x86,
     PTX
     */

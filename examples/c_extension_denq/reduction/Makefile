@@ -39,7 +39,7 @@ reduction: Reduction.cpp reduction.cl
 	$(CC) -o $@ Reduction.o pifdefs.cpp $(CFLAGS) $(LIBS) $(LIB_FLAGS) $(INC_FLAGS)
 
 clean:
-	rm -rf *.o *.brig *_brig.h *pifdefs.c* $(OBJS)
+	rm -rf *.o *pifdefs.c* $(OBJS)
 
 
 

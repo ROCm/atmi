@@ -100,7 +100,7 @@ atmi_status_t atmi_finalize();
  * host program.
  *
  * @param[in] filenames A collection of files that contain the GPU modules
- * targeting either the ::BRIG or ::AMDGCN platform types. Value cannot be NULL.
+ * targeting ::AMDGCN platform types. Value cannot be NULL.
  *
  * @param[in] types A collection of platform types corresponding to the files.
  * Value cannot be NULL.
@@ -129,7 +129,7 @@ atmi_status_t atmi_module_register(
  * host program.
  *
  * @param[in] modules A collection of memory regions that contain the GPU modules
- * targeting either the ::BRIG or ::AMDGCN platform types. Value cannot be NULL.
+ * targeting ::AMDGCN platform types. Value cannot be NULL.
  *
  * @param[in] module_sizes Sizes of each module region in @p modules. Value
  * cannot be NULL.

@@ -1382,6 +1382,7 @@ namespace core {
       comgrErrorCheck(COMGR code props iterate, status);
       kernel_segment_size = kernelObj.mCodeProps.mKernargSegmentSize;
 
+      bool hasHiddenArgs = false;
       if(kernel_segment_size > 0) {
         // this kernel has some arguments
         size_t offset = 0;
@@ -1440,6 +1441,9 @@ namespace core {
           if(!isImplicit(lcArg.mValueKind)) {
             kernel_explicit_args_size += lcArg.mSize;
           }
+          else {
+            hasHiddenArgs = true;
+          }
           kernel_explicit_args_size += padding;
         }
         amd_comgr_destroy_metadata(argsMeta);
@@ -1448,7 +1452,8 @@ namespace core {
       // add size of implicit args, e.g.: offset x, y and z and pipe pointer, but
       // in ATMI, do not count the compiler set implicit args, but set your own
       // implicit args by discounting the compiler set implicit args
-      info.kernel_segment_size = kernel_explicit_args_size + sizeof(atmi_implicit_args_t);
+      info.kernel_segment_size = (hasHiddenArgs ? kernel_explicit_args_size : kernelObj.mCodeProps.mKernargSegmentSize)
+                                 + sizeof(atmi_implicit_args_t);
       DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(), kernelObj.mCodeProps.mKernargSegmentSize, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table
@@ -1540,6 +1545,7 @@ namespace core {
       size_t kernel_explicit_args_size = 0;
       size_t kernel_segment_size = std::stoi(kernargSegSize);
 
+      bool hasHiddenArgs = false;
       if(kernel_segment_size > 0) {
         size_t argsSize;
         size_t offset = 0;
@@ -1601,6 +1607,9 @@ namespace core {
           if(!isImplicit(lcArg.mValueKind)) {
             kernel_explicit_args_size += lcArg.mSize;
           }
+          else {
+            hasHiddenArgs = true;
+          }
           kernel_explicit_args_size += padding;
         }
         amd_comgr_destroy_metadata(argsMeta);
@@ -1609,7 +1618,8 @@ namespace core {
       // add size of implicit args, e.g.: offset x, y and z and pipe pointer, but
       // in ATMI, do not count the compiler set implicit args, but set your own
       // implicit args by discounting the compiler set implicit args
-      info.kernel_segment_size = kernel_explicit_args_size + sizeof(atmi_implicit_args_t);
+      info.kernel_segment_size = (hasHiddenArgs ? kernel_explicit_args_size : kernel_segment_size)
+                                 + sizeof(atmi_implicit_args_t);
       DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(), kernel_segment_size, info.kernel_segment_size);
 
       // kernel received, now add it to the kernel info table

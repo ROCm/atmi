@@ -1428,15 +1428,19 @@ namespace core {
           info.arg_sizes.push_back(lcArg.mSize);
           info.arg_alignments.push_back(lcArg.mAlign);
           //  use offset with/instead of alignment
-          offset = core::alignUp(offset, lcArg.mAlign);
+          size_t new_offset = core::alignUp(offset, lcArg.mAlign);
+          size_t padding = new_offset - offset;
+          offset = new_offset;
           info.arg_offsets.push_back(offset);
           DEBUG_PRINT("[%s:%lu] \"%s\" (%u, %lu)\n", kernelName.c_str(), i, lcArg.mName.c_str(), lcArg.mSize, offset);
           offset += lcArg.mSize;
 
           // check if the arg is a hidden/implicit arg
+          // this logic assumes that all hidden args are 8-byte aligned
           if(!isImplicit(lcArg.mValueKind)) {
             kernel_explicit_args_size += lcArg.mSize;
           }
+          kernel_explicit_args_size += padding;
         }
         amd_comgr_destroy_metadata(argsMeta);
       }
@@ -1538,6 +1542,7 @@ namespace core {
 
       if(kernel_segment_size > 0) {
         size_t argsSize;
+        size_t offset = 0;
 
         status =  amd_comgr_metadata_lookup(kernelMD, ".args", &argsMeta);
         comgrErrorCheck(COMGR kernel args metadata lookup in kernel metadata, status);
@@ -1583,14 +1588,20 @@ namespace core {
           //info.arg_alignments.push_back(lcArg.mAlign);
           //  use offset with/instead of alignment
           // offset = lcArg.mAlign;
+          size_t new_offset = lcArg.mAlign;
+          size_t padding = new_offset - offset;
+          offset = new_offset;
           info.arg_offsets.push_back(lcArg.mAlign);
           DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %u)\n",
               i, lcArg.mName.c_str(), lcArg.mSize, lcArg.mAlign);
+          offset += lcArg.mSize;
 
           // check if the arg is a hidden/implicit arg
+          // this logic assumes that all hidden args are 8-byte aligned
           if(!isImplicit(lcArg.mValueKind)) {
             kernel_explicit_args_size += lcArg.mSize;
           }
+          kernel_explicit_args_size += padding;
         }
         amd_comgr_destroy_metadata(argsMeta);
       }

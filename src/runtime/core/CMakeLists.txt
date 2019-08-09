@@ -24,12 +24,14 @@ include_directories(${LIBELF_INCLUDE_DIRS})
 
 # Find comgr
 find_package(amd_comgr REQUIRED CONFIG
-             HINTS ${ROC_DIR})
+             HINTS ${ROC_DIR} ${ROC_COMGR_CONFIG_DIR})
 find_path (amd_comgr_INCLUDE_DIRS
     NAMES
     amd_comgr.h
     PATHS
     ${ROCM_INCLUDE_DIRS}
+    ${ROC_COMGR_INCLUDE_DIR}
+    ${ROC_COMGR_INCLUDE_DIR}/include
     /opt/rocm/include
     /usr/include
     /usr/local/include

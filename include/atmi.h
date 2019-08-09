@@ -40,7 +40,11 @@ typedef enum atmi_status_t {
     /**
      * A generic error has occurred.
      */
-    ATMI_STATUS_ERROR=2
+    ATMI_STATUS_ERROR=2,
+    /**
+     * Too many kernel/task types have been created.
+     */
+    ATMI_STATUS_KERNELCOUNT_OVERFLOW=3
 } atmi_status_t;
 
 /**

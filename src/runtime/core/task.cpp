@@ -2013,9 +2013,24 @@ atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
   if(ret) {
     set_task_params(ret, lparm, kernel_id, args);
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      lock(&mutex_readyq_);
+      std::set<pthread_mutex_t *> req_mutexes;
+      req_mutexes.clear();
+
+      req_mutexes.insert(&mutex_readyq_);
+      req_mutexes.insert((pthread_mutex_t *)&(ret->mutex));
+      lock_set(req_mutexes);
+      // Save kernel args because it will be activated
+      // later. This way, the user will be able to
+      // reuse their kernarg region that was created
+      // in the application space.
+      if(ret->kernel && ret->kernarg_region == NULL) {
+        // first time allocation/assignment
+        ret->kernarg_region = malloc(ret->kernarg_region_size);
+        //ret->kernarg_region_copied = true;
+        set_kernarg_region(ret, args);
+      }
       TaskList.push_back(ret);
-      unlock(&mutex_readyq_);
+      unlock_set(req_mutexes);
     }
     try_dispatch(ret, args, lparm->synchronous);
     ret_handle = ret->id;

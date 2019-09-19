@@ -96,8 +96,8 @@ target_link_libraries(
   ${ROCM_LIBRARIES}
   -L${ROCM_LIBRARIES_DIR}/../hsa/lib
   -L${ROCM_LIBRARIES_DIR}
-  -Wl,-rpath,${ROCM_LIBRARIES_DIR}/../hsa/lib
-  -Wl,-rpath,${ROCM_LIBRARIES_DIR}
+  -Wl,-rpath,\$ORIGIN/../../hsa/lib
+  -Wl,-rpath,\$ORIGIN/../../lib
 )
 
 # set output dir for .h files

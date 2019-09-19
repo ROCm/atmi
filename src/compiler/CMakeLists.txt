@@ -85,7 +85,7 @@ if(ROCM_FOUND)
                 atmi_cplugin
                 ${ROCM_LIBRARIES}
                 -L${ROCM_LIBRARIES_DIR}/../hsa/lib -L${ROCM_LIBRARIES_DIR}
-                -Wl,-rpath,${ROCM_LIBRARIES_DIR}/../hsa/lib -Wl,-rpath,${ROCM_LIBRARIES_DIR}
+                -Wl,-rpath,\$ORIGIN/../../hsa/lib -Wl,-rpath,\$ORIGIN/../../lib
             )
        else()
             libatmi_runtime_say("Not building ATMI C Extension: GCC Plugin not found.")

@@ -64,6 +64,24 @@ add_definitions(-fpic)
 # set output dir for the .so file
 set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../lib)
 
+#set soname version number
+get_version ( "1.0.0" )
+
+set ( BUILD_VERSION_MAJOR ${VERSION_MAJOR} )
+set ( BUILD_VERSION_MINOR ${VERSION_MINOR} )
+set ( BUILD_VERSION_PATCH ${VERSION_PATCH} )
+
+set ( BUILD_VERSION_STRING "${BUILD_VERSION_MAJOR}.${BUILD_VERSION_MINOR}.${BUILD_VERSION_PATCH}" )
+
+set ( LIB_VERSION_MAJOR ${VERSION_MAJOR} )
+set ( LIB_VERSION_MINOR ${VERSION_MINOR} )
+if ( ${ROCM_PATCH_VERSION} )
+    set ( LIB_VERSION_PATCH ${ROCM_PATCH_VERSION} )
+else()
+    set ( LIB_VERSION_PATCH ${VERSION_PATCH} )
+endif()
+set ( LIB_VERSION_STRING "${LIB_VERSION_MAJOR}.${LIB_VERSION_MINOR}.${LIB_VERSION_PATCH}" )
+
 add_library(atmi_runtime SHARED
     system.cpp
     atl_bindthread.c
@@ -78,6 +96,9 @@ add_library(atmi_runtime SHARED
     atmi.cpp
     utils.cpp
     )
+
+set_property ( TARGET atmi_runtime PROPERTY VERSION "${LIB_VERSION_STRING}" )
+set_property ( TARGET atmi_runtime PROPERTY SOVERSION "${LIB_VERSION_MAJOR}" )
 
 include_directories(${ROCM_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})

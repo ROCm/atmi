@@ -85,6 +85,7 @@ if(ROCM_FOUND)
                 atmi_cplugin
                 ${ROCM_LIBRARIES}
                 -L${ROCM_LIBRARIES_DIR}/../hsa/lib -L${ROCM_LIBRARIES_DIR}
+                -Wl,--enable-new-dtags
                 -Wl,-rpath,\$ORIGIN/../../hsa/lib -Wl,-rpath,\$ORIGIN/../../lib
             )
        else()

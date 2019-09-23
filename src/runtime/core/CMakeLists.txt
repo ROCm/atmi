@@ -71,12 +71,12 @@ set ( BUILD_VERSION_PATCH ${VERSION_PATCH} )
 
 set ( BUILD_VERSION_STRING "${BUILD_VERSION_MAJOR}.${BUILD_VERSION_MINOR}.${BUILD_VERSION_PATCH}" )
 
-set ( LIB_VERSION_MAJOR ${VERSION_MAJOR} )
-set ( LIB_VERSION_MINOR ${VERSION_MINOR} )
+set ( LIB_VERSION_MAJOR 0 )
+set ( LIB_VERSION_MINOR 7 )
 if ( ${ROCM_PATCH_VERSION} )
     set ( LIB_VERSION_PATCH ${ROCM_PATCH_VERSION} )
 else()
-    set ( LIB_VERSION_PATCH ${VERSION_PATCH} )
+    set ( LIB_VERSION_PATCH 0 )
 endif()
 set ( LIB_VERSION_STRING "${LIB_VERSION_MAJOR}.${LIB_VERSION_MINOR}.${LIB_VERSION_PATCH}" )
 
@@ -117,6 +117,7 @@ target_link_libraries(
   -L${ROCM_LIBRARIES_DIR}/../hsa/lib
   -L${ROCM_LIBRARIES_DIR}
   -L${CMAKE_INSTALL_PREFIX}/lib -lamd_hostcall -Wl,-rpath,${CMAKE_INSTALL_PREFIX}/lib
+  -Wl,--enable-new-dtags
   -Wl,-rpath,\$ORIGIN/../../hsa/lib
   -Wl,-rpath,\$ORIGIN/../../lib
 )

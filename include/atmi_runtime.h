@@ -3,16 +3,15 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef __ATMI_RUNTIME_H__
-#define __ATMI_RUNTIME_H__
+#ifndef INCLUDE_ATMI_RUNTIME_H_
+#define INCLUDE_ATMI_RUNTIME_H_
 
-#include "atmi.h"
 #include <inttypes.h>
 #include <stdlib.h>
+#include "atmi.h"
 #ifndef __cplusplus
 #include <stdbool.h>
 #endif
-
 
 /** \defgroup kernel Kernel Handles
  * This module includes all kernel-related classes, structs and functions.
@@ -21,16 +20,17 @@
 /**
  * @brief Opaque handle representing an ATMI Kernel.
  *
- * @details ATMI kernels are instantiated in two steps. First, an empty kernel is
+ * @details ATMI kernels are instantiated in two steps. First, an empty kernel
+ * is
  * created. Next, architecture specific implementations are added. Each kernel
  * can have several implementations, but should have at least one implementation
  *
  */
 typedef struct atmi_kernel_s {
-    /**
-     * Opaque handle.
-     */
-    uint64_t handle;
+  /**
+   * Opaque handle.
+   */
+  uint64_t handle;
 } atmi_kernel_t;
 
 /**
@@ -38,13 +38,13 @@ typedef struct atmi_kernel_s {
  */
 typedef void (*atmi_generic_fp)(void);
 
-typedef void (*task_process_init_buffer_t) (void *, int);
+typedef void (*task_process_init_buffer_t)(void *, int);
 /**
  * @brief Register a callback to init a buffer assoicated with a task
  */
 atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp);
 
-typedef void (*task_process_fini_buffer_t) (void *, int);
+typedef void (*task_process_fini_buffer_t)(void *, int);
 /**
  * @brief Register a callback to fini a buffer assoicated with a task
  */
@@ -95,7 +95,8 @@ atmi_status_t atmi_finalize();
  * @brief Register the ATMI code module from file.
  *
  * @detail Currently, only GPU devices need explicit module registration because
- * of their specific ISAs that require a separate compilation phase. On the other
+ * of their specific ISAs that require a separate compilation phase. On the
+ * other
  * hand, CPU devices execute regular x86 functions that are compiled with the
  * host program.
  *
@@ -115,20 +116,21 @@ atmi_status_t atmi_finalize();
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  *
  */
-atmi_status_t atmi_module_register(
-    const char **filenames,
-    atmi_platform_type_t *types,
-    const int num_modules);
+atmi_status_t atmi_module_register(const char **filenames,
+                                   atmi_platform_type_t *types,
+                                   const int num_modules);
 
 /**
  * @brief Register the ATMI code module from memory.
  *
  * @detail Currently, only GPU devices need explicit module registration because
- * of their specific ISAs that require a separate compilation phase. On the other
+ * of their specific ISAs that require a separate compilation phase. On the
+ * other
  * hand, CPU devices execute regular x86 functions that are compiled with the
  * host program.
  *
- * @param[in] modules A collection of memory regions that contain the GPU modules
+ * @param[in] modules A collection of memory regions that contain the GPU
+ * modules
  * targeting ::AMDGCN platform types. Value cannot be NULL.
  *
  * @param[in] module_sizes Sizes of each module region in @p modules. Value
@@ -147,18 +149,18 @@ atmi_status_t atmi_module_register(
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  *
  */
-atmi_status_t atmi_module_register_from_memory(
-    void **modules,
-    size_t *module_sizes,
-    atmi_platform_type_t *types,
-    const int num_modules);
+atmi_status_t atmi_module_register_from_memory(void **modules,
+                                               size_t *module_sizes,
+                                               atmi_platform_type_t *types,
+                                               const int num_modules);
 /** @} */
 
 /** \defgroup machine ATMI Machine
  * @{
  */
 /**
- * @brief ATMI's device discovery function to get the current machine's topology.
+ * @brief ATMI's device discovery function to get the current machine's
+ * topology.
  *
  * @detail The @p atmi_machine_t structure is a tree-based representation of the
  * compute and memory elements in the current node. Once ATMI is initialized,
@@ -178,23 +180,31 @@ atmi_machine_t *atmi_machine_get_info();
  * @brief Create an kernel opaque structure with all its architecture
  * specific implementations.
  *
- * @detail An ATMI kernel object is created and its architecture specific implementations
- * are added. Each kernel can have several implementations, but should have at least one
- * implementation. The opaque kernel handle acts as a key to identify the set of kernel
- * implementations. An ATMI GPU kernel implementation is identified by a char string,
+ * @detail An ATMI kernel object is created and its architecture specific
+ * implementations
+ * are added. Each kernel can have several implementations, but should have at
+ * least one
+ * implementation. The opaque kernel handle acts as a key to identify the set of
+ * kernel
+ * implementations. An ATMI GPU kernel implementation is identified by a char
+ * string,
  * whereas a CPU kernel implementation is identified by a function pointer.
  * These implementations must have the same number of arguments as specified in
  * this function. Each kernel implementation is associated with an identifier,
- * which is nothing but the order in which the implementations have been added to the
- * kernel. The advanced user may want to run the specific implementation of the kernel
- * by using the unique identifier in the launch parameter of task launch functions.
+ * which is nothing but the order in which the implementations have been added
+ * to the
+ * kernel. The advanced user may want to run the specific implementation of the
+ * kernel
+ * by using the unique identifier in the launch parameter of task launch
+ * functions.
  *
  * @param[out] kernel The opaque kernel handle.
  *
  * @param[in] num_args Number of arguments of the kernel. All implementations
  * must have the same number of input arguments. May be 0.
  *
- * @param[in] arg_sizes Size of each argument. May be NULL only if @p num_args is 0.
+ * @param[in] arg_sizes Size of each argument. May be NULL only if @p num_args
+ * is 0.
  *
  * @param[in] num_impls Number of implementations for this kernel.
  *
@@ -210,13 +220,15 @@ atmi_machine_t *atmi_machine_get_info();
  *
  */
 atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
-                                 const size_t *arg_sizes, const int num_impls, ...);
+                                 const size_t *arg_sizes, const int num_impls,
+                                 ...);
 /**
  * @brief Create an empty kernel opaque structure.
  *
  * @detail ATMI kernels are instantiated in two steps. First, an empty kernel is
  * created. Next, architecture specific implementations are added. Each kernel
- * can have several implementations, but should have at least one implementation.
+ * can have several implementations, but should have at least one
+ * implementation.
  * The opaque kernel handle acts as a key to identify the set of kernel
  * implementations.
  *
@@ -225,7 +237,8 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
  * @param[in] num_args Number of arguments of the kernel. All implementations
  * must have the same number of input arguments. May be 0.
  *
- * @param[in] arg_sizes Size of each argument. May be NULL only if @p num_args is 0.
+ * @param[in] arg_sizes Size of each argument. May be NULL only if @p num_args
+ * is 0.
  *
  * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
  *
@@ -234,10 +247,9 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  *
  */
-atmi_status_t atmi_kernel_create_empty(
-    atmi_kernel_t *kernel,
-    const int num_args,
-    const size_t *arg_sizes);
+atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *kernel,
+                                       const int num_args,
+                                       const size_t *arg_sizes);
 
 /**
  * @brief Add a GPU kernel implementation.
@@ -246,7 +258,8 @@ atmi_status_t atmi_kernel_create_empty(
  * The implementation must have the same number of arguments as the kernel.
  * A unique user-specified identifier is associated with each implementation.
  * The advanced user may want to run the specific implementation of the kernel
- * by using the unique identifier in the launch parameter of task launch functions.
+ * by using the unique identifier in the launch parameter of task launch
+ * functions.
  *
  * @param[in] kernel The opaque kernel handle.
  *
@@ -261,19 +274,19 @@ atmi_status_t atmi_kernel_create_empty(
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  *
  */
-atmi_status_t atmi_kernel_add_gpu_impl(
-    atmi_kernel_t atmi_kernel,
-    const char *impl,
-    const unsigned int ID);
+atmi_status_t atmi_kernel_add_gpu_impl(atmi_kernel_t atmi_kernel,
+                                       const char *impl, const unsigned int ID);
 
 /**
  * @brief Add a CPU kernel implementation.
  *
- * @detail An ATMI CPU kernel implementation is identified by a function pointer.
+ * @detail An ATMI CPU kernel implementation is identified by a function
+ * pointer.
  * The implementation must have the same number of arguments as the kernel.
  * A unique user-specified identifier is associated with each implementation.
  * The advanced user may want to run the specific implementation of the kernel
- * by using the unique identifier in the launch parameter of task launch functions.
+ * by using the unique identifier in the launch parameter of task launch
+ * functions.
  *
  * @param[in] kernel The opaque kernel handle.
  *
@@ -288,10 +301,9 @@ atmi_status_t atmi_kernel_add_gpu_impl(
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  *
  */
-atmi_status_t atmi_kernel_add_cpu_impl(
-    atmi_kernel_t atmi_kernel,
-    atmi_generic_fp impl,
-    const unsigned int ID);
+atmi_status_t atmi_kernel_add_cpu_impl(atmi_kernel_t atmi_kernel,
+                                       atmi_generic_fp impl,
+                                       const unsigned int ID);
 
 /**
  * @brief Release the kernel and all of its implementations.
@@ -332,13 +344,12 @@ atmi_status_t atmi_kernel_release(atmi_kernel_t kernel);
  * should be consistent with the kernel's @p arg_sizes parameter.
  *
  * @return A handle to the ATMI task. The task handle may be used to setup
- * dependencies with other copy and compute tasks or for explicit synchronization
+ * dependencies with other copy and compute tasks or for explicit
+ * synchronization
  * by the host. Returns @ATMI_NULL_TASK_HANDLE on an error.
  */
-atmi_task_handle_t atmi_task_launch(
-    atmi_lparm_t *lparm,
-    atmi_kernel_t kernel,
-    void **args);
+atmi_task_handle_t atmi_task_launch(atmi_lparm_t *lparm, atmi_kernel_t kernel,
+                                    void **args);
 
 /**
  * @brief Creating an ATMI task template for a future launch.
@@ -347,14 +358,17 @@ atmi_task_handle_t atmi_task_launch(
  * The @p kernel parameter specifies what has to be eventually launched. This
  * function is especially useful when the user wants a placeholder task to wait
  * on, but its predecessor task graph has not yet been determined and may be
- * generated dynamically at some point in the future. A typical use case would be
+ * generated dynamically at some point in the future. A typical use case would
+ * be
  * to represent a fork-join model as a directed acyclic graph (DAG).
  *
  * @param[in] kernel The opaque kernel handle that denotes what has to be
  * launched in the future.
  *
- * @return A handle to the placeholder ATMI task. The task handle may be used to setup
- * dependencies with other copy and compute tasks or for explicit synchronization
+ * @return A handle to the placeholder ATMI task. The task handle may be used to
+ * setup
+ * dependencies with other copy and compute tasks or for explicit
+ * synchronization
  * by the host. Returns @ATMI_NULL_TASK_HANDLE on an error.
  */
 atmi_task_handle_t atmi_task_template_create(atmi_kernel_t kernel);
@@ -366,7 +380,8 @@ atmi_task_handle_t atmi_task_template_create(atmi_kernel_t kernel);
  * previously created using @p atmi_task_template_create. The @p
  * task parameter specifies what has to be activated. The @p
  * lparm structure defines the task's launch parameters, which will guide the
- * ATMI runtime how to activate and manage the task. A task that is created using
+ * ATMI runtime how to activate and manage the task. A task that is created
+ * using
  * @atmi_task_create can be activated only once. Activating an already active
  * task is an error.
  *
@@ -378,15 +393,17 @@ atmi_task_handle_t atmi_task_template_create(atmi_kernel_t kernel);
  * @param[in] args The bag of arguments all passed by reference. Their sizes
  * should be consistent with the kernel's @p arg_sizes parameter.
  *
- * @return The handle to the activated ATMI task. It should be the same as the input
- * @task handle, otherwise it is an error. The returned task handle may be used to setup
- * dependencies with other copy and compute tasks or for explicit synchronization
+ * @return The handle to the activated ATMI task. It should be the same as the
+ * input
+ * @task handle, otherwise it is an error. The returned task handle may be used
+ * to setup
+ * dependencies with other copy and compute tasks or for explicit
+ * synchronization
  * by the host. Returns @ATMI_NULL_TASK_HANDLE on an error.
  */
-atmi_task_handle_t atmi_task_template_activate(
-    atmi_task_handle_t task,
-    atmi_lparm_t *lparm,
-    void **args);
+atmi_task_handle_t atmi_task_template_activate(atmi_task_handle_t task,
+                                               atmi_lparm_t *lparm,
+                                               void **args);
 
 /**
  * @brief Creating an ATMI task for a future launch.
@@ -396,7 +413,8 @@ atmi_task_handle_t atmi_task_template_activate(
  * The @p kernel parameter specifies what has to be eventually launched. This
  * function is especially useful when the user wants a placeholder task to wait
  * on, but its predecessor task graph has not yet been determined and may be
- * generated dynamically at some point in the future. A typical use case would be
+ * generated dynamically at some point in the future. A typical use case would
+ * be
  * to represent a fork-join model as a directed acyclic graph (DAG).
  *
  * @param[in] lparm The structure desribing how the task has to be managed.
@@ -407,15 +425,15 @@ atmi_task_handle_t atmi_task_template_activate(
  * @param[in] args The bag of arguments all passed by reference. Their sizes
  * should be consistent with the kernel's @p arg_sizes parameter.
  *
- * @return A handle to the placeholder ATMI task. The task handle may be used to setup
- * dependencies with other copy and compute tasks or for explicit synchronization
+ * @return A handle to the placeholder ATMI task. The task handle may be used to
+ * setup
+ * dependencies with other copy and compute tasks or for explicit
+ * synchronization
  * by the host. The initial state of the task will be ATMI_UNINITIALIZED.
  * Returns @ATMI_NULL_TASK_HANDLE on an error.
  */
-atmi_task_handle_t atmi_task_create(
-    atmi_lparm_t *lparm,
-    atmi_kernel_t kernel,
-    void **args);
+atmi_task_handle_t atmi_task_create(atmi_lparm_t *lparm, atmi_kernel_t kernel,
+                                    void **args);
 
 /**
  * @brief The ATMI task activator function.
@@ -424,20 +442,23 @@ atmi_task_handle_t atmi_task_create(
  * previously created using @p atmi_task_create. The @p
  * task parameter specifies what has to be activated. The @p
  * lparm structure defines the task's launch parameters, which will guide the
- * ATMI runtime how to activate and manage the task. A task that is created using
+ * ATMI runtime how to activate and manage the task. A task that is created
+ * using
  * @atmi_task_create can be activated only once. Activating an already active
  * task is an error.
  *
  * @param[in] task The task handle, which was created previously using
  * atmi_task_create.
  *
- * @return The handle to the activated ATMI task. It should be the same as the input
- * @task handle, otherwise it is an error. The returned task handle may be used to setup
- * dependencies with other copy and compute tasks or for explicit synchronization
+ * @return The handle to the activated ATMI task. It should be the same as the
+ * input
+ * @task handle, otherwise it is an error. The returned task handle may be used
+ * to setup
+ * dependencies with other copy and compute tasks or for explicit
+ * synchronization
  * by the host. Returns @ATMI_NULL_TASK_HANDLE on an error.
  */
-atmi_task_handle_t atmi_task_activate(
-    atmi_task_handle_t task);
+atmi_task_handle_t atmi_task_activate(atmi_task_handle_t task);
 
 /**
  * @brief Wait for a launched task or a data movement operation.
@@ -451,7 +472,7 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_task_wait(atmi_task_handle_t task);
+atmi_status_t atmi_task_wait(atmi_task_handle_t task);
 
 /**
  * @brief Create a new task group structure, which could be a group of compute
@@ -459,10 +480,12 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @param[out] group_handle Pointer to the opaque task group handle.
  *
- * @param[in] ordered Denotes if tasks in the task group have to be executed in the
+ * @param[in] ordered Denotes if tasks in the task group have to be executed in
+ * the
  * enqueue order (default = false).
  *
- * @param[in] place Denotes the default execution place of tasks belonging to this
+ * @param[in] place Denotes the default execution place of tasks belonging to
+ * this
  * task group (default = ATMI_DEFAULT_PLACE).
  *
  * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
@@ -471,19 +494,19 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
+atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
 #ifdef __cplusplus
-                                     bool ordered = false,
-                                     atmi_place_t place = ATMI_DEFAULT_PLACE
-#else 
-                                     bool ordered,
-                                     atmi_place_t place
+                                    bool ordered = false,
+                                    atmi_place_t place = ATMI_DEFAULT_PLACE
+#else
+                                    bool ordered, atmi_place_t place
 #endif
-                                     );
+                                    );
 
 /**
  * @brief Release the task group structure, which could be a group of compute
- * tasks and data movement tasks. If this is called when a task group is in execution,
+ * tasks and data movement tasks. If this is called when a task group is in
+ * execution,
  * behavior is undefined.
  *
  * @param[out] group_handle Pointer to the opaque task group handle.
@@ -494,13 +517,14 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_taskgroup_release(atmi_taskgroup_handle_t group_handle);
+atmi_status_t atmi_taskgroup_release(atmi_taskgroup_handle_t group_handle);
 
 /**
  * @brief Wait for the launched task group, which could be a group of compute
  * tasks and data movement tasks.
  *
- * @param[in] group The task group handle of already launched tasks or an in-flight data
+ * @param[in] group The task group handle of already launched tasks or an
+ * in-flight data
  * movement operations.
  *
  * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
@@ -509,7 +533,7 @@ atmi_task_handle_t atmi_task_activate(
  *
  * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
  */
- atmi_status_t atmi_taskgroup_wait(atmi_taskgroup_handle_t group_handle);
+atmi_status_t atmi_taskgroup_wait(atmi_taskgroup_handle_t group_handle);
 
 /** @} */
 
@@ -519,9 +543,11 @@ atmi_task_handle_t atmi_task_activate(
 /**
  * @brief Allocate memory from the specified memory place.
  *
- * @detail This function allocates memory from the specified memory place. If the memory
+ * @detail This function allocates memory from the specified memory place. If
+ * the memory
  * place belongs primarily to the CPU, then the memory will be accessible by
- * other GPUs and CPUs in the system. If the memory place belongs primarily to a GPU,
+ * other GPUs and CPUs in the system. If the memory place belongs primarily to a
+ * GPU,
  * then it cannot be accessed by other devices in the system.
  *
  * @param[in] ptr The pointer to the memory that will be allocated.
@@ -558,10 +584,12 @@ atmi_status_t atmi_malloc(void **ptr, size_t size, atmi_mem_place_t place);
 atmi_status_t atmi_free(void *ptr);
 
 /**
- * @brief Syncrhonously copy memory from the source to destination memory locations.
+ * @brief Syncrhonously copy memory from the source to destination memory
+ * locations.
  *
  * @detail This function assumes that the source and destination regions are
- * non-overlapping. The runtime determines the memory place of the source and the
+ * non-overlapping. The runtime determines the memory place of the source and
+ * the
  * destination and executes the appropriate optimized data movement methodology.
  *
  * @param[in] dest The destination pointer previously allocated by a system
@@ -582,10 +610,12 @@ atmi_status_t atmi_free(void *ptr);
 atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size);
 
 /**
- * @brief Asyncrhonously copy memory from the source to destination memory locations.
+ * @brief Asyncrhonously copy memory from the source to destination memory
+ * locations.
  *
  * @detail This function assumes that the source and destination regions are
- * non-overlapping. The runtime determines the memory place of the source and the
+ * non-overlapping. The runtime determines the memory place of the source and
+ * the
  * destination and executes the appropriate optimized data movement methodology.
  * This function is equivalent to an asynchronous task, which means that it can
  * be used to setup dependencies with other memory copy routines or compute
@@ -603,15 +633,13 @@ atmi_status_t atmi_memcpy(void *dest, const void *src, size_t size);
  * @param[in] size The size of the data to be copied in bytes.
  *
  * @return A handle to the ATMI task. The task handle may be used to setup
- * dependencies with other copy and compute tasks or for explicit synchronization
+ * dependencies with other copy and compute tasks or for explicit
+ * synchronization
  * by the host.
  *
  */
-atmi_task_handle_t atmi_memcpy_async(
-    atmi_cparm_t *cparm,
-    void *dest,
-    const void *src,
-    size_t size);
+atmi_task_handle_t atmi_memcpy_async(atmi_cparm_t *cparm, void *dest,
+                                     const void *src, size_t size);
 /** @} */
 
 /** \defgroup cpu_dev_runtime ATMI CPU Device Runtime
@@ -729,4 +757,4 @@ unsigned long get_num_groups(unsigned int dim);
 }
 #endif
 
-#endif // __ATMI_RUNTIME_H__
+#endif  // INCLUDE_ATMI_RUNTIME_H_

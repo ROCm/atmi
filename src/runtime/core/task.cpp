@@ -56,7 +56,7 @@ bool setCallbackToggle = false;
 static atl_dep_sync_t g_dep_sync_type =
     (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
 
-atmi_task_handle_t ATMI_NULL_TASK_HANDLE = ATMI_TASK_HANDLE(0xFFFFFFFFFFFFFFFF);
+atmi_task_handle_t ATMI_NULL_TASK_HANDLE = 0xFFFFFFFFFFFFFFFF;
 atmi_place_t ATMI_DEFAULT_PLACE = {0, ATMI_DEVTYPE_GPU, 0, 0xFFFFFFFFFFFFFFFF};
 atmi_mem_place_t ATMI_DEFAULT_MEM_PLACE = {0, ATMI_DEVTYPE_GPU, 0, 0};
 
@@ -81,10 +81,7 @@ extern ATLMachine g_atl_machine;
 extern hsa_signal_t IdentityORSignal;
 extern hsa_signal_t IdentityANDSignal;
 extern hsa_signal_t IdentityCopySignal;
-extern atmi_context_t atmi_context_data;
-extern atmi_context_t *atmi_context;
 extern atl_context_t atlc;
-extern atl_context_t *atlc_p;
 
 namespace core {
 extern void lock_set(std::set<pthread_mutex_t *> &mutexes);

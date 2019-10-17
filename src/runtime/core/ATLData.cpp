@@ -18,8 +18,6 @@
 #include "rt.h"
 #include "taskgroup.h"
 
-using namespace std;
-
 extern ATLMachine g_atl_machine;
 extern hsa_signal_t IdentityCopySignal;
 extern std::deque<atl_task_t *> TaskList;

@@ -195,22 +195,15 @@ struct timespec context_init_time;
 int context_init_time_init = 0;
 
 /*
-   All global values are defined here in two data structures.
+   All global values are defined here in one data structure.
 
-   1  atmi_context is all information we expose externally.
-   The structure atmi_context_t is defined in atmi.h.
-   Most references will use pointer prefix atmi_context->
-   The value atmi_context_data. is equivalent to atmi_context->
-
-   2  atlc is all internal global values.
+   atlc is all internal global values.
    The structure atl_context_t is defined in atl_internal.h
    Most references will use the global structure prefix atlc.
    However the pointer value atlc_p-> is equivalent to atlc.
 
 */
 
-atmi_context_t atmi_context_data;
-atmi_context_t *atmi_context = NULL;
 atl_context_t atlc = {.struct_initialized = 0};
 atl_context_t *atlc_p = NULL;
 
@@ -423,7 +416,6 @@ atmi_status_t Runtime::Finalize() {
 }
 
 void atmi_init_context_structs() {
-  atmi_context = &atmi_context_data;
   atlc_p = &atlc;
   atlc.struct_initialized = 1; /* This only gets called one time */
   atlc.g_cpu_initialized = 0;

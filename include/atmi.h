@@ -41,7 +41,7 @@ typedef enum atmi_status_t {
  */
 typedef enum {
   /**
-   * Target Platform is BRIG (deprecated)
+   * \deprecated Target Platform is BRIG
    */
   BRIG = 0,
   /**
@@ -134,6 +134,7 @@ typedef enum atmi_task_fence_scope_s {
 } atmi_task_fence_scope_t;
 
 #if 0
+// More investigation needed to include these enums
 typedef enum atmi_data_type_s {
     ATMI_CHAR,
     ATMI_UNSIGNED_CHAR,
@@ -149,7 +150,6 @@ typedef enum atmi_data_type_s {
     ATMI_PTR = (1 << 31)
 } atmi_data_type_t;
 
-// More investigation needed to include this enum
 typedef enum atmi_full_policy_s {
     ATMI_WAIT        = 0,
     ATMI_FAIL        = 1,
@@ -158,8 +158,6 @@ typedef enum atmi_full_policy_s {
 #endif
 /** @} */
 typedef char boolean;
-//#define ATMI_MAX_NODES  1024
-//#define ATMI_MAX_CUS    64
 
 /** \defgroup common Common ATMI Structures
  *  @{
@@ -525,8 +523,6 @@ typedef struct atmi_data_s {
 } atmi_data_t;
 /** @} */
 
-#define ATMI_TASK_HANDLE(low) (low)
-
 // Below are some helper macros that can be used to setup 
 // some of the ATMI data structures.
 #define ATMI_PLACE_ANY(node)                                    \
@@ -692,47 +688,5 @@ typedef struct atmi_data_s {
   X->groupDim[0] = 8;             \
   X->groupDim[1] = 8;             \
   X->groupDim[2] = 8;
-
-/*----------------------------------------------------------------------------*/
-/*                                                                            */
-/* atmi_context_t  ATMI Context Data Structure for system information         */
-/*                                                                            */
-/*----------------------------------------------------------------------------*/
-typedef struct atmi_context_s {
-  int atmi_id; /* ATMI version information             */
-} atmi_context_t;
-extern atmi_context_t* atmi_context;
-// Why are we exposing the object AND the pointer to the programmer?
-// extern atmi_context_t  atmi_context_data;;
-
-/*----------------------------------------------------------------------------*/
-/* String macros that look like an API, but actually implement feature by     */
-/* calling a null kernel under specific conditions.                           */
-/*----------------------------------------------------------------------------*/
-#ifdef __cplusplus
-#define _CPPSTRING_ "C"
-#endif
-#ifndef __cplusplus
-#define _CPPSTRING_
-#endif
-extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t* lparm);
-
-#define SYNC_STREAM(s)                            \
-  {                                               \
-    ATMI_LPARM(__lparm_sync_kernel);              \
-    __lparm_sync_kernel->synchronous = ATMI_TRUE; \
-    __lparm_sync_kernel->groupable = ATMI_TRUE;   \
-    __lparm_sync_kernel->group = s;               \
-    __sync_kernel_pif(__lparm_sync_kernel);       \
-  }
-
-#define SYNC_TASK(t)                              \
-  {                                               \
-    ATMI_LPARM(__lparm_sync_kernel);              \
-    __lparm_sync_kernel->synchronous = ATMI_TRUE; \
-    __lparm_sync_kernel->num_required = 1;        \
-    __lparm_sync_kernel->requires = &t;           \
-    __sync_kernel_pif(__lparm_sync_kernel);       \
-  }
 
 #endif  //INCLUDE_ATMI_H_

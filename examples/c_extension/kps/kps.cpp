@@ -11,7 +11,7 @@
 #include <iostream>
 #include <sys/param.h> 
 #include <time.h>
-#include "atmi.h"
+#include "atmi_c_ext.h"
 #include "atmi_runtime.h"
 #define NSECPERSEC 1000000000L
 #define NTIMERS 13

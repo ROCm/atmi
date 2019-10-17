@@ -1801,11 +1801,8 @@ namespace core {
       DEBUG_PRINT("Symbol %s = %p (%u bytes)\n", name, (void *)info.addr, info.size);
       register_allocation((void *)info.addr, (size_t)info.size, place);
       SymbolInfoTable[gpu][std::string(name)] = info;
-      if (strcmp(name,"needs_hostcall_buffer")==0) {
+      if (strcmp(name,"needs_hostcall_buffer")==0)
         atl_hostcall_is_required = true;
-        unsigned int truevalue = 1;
-        atmi_status_t err = atmi_memcpy((void*) info.addr, &truevalue, (size_t) info.size);
-      }
       free(name);
     }
     else {

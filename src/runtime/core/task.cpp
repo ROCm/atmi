@@ -1874,11 +1874,6 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
   ShouldDispatchTimer.Stop();
 
   if (should_dispatch) {
-    if (ret->atmi_task) {
-      // FIXME: set a lookup table for dynamic parallelism kernels
-      // perhaps?
-      ret->atmi_task->handle = (void *)(&(ret->signal));
-    }
     // direct_dispatch++;
     dispatch_task(ret);
 

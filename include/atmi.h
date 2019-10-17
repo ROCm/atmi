@@ -3,28 +3,21 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef __ATMI_H__
-/*----------------------------------------------------------------------------*/
-/*                                                                            */
-/* Asynchronous Task Management Interface ATMI file: atmi.h                   */
-/*                                                                            */
-/*----------------------------------------------------------------------------*/
+#ifndef INCLUDE_ATMI_H_
+#define INCLUDE_ATMI_H_
+
 #define ATMI_VERSION 0
-#define ATMI_RELEASE 1
+#define ATMI_RELEASE 7
 #define ATMI_PATCH 0
 #define ATMI_VRM ((ATMI_VERSION * 65536) + (ATMI_RELEASE * 256) + ATMI_PATCH)
-
-/*----------------------------------------------------------------------------*/
-/* Enumerated constants and data types                                        */
-/*----------------------------------------------------------------------------*/
-#define ATMI_ORDERED 1
-#define ATMI_UNORDERED 0
-#define ATMI_TRUE 1
-#define ATMI_FALSE 0
 
 /** \defgroup enumerations Enumerated Types
  * @{
  */
+
+#define ATMI_TRUE 1
+#define ATMI_FALSE 0
+
 /**
  * @brief Status codes.
  */
@@ -74,53 +67,51 @@ typedef enum {
  * @brief Device Types.
  */
 typedef enum atmi_devtype_s {
-  ATMI_DEVTYPE_CPU = 0x0001,  /**< CPU */
-  ATMI_DEVTYPE_iGPU = 0x0010, /**< Integrated GPU */
-  ATMI_DEVTYPE_dGPU = 0x0100, /**< Discrete GPU */
-  ATMI_DEVTYPE_GPU = ATMI_DEVTYPE_iGPU | ATMI_DEVTYPE_dGPU, /**< Any GPU */
-  ATMI_DEVTYPE_DSP = 0x1000, /**< Digitial Signal Processor */
-  ATMI_DEVTYPE_ALL = 0x1111  /**< Union of all device types */
+  ATMI_DEVTYPE_CPU = 0x0001,
+  ATMI_DEVTYPE_iGPU = 0x0010, // Integrated GPU
+  ATMI_DEVTYPE_dGPU = 0x0100, // Discrete GPU
+  ATMI_DEVTYPE_GPU = ATMI_DEVTYPE_iGPU | ATMI_DEVTYPE_dGPU, // Any GPU
+  ATMI_DEVTYPE_DSP = 0x1000,
+  ATMI_DEVTYPE_ALL = 0x1111   // Union of all device types
 } atmi_devtype_t;
 
 /**
  * @brief Memory Access Type.
  */
 typedef enum atmi_memtype_s {
-  ATMI_MEMTYPE_FINE_GRAINED = 0,   /**< Fine grained memory type */
-  ATMI_MEMTYPE_COARSE_GRAINED = 1, /**< Coarse grained memory type */
-  ATMI_MEMTYPE_ANY                 /**< Any memory type */
-  // ATMI should not be concerned about kernarg region, which should
-  // be handled by HSA and not by the end application user
+  ATMI_MEMTYPE_FINE_GRAINED = 0,
+  ATMI_MEMTYPE_COARSE_GRAINED = 1,
+  ATMI_MEMTYPE_ANY
 } atmi_memtype_t;
 
 /**
  * @brief Task States.
  */
 typedef enum atmi_state_s {
-  ATMI_UNINITIALIZED = -1, /**< Uninitialized state */
-  ATMI_INITIALIZED = 0,    /**< Initialized state */
-  ATMI_READY = 1,          /**< Ready state */
-  ATMI_DISPATCHED = 2,     /**< Dispatched state */
-  ATMI_EXECUTED = 3,       /**< Executed state */
-  ATMI_COMPLETED = 4,      /**< Completed state */
-  ATMI_FAILED = 9999       /**< Failed state */
+  ATMI_UNINITIALIZED = -1,
+  ATMI_INITIALIZED = 0,
+  ATMI_READY = 1,
+  ATMI_DISPATCHED = 2,
+  ATMI_EXECUTED = 3,
+  ATMI_COMPLETED = 4,
+  ATMI_FAILED = 9999   
 } atmi_state_t;
 
 /**
  * @brief Scheduler Types.
  */
 typedef enum atmi_scheduler_s {
-  ATMI_SCHED_NONE = 0, /**< No scheduler, all tasks go to the same queue */
-  ATMI_SCHED_RR        /**< Round-robin scheduler */
+  ATMI_SCHED_NONE = 0, // No scheduler, all tasks go to the same queue
+  ATMI_SCHED_RR        // Round-robin tasks across queues
 } atmi_scheduler_t;
 
 /**
  * @brief ATMI data arg types.
  */
 typedef enum atmi_arg_type_s {
-  ATMI_IN,    /**< Input argument */
-  ATMI_OUT,   /**< Output argument */
-  ATMI_IN_OUT /** In/out argument */
+  ATMI_IN,
+  ATMI_OUT,
+  ATMI_IN_OUT
 } atmi_arg_type_t;
 
 /**
@@ -177,42 +168,83 @@ typedef char boolean;
  * @brief ATMI Task Profile Data Structure
  */
 typedef struct atmi_tprofile_s {
-  unsigned long int dispatch_time; /**< Timestamp of task dispatch.         */
-  unsigned long int ready_time;    /**< Timestamp when the task's dependencies
-                                        were all met and ready to be
-                                        dispatched.                         */
-  unsigned long int start_time;    /**< Timstamp when the task started
-                                        execution.                          */
-  unsigned long int end_time;      /**< TImestamp when the task completed
-                                        execution.                          */
+  /**
+   * Timestamp of task dispatch.
+   */
+  unsigned long int dispatch_time;
+  /**
+   * Timestamp when the task's dependencies were all met and ready to be
+   * dispatched.
+   */
+  unsigned long int ready_time;
+  /**
+   * Timstamp when the task started execution.
+   */
+  unsigned long int start_time;
+  /**
+   * Timestamp when the task completed execution.                       
+   */
+  unsigned long int end_time;
 } atmi_tprofile_t;
 
 /**
  * @brief ATMI Compute Place
  */
 typedef struct atmi_place_s {
-  unsigned int node_id;  /**< node_id = 0 for local computations     */
-  atmi_devtype_t type;   /**< CPU, GPU or DSP                        */
-  int device_id;         /**< Devices ordered by runtime; -1 for any */
-  unsigned long cu_mask; /**< Compute Unit Mask (advanced feature)   */
+  /**
+   * The node in a cluster where computation should occur.
+   * Default is node_id = 0 for local computations.
+   */
+  unsigned int node_id;
+  /**
+   * Device type: CPU, GPU or DSP
+   */
+  atmi_devtype_t type;
+  /**
+   * The device ordinal number ordered by runtime; -1 for any
+   */
+  int device_id;
+  /**
+   * Compute Unit Mask (advanced feature)
+   */
+  unsigned long cu_mask;
 } atmi_place_t;
 
 /**
  * @brief ATMI Memory Place
  */
 typedef struct atmi_mem_place_s {
-  unsigned int node_id;    /**< node_id = 0 for local computations     */
-  atmi_devtype_t dev_type; /**< CPU, GPU or DSP                        */
-  int dev_id;              /**< Devices ordered by runtime; -1 for any */
-  // atmi_memtype_t mem_type;        /**< Fine grained or Coarse grained */
-  int mem_id; /**< Memory spaces; -1 for any              */
+  /**
+   * The node in a cluster where computation should occur.
+   * Default is node_id = 0 for local computations.
+   */
+  unsigned int node_id;
+  /**
+   * Device type: CPU, GPU or DSP
+   */
+  atmi_devtype_t dev_type;
+  /**
+   * The device ordinal number ordered by runtime; -1 for any
+   */
+  int dev_id;
+  // atmi_memtype_t mem_type;        // Fine grained or Coarse grained
+  /**
+   * The memory space/region ordinal number ordered by runtime; -1 for any
+   */
+  int mem_id;
 } atmi_mem_place_t;
 
 /**
- * @brief ATMI Memory Structure
+ * @brief ATMI Memory Space/region Structure
  */
 typedef struct atmi_memory_s {
+  /**
+   * Memory capacity
+   */
   unsigned long int capacity;
+  /**
+   * Memory type
+   */
   atmi_memtype_t type;
 } atmi_memory_t;
 
@@ -220,46 +252,69 @@ typedef struct atmi_memory_s {
  * @brief ATMI Device Structure
  */
 typedef struct atmi_device_s {
-  atmi_devtype_t type;       /**< Device type */
-  unsigned int core_count;   /**< Number of compute cores */
-  unsigned int memory_count; /**< Number of memory regions that are
-                                  accessible from this device. */
-  atmi_memory_t* memories;   /**< The memory regions that are
-                                  accessible from this device. */
+  /**
+   * Device type: CPU, GPU or DSP
+   */
+  atmi_devtype_t type;
+  /**
+   * The number of compute cores
+   */
+  unsigned int core_count;
+  /**
+   * The number of memory spaces/regions that are accessible 
+   * from this device
+   */
+  unsigned int memory_count;
+  /**
+   * Array of memory spaces/regions that are accessible 
+   * from this device.
+   */
+  atmi_memory_t* memories;
 } atmi_device_t;
 
 /**
  * @brief ATMI Machine Structure
  */
 typedef struct atmi_machine_s {
-  unsigned int device_count_by_type[ATMI_DEVTYPE_ALL]; /**< The number of
-                                                          devices categorized
-                                                            by the device type
-                                                          */
-  atmi_device_t*
-      devices_by_type[ATMI_DEVTYPE_ALL]; /**< The device structures categorized
-                                              by the device type */
+  /**
+   * The number of devices categorized by the device type
+   */
+  unsigned int device_count_by_type[ATMI_DEVTYPE_ALL];
+  /** 
+   * The device structures categorized by the device type 
+   */
+  atmi_device_t* devices_by_type[ATMI_DEVTYPE_ALL]; 
 } atmi_machine_t;
 
 /**
  * @brief ATMI Task info structure
  */
-typedef void* atmi_handle_t;
 typedef struct atmi_task_s {
-  atmi_handle_t
-      handle; /**< Temp storage location for current task handle for DP*/
-  atmi_state_t state;      /**< Previously consistent state of task    */
-  atmi_tprofile_t profile; /**< Previously consistent profile information */
-  struct atmi_task_s*
-      continuation; /**< The continuation task of this current task */
+  /**
+   * Previously consistent state of task
+   */
+  atmi_state_t state;
+  /**
+   * Previously consistent task profile
+   */
+  atmi_tprofile_t profile;
 } atmi_task_t;
 #if 0
 typedef struct atmi_task_info_s {
-   atmi_state_t     state;    /* Eventually consistent state of task    */
-   atmi_tprofile_t  profile;  /* Profile if reqeusted by lparm          */
+  /**
+   * Previously consistent state of task
+   */
+  atmi_state_t state;
+  /**
+   * Previously consistent task profile
+   */
+  atmi_tprofile_t profile;
 } atmi_task_info_t;
 #endif
 #if 0
+/**
+ * @brief The ATMI task handle.
+ */
 typedef struct atmi_task_handle_s {
     union {
         struct {
@@ -281,9 +336,8 @@ typedef unsigned long int atmi_task_handle_t;
  * @brief The ATMI taskgroup handle.
  *
  * @details ATMI task groups can be a collection of compute and memory tasks.
- * They can have
- * different properties like being ordered or belonging to the same
- * compute/memory place.
+ * They can have different properties like being ordered or 
+ * belonging to the same compute/memory place.
  *
  */
 typedef unsigned long int atmi_taskgroup_handle_t;
@@ -302,73 +356,179 @@ extern atmi_taskgroup_handle_t ATMI_DEFAULT_TASKGROUP_HANDLE;
 extern atmi_place_t ATMI_DEFAULT_PLACE;
 
 /**
- * @brief The ATMI Launch Parameter Data Structure
+ * @brief The ATMI Task Launch Parameter Data Structure
  */
 typedef struct atmi_lparm_s {
-#if 0
-    union {
-        struct {
-            unsigned long workitems;
-            unsigned long workitems2D;
-            unsigned long workitems3D;
-        };
-        unsigned long gridDim[3];
-    };
-#else
-  unsigned long gridDim[3]; /**< # of global threads for each dimension */
-#endif
-  unsigned long groupDim[3];     /**< Thread group size for each dimension   */
-  atmi_taskgroup_handle_t group; /**< Group for this task, Default= NULL     */
-  boolean groupable;             /**< Create signal for task, default = F    */
-  boolean synchronous;           /**< Async or Sync,  default = F (async)    */
-  atmi_task_fence_scope_t acquire_scope; /**< Memory model, default = 2       */
-  atmi_task_fence_scope_t release_scope; /**< Memory model, default = 2       */
-  int num_required;             /**< # of required parent tasks, default 0  */
-  atmi_task_handle_t* requires; /**< Array of required parent tasks         */
-  int num_required_groups;      /**< # of required parent task groups       */
-  atmi_taskgroup_handle_t*
-      required_groups;    /**< Array of required parent task groups   */
-  boolean profilable;     /**< Points to tprofile if metrics desired  */
-  int atmi_id;            /**< Constant that PIFs can check for       */
-  int kernel_id;          /**< Kernel ID if more than one kernel per task */
-  atmi_place_t place;     /**< Compute location to launch this task. */
-  atmi_task_t* task_info; /**< Optional user-created structure to store
-                               executed task's information */
-  atmi_task_handle_t continuation_task; /**< The continuation task of
-                                             this current task */
+  /**
+   * Number of global threads/workitems in each dimension
+   */
+  unsigned long gridDim[3];
+  /**
+   * Workgroup size in each dimension
+   */
+  unsigned long groupDim[3];
+  /** Taskgroup to which this task belongs. 
+   * Default = @p ATMI_DEFAULT_TASKGROUP_HANDLE. The runtime
+   * enables several optimizations for tasks within the same
+   * taskgroup (e.g., ordered taskgroups can execute in the 
+   * same queue, or tasks from the same taskgroup can be scheduled
+   * independently from tasks from another taskgroup, and so on).
+   */
+  atmi_taskgroup_handle_t group;
+  /**
+   * Indicates whether to share completion signal objects with
+   * other tasks in the same taskgroup (optimization opportunity).
+   * Default = @p false
+   */
+  boolean groupable;
+  /**
+   * Default = @p false (asynchronous with respect to launching agent).
+   */
+  boolean synchronous;
+  /**
+   * Memory acquire semantics for this task. 
+   * Default = ATMI_FENCE_SCOPE_SYSTEM
+   */
+  atmi_task_fence_scope_t acquire_scope;
+  /**
+   * Memory release semantics for this task. 
+   * Default = ATMI_FENCE_SCOPE_SYSTEM
+   */
+  atmi_task_fence_scope_t release_scope;
+  /**
+   * Number of predecessor (parent) tasks required to be completed
+   * before this task may begin execution. Default = 0.
+   */
+  int num_required;
+  /**
+   * Array of predecessor (parent) task handles required to be completed
+   * before this task may begin execution. Default = NULL.
+   */
+  atmi_task_handle_t* requires;
+  /**
+   * Number of predecessor (parent) taskgroups required to be completed
+   * before any task from this taskgroup may begin execution.
+   * Default = 0
+   */
+  int num_required_groups;
+  /**
+   * Array of predecessor (parent) taskgroup handles required to be completed
+   * before any task from this taskgroup may begin execution. Default = NULL.
+   */
+  atmi_taskgroup_handle_t* required_groups;
+  /**
+   * Indicates if metrics need to be collected about this task or not. If 
+   * @p true, then the profiling information will be returned in 
+   * task_info->profile structure, so this needs task_info to not be NULL.
+   * Default = @p false.
+   */
+  boolean profilable;
+  /**
+   * \deprecated Constant that can be queried for the library vesion number.
+   */
+  int atmi_id;
+  /**
+   * Kernel implementation identifier if more than one kernel implementation
+   * is defined for this task's kernel.
+   */
+  int kernel_id;
+  /**
+   * Compute location to launch this task.
+   */
+  atmi_place_t place;
+  /**
+   * Optional user-created structure to store executed task's information
+   * like task's state or task's time profile.
+   */
+  atmi_task_t* task_info; 
+  /**
+   * (Experimental) The continuation task of the current task.
+   */
+  atmi_task_handle_t continuation_task;
 } atmi_lparm_t;
 
 /**
  * @brief The ATMI Data Copy Parameter Data Structure
  */
 typedef struct atmi_cparm_s {
-  atmi_taskgroup_handle_t group; /**< Group for this task, Default= NULL     */
-  boolean groupable;             /**< Create signal for task, default = F    */
-  boolean profilable;            /**< Points to tprofile if metrics desired  */
-  boolean synchronous;           /**< Async or Sync,  default = F (async)    */
-  int num_required;              /**< # of required parent tasks, default 0  */
-  atmi_task_handle_t* requires;  /**< Array of required parent tasks         */
-  int num_required_groups;       /**< # of required parent task groups       */
-  atmi_taskgroup_handle_t*
-      required_groups;    /**< Array of required parent task groups   */
-  atmi_task_t* task_info; /**< Optional user-created structure to store
-                               executed task's information */
+  /** Taskgroup to which this task belongs. 
+   * Default = @p ATMI_DEFAULT_TASKGROUP_HANDLE. The runtime
+   * enables several optimizations for tasks within the same
+   * taskgroup (e.g., ordered taskgroups can execute in the 
+   * same queue, or tasks from the same taskgroup can be scheduled
+   * independently from tasks from another taskgroup, and so on).
+   */
+  atmi_taskgroup_handle_t group;
+  /**
+   * Indicates whether to share completion signal objects with
+   * other tasks in the same taskgroup (optimization opportunity).
+   * Default = @p false
+   */
+  boolean groupable;
+  /**
+   * Indicates if metrics need to be collected about this task or not. If 
+   * @p true, then the profiling information will be returned in 
+   * task_info->profile structure, so this needs task_info to not be NULL.
+   * Default = @p false.
+   */
+  boolean profilable;
+  /**
+   * Default = @p false (asynchronous with respect to launching agent).
+   */
+  boolean synchronous;
+  /**
+   * Number of predecessor (parent) tasks required to be completed
+   * before this task may begin execution. Default = 0.
+   */
+  int num_required;
+  /**
+   * Array of predecessor (parent) task handles required to be completed
+   * before this task may begin execution. Default = NULL.
+   */
+  atmi_task_handle_t* requires;
+  /**
+   * Number of predecessor (parent) taskgroups required to be completed
+   * before any task from this taskgroup may begin execution.
+   * Default = 0
+   */
+  int num_required_groups;
+  /**
+   * Array of predecessor (parent) taskgroup handles required to be completed
+   * before any task from this taskgroup may begin execution. Default = NULL.
+   */
+  atmi_taskgroup_handle_t* required_groups;
+  /**
+   * Optional user-created structure to store executed task's information
+   * like task's state or task's time profile.
+   */
+  atmi_task_t* task_info;
 } atmi_cparm_t;
 
 /**
- * @brief High-level data abstraction
+ * @brief (Experimental) High-level data abstraction
  */
 typedef struct atmi_data_s {
-  void* ptr; /**< The data pointer */
+  /**
+   * The data pointer
+   */
+  void* ptr;
   // atmi_data_type_t type;
-  unsigned int size;      /**< Data size */
-  atmi_mem_place_t place; /**< The memory placement of data */
-                          // TODO: what other information can be part of data?
+  /**
+   * Data size
+   */
+  unsigned int size;
+  /**
+   * The memory placement of the data
+   */
+  atmi_mem_place_t place;
+  // TODO(ashwinma): what other information can be part of data?
 } atmi_data_t;
 /** @} */
 
 #define ATMI_TASK_HANDLE(low) (low)
 
+// Below are some helper macros that can be used to setup 
+// some of the ATMI data structures.
 #define ATMI_PLACE_ANY(node)                                    \
   {                                                             \
     .node_id = node, .type = ATMI_DEVTYPE_ALL, .device_id = -1, \
@@ -448,7 +608,6 @@ typedef struct atmi_data_s {
 #define WORKITEMS2D gridDim[1]
 #define WORKITEMS3D gridDim[2]
 
-/* String macros to initialize popular default launch parameters.             */
 #define ATMI_CPARM(X)                                          \
   atmi_cparm_t* X;                                             \
   atmi_cparm_t _##X = {.group = ATMI_DEFAULT_TASKGROUP_HANDLE, \
@@ -534,13 +693,6 @@ typedef struct atmi_data_s {
   X->groupDim[1] = 8;             \
   X->groupDim[2] = 8;
 
-#define ATMI_PROFILE(NAME) NAME = malloc(sizeof(atmi_tprofile_t));
-
-#define ATMI_PROFILE_NEW(NAME)                                              \
-  atmi_tprofile_t* NAME;                                                    \
-  atmi_tprofile_t _##NAME = {                                               \
-      .dispatch_time = 0, .ready_time = 0, .start_time = 0, .end_time = 0}; \
-  NAME = &_##NAME;
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /* atmi_context_t  ATMI Context Data Structure for system information         */
@@ -583,5 +735,4 @@ extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t* lparm);
     __sync_kernel_pif(__lparm_sync_kernel);       \
   }
 
-#define __ATMI_H__
-#endif  //__ATMI_H__
+#endif  //INCLUDE_ATMI_H_

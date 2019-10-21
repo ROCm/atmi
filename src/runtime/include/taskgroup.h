@@ -4,8 +4,8 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 
-#ifndef __ATMI_TASKGROUP_H
-#define __ATMI_TASKGROUP_H
+#ifndef SRC_RUNTIME_INCLUDE_TASKGROUP_H_
+#define SRC_RUNTIME_INCLUDE_TASKGROUP_H_
 
 #include <hsa.h>
 #include "ATLMachine.h"
@@ -88,4 +88,4 @@ class TaskgroupImpl {
   // atmi_full_policy_t full_policy;/**< What to do if maxsize reached */
 };  // class TaskgroupImpl
 }  // namespace core
-#endif  //__ATMI_TASKGROUP_H
+#endif  //SRC_RUNTIME_INCLUDE_TASKGROUP_H_

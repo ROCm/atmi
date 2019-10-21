@@ -7,7 +7,6 @@
 /* This file contains logic for CPU tasking in ATMI */
 #include "atl_internal.h"
 #include "atl_bindthread.h"
-#include "atl_profile.h"
 #include <climits>
 #include <assert.h>
 #include "ATLMachine.h"
@@ -133,6 +132,7 @@ int process_packet(agent_t *agent)
     int id = agent->id;
     DEBUG_PRINT("Processing Packet from CPU Queue\n");
 
+    struct timespec start_time, end_time;
     uint64_t start_time_ns; 
     uint64_t end_time_ns; 
     uint64_t read_index = hsa_queue_load_read_index_acquire(queue);
@@ -143,17 +143,11 @@ int process_packet(agent_t *agent)
         DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index, queue->size);
         hsa_signal_value_t doorbell_value = INT_MAX;
         agent->timer.Start();
-        double start_time = agent->timer.CurrentTime();
         while ( (doorbell_value = hsa_signal_wait_acquire(doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                     ATMI_WAIT_STATE)) < (hsa_signal_value_t) read_index );
         if (doorbell_value == INT_MAX) break;
         atl_task_t *this_task = NULL; // will be assigned to collect metrics
         char *kernel_name = NULL;
-#if defined (ATMI_HAVE_PROFILE)
-        struct timespec start_time, end_time;
-        clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
-        start_time_ns = get_nanosecs(context_init_time, start_time);
-#endif /* ATMI_HAVE_PROFILE */
         hsa_agent_dispatch_packet_t* packets = (hsa_agent_dispatch_packet_t*) queue->base_address;
         hsa_agent_dispatch_packet_t* packet = packets + read_index % queue->size;
 
@@ -205,6 +199,10 @@ int process_packet(agent_t *agent)
                 set_task_packet(packet);
 
                 atl_task_t *task = get_task(packet->arg[0]);
+                if(task->profilable == ATMI_TRUE) {
+                  clock_gettime(CLOCK_MONOTONIC_RAW,&start_time);
+                  start_time_ns = get_nanosecs(context_init_time, start_time);
+                }
                 DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id);
                 atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
                 int kernel_id = packet->type;
@@ -693,28 +691,24 @@ int process_packet(agent_t *agent)
                 packet_store_release((uint32_t*) packet, create_header(HSA_PACKET_TYPE_INVALID, 0), packet->type);
                 kernel_args.clear();
                 DEBUG_PRINT("End Thread[%lu] --> ID[%lu] }}}\n", pthread_self(), task->id);
+                if(task->profilable == ATMI_TRUE) {
+                  clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
+                  end_time_ns = get_nanosecs(context_init_time, end_time);
+                  if(task->atmi_task) {
+                    task->atmi_task->profile.start_time = start_time_ns;
+                    task->atmi_task->profile.end_time = end_time_ns;
+                    task->atmi_task->profile.dispatch_time = start_time_ns;
+                    task->atmi_task->profile.ready_time = start_time_ns;
+                    DEBUG_PRINT("Task %p timing info (%" PRIu64", %" PRIu64")\n", 
+                        task->atmi_task, start_time_ns, end_time_ns);
+                  }
+                }
                 }
                 break;
         }
         if (packet->completion_signal.handle != 0) {
             hsa_signal_subtract_release(packet->completion_signal, 1);
         }
-#if defined (ATMI_HAVE_PROFILE)
-        clock_gettime(CLOCK_MONOTONIC_RAW,&end_time);
-        end_time_ns = get_nanosecs(context_init_time, end_time);
-        if(this_task != NULL && this_task->atmi_task != NULL) {
-            //if(this_task->profile != NULL) 
-            if (kernel_name != NULL)
-            {
-                this_task->atmi_task->profile.end_time = end_time_ns;
-                this_task->atmi_task->profile.start_time = start_time_ns;
-                this_task->atmi_task->profile.ready_time = start_time_ns;
-                DEBUG_PRINT("Task %p timing info (%" PRIu64", %" PRIu64")\n", 
-                        this_task->atmi_task, start_time_ns, end_time_ns);
-                atmi_profiling_record(id, &(this_task->atmi_task->profile), kernel_name);
-            }
-        }
-#endif /* ATMI_HAVE_PROFILE */
         read_index++;
         hsa_queue_store_read_index_release(queue, read_index);
         agent->timer.Stop();
@@ -777,9 +771,6 @@ void *agent_worker(void *agent_args) {
     int set_core = (num_cpus - 1 - (1 * agent->id)) % num_cpus;
     DEBUG_PRINT("Setting on CPU core: %d / %d\n", set_core, num_cpus);
     set_thread_affinity(set_core);
-#if defined (ATMI_HAVE_PROFILE)
-    atmi_profiling_agent_init(agent->id);
-#endif /* ATMI_HAVE_PROFILE */ 
 
     hsa_signal_value_t sig_value = IDLE;
     while (sig_value == IDLE) {
@@ -800,10 +791,6 @@ void *agent_worker(void *agent_args) {
         sig_value = IDLE;
     }
 
-#if defined (ATMI_HAVE_PROFILE)
-    atmi_profiling_output(agent->id);
-    atmi_profiling_agent_fini(agent->id);
-#endif /*ATMI_HAVE_PROFILE */
     return NULL;
 }
 #endif

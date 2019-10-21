@@ -999,9 +999,6 @@ atmi_status_t atl_init_cpu_context() {
 
 /* Get a CPU agent, create a pthread to handle packets*/
 /* Iterate over the agents and pick the cpu agent */
-#if defined(ATMI_HAVE_PROFILE)
-  atmi_profiling_init();
-#endif /*ATMI_HAVE_PROFILE */
   int cpu_count = g_atl_machine.getProcessorCount<ATLCPUProcessor>();
   for (int cpu = 0; cpu < cpu_count; cpu++) {
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu);

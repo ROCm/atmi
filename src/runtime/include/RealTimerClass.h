@@ -4,8 +4,8 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 
-#ifndef COUTIL_GLOBAL_REALTIMER
-#define COUTIL_GLOBAL_REALTIMER
+#ifndef SRC_RUNTIME_INCLUDE_REALTIMERCLASS_H_
+#define SRC_RUNTIME_INCLUDE_REALTIMERCLASS_H_
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -26,7 +26,7 @@ class RealTimer {
  public:
   /// Constructor.  If desc is provides, it will be output along with
   /// the RealTimer state when the RealTimer object is destroyed.
-  RealTimer(const std::string& desc = "");
+  explicit RealTimer(const std::string& desc = "");
   ~RealTimer();
 
   /// Start the timer.
@@ -178,5 +178,5 @@ inline void RealTimer::BufPrint(std::ostream& o, std::string& str) const {
   }
 #endif
 }
-}  // namespace
-#endif  //  COUTIL_GLOBAL_REALTIMER
+}  // namespace Global
+#endif  //  SRC_RUNTIME_INCLUDE_REALTIMERCLASS_H_

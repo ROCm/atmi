@@ -26,7 +26,6 @@
 #include "RealTimerClass.h"
 #include "atl_bindthread.h"
 #include "atl_internal.h"
-#include "atl_profile.h"
 #include "rt.h"
 #include "taskgroup.h"
 using namespace Global;

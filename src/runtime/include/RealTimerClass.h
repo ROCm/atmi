@@ -154,12 +154,12 @@ inline double RealTimer::CurrentTime() const {
   timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   return static_cast<double>(ts.tv_sec - time_offset) +
-      static_cast<double>(ts.tv_nsec) * 1e-9;
+         static_cast<double>(ts.tv_nsec) * 1e-9;
 #else
   timeval tv;
   gettimeofday(&tv, NULL);
   return static_cast<double>(tv.tv_sec - time_offset) +
-      static_cast<double>(tv.tv_usec) * 1e-6;
+         static_cast<double>(tv.tv_usec) * 1e-6;
 #endif
 }
 

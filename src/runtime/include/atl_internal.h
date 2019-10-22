@@ -25,10 +25,10 @@
 #include "hsa_ext_amd.h"
 #include "hsa_ext_finalize.h"
 
+#include "RealTimerClass.h"
 #include "atmi.h"
 #include "atmi_kl.h"
 #include "atmi_runtime.h"
-#include "RealTimerClass.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -338,8 +338,8 @@ inline T alignUp(T value, size_t alignment) {
 
 template <typename T>
 inline T *alignUp(T *value, size_t alignment) {
-  return reinterpret_cast<T *>(alignDown((intptr_t)(value + alignment - 1),
-                                         alignment));
+  return reinterpret_cast<T *>(
+      alignDown((intptr_t)(value + alignment - 1), alignment));
 }
 
 template <typename T>

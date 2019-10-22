@@ -157,7 +157,7 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
     // 3) unlock ptr?
     data->ptr = agent_ptr;
 #endif
-    // TODO: register ptr in a pointer map
+    // TODO(ashwinma): register ptr in a pointer map
     ATLData *m = new ATLData(*mapped_ptr, ptr, size, place, arg_type);
     MemoryMap[*mapped_ptr] = m;
 
@@ -217,7 +217,7 @@ atmi_status_t atmi_data_copy_sync(atmi_data_t *dest, const atmi_data_t *src) {
                               src->ptr, get_mem_agent(src_place),
                               src->size,
                               0, NULL, IdentityCopySignal);
-	ErrorCheck(Copy async between memory pools, err);
+    ErrorCheck(Copy async between memory pools, err);
     hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
     return ATMI_STATUS_SUCCESS;
 }
@@ -235,7 +235,7 @@ atmi_status_t atmi_data_copy_h2d_sync(atmi_data_t *dest, void *src, size_t size)
                               agent_ptr, dest_agent,
                               size,
                               0, NULL, IdentityCopySignal);
-	ErrorCheck(Copy async between memory pools, err);
+    ErrorCheck(Copy async between memory pools, err);
     hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
 
     if(err != HSA_STATUS_SUCCESS || ret != ATMI_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
@@ -294,7 +294,7 @@ void register_allocation(void *ptr, size_t size, atmi_mem_place_t place) {
   ErrorCheck(Setting pointer info with user data, err);
 #endif
   if (place.dev_type == ATMI_DEVTYPE_CPU) allow_access_to_all_gpu_agents(ptr);
-  // TODO: what if one GPU wants to access another GPU?
+  // TODO(ashwinma): what if one GPU wants to access another GPU?
 }
 
 atmi_status_t Runtime::Malloc(void **ptr, size_t size, atmi_mem_place_t place) {
@@ -320,12 +320,13 @@ atmi_status_t Runtime::Memfree(void *ptr) {
 #else
   hsa_amd_pointer_info_t ptr_info;
   ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-  err = hsa_amd_pointer_info((void *)ptr, &ptr_info, NULL, /* alloc fn ptr */
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(ptr), &ptr_info,
+                             NULL,  /* alloc fn ptr */
                              NULL,  /* num_agents_accessible */
                              NULL); /* accessible agents */
   ErrorCheck(Checking pointer info, err);
 
-  ATLData *data = (ATLData *)ptr_info.userData;
+  ATLData *data = reinterpret_cast<ATLData *>(ptr_info.userData);
 #endif
   if (!data)
     ErrorCheck(Checking pointer info userData,
@@ -348,7 +349,7 @@ atmi_status_t Runtime::Memfree(void *ptr) {
 
 atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
                                         const void *src, size_t size) {
-  // TODO: Reuse code in atl_rt for setting up default task params
+  // TODO(ashwinma): Reuse code in atl_rt for setting up default task params
 
   atl_task_t *ret = get_new_task();
 
@@ -357,7 +358,7 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
   ret->taskgroup_obj = get_taskgroup_impl(ret->taskgroup);
 
   ret->data_dest_ptr = dest;
-  ret->data_src_ptr = (void *)src;
+  ret->data_src_ptr = const_cast<void *>(reinterpret_cast<const void *>(src));
   ret->data_size = size;
 
   ret->profilable = lparm->profilable;
@@ -371,7 +372,8 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
   ret->acquire_scope = ATMI_FENCE_SCOPE_SYSTEM;
   ret->release_scope = ATMI_FENCE_SCOPE_SYSTEM;
 
-  // TODO: performance fix if there are more CPU agents to improve locality
+  // TODO(ashwinma): performance fix if there are more CPU agents to improve
+  // locality
   ret->place = ATMI_PLACE_GPU(0, 0);
 
   ret->num_predecessors = 0;
@@ -432,12 +434,11 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
   std::vector<hsa_signal_t> dep_signals;
   int val = 0;
   DEBUG_PRINT("(");
-  for (atl_task_vector_t::iterator it = task->and_predecessors.begin();
-       it != task->and_predecessors.end(); it++) {
-    dep_signals.push_back((*it)->signal);
-    if ((*it)->state < ATMI_DISPATCHED) val++;
-    assert((*it)->state >= ATMI_DISPATCHED);
-    DEBUG_PRINT("%lu ", (*it)->id);
+  for (auto pred_task : task->and_predecessors) {
+    dep_signals.push_back(pred_task->signal);
+    if (pred_task->state < ATMI_DISPATCHED) val++;
+    assert(pred_task->state >= ATMI_DISPATCHED);
+    DEBUG_PRINT("%lu ", pred_task->id);
   }
   DEBUG_PRINT(")\n");
   if (val > 0)
@@ -452,18 +453,20 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
   hsa_amd_pointer_info_t dest_ptr_info;
   src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
   dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-  err =
-      hsa_amd_pointer_info((void *)src, &src_ptr_info, NULL, /* alloc fn ptr */
-                           NULL,  /* num_agents_accessible */
-                           NULL); /* accessible agents */
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(src), &src_ptr_info,
+                             NULL,  /* alloc fn ptr */
+                             NULL,  /* num_agents_accessible */
+                             NULL); /* accessible agents */
   ErrorCheck(Checking src pointer info, err);
-  err = hsa_amd_pointer_info((void *)dest, &dest_ptr_info,
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(dest), &dest_ptr_info,
                              NULL,  /* alloc fn ptr */
                              NULL,  /* num_agents_accessible */
                              NULL); /* accessible agents */
   ErrorCheck(Checking dest pointer info, err);
-  ATLData *volatile src_data = (ATLData *)src_ptr_info.userData;
-  ATLData *volatile dest_data = (ATLData *)dest_ptr_info.userData;
+  ATLData *volatile src_data =
+      reinterpret_cast<ATLData *>(src_ptr_info.userData);
+  ATLData *volatile dest_data =
+      reinterpret_cast<ATLData *>(dest_ptr_info.userData);
 #endif
   bool is_src_host =
       (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
@@ -604,18 +607,20 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
   hsa_amd_pointer_info_t dest_ptr_info;
   src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
   dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-  err =
-      hsa_amd_pointer_info((void *)src, &src_ptr_info, NULL, /* alloc fn ptr */
-                           NULL,  /* num_agents_accessible */
-                           NULL); /* accessible agents */
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(src), &src_ptr_info,
+                             NULL,  /* alloc fn ptr */
+                             NULL,  /* num_agents_accessible */
+                             NULL); /* accessible agents */
   ErrorCheck(Checking src pointer info, err);
-  err = hsa_amd_pointer_info((void *)dest, &dest_ptr_info,
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(dest), &dest_ptr_info,
                              NULL,  /* alloc fn ptr */
                              NULL,  /* num_agents_accessible */
                              NULL); /* accessible agents */
   ErrorCheck(Checking dest pointer info, err);
-  ATLData *volatile src_data = (ATLData *)src_ptr_info.userData;
-  ATLData *volatile dest_data = (ATLData *)dest_ptr_info.userData;
+  ATLData *volatile src_data =
+      reinterpret_cast<ATLData *>(src_ptr_info.userData);
+  ATLData *volatile dest_data =
+      reinterpret_cast<ATLData *>(dest_ptr_info.userData);
 #endif
   atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
   hsa_agent_t cpu_agent = get_mem_agent(cpu);

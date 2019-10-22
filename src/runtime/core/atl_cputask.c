@@ -14,7 +14,12 @@
 #include "atl_bindthread.h"
 #include "atl_internal.h"
 
-using namespace core;
+using core::lock;
+using core::unlock;
+using core::create_header;
+using core::packet_store_release;
+using core::get_task;
+using core::get_nanosecs;
 
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;
@@ -115,10 +120,6 @@ void signal_worker_id(int cpu_id, int tid, int signal) {
   hsa_signal_store_release(agent->worker_sig, signal);
 }
 
-int is_barrier(uint16_t header) {
-  return (header & (1 << HSA_PACKET_HEADER_BARRIER)) ? 1 : 0;
-}
-
 uint8_t get_packet_type(uint16_t header) {
   // FIXME: The width of packet type is 8 bits. Change to below line if width
   // changes
@@ -146,25 +147,26 @@ int process_packet(agent_t *agent) {
     agent->timer.Start();
     while ((doorbell_value = hsa_signal_wait_acquire(
                 doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
-                ATMI_WAIT_STATE)) < (hsa_signal_value_t)read_index)
-      ;
+                ATMI_WAIT_STATE)) < (hsa_signal_value_t)read_index) {
+    }
     if (doorbell_value == INT_MAX) break;
     atl_task_t *this_task = NULL;  // will be assigned to collect metrics
     char *kernel_name = NULL;
     hsa_agent_dispatch_packet_t *packets =
-        (hsa_agent_dispatch_packet_t *)queue->base_address;
+        reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address);
     hsa_agent_dispatch_packet_t *packet = packets + read_index % queue->size;
 
     int i;
     DEBUG_PRINT("Processing CPU task with header: %d\n",
                 get_packet_type(packet->header));
     // wait til the packet is ready to be dispatched
-    while (get_packet_type(packet->header) == HSA_PACKET_TYPE_VENDOR_SPECIFIC)
-      ;
+    while (get_packet_type(packet->header) == HSA_PACKET_TYPE_VENDOR_SPECIFIC) {
+    }
     switch (get_packet_type(packet->header)) {
       case HSA_PACKET_TYPE_BARRIER_OR: {
         ;
-        hsa_barrier_or_packet_t *barrier_or = (hsa_barrier_or_packet_t *)packet;
+        hsa_barrier_or_packet_t *barrier_or =
+            reinterpret_cast<hsa_barrier_or_packet_t *>(packet);
         DEBUG_PRINT("Executing OR barrier\n");
         for (i = 0; i < 5; ++i) {
           if (barrier_or->dep_signal[i].handle != 0) {
@@ -175,13 +177,14 @@ int process_packet(agent_t *agent) {
             break;
           }
         }
-        packet_store_release((uint32_t *)barrier_or,
+        packet_store_release(reinterpret_cast<uint32_t *>(barrier_or),
                              create_header(HSA_PACKET_TYPE_INVALID, 0),
                              HSA_PACKET_TYPE_BARRIER_OR);
       } break;
       case HSA_PACKET_TYPE_BARRIER_AND: {
         ;
-        hsa_barrier_and_packet_t *barrier = (hsa_barrier_and_packet_t *)packet;
+        hsa_barrier_and_packet_t *barrier =
+            reinterpret_cast<hsa_barrier_and_packet_t *>(packet);
         DEBUG_PRINT("Executing AND barrier\n");
         for (i = 0; i < 5; ++i) {
           if (barrier->dep_signal[i].handle != 0) {
@@ -193,7 +196,7 @@ int process_packet(agent_t *agent) {
             DEBUG_PRINT("AND Signal %d completed...\n", i);
           }
         }
-        packet_store_release((uint32_t *)barrier,
+        packet_store_release(reinterpret_cast<uint32_t *>(barrier),
                              create_header(HSA_PACKET_TYPE_INVALID, 0),
                              HSA_PACKET_TYPE_BARRIER_AND);
       } break;
@@ -208,16 +211,17 @@ int process_packet(agent_t *agent) {
           start_time_ns = get_nanosecs(context_init_time, start_time);
         }
         DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id);
-        atl_kernel_t *kernel = (atl_kernel_t *)(packet->arg[2]);
+        atl_kernel_t *kernel = reinterpret_cast<atl_kernel_t *>(packet->arg[2]);
         int kernel_id = packet->type;
         atl_kernel_impl_t *kernel_impl = kernel->impls[kernel_id];
         std::vector<void *> kernel_args;
-        void *kernel_args_region = (void *)(packet->arg[1]);
-        kernel_name = (char *)kernel_impl->kernel_name.c_str();
+        void *kernel_args_region = reinterpret_cast<void *>(packet->arg[1]);
+        kernel_name = const_cast<char *>(
+            reinterpret_cast<const char *>(kernel_impl->kernel_name.c_str()));
         uint64_t num_params = kernel->num_args;
-        char *thisKernargAddress = (char *)(kernel_args_region);
+        char *thisKernargAddress = reinterpret_cast<char *>(kernel_args_region);
         for (int i = 0; i < kernel->num_args; i++) {
-          kernel_args.push_back((void *)thisKernargAddress);
+          kernel_args.push_back(reinterpret_cast<void *>(thisKernargAddress));
           thisKernargAddress += kernel->arg_sizes[i];
         }
         switch (num_params) {
@@ -463,7 +467,7 @@ int process_packet(agent_t *agent) {
 
         DEBUG_PRINT("Signaling from CPU task: %" PRIu64 "\n",
                     packet->completion_signal.handle);
-        packet_store_release((uint32_t *)packet,
+        packet_store_release(reinterpret_cast<uint32_t *>(packet),
                              create_header(HSA_PACKET_TYPE_INVALID, 0),
                              packet->type);
         kernel_args.clear();
@@ -498,44 +502,9 @@ int process_packet(agent_t *agent) {
   // hsa_signal_store_release(worker_sig[id], PROCESS_PKT);
   return 0;
 }
-#if 0
-typedef struct thread_args_s {
-    int tid;
-    size_t num_queues;
-    size_t capacity;
-    hsa_agent_t cpu_agent;
-    hsa_region_t cpu_region;
-} thread_args_t;
 
 void *agent_worker(void *agent_args) {
-    /* TODO: Investigate more if we really need the inter-thread worker signal. 
-     * Can we just do the below without hanging? */
-    thread_args_t *args = (thread_args_t *) agent_args; 
-    int tid = args->tid;
-    agent[tid].num_queues = args->num_queues;
-    agent[tid].id = tid;
-
-    hsa_signal_t db_signal;
-    hsa_status_t err;
-    err = hsa_signal_create(1, 0, NULL, &db_signal);
-    check(Creating a HSA signal for agent dispatch db signal, err);
-
-    hsa_queue_t *queue = NULL;
-    err = hsa_soft_queue_create(args->cpu_region, args->capacity, HSA_QUEUE_TYPE_SINGLE,
-            HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &queue);
-    check(Creating an agent queue, err);
-
-    /* FIXME: Looks like a HSA bug. The doorbell signal that we pass to the 
-     * soft queue creation API never seems to be set. Workaround is to 
-     * manually set it again like below.
-     */
-    queue->doorbell_signal = db_signal;
-
-    process_packet(queue, tid);
-}
-#else
-void *agent_worker(void *agent_args) {
-  agent_t *agent = (agent_t *)agent_args;
+  agent_t *agent = reinterpret_cast<agent_t *>(agent_args);
 
   unsigned num_cpus = std::thread::hardware_concurrency();
   // pin this thread to the core number as its agent ID...
@@ -571,7 +540,7 @@ void *agent_worker(void *agent_args) {
 
   return NULL;
 }
-#endif
+
 void cpu_agent_init(int cpu_id, const size_t num_queues) {
   static bool initialized = false;
   hsa_status_t err;
@@ -647,8 +616,9 @@ unsigned long get_global_size(unsigned int dim) {
       return task->gridDim[dim];
     else
       return 1;
-  } else
+  } else {
     return 0;
+  }
 }
 
 unsigned long get_local_size(unsigned int dim) {
@@ -657,7 +627,8 @@ unsigned long get_local_size(unsigned int dim) {
       return task->groupDim[dim];
   else
   */
-  // TODO: Current CPU task model is to have a single thread per "workgroup"
+  // TODO(ashwinma): Current CPU task model is to have a single thread per
+  // "workgroup"
   // because i clearly do not see the necessity to have a tree based hierarchy
   // per CPU socket. Should revisit if we get a compelling case otherwise.
   return 1;
@@ -665,12 +636,13 @@ unsigned long get_local_size(unsigned int dim) {
 
 unsigned long get_num_groups(unsigned int dim) {
   // return ((get_global_size(dim)-1)/(dim)*get_local_size(dim))+1;
-  // TODO: simplify return because local dims are hardcoded to 1
+  // TODO(ashwinma): simplify return because local dims are hardcoded to 1
   return get_global_size(dim);
 }
 
 unsigned long get_local_id(unsigned int dim) {
-  // TODO: Current CPU task model is to have a single thread per "workgroup"
+  // TODO(ashwinma): Current CPU task model is to have a single thread per
+  // "workgroup"
   // because i clearly do not see the necessity to have a tree based hierarchy
   // per CPU socket. Should revisit if we get a compelling case otherwise.
   return 0;
@@ -701,8 +673,9 @@ unsigned long get_global_id(unsigned int dim) {
       id = flat_id / (x_dim * y_dim);
     }
     return id;
-  } else
+  } else {
     return 0;
+  }
 }
 
 unsigned long get_group_id(unsigned int dim) { return get_global_id(dim); }

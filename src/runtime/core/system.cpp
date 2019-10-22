@@ -3,6 +3,9 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
+#include <gelf.h>
+#include <libelf.h>
+
 #include <cassert>
 #include <cstdarg>
 #include <fstream>
@@ -10,13 +13,13 @@
 #include <iostream>
 #include <set>
 #include <string>
+
 #include "ATLMachine.h"
+#include "RealTimerClass.h"
+#include "amd_comgr.h"
 #include "atl_internal.h"
 #include "rt.h"
-
-#include <gelf.h>
-#include <libelf.h>
-#include "amd_comgr.h"
+using Global::RealTimer;
 
 typedef unsigned char *address;
 /*
@@ -114,7 +117,7 @@ static const std::map<std::string, ValueKind> ArgValueKind = {
     {"hidden_printf_buffer", ValueKind::HiddenPrintfBuffer},
     {"hidden_default_queue", ValueKind::HiddenDefaultQueue},
     {"hidden_completion_action", ValueKind::HiddenCompletionAction}
-    //,{"hidden_multigrid_sync_arg", ValueKind::HiddenMultiGridSyncArg}
+    // ,{"hidden_multigrid_sync_arg", ValueKind::HiddenMultiGridSyncArg}
 };
 
 enum class CodePropField : uint8_t {
@@ -145,10 +148,8 @@ static const std::map<std::string, CodePropField> CodePropFieldMap = {
     {"IsXNACKEnabled", CodePropField::IsXNACKEnabled},
     {"NumSpilledSGPRs", CodePropField::NumSpilledSGPRs},
     {"NumSpilledVGPRs", CodePropField::NumSpilledVGPRs}};
-#include "RealTimerClass.h"
-using namespace Global;
 
-// public variables -- TODO move these to a runtime object?
+// public variables -- TODO(ashwinma) move these to a runtime object?
 atmi_machine_t g_atmi_machine;
 ATLMachine g_atl_machine;
 
@@ -174,7 +175,7 @@ static atl_dep_sync_t g_dep_sync_type =
 
 RealTimer SignalAddTimer("Signal Time");
 RealTimer HandleSignalTimer("Handle Signal Time");
-;
+
 RealTimer HandleSignalInvokeTimer("Handle Signal Invoke Time");
 RealTimer TaskWaitTimer("Task Wait Time");
 RealTimer TryLaunchTimer("Launch Time");
@@ -255,7 +256,8 @@ atmi_status_t atmi_ke_init() {
     std::vector<hsa_queue_t *> qs = proc.getQueues();
     num_queues = qs.size();
     gpu_queues.insert(gpu_queues.end(), qs.begin(), qs.end());
-    // TODO: how to handle queues from multiple devices? keep them separate?
+    // TODO(ashwinma): how to handle queues from multiple devices? keep them
+    // separate?
     // Currently, first N queues correspond to GPU0, next N queues map to GPU1
     // and so on.
   }
@@ -268,7 +270,8 @@ atmi_status_t atmi_ke_init() {
     ErrorCheck(Allocating GPU queue pointers, err);
     allow_access_to_all_gpu_agents(gpu_queue_ptr);
     for (int gpuq = 0; gpuq < gpu_queues.size(); gpuq++) {
-      ((hsa_queue_t **)gpu_queue_ptr)[gpuq] = gpu_queues[gpuq];
+      (reinterpret_cast<hsa_queue_t **>(gpu_queue_ptr))[gpuq] =
+          gpu_queues[gpuq];
     }
   }
   g_ke_args.gpu_queue_ptr = gpu_queue_ptr;
@@ -283,7 +286,8 @@ atmi_status_t atmi_ke_init() {
     std::vector<hsa_queue_t *> qs = proc.getQueues();
     num_queues = qs.size();
     cpu_queues.insert(cpu_queues.end(), qs.begin(), qs.end());
-    // TODO: how to handle queues from multiple devices? keep them separate?
+    // TODO(ashwinma): how to handle queues from multiple devices? keep them
+    // separate?
     // Currently, first N queues correspond to CPU0, next N queues map to CPU1
     // and so on.
   }
@@ -296,7 +300,8 @@ atmi_status_t atmi_ke_init() {
     ErrorCheck(Allocating CPU queue pointers, err);
     allow_access_to_all_gpu_agents(cpu_queue_ptr);
     for (int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
-      ((hsa_queue_t **)cpu_queue_ptr)[cpuq] = cpu_queues[cpuq];
+      (reinterpret_cast<hsa_queue_t **>(cpu_queue_ptr))[cpuq] =
+          cpu_queues[cpuq];
     }
   }
   g_ke_args.cpu_queue_ptr = cpu_queue_ptr;
@@ -309,7 +314,7 @@ atmi_status_t atmi_ke_init() {
     ErrorCheck(Allocating CPU queue iworker signals, err);
     allow_access_to_all_gpu_agents(cpu_worker_signals);
     for (int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
-      ((hsa_signal_t *)cpu_worker_signals)[cpuq] =
+      (reinterpret_cast<hsa_signal_t *>(cpu_worker_signals))[cpuq] =
           *(get_worker_sig(cpu_queues[cpuq]));
     }
   }
@@ -353,13 +358,15 @@ atmi_status_t Runtime::Initialize(atmi_devtype_t devtype) {
 }
 
 atmi_status_t Runtime::Finalize() {
-  // TODO: Finalize all processors, queues, signals, kernarg memory regions
+  // TODO(ashwinma): Finalize all processors, queues, signals, kernarg memory
+  // regions
   hsa_status_t err;
   finalize_hsa();
   // free up the kernel enqueue related data
   for (int i = 0; i < g_ke_args.kernel_counter; i++) {
     atmi_kernel_enqueue_template_t *ke_template =
-        &((atmi_kernel_enqueue_template_t *)g_ke_args.kernarg_template_ptr)[i];
+        &(reinterpret_cast<atmi_kernel_enqueue_template_t *>(
+            g_ke_args.kernarg_template_ptr))[i];
     hsa_memory_free(ke_template->kernarg_regions);
   }
   hsa_memory_free(g_ke_args.kernarg_template_ptr);
@@ -504,7 +511,7 @@ static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
 
   return err;
 }
-//#else
+
 /* Determines if the given agent is of type HSA_DEVICE_TYPE_GPU
    and sets the value of data to the agent handle if it is.
    */
@@ -517,7 +524,7 @@ static hsa_status_t get_gpu_agent(hsa_agent_t agent, void *data) {
     uint32_t max_queues;
     status = hsa_agent_get_info(agent, HSA_AGENT_INFO_QUEUES_MAX, &max_queues);
     DEBUG_PRINT("GPU has max queues = %" PRIu32 "\n", max_queues);
-    hsa_agent_t *ret = (hsa_agent_t *)data;
+    hsa_agent_t *ret = reinterpret_cast<hsa_agent_t *>(data);
     *ret = agent;
     return HSA_STATUS_INFO_BREAK;
   }
@@ -535,7 +542,7 @@ static hsa_status_t get_cpu_agent(hsa_agent_t agent, void *data) {
     uint32_t max_queues;
     status = hsa_agent_get_info(agent, HSA_AGENT_INFO_QUEUES_MAX, &max_queues);
     DEBUG_PRINT("CPU has max queues = %" PRIu32 "\n", max_queues);
-    hsa_agent_t *ret = (hsa_agent_t *)data;
+    hsa_agent_t *ret = reinterpret_cast<hsa_agent_t *>(data);
     *ret = agent;
     return HSA_STATUS_INFO_BREAK;
   }
@@ -551,7 +558,7 @@ hsa_status_t get_fine_grained_region(hsa_region_t region, void *data) {
   hsa_region_global_flag_t flags;
   hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &flags);
   if (flags & HSA_REGION_GLOBAL_FLAG_FINE_GRAINED) {
-    hsa_region_t *ret = (hsa_region_t *)data;
+    hsa_region_t *ret = reinterpret_cast<hsa_region_t *>(data);
     *ret = region;
     return HSA_STATUS_INFO_BREAK;
   }
@@ -569,7 +576,7 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void *data) {
   hsa_region_global_flag_t flags;
   hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &flags);
   if (flags & HSA_REGION_GLOBAL_FLAG_KERNARG) {
-    hsa_region_t *ret = (hsa_region_t *)data;
+    hsa_region_t *ret = reinterpret_cast<hsa_region_t *>(data);
     *ret = region;
     return HSA_STATUS_INFO_BREAK;
   }
@@ -732,8 +739,8 @@ hsa_status_t init_comute_and_memory() {
   size_t num_procs = cpu_procs.size() + gpu_procs.size() + dsp_procs.size();
   // g_atmi_machine.devices = (atmi_device_t *)malloc(num_procs *
   // sizeof(atmi_device_t));
-  atmi_device_t *all_devices =
-      (atmi_device_t *)malloc(num_procs * sizeof(atmi_device_t));
+  atmi_device_t *all_devices = reinterpret_cast<atmi_device_t *>(
+      malloc(num_procs * sizeof(atmi_device_t)));
   int num_iGPUs = 0;
   int num_dGPUs = 0;
   for (int i = 0; i < gpu_procs.size(); i++) {
@@ -882,7 +889,7 @@ void init_tasks() {
     // For ATL_SYNC_BARRIER_PKT, since barrier packets resolve
     // dependencies within the GPU, they can be just agent signals
     // without host interrupts.
-    // TODO: for barrier packet with host tasks, should we create
+    // TODO(ashwinma): for barrier packet with host tasks, should we create
     // a separate list of free signals?
     if (g_dep_sync_type == ATL_SYNC_CALLBACK)
       err = hsa_signal_create(0, 0, NULL, &new_signal);
@@ -918,9 +925,9 @@ hsa_status_t callbackEvent(const hsa_amd_event_t *event, void *data) {
 
     std::string err_string = "[GPU Memory Error] Addr: " + addr;
     err_string += " Reason: ";
-    if (!(memory_fault.fault_reason_mask & 0x00111111))
+    if (!(memory_fault.fault_reason_mask & 0x00111111)) {
       err_string += "No Idea! ";
-    else {
+    } else {
       if (memory_fault.fault_reason_mask & 0x00000001)
         err_string += "Page not present or supervisor privilege. ";
       if (memory_fault.fault_reason_mask & 0x00000010)
@@ -1022,7 +1029,7 @@ void *atl_read_binary_from_file(const char *module, size_t *module_size) {
   assert(raw_code_object);
 
   // Read file contents.
-  file.read((char *)raw_code_object, size);
+  file.read(reinterpret_cast<char *>(raw_code_object), size);
 
   // Close file.
   file.close();
@@ -1049,7 +1056,7 @@ bool isImplicit(ValueKind value_kind) {
 hsa_status_t validate_code_object(hsa_code_object_t code_object,
                                   hsa_code_symbol_t symbol, void *data) {
   hsa_status_t retVal = HSA_STATUS_SUCCESS;
-  int gpu = *(int *)data;
+  int gpu = *reinterpret_cast<int *>(data);
   hsa_symbol_kind_t type;
 
   uint32_t name_length;
@@ -1062,7 +1069,7 @@ hsa_status_t validate_code_object(hsa_code_object_t code_object,
     err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME_LENGTH,
                                    &name_length);
     ErrorCheck(Symbol info extraction, err);
-    char *name = (char *)malloc(name_length + 1);
+    char *name = reinterpret_cast<char *>(malloc(name_length + 1));
     err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME, name);
     ErrorCheck(Symbol info extraction, err);
     name[name_length] = 0;
@@ -1150,7 +1157,8 @@ static amd_comgr_status_t populateArgs(const amd_comgr_metadata_node_t key,
       }
       lcArg->mValueKind = itValueKind->second;
     } break;
-// TODO: If we are interested in parsing other fields, then uncomment them from
+// TODO(ashwinma): If we are interested in parsing other fields, then uncomment
+// them from
 // below
 #if 0
       case ArgField::ValueType:
@@ -1245,7 +1253,8 @@ static amd_comgr_status_t populateCodeProps(
     case CodePropField::KernargSegmentSize:
       kernelMD->mCodeProps.mKernargSegmentSize = atoi(buf.c_str());
       break;
-// TODO: If we are interested in parsing other fields, then uncomment them from
+// TODO(ashwinma): If we are interested in parsing other fields, then uncomment
+// them from
 // below
 #if 0
       case CodePropField::GroupSegmentFixedSize:
@@ -1411,7 +1420,7 @@ hsa_status_t get_code_object_custom_metadata_v2(atmi_platform_type_t platform,
           return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
         }
 
-        // TODO: should the below population actions be done only for
+        // TODO(ashwinma): should the below population actions be done only for
         // non-implicit args?
         // populate info with num args, their sizes and alignments
         info.arg_sizes.push_back(lcArg.mSize);
@@ -1589,7 +1598,7 @@ hsa_status_t get_code_object_custom_metadata_v3(atmi_platform_type_t platform,
           return HSA_STATUS_ERROR_INVALID_CODE_OBJECT;
         }
 
-        // TODO: should the below population actions be done only for
+        // TODO(ashwinma): should the below population actions be done only for
         // non-implicit args?
         // populate info with sizes and offsets
         info.arg_sizes.push_back(lcArg.mSize);
@@ -1645,7 +1654,7 @@ hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
   int code_object_ver = 0;
   // Get the code object version by looking int the runtime metadata note
   // Begin the Elf image from memory
-  Elf *e = elf_memory((char *)binary, binSize);
+  Elf *e = elf_memory(reinterpret_cast<char *>(binary), binSize);
   if (elf_kind(e) != ELF_K_ELF) {
     ELFErrorReturn(Error while reading the ELF program binary,
                    HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
@@ -1669,7 +1678,7 @@ hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
       address segmentEnd = ptr + pHdr.p_filesz;
 
       while (ptr < segmentEnd) {
-        Elf_Note *note = (Elf_Note *)ptr;
+        Elf_Note *note = reinterpret_cast<Elf_Note *>(ptr);
         address name = (address)&note[1];
         address desc = name + core::alignUp(note->n_namesz, sizeof(int));
 
@@ -1712,7 +1721,7 @@ hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
 
 hsa_status_t create_kernarg_memory(hsa_executable_t executable,
                                    hsa_executable_symbol_t symbol, void *data) {
-  int gpu = *(int *)data;
+  int gpu = *reinterpret_cast<int *>(data);
   hsa_symbol_kind_t type;
 
   uint32_t name_length;
@@ -1725,7 +1734,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable,
     err = hsa_executable_symbol_get_info(
         symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length);
     ErrorCheck(Symbol info extraction, err);
-    char *name = (char *)malloc(name_length + 1);
+    char *name = reinterpret_cast<char *>(malloc(name_length + 1));
     err = hsa_executable_symbol_get_info(symbol,
                                          HSA_EXECUTABLE_SYMBOL_INFO_NAME, name);
     ErrorCheck(Symbol info extraction, err);
@@ -1784,7 +1793,7 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable,
     err = hsa_executable_symbol_get_info(
         symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length);
     ErrorCheck(Symbol info extraction, err);
-    char *name = (char *)malloc(name_length + 1);
+    char *name = reinterpret_cast<char *>(malloc(name_length + 1));
     err = hsa_executable_symbol_get_info(symbol,
                                          HSA_EXECUTABLE_SYMBOL_INFO_NAME, name);
     ErrorCheck(Symbol info extraction, err);
@@ -1803,7 +1812,8 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable,
     atmi_mem_place_t place = ATMI_MEM_PLACE(ATMI_DEVTYPE_GPU, gpu, 0);
     DEBUG_PRINT("Symbol %s = %p (%u bytes)\n", name, (void *)info.addr,
                 info.size);
-    register_allocation((void *)info.addr, (size_t)info.size, place);
+    register_allocation(reinterpret_cast<void *>(info.addr), (size_t)info.size,
+                        place);
     SymbolInfoTable[gpu][std::string(name)] = info;
     free(name);
   } else {
@@ -1827,7 +1837,7 @@ atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
   int some_success = 0;
   std::vector<std::string> modules_str;
   for (int i = 0; i < num_modules; i++) {
-    modules_str.push_back(std::string((char *)modules[i]));
+    modules_str.push_back(std::string(reinterpret_cast<char *>(modules[i])));
   }
 
   int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
@@ -1973,32 +1983,31 @@ atmi_status_t Runtime::ReleaseKernel(atmi_kernel_t atmi_kernel) {
   atl_kernel_t *kernel = KernelImplMap[pif_id];
   // kernel->id_map.clear();
   clear_container(&(kernel->arg_sizes));
-  for (std::vector<atl_kernel_impl_t *>::iterator it = kernel->impls.begin();
-       it != kernel->impls.end(); it++) {
-    lock(&((*it)->mutex));
-    if ((*it)->devtype == ATMI_DEVTYPE_GPU) {
+  for (auto kernel_impl : kernel->impls) {
+    lock(&(kernel_impl->mutex));
+    if (kernel_impl->devtype == ATMI_DEVTYPE_GPU) {
       // free the pipe_ptrs data
       // We create the pipe_ptrs region for all kernel instances
       // combined, and each instance of the kernel
       // invocation takes a piece of it. So, the first kernel instance
       // (k=0) will have the pointer to the entire pipe region itself.
       atmi_implicit_args_t *impl_args =
-          (atmi_implicit_args_t *)(((char *)(*it)->kernarg_region) +
-                                   (*it)->kernarg_segment_size -
-                                   sizeof(atmi_implicit_args_t));
-      void *pipe_ptrs = (void *)impl_args->pipe_ptr;
+          reinterpret_cast<atmi_implicit_args_t *>(
+              reinterpret_cast<char *>(kernel_impl->kernarg_region) +
+              kernel_impl->kernarg_segment_size - sizeof(atmi_implicit_args_t));
+      void *pipe_ptrs = reinterpret_cast<void *>(impl_args->pipe_ptr);
       DEBUG_PRINT("Freeing pipe ptr: %p\n", pipe_ptrs);
       hsa_memory_free(pipe_ptrs);
-      hsa_memory_free((*it)->kernarg_region);
-      free((*it)->kernel_objects);
-      free((*it)->group_segment_sizes);
-      free((*it)->private_segment_sizes);
-    } else if ((*it)->devtype == ATMI_DEVTYPE_CPU) {
-      free((*it)->kernarg_region);
+      hsa_memory_free(kernel_impl->kernarg_region);
+      free(kernel_impl->kernel_objects);
+      free(kernel_impl->group_segment_sizes);
+      free(kernel_impl->private_segment_sizes);
+    } else if (kernel_impl->devtype == ATMI_DEVTYPE_CPU) {
+      free(kernel_impl->kernarg_region);
     }
-    clear_container(&((*it)->free_kernarg_segments));
-    unlock(&((*it)->mutex));
-    delete *it;
+    clear_container(&(kernel_impl->free_kernarg_segments));
+    unlock(&(kernel_impl->mutex));
+    delete kernel_impl;
   }
   clear_container(&(kernel->impls));
   delete kernel;
@@ -2061,8 +2070,9 @@ atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel,
         &ke_kernarg_region);
       ErrorCheck(Allocating memory for the executable-kernel, err);
       allow_access_to_all_gpu_agents(ke_kernarg_region);
-      *(int *)ke_kernarg_region = 0;
-      char *ke_kernargs = (char *)ke_kernarg_region + sizeof(int);
+      *reinterpret_cast<int *>(ke_kernarg_region) = 0;
+      char *ke_kernargs =
+          reinterpret_cast<char *>(ke_kernarg_region) + sizeof(int);
 
       // fill in the kernel template AQL packets
       int cur_kernel = g_ke_args.kernel_counter++;
@@ -2070,11 +2080,10 @@ atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel,
       // assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
       if (cur_kernel >= MAX_NUM_KERNEL_TYPES) return ATMI_STATUS_ERROR;
       atmi_kernel_enqueue_template_t *ke_template =
-          &((atmi_kernel_enqueue_template_t *)
-                g_ke_args.kernarg_template_ptr)[cur_kernel];
-      ke_template->kernel_handle =
-          atmi_kernel
-              ->handle;  // To be used by device code to pick a task template
+          &(reinterpret_cast<atmi_kernel_enqueue_template_t *>(
+              g_ke_args.kernarg_template_ptr))[cur_kernel];
+      // To be used by device code to pick a task template
+      ke_template->kernel_handle = atmi_kernel->handle;
 
       // fill in the kernel arg regions
       ke_template->kernarg_segment_size = max_kernarg_segment_size;
@@ -2115,10 +2124,10 @@ atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel,
         if (this_impl->devtype == ATMI_DEVTYPE_GPU) {
           for (int k = 0; k < MAX_NUM_KERNELS; k++) {
             atmi_implicit_args_t *impl_args =
-                (atmi_implicit_args_t *)((char *)this_impl->kernarg_region +
-                                         (((k + 1) *
-                                           this_impl->kernarg_segment_size) -
-                                          sizeof(atmi_implicit_args_t)));
+                reinterpret_cast<atmi_implicit_args_t *>(
+                    reinterpret_cast<char *>(this_impl->kernarg_region) +
+                    (((k + 1) * this_impl->kernarg_segment_size) -
+                     sizeof(atmi_implicit_args_t)));
             // fill in the queue
             impl_args->num_gpu_queues = g_ke_args.num_gpu_queues;
             impl_args->gpu_queue_ptr = (uint64_t)g_ke_args.gpu_queue_ptr;
@@ -2133,10 +2142,10 @@ atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel,
 
             // *** fill in implicit args for kernel enqueue ***
             atmi_implicit_args_t *ke_impl_args =
-                (atmi_implicit_args_t *)((char *)ke_kernargs +
-                                         (((k + 1) *
-                                           this_impl->kernarg_segment_size) -
-                                          sizeof(atmi_implicit_args_t)));
+                reinterpret_cast<atmi_implicit_args_t *>(
+                    reinterpret_cast<char *>(ke_kernargs) +
+                    (((k + 1) * this_impl->kernarg_segment_size) -
+                     sizeof(atmi_implicit_args_t)));
             // SHARE the same pipe for printf etc
             *ke_impl_args = *impl_args;
           }
@@ -2169,11 +2178,11 @@ atmi_status_t Runtime::AddGPUKernelImpl(atmi_kernel_t atmi_kernel,
       g_atl_machine.getProcessors<ATLGPUProcessor>();
   int gpu_count = gpu_procs.size();
   kernel_impl->kernel_objects =
-      (uint64_t *)malloc(sizeof(uint64_t) * gpu_count);
+      reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t) * gpu_count));
   kernel_impl->group_segment_sizes =
-      (uint32_t *)malloc(sizeof(uint32_t) * gpu_count);
+      reinterpret_cast<uint32_t *>(malloc(sizeof(uint32_t) * gpu_count));
   kernel_impl->private_segment_sizes =
-      (uint32_t *)malloc(sizeof(uint32_t) * gpu_count);
+      reinterpret_cast<uint32_t *>(malloc(sizeof(uint32_t) * gpu_count));
   int max_kernarg_segment_size = 0;
   std::string kernel_name;
   atmi_platform_type_t kernel_type;
@@ -2225,7 +2234,7 @@ atmi_status_t Runtime::AddGPUKernelImpl(atmi_kernel_t atmi_kernel,
 
       void *pipe_ptrs;
       // allocate pipe memory in the kernarg memory pool
-      // TODO: may be possible to allocate this on device specific
+      // TODO(ashwinma): may be possible to allocate this on device specific
       // memory but data movement will have to be done later by
       // post-processing kernel on destination agent.
       err = hsa_amd_memory_pool_allocate(
@@ -2236,12 +2245,12 @@ atmi_status_t Runtime::AddGPUKernelImpl(atmi_kernel_t atmi_kernel,
 
       for (int k = 0; k < MAX_NUM_KERNELS; k++) {
         atmi_implicit_args_t *impl_args =
-            (atmi_implicit_args_t *)((char *)kernel_impl->kernarg_region +
-                                     (((k + 1) *
-                                       kernel_impl->kernarg_segment_size) -
-                                      sizeof(atmi_implicit_args_t)));
-        impl_args->pipe_ptr =
-            (uint64_t)((char *)pipe_ptrs + (k * MAX_PIPE_SIZE));
+            reinterpret_cast<atmi_implicit_args_t *>(
+                reinterpret_cast<char *>(kernel_impl->kernarg_region) +
+                (((k + 1) * kernel_impl->kernarg_segment_size) -
+                 sizeof(atmi_implicit_args_t)));
+        impl_args->pipe_ptr = (uint64_t)(reinterpret_cast<char *>(pipe_ptrs) +
+                                         (k * MAX_PIPE_SIZE));
         impl_args->offset_x = 0;
         impl_args->offset_y = 0;
         impl_args->offset_z = 0;

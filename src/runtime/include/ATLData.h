@@ -3,15 +3,15 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef __ATL_DATA__
-#define __ATL_DATA__
+#ifndef SRC_RUNTIME_INCLUDE_ATLDATA_H_
+#define SRC_RUNTIME_INCLUDE_ATLDATA_H_
 #include <hsa.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
 #include <mutex>
 #include "atmi.h"
-//#define USE_ROCR_PTR_INFO
+// #define USE_ROCR_PTR_INFO
 // There seems to be a bug with ROCr's hsa_amd_pointer_info_set_userdata for
 // variable
 // symbols. If/when that bug is fixed, we can uncomment the above line to
@@ -101,4 +101,4 @@ enum { ATMI_H2D = 0, ATMI_D2H = 1, ATMI_D2D = 2, ATMI_H2H = 3 };
 hsa_agent_t get_mem_agent(atmi_mem_place_t place);
 hsa_agent_t get_compute_agent(atmi_place_t place);
 }  // namespace core
-#endif  // __ATL_DATA__
+#endif  // SRC_RUNTIME_INCLUDE_ATLDATA_H_

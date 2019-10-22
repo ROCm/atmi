@@ -207,8 +207,8 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue,
      */
     uint64_t index = hsa_queue_add_write_index_relaxed(queue, 1);
     // Wait until the queue is not full before writing the packet
-    while (index - hsa_queue_load_read_index_acquire(queue) >= queue->size)
-      ;
+    while (index - hsa_queue_load_read_index_acquire(queue) >= queue->size) {
+    }
 
     const uint32_t queueMask = queue->size - 1;
     hsa_barrier_and_packet_t *barrier = &(
@@ -391,7 +391,8 @@ void init_dag_scheduler() {
 }
 
 #if 0
-//FIXME: this implementation may be needed to have a common lock/unlock for CPU/GPU
+// FIXME: this implementation may be needed to
+// have a common lock/unlock for CPU/GPU
 lock(int *mutex) {
     // atomic cas of mutex with 1 and return 0
 }

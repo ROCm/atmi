@@ -12,7 +12,6 @@
 #include <vector>
 #include "atl_internal.h"
 #include "atmi_runtime.h"
-using namespace std;
 extern ATLMachine g_atl_machine;
 extern hsa_region_t atl_cpu_kernarg_region;
 
@@ -36,7 +35,7 @@ void ATLMemory::free(void *ptr) {
     return ret_task;
 }*/
 
-void ATLProcessor::addMemory(ATLMemory &mem) {
+void ATLProcessor::addMemory(const ATLMemory &mem) {
   for (std::vector<ATLMemory>::iterator it = _memories.begin();
        it != _memories.end(); it++) {
     // if the memory already exists, then just return
@@ -45,7 +44,9 @@ void ATLProcessor::addMemory(ATLMemory &mem) {
   _memories.push_back(mem);
 }
 
-std::vector<ATLMemory> &ATLProcessor::getMemories() { return _memories; }
+const std::vector<ATLMemory> &ATLProcessor::getMemories() const {
+  return _memories;
+}
 
 template <>
 std::vector<ATLCPUProcessor> &ATLMachine::getProcessors() {
@@ -62,9 +63,10 @@ std::vector<ATLDSPProcessor> &ATLMachine::getProcessors() {
   return _dsp_processors;
 }
 
-hsa_amd_memory_pool_t get_memory_pool(ATLProcessor &proc, const int mem_id) {
+hsa_amd_memory_pool_t get_memory_pool(const ATLProcessor &proc,
+                                      const int mem_id) {
   hsa_amd_memory_pool_t pool;
-  vector<ATLMemory> &mems = proc.getMemories();
+  const std::vector<ATLMemory> &mems = proc.getMemories();
   assert(mems.size() && mem_id >= 0 && mem_id < mems.size() &&
          "Invalid memory pools for this processor");
   pool = mems[mem_id].getMemory();
@@ -72,17 +74,17 @@ hsa_amd_memory_pool_t get_memory_pool(ATLProcessor &proc, const int mem_id) {
 }
 
 template <>
-void ATLMachine::addProcessor(ATLCPUProcessor &p) {
+void ATLMachine::addProcessor(const ATLCPUProcessor &p) {
   _cpu_processors.push_back(p);
 }
 
 template <>
-void ATLMachine::addProcessor(ATLGPUProcessor &p) {
+void ATLMachine::addProcessor(const ATLGPUProcessor &p) {
   _gpu_processors.push_back(p);
 }
 
 template <>
-void ATLMachine::addProcessor(ATLDSPProcessor &p) {
+void ATLMachine::addProcessor(const ATLDSPProcessor &p) {
   _dsp_processors.push_back(p);
 }
 
@@ -143,8 +145,9 @@ void callbackQueue(hsa_status_t status, hsa_queue_t *source, void *data) {
 void ATLGPUProcessor::createQueues(const int count) {
   char *gpu_workers = getenv("ATMI_DEVICE_GPU_WORKERS");
 
-  int *num_cus = (int *)calloc(count, sizeof(int));
-  uint64_t *cu_masks = (uint64_t *)calloc(count, sizeof(uint64_t));
+  int *num_cus = reinterpret_cast<int *>(calloc(count, sizeof(int)));
+  uint64_t *cu_masks =
+      reinterpret_cast<uint64_t *>(calloc(count, sizeof(uint64_t)));
 
   int cu_mask_enable = 0;
 
@@ -175,7 +178,7 @@ void ATLGPUProcessor::createQueues(const int count) {
         fprintf(stderr, "Warning: queue[%d]: cu mask is 0x0\n", qid);
       }
 
-      uint32_t *this_cu_mask_v = (uint32_t *)&cu_masks[qid];
+      uint32_t *this_cu_mask_v = reinterpret_cast<uint32_t *>(&cu_masks[qid]);
       hsa_status_t ret = hsa_amd_queue_cu_set_mask(this_Q, 64, this_cu_mask_v);
 
       if (ret != HSA_STATUS_SUCCESS)
@@ -219,7 +222,8 @@ void ATLCPUProcessor::createQueues(const int count) {
     agent->id = qid;
     // signal between the host thread and the CPU tasking queue thread
     err = hsa_signal_create(IDLE, 0, NULL, &(agent->worker_sig));
-        ErrorCheck(Creating a HSA signal for agent dispatch worker threads, err);
+        ErrorCheck(Creating a HSA signal for agent dispatch worker threads,
+            err);
 
         hsa_signal_t db_signal;
         err = hsa_signal_create(1, 0, NULL, &db_signal);
@@ -248,7 +252,8 @@ void ATLCPUProcessor::createQueues(const int count) {
         q->doorbell_signal = db_signal;
         _agents.push_back(agent);
         int last_index = _agents.size() - 1;
-        pthread_create(&(agent->thread), NULL, agent_worker, (void *)agent);
+        pthread_create(&(agent->thread), NULL, agent_worker,
+                       reinterpret_cast<void *>(agent));
   }
 }
 

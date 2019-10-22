@@ -6,7 +6,9 @@
 #include "atmi_interop_hsa.h"
 #include "atl_internal.h"
 #include "atmi_kl.h"
-using namespace core;
+using core::atl_is_atmi_initialized;
+using core::get_memory_pool_by_mem_place;
+using core::get_compute_agent;
 
 atmi_status_t atmi_interop_hsa_get_agent(atmi_place_t proc,
                                          hsa_agent_t *agent) {
@@ -51,7 +53,7 @@ atmi_status_t atmi_interop_hsa_get_symbol_info(atmi_mem_place_t place,
   if (SymbolInfoTable[place.dev_id].find(symbolStr) !=
       SymbolInfoTable[place.dev_id].end()) {
     atl_symbol_info_t info = SymbolInfoTable[place.dev_id][symbolStr];
-    *var_addr = (void *)info.addr;
+    *var_addr = reinterpret_cast<void *>(info.addr);
     *var_size = info.size;
     return ATMI_STATUS_SUCCESS;
   } else {

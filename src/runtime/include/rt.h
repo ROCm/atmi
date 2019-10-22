@@ -3,8 +3,8 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef __RT_H__
-#define __RT_H__
+#ifndef SRC_RUNTIME_INCLUDE_RT_H_
+#define SRC_RUNTIME_INCLUDE_RT_H_
 
 #include <atmi_runtime.h>
 #include <hsa.h>
@@ -14,7 +14,7 @@
 namespace core {
 class Environment {
  public:
-  explicit Environment()
+  Environment()
       : max_signals_(24),
         num_gpu_queues_(-1),
         num_cpu_queues_(-1),
@@ -31,9 +31,9 @@ class Environment {
   int getMaxSignals() const { return max_signals_; }
   int getNumGPUQueues() const { return num_gpu_queues_; }
   int getNumCPUQueues() const { return num_cpu_queues_; }
-  // TODO: int may change to enum if we have more debug modes
+  // TODO(ashwinma): int may change to enum if we have more debug modes
   int getDebugMode() const { return debug_mode_; }
-  // TODO: int may change to enum if we have more profile modes
+  // TODO(ashwinma): int may change to enum if we have more profile modes
   int getProfileMode() const { return profile_mode_; }
 
  private:
@@ -109,9 +109,9 @@ class Runtime {
   int getMaxSignals() const { return env_.getMaxSignals(); }
   int getNumGPUQueues() const { return env_.getNumGPUQueues(); }
   int getNumCPUQueues() const { return env_.getNumCPUQueues(); }
-  // TODO: int may change to enum if we have more debug modes
+  // TODO(ashwinma): int may change to enum if we have more debug modes
   int getDebugMode() const { return env_.getDebugMode(); }
-  // TODO: int may change to enum if we have more profile modes
+  // TODO(ashwinma): int may change to enum if we have more profile modes
   int getProfileMode() const { return env_.getProfileMode(); }
 
  private:
@@ -125,4 +125,4 @@ class Runtime {
 };
 }  // namespace core
 
-#endif  // __RT_H__
+#endif  // SRC_RUNTIME_INCLUDE_RT_H_

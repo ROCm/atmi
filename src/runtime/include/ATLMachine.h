@@ -3,8 +3,8 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef __ATL_MACHINE__
-#define __ATL_MACHINE__
+#ifndef SRC_RUNTIME_INCLUDE_ATLMACHINE_H_
+#define SRC_RUNTIME_INCLUDE_ATLMACHINE_H_
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 #include <vector>
@@ -15,16 +15,18 @@ class ATLMemory;
 
 class ATLProcessor {
  public:
-  ATLProcessor(hsa_agent_t agent) : _next_best_queue_id(0), _agent(agent) {
+  explicit ATLProcessor(hsa_agent_t agent)
+      : _next_best_queue_id(0), _agent(agent) {
     _queues.clear();
     _memories.clear();
   }
-  void addMemory(ATLMemory &p);
+  void addMemory(const ATLMemory &p);
   hsa_agent_t getAgent() const { return _agent; }
-  // TODO: Do we need this or are we building the machine structure just once in
+  // TODO(ashwinma): Do we need this or are we building the machine structure
+  // just once in
   // the program?
   // void removeMemory(ATLMemory &p);
-  std::vector<ATLMemory> &getMemories();
+  const std::vector<ATLMemory> &getMemories() const;
   virtual atmi_devtype_t getType() { return ATMI_DEVTYPE_ALL; }
 
   virtual void createQueues(const int count) {}
@@ -46,7 +48,9 @@ class ATLProcessor {
 
 class ATLCPUProcessor : public ATLProcessor {
  public:
-  ATLCPUProcessor(hsa_agent_t agent) : ATLProcessor(agent) { _agents.clear(); }
+  explicit ATLCPUProcessor(hsa_agent_t agent) : ATLProcessor(agent) {
+    _agents.clear();
+  }
   atmi_devtype_t getType() const { return ATMI_DEVTYPE_CPU; }
   void createQueues(const int count);
 
@@ -61,7 +65,8 @@ class ATLCPUProcessor : public ATLProcessor {
 
 class ATLGPUProcessor : public ATLProcessor {
  public:
-  ATLGPUProcessor(hsa_agent_t agent, atmi_devtype_t type = ATMI_DEVTYPE_dGPU)
+  explicit ATLGPUProcessor(hsa_agent_t agent,
+                           atmi_devtype_t type = ATMI_DEVTYPE_dGPU)
       : ATLProcessor(agent) {
     _type = type;
   }
@@ -74,7 +79,7 @@ class ATLGPUProcessor : public ATLProcessor {
 
 class ATLDSPProcessor : public ATLProcessor {
  public:
-  ATLDSPProcessor(hsa_agent_t agent) : ATLProcessor(agent) {}
+  explicit ATLDSPProcessor(hsa_agent_t agent) : ATLProcessor(agent) {}
   atmi_devtype_t getType() const { return ATMI_DEVTYPE_DSP; }
   void createQueues(const int count);
 };
@@ -106,7 +111,7 @@ class ATLMachine {
     _dsp_processors.clear();
   }
   template <typename T>
-  void addProcessor(T &p);
+  void addProcessor(const T &p);
   template <typename T>
   std::vector<T> &getProcessors();
   template <typename T>
@@ -120,8 +125,9 @@ class ATLMachine {
   std::vector<ATLDSPProcessor> _dsp_processors;
 };
 
-hsa_amd_memory_pool_t get_memory_pool(ATLProcessor &proc, const int mem_id);
+hsa_amd_memory_pool_t get_memory_pool(const ATLProcessor &proc,
+                                      const int mem_id);
 
 #include "ATLMachine.tcc"
 
-#endif  // __ATL_MACHINE__
+#endif  // SRC_RUNTIME_INCLUDE_ATLMACHINE_H_

@@ -404,7 +404,7 @@ void unlock(pthread_mutex_t *m);
 
 bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
 atl_task_t *get_new_task();
-} // namespace core
+}  // namespace core
 hsa_signal_t *get_worker_sig(hsa_queue_t *queue);
 
 const char *get_error_string(hsa_status_t err);
@@ -451,4 +451,4 @@ const char *get_atmi_error_string(atmi_status_t err);
     /*  printf("%s succeeded.\n", #msg);*/                           \
   }
 
-#endif  //SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H
+#endif  // SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H

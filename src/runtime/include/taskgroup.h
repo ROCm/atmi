@@ -8,6 +8,10 @@
 #define SRC_RUNTIME_INCLUDE_TASKGROUP_H_
 
 #include <hsa.h>
+
+#include <deque>
+#include <vector>
+
 #include "ATLMachine.h"
 #include "atl_internal.h"
 #include "atmi.h"
@@ -77,10 +81,10 @@ class TaskgroupImpl {
   std::deque<atl_task_t *> _running_ordered_tasks;
   std::vector<atl_task_t *> _running_default_tasks;
   std::vector<atl_task_t *> _running_groupable_tasks;
-  // TODO: for now, all waiting tasks (groupable and individual) are placed in a
-  // single queue. does it make sense to have groupable waiting tasks separately
-  // waiting in their own queue? perhaps not for now. should revisit if there
-  // are more than one callback threads
+  // TODO(ashwinma): for now, all waiting tasks (groupable and individual) are
+  // placed in a single queue. does it make sense to have groupable waiting
+  // tasks separately waiting in their own queue? perhaps not for now.
+  // Should revisit if there are more than one callback threads
   // std::vector<atl_task_t *> waiting_groupable_tasks;
   std::atomic_flag _callback_started;
 
@@ -88,4 +92,4 @@ class TaskgroupImpl {
   // atmi_full_policy_t full_policy;/**< What to do if maxsize reached */
 };  // class TaskgroupImpl
 }  // namespace core
-#endif  //SRC_RUNTIME_INCLUDE_TASKGROUP_H_
+#endif  // SRC_RUNTIME_INCLUDE_TASKGROUP_H_

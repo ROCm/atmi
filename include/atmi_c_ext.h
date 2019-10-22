@@ -17,12 +17,12 @@
 #define _CPPSTRING_
 #endif
 /**
- * @brief \deprecated Predefined function calling a null CPU task. 
+ * @brief \deprecated Predefined function calling a null CPU task.
  */
 extern _CPPSTRING_ atmi_task_handle_t __sync_kernel_pif(atmi_lparm_t* lparm);
 
 /**
- * @brief \deprecated Helper macros calling a 
+ * @brief \deprecated Helper macros calling a
  * null CPU task under specific conditions.
  */
 #define SYNC_STREAM(s)                            \

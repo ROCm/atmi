@@ -1,7 +1,7 @@
 #include "taskgroup.h"
 #include <cassert>
 #include "RealTimerClass.h"
-using namespace Global;
+using Global::RealTimer;
 extern RealTimer TaskWaitTimer;
 
 /* Taskgroup specific globals */

@@ -68,11 +68,11 @@ typedef enum {
  */
 typedef enum atmi_devtype_s {
   ATMI_DEVTYPE_CPU = 0x0001,
-  ATMI_DEVTYPE_iGPU = 0x0010, // Integrated GPU
-  ATMI_DEVTYPE_dGPU = 0x0100, // Discrete GPU
-  ATMI_DEVTYPE_GPU = ATMI_DEVTYPE_iGPU | ATMI_DEVTYPE_dGPU, // Any GPU
+  ATMI_DEVTYPE_iGPU = 0x0010,                                // Integrated GPU
+  ATMI_DEVTYPE_dGPU = 0x0100,                                // Discrete GPU
+  ATMI_DEVTYPE_GPU = ATMI_DEVTYPE_iGPU | ATMI_DEVTYPE_dGPU,  // Any GPU
   ATMI_DEVTYPE_DSP = 0x1000,
-  ATMI_DEVTYPE_ALL = 0x1111   // Union of all device types
+  ATMI_DEVTYPE_ALL = 0x1111  // Union of all device types
 } atmi_devtype_t;
 
 /**
@@ -94,25 +94,21 @@ typedef enum atmi_state_s {
   ATMI_DISPATCHED = 2,
   ATMI_EXECUTED = 3,
   ATMI_COMPLETED = 4,
-  ATMI_FAILED = 9999   
+  ATMI_FAILED = 9999
 } atmi_state_t;
 
 /**
  * @brief Scheduler Types.
  */
 typedef enum atmi_scheduler_s {
-  ATMI_SCHED_NONE = 0, // No scheduler, all tasks go to the same queue
-  ATMI_SCHED_RR        // Round-robin tasks across queues
+  ATMI_SCHED_NONE = 0,  // No scheduler, all tasks go to the same queue
+  ATMI_SCHED_RR         // Round-robin tasks across queues
 } atmi_scheduler_t;
 
 /**
  * @brief ATMI data arg types.
  */
-typedef enum atmi_arg_type_s {
-  ATMI_IN,
-  ATMI_OUT,
-  ATMI_IN_OUT
-} atmi_arg_type_t;
+typedef enum atmi_arg_type_s { ATMI_IN, ATMI_OUT, ATMI_IN_OUT } atmi_arg_type_t;
 
 /**
  * @brief ATMI Memory Fences for Tasks.
@@ -180,7 +176,7 @@ typedef struct atmi_tprofile_s {
    */
   unsigned long int start_time;
   /**
-   * Timestamp when the task completed execution.                       
+   * Timestamp when the task completed execution.
    */
   unsigned long int end_time;
 } atmi_tprofile_t;
@@ -259,12 +255,12 @@ typedef struct atmi_device_s {
    */
   unsigned int core_count;
   /**
-   * The number of memory spaces/regions that are accessible 
+   * The number of memory spaces/regions that are accessible
    * from this device
    */
   unsigned int memory_count;
   /**
-   * Array of memory spaces/regions that are accessible 
+   * Array of memory spaces/regions that are accessible
    * from this device.
    */
   atmi_memory_t* memories;
@@ -278,10 +274,10 @@ typedef struct atmi_machine_s {
    * The number of devices categorized by the device type
    */
   unsigned int device_count_by_type[ATMI_DEVTYPE_ALL];
-  /** 
-   * The device structures categorized by the device type 
+  /**
+   * The device structures categorized by the device type
    */
-  atmi_device_t* devices_by_type[ATMI_DEVTYPE_ALL]; 
+  atmi_device_t* devices_by_type[ATMI_DEVTYPE_ALL];
 } atmi_machine_t;
 
 /**
@@ -323,7 +319,7 @@ typedef struct atmi_task_handle_s {
         unsigned long int all;
     };
 } atmi_task_handle_t;
-//#define ATMI_TASK_HANDLE(low) (atmi_task_handle_t){.node=0,.hi=0,.lo=low}
+// #define ATMI_TASK_HANDLE(low) (atmi_task_handle_t){.node=0,.hi=0,.lo=low}
 #else
 /**
  * @brief The ATMI task handle.
@@ -334,7 +330,7 @@ typedef unsigned long int atmi_task_handle_t;
  * @brief The ATMI taskgroup handle.
  *
  * @details ATMI task groups can be a collection of compute and memory tasks.
- * They can have different properties like being ordered or 
+ * They can have different properties like being ordered or
  * belonging to the same compute/memory place.
  *
  */
@@ -365,10 +361,10 @@ typedef struct atmi_lparm_s {
    * Workgroup size in each dimension
    */
   unsigned long groupDim[3];
-  /** Taskgroup to which this task belongs. 
+  /** Taskgroup to which this task belongs.
    * Default = @p ATMI_DEFAULT_TASKGROUP_HANDLE. The runtime
    * enables several optimizations for tasks within the same
-   * taskgroup (e.g., ordered taskgroups can execute in the 
+   * taskgroup (e.g., ordered taskgroups can execute in the
    * same queue, or tasks from the same taskgroup can be scheduled
    * independently from tasks from another taskgroup, and so on).
    */
@@ -384,12 +380,12 @@ typedef struct atmi_lparm_s {
    */
   boolean synchronous;
   /**
-   * Memory acquire semantics for this task. 
+   * Memory acquire semantics for this task.
    * Default = ATMI_FENCE_SCOPE_SYSTEM
    */
   atmi_task_fence_scope_t acquire_scope;
   /**
-   * Memory release semantics for this task. 
+   * Memory release semantics for this task.
    * Default = ATMI_FENCE_SCOPE_SYSTEM
    */
   atmi_task_fence_scope_t release_scope;
@@ -415,8 +411,8 @@ typedef struct atmi_lparm_s {
    */
   atmi_taskgroup_handle_t* required_groups;
   /**
-   * Indicates if metrics need to be collected about this task or not. If 
-   * @p true, then the profiling information will be returned in 
+   * Indicates if metrics need to be collected about this task or not. If
+   * @p true, then the profiling information will be returned in
    * task_info->profile structure, so this needs task_info to not be NULL.
    * Default = @p false.
    */
@@ -438,7 +434,7 @@ typedef struct atmi_lparm_s {
    * Optional user-created structure to store executed task's information
    * like task's state or task's time profile.
    */
-  atmi_task_t* task_info; 
+  atmi_task_t* task_info;
   /**
    * (Experimental) The continuation task of the current task.
    */
@@ -449,10 +445,10 @@ typedef struct atmi_lparm_s {
  * @brief The ATMI Data Copy Parameter Data Structure
  */
 typedef struct atmi_cparm_s {
-  /** Taskgroup to which this task belongs. 
+  /** Taskgroup to which this task belongs.
    * Default = @p ATMI_DEFAULT_TASKGROUP_HANDLE. The runtime
    * enables several optimizations for tasks within the same
-   * taskgroup (e.g., ordered taskgroups can execute in the 
+   * taskgroup (e.g., ordered taskgroups can execute in the
    * same queue, or tasks from the same taskgroup can be scheduled
    * independently from tasks from another taskgroup, and so on).
    */
@@ -464,8 +460,8 @@ typedef struct atmi_cparm_s {
    */
   boolean groupable;
   /**
-   * Indicates if metrics need to be collected about this task or not. If 
-   * @p true, then the profiling information will be returned in 
+   * Indicates if metrics need to be collected about this task or not. If
+   * @p true, then the profiling information will be returned in
    * task_info->profile structure, so this needs task_info to not be NULL.
    * Default = @p false.
    */
@@ -523,7 +519,7 @@ typedef struct atmi_data_s {
 } atmi_data_t;
 /** @} */
 
-// Below are some helper macros that can be used to setup 
+// Below are some helper macros that can be used to setup
 // some of the ATMI data structures.
 #define ATMI_PLACE_ANY(node)                                    \
   {                                                             \
@@ -689,4 +685,4 @@ typedef struct atmi_data_s {
   X->groupDim[1] = 8;             \
   X->groupDim[2] = 8;
 
-#endif  //INCLUDE_ATMI_H_
+#endif  // INCLUDE_ATMI_H_

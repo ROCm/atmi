@@ -53,7 +53,7 @@ class RealTimer {
   /// Print the current state of the counter to the stream with custom
   /// description
   /// string
-  void BufPrint(std::ostream& o, std::string& str) const;
+  void BufPrint(std::ostream& o, const std::string& str) const;
 
   /// Return the system time.
   double CurrentTime() const;
@@ -85,7 +85,7 @@ inline RealTimer::RealTimer(const std::string& desc)
       elapsed(0.0),
       isRunning(false),
       count(0) {
-  time_offset = (int)CurrentTime();
+  time_offset = static_cast<int>(CurrentTime());
   profile_mode = core::Runtime::getInstance().getProfileMode();
 }
 
@@ -134,7 +134,7 @@ inline void RealTimer::Reset() {
   start_time = 0;
   count = 0;
   time_offset = 0;
-  time_offset = (int)CurrentTime();
+  time_offset = static_cast<int>(CurrentTime());
 }
 
 inline double RealTimer::Elapsed() const {
@@ -153,11 +153,13 @@ inline double RealTimer::CurrentTime() const {
 #if 1
   timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
-  return (double)(ts.tv_sec - time_offset) + (double)ts.tv_nsec * 1e-9;
+  return static_cast<double>(ts.tv_sec - time_offset) +
+      static_cast<double>(ts.tv_nsec) * 1e-9;
 #else
   timeval tv;
   gettimeofday(&tv, NULL);
-  return (double)(tv.tv_sec - time_offset) + (double)tv.tv_usec * 1e-6;
+  return static_cast<double>(tv.tv_sec - time_offset) +
+      static_cast<double>(tv.tv_usec) * 1e-6;
 #endif
 }
 
@@ -170,7 +172,7 @@ inline void RealTimer::Print(std::ostream& o) const {
 #endif
 }
 
-inline void RealTimer::BufPrint(std::ostream& o, std::string& str) const {
+inline void RealTimer::BufPrint(std::ostream& o, const std::string& str) const {
 #ifdef USE_PROFILE
   if (profile_mode) {
     o << str << ": " << elapsed * 1000 << " msecs " << count << " times";

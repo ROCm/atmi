@@ -19,7 +19,8 @@ hsa_status_t ATLGPUQueue::setPlace(atmi_place_t place) {
   hsa_status_t val = HSA_STATUS_SUCCESS;
   if (!equalsPlace(_place, place)) {
     _place = place;
-    val = hsa_amd_queue_cu_set_mask(_queue, 2, (uint32_t *)&(_place.cu_mask));
+    val = hsa_amd_queue_cu_set_mask(
+        _queue, 2, reinterpret_cast<uint32_t *>(&(_place.cu_mask)));
   }
   return val;
 }
@@ -31,7 +32,7 @@ hsa_status_t ATLCPUQueue::setPlace(atmi_place_t place) {
     // change pthread-to-core binding based on cpu_set. If number of bits that
     // are set on cpu_set is >1 then choose the first non-zero bit and place
     // the thread on that core.
-    // TODO: Any other scheduling algorithms based on load, task group
+    // TODO(ashwinma): Any other scheduling algorithms based on load, task group
     // annotations, and so on...
   }
   return val;

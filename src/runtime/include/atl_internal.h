@@ -3,14 +3,23 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H
-#define SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H
+#ifndef SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H_
+#define SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H_
 #include <inttypes.h>
+#include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+
+#include <atomic>
+#include <cstring>
+#include <deque>
+#include <map>
+#include <queue>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "hsa.h"
 #include "hsa_ext_amd.h"
@@ -19,14 +28,7 @@
 #include "atmi.h"
 #include "atmi_kl.h"
 #include "atmi_runtime.h"
-
-#include <RealTimerClass.h>
-#include <pthread.h>
-#include <atomic>
-#include <deque>
-#include <map>
-#include <queue>
-#include <vector>
+#include "RealTimerClass.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,13 +38,13 @@ extern "C" {
 #define _CPPSTRING_
 #endif
 
-//#define ATMI_MAX_TASKGROUPS            8
-//#define ATMI_MAX_TASKS_PER_TASKGROUP   125
+// #define ATMI_MAX_TASKGROUPS            8
+// #define ATMI_MAX_TASKS_PER_TASKGROUP   125
 
 #define SNK_MAX_FUNCTIONS 100
 
-//#define SNK_MAX_TASKS 32 //100000 //((ATMI_MAX_TASKGROUPS) *
-//(ATMI_MAX_TASKS_PER_TASKGROUP))
+// #define SNK_MAX_TASKS 32 //100000 //((ATMI_MAX_TASKGROUPS) *
+// (ATMI_MAX_TASKS_PER_TASKGROUP))
 
 #define SNK_WAIT 1
 #define SNK_NOWAIT 0
@@ -117,7 +119,7 @@ typedef void *ARG_TYPE;
 #define REPEAT16(name) REPEAT8(name) REPEAT8(name)
 
 #define ATMI_WAIT_STATE HSA_WAIT_STATE_BLOCKED
-//#define ATMI_WAIT_STATE HSA_WAIT_STATE_ACTIVE
+// #define ATMI_WAIT_STATE HSA_WAIT_STATE_ACTIVE
 
 typedef struct atl_kernel_enqueue_args_s {
   char num_gpu_queues;
@@ -326,7 +328,7 @@ inline T alignDown(T value, size_t alignment) {
 
 template <typename T>
 inline T *alignDown(T *value, size_t alignment) {
-  return (T *)alignDown((intptr_t)value, alignment);
+  return reinterpret_cast<T *>(alignDown((intptr_t)value, alignment));
 }
 
 template <typename T>
@@ -336,13 +338,14 @@ inline T alignUp(T value, size_t alignment) {
 
 template <typename T>
 inline T *alignUp(T *value, size_t alignment) {
-  return (T *)alignDown((intptr_t)(value + alignment - 1), alignment);
+  return reinterpret_cast<T *>(alignDown((intptr_t)(value + alignment - 1),
+                                         alignment));
 }
 
 template <typename T>
-void clear_container(T &q) {
+void clear_container(T *q) {
   T empty;
-  std::swap(q, empty);
+  std::swap(*q, empty);
 }
 
 bool is_valid_kernel_id(atl_kernel_t *kernel, unsigned int kernel_id);
@@ -451,4 +454,4 @@ const char *get_atmi_error_string(atmi_status_t err);
     /*  printf("%s succeeded.\n", #msg);*/                           \
   }
 
-#endif  // SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H
+#endif  // SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H_

@@ -1961,7 +1961,7 @@ atmi_status_t Runtime::CreateEmptyKernel(atmi_kernel_t *atmi_kernel,
   for (int i = 0; i < num_args; i++) {
     kernel->arg_sizes.push_back(arg_sizes[i]);
   }
-  clear_container(kernel->impls);
+  clear_container(&(kernel->impls));
   kernel->pif_id = pif_id;
   KernelImplMap[pif_id] = kernel;
   return ATMI_STATUS_SUCCESS;
@@ -1972,7 +1972,7 @@ atmi_status_t Runtime::ReleaseKernel(atmi_kernel_t atmi_kernel) {
 
   atl_kernel_t *kernel = KernelImplMap[pif_id];
   // kernel->id_map.clear();
-  clear_container(kernel->arg_sizes);
+  clear_container(&(kernel->arg_sizes));
   for (std::vector<atl_kernel_impl_t *>::iterator it = kernel->impls.begin();
        it != kernel->impls.end(); it++) {
     lock(&((*it)->mutex));
@@ -1996,11 +1996,11 @@ atmi_status_t Runtime::ReleaseKernel(atmi_kernel_t atmi_kernel) {
     } else if ((*it)->devtype == ATMI_DEVTYPE_CPU) {
       free((*it)->kernarg_region);
     }
-    clear_container((*it)->free_kernarg_segments);
+    clear_container(&((*it)->free_kernarg_segments));
     unlock(&((*it)->mutex));
     delete *it;
   }
-  clear_container(kernel->impls);
+  clear_container(&(kernel->impls));
   delete kernel;
 
   KernelImplMap.erase(pif_id);

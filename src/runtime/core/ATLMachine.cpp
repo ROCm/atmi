@@ -36,10 +36,9 @@ void ATLMemory::free(void *ptr) {
 }*/
 
 void ATLProcessor::addMemory(const ATLMemory &mem) {
-  for (std::vector<ATLMemory>::iterator it = _memories.begin();
-       it != _memories.end(); it++) {
+  for (auto& mem_obj : _memories) {
     // if the memory already exists, then just return
-    if (mem.getMemory().handle == it->getMemory().handle) return;
+    if (mem.getMemory().handle == mem_obj.getMemory().handle) return;
   }
   _memories.push_back(mem);
 }
@@ -202,9 +201,7 @@ agent_t *ATLCPUProcessor::getThreadAgent(const int index) {
 
 hsa_signal_t *ATLCPUProcessor::get_worker_sig(hsa_queue_t *q) {
   hsa_signal_t *ret = NULL;
-  for (std::vector<agent_t *>::iterator it = _agents.begin();
-       it != _agents.end(); it++) {
-    agent_t *agent = *it;
+  for (auto agent : _agents) {
     if (agent->queue == q) {
       ret = &(agent->worker_sig);
       break;
@@ -260,10 +257,8 @@ void ATLCPUProcessor::createQueues(const int count) {
 void ATLDSPProcessor::createQueues(const int count) {}
 
 void ATLProcessor::destroyQueues() {
-  hsa_status_t err;
-  for (std::vector<hsa_queue_t *>::iterator it = _queues.begin();
-       it != _queues.end(); it++) {
-    err = hsa_queue_destroy(*it);
+  for (auto queue : _queues) {
+    hsa_status_t err = hsa_queue_destroy(queue);
     ErrorCheck(Destroying the queue, err);
   }
 }

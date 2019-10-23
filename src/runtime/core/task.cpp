@@ -511,24 +511,23 @@ void handle_signal_callback(atl_task_t *task) {
   // dispatch all ready tasks in a round-robin manner to the available
   // GPU/CPU queues.
   // decrement reference count of its dependencies; add those with ref count = 0
-  // to a
-  // “ready” list
-  atl_task_vector_t &deps = task->and_successors;
-  DEBUG_PRINT("Deps list of %lu [%lu]: ", task->id, deps.size());
+  // to a 'ready' list.
+  atl_task_vector_t &successors = task->and_successors;
+  DEBUG_PRINT("Deps list of %lu [%lu]: ", task->id, successors.size());
   atl_task_vector_t temp_list;
-  for (atl_task_vector_t::iterator it = deps.begin(); it != deps.end(); it++) {
+  for (auto successor : successors) {
     // FIXME: should we be grabbing a lock on each successor before
     // decrementing their predecessor count? Currently, it may not be
     // required because there is only one callback thread, but what if there
     // were more?
-    lock(&((*it)->mutex));
-    DEBUG_PRINT(" %lu(%d) ", (*it)->id, (*it)->num_predecessors);
-    (*it)->num_predecessors--;
-    if ((*it)->num_predecessors == 0) {
+    lock(&(successor->mutex));
+    DEBUG_PRINT(" %lu(%d) ", successor->id, successor->num_predecessors);
+    successor->num_predecessors--;
+    if (successor->num_predecessors == 0) {
       // add to ready list
-      temp_list.push_back(*it);
+      temp_list.push_back(successor);
     }
-    unlock(&((*it)->mutex));
+    unlock(&(successor->mutex));
   }
   std::set<pthread_mutex_t *> mutexes;
   // release the kernarg segment back to the kernarg pool
@@ -541,11 +540,10 @@ void handle_signal_callback(atl_task_t *task) {
   mutexes.insert(&mutex_readyq_);
   lock_set(mutexes);
   DEBUG_PRINT("\n");
-  for (atl_task_vector_t::iterator it = temp_list.begin();
-       it != temp_list.end(); it++) {
+  for (auto t : temp_list) {
     // FIXME: if groupable task, push it in the right taskgroup
     // else push it to readyqueue
-    ReadyTaskQueue.push(*it);
+    ReadyTaskQueue.push(t);
   }
   // release your own signal to the pool
   FreeSignalPool.push(task->signal);
@@ -730,9 +728,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
   unlock(&(taskgroup->_group_mutex));
 
   std::set<pthread_mutex_t *> mutexes;
-  for (std::vector<atl_task_t *>::iterator it = group_tasks.begin();
-       it != group_tasks.end(); it++) {
-    atl_task_t *task = *it;
+  for (auto task : group_tasks) {
     mutexes.insert(&(task->mutex));
     atl_kernel_t *kernel = task->kernel;
     atl_kernel_impl_t *kernel_impl = NULL;
@@ -764,17 +760,14 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       }
     }
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      atl_task_vector_t &requires = task->and_predecessors;
-      for (int idx = 0; idx < requires.size(); idx++) {
-        mutexes.insert(&(requires[idx]->mutex));
+      for (auto& t : task->and_predecessors) {
+        mutexes.insert(&(t->mutex));
       }
     }
   }
   mutexes.insert(&mutex_readyq_);
   lock_set(mutexes);
-  for (std::vector<atl_task_t *>::iterator itg = group_tasks.begin();
-       itg != group_tasks.end(); itg++) {
-    atl_task_t *task = *itg;
+  for (auto task : group_tasks) {
     atl_kernel_t *kernel = task->kernel;
     atl_kernel_impl_t *kernel_impl = NULL;
     if (kernel) {
@@ -785,20 +778,16 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       std::vector<hsa_signal_t> temp_list;
       temp_list.clear();
       // if num_successors == 0 then we can reuse their signal.
-      atl_task_vector_t &requires = task->and_predecessors;
-      for (atl_task_vector_t::iterator it = requires.begin();
-           it != requires.end(); it++) {
-        assert((*it)->state >= ATMI_DISPATCHED);
-        (*it)->num_successors--;
-        if ((*it)->state >= ATMI_EXECUTED && (*it)->num_successors == 0) {
+      for (auto pred_task : task->and_predecessors) {
+        assert(pred_task->state >= ATMI_DISPATCHED);
+        pred_task->num_successors--;
+        if (pred_task->state >= ATMI_EXECUTED && pred_task->num_successors == 0) {
           // release signal because this predecessor is done waiting for
-          temp_list.push_back((*it)->signal);
+          temp_list.push_back(pred_task->signal);
         }
       }
-      for (std::vector<hsa_signal_t>::iterator it = temp_list.begin();
-           it != temp_list.end(); it++) {
-        // hsa_signal_store_relaxed((*it), 1);
-        FreeSignalPool.push(*it);
+      for (auto signal : temp_list) {
+        FreeSignalPool.push(signal);
         DEBUG_PRINT(
             "[Handle Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue "
             "Size: %lu\n",
@@ -831,32 +820,30 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       // = 0 to a
       // “ready” list
       lock(&(taskgroup->_group_mutex));
-      atl_task_vector_t deps = taskgroup->_and_successors;
+      atl_task_vector_t& successors = taskgroup->_and_successors;
       taskgroup->_and_successors.clear();
       unlock(&(taskgroup->_group_mutex));
-      DEBUG_PRINT("Deps list of %p [%lu]: ", taskgroup, deps.size());
+      DEBUG_PRINT("Deps list of %p [%lu]: ", taskgroup, successors.size());
       atl_task_vector_t temp_list;
-      for (atl_task_vector_t::iterator it = deps.begin(); it != deps.end();
-           it++) {
+      for (auto successor : successors) {
         // FIXME: should we be grabbing a lock on each successor before
         // decrementing their predecessor count? Currently, it may not be
         // required because there is only one callback thread, but what if there
         // were more?
-        lock(&((*it)->mutex));
-        DEBUG_PRINT(" %lu(%d) ", (*it)->id, (*it)->num_predecessors);
-        (*it)->num_predecessors--;
-        if ((*it)->num_predecessors == 0) {
+        lock(&(successor->mutex));
+        DEBUG_PRINT(" %lu(%d) ", successor->id, successor->num_predecessors);
+        successor->num_predecessors--;
+        if (successor->num_predecessors == 0) {
           // add to ready list
-          temp_list.push_back(*it);
+          temp_list.push_back(successor);
         }
-        unlock(&((*it)->mutex));
+        unlock(&(successor->mutex));
       }
       lock(&mutex_readyq_);
-      for (atl_task_vector_t::iterator it = temp_list.begin();
-           it != temp_list.end(); it++) {
+      for (auto t : temp_list) {
         // FIXME: if groupable task, push it in the right taskgroup
         // else push it to readyqueue
-        ReadyTaskQueue.push(*it);
+        ReadyTaskQueue.push(t);
       }
       unlock(&mutex_readyq_);
 
@@ -1490,12 +1477,10 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
     TaskList.pop_front();
     // save the current set of sink tasks
     SinkTasks.insert(ret);
-    atl_task_vector_t::iterator it = ret->and_predecessors.begin();
-    for (; it != ret->and_predecessors.end(); it++) {
+    for (auto& pred_task : ret->and_predecessors) {
       // The predecessors are no longer sink tasks (if they were until now). The
-      // current
-      // task will be the sink task for its predecessors
-      SinkTasks.erase(*it);
+      // current task will be the sink task for its predecessors
+      SinkTasks.erase(pred_task);
     }
     if (ret->prev_ordered_task) {
       // remove previous task in the ordered list from sink tasks
@@ -2123,11 +2108,9 @@ int get_kernel_id(atmi_lparm_t *lparm, atl_kernel_t *kernel) {
   int kernel_id = lparm->kernel_id;
   if (kernel_id == -1) {
     // choose the first available kernel for the given devtype
-    atmi_devtype_t type = lparm->place.type;
-    for (std::vector<atl_kernel_impl_t *>::iterator it = kernel->impls.begin();
-         it != kernel->impls.end(); it++) {
-      if ((*it)->devtype == type) {
-        kernel_id = (*it)->kernel_id;
+    for (auto kernel_impl : kernel->impls) {
+      if (kernel_impl->devtype == lparm->place.type) {
+        kernel_id = kernel_impl->kernel_id;
         break;
       }
     }

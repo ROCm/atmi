@@ -776,9 +776,8 @@ hsa_status_t init_comute_and_memory() {
     int fine_memories_size = 0;
     int coarse_memories_size = 0;
     DEBUG_PRINT("CPU memory types:\t");
-    for (std::vector<ATLMemory>::iterator it = memories.begin();
-         it != memories.end(); it++) {
-      atmi_memtype_t type = it->getType();
+    for (auto& memory : memories) {
+      atmi_memtype_t type = memory.getType();
       if (type == ATMI_MEMTYPE_FINE_GRAINED) {
         fine_memories_size++;
         DEBUG_PRINT("Fine\t");
@@ -801,9 +800,8 @@ hsa_status_t init_comute_and_memory() {
     int fine_memories_size = 0;
     int coarse_memories_size = 0;
     DEBUG_PRINT("GPU memory types:\t");
-    for (std::vector<ATLMemory>::iterator it = memories.begin();
-         it != memories.end(); it++) {
-      atmi_memtype_t type = it->getType();
+    for (auto& memory : memories) {
+      atmi_memtype_t type = memory.getType();
       if (type == ATMI_MEMTYPE_FINE_GRAINED) {
         fine_memories_size++;
         DEBUG_PRINT("Fine\t");
@@ -2068,90 +2066,81 @@ atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel,
         atl_gpu_kernarg_pool,
         sizeof(int) + max_kernarg_segment_size * MAX_NUM_KERNELS, 0,
         &ke_kernarg_region);
-      ErrorCheck(Allocating memory for the executable-kernel, err);
-      allow_access_to_all_gpu_agents(ke_kernarg_region);
-      *reinterpret_cast<int *>(ke_kernarg_region) = 0;
-      char *ke_kernargs =
-          reinterpret_cast<char *>(ke_kernarg_region) + sizeof(int);
+    ErrorCheck(Allocating memory for the executable-kernel, err);
+    allow_access_to_all_gpu_agents(ke_kernarg_region);
+    *reinterpret_cast<int *>(ke_kernarg_region) = 0;
+    char *ke_kernargs =
+      reinterpret_cast<char *>(ke_kernarg_region) + sizeof(int);
 
-      // fill in the kernel template AQL packets
-      int cur_kernel = g_ke_args.kernel_counter++;
-      // FIXME: reformulate this for debug mode
-      // assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
-      if (cur_kernel >= MAX_NUM_KERNEL_TYPES) return ATMI_STATUS_ERROR;
-      atmi_kernel_enqueue_template_t *ke_template =
-          &(reinterpret_cast<atmi_kernel_enqueue_template_t *>(
-              g_ke_args.kernarg_template_ptr))[cur_kernel];
-      // To be used by device code to pick a task template
-      ke_template->kernel_handle = atmi_kernel->handle;
+    // fill in the kernel template AQL packets
+    int cur_kernel = g_ke_args.kernel_counter++;
+    // FIXME: reformulate this for debug mode
+    // assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
+    if (cur_kernel >= MAX_NUM_KERNEL_TYPES) return ATMI_STATUS_ERROR;
+    atmi_kernel_enqueue_template_t *ke_template =
+      &(reinterpret_cast<atmi_kernel_enqueue_template_t *>(
+            g_ke_args.kernarg_template_ptr))[cur_kernel];
+    // To be used by device code to pick a task template
+    ke_template->kernel_handle = atmi_kernel->handle;
 
-      // fill in the kernel arg regions
-      ke_template->kernarg_segment_size = max_kernarg_segment_size;
-      ke_template->kernarg_regions = ke_kernarg_region;
+    // fill in the kernel arg regions
+    ke_template->kernarg_segment_size = max_kernarg_segment_size;
+    ke_template->kernarg_regions = ke_kernarg_region;
 
-      std::vector<atl_kernel_impl_t *>::iterator impl_it;
-      int this_impl_id = 0;
-      for (impl_it = kernel->impls.begin(); impl_it != kernel->impls.end();
-           impl_it++) {
-        atl_kernel_impl_t *this_impl = *impl_it;
-        if (this_impl->devtype == ATMI_DEVTYPE_GPU) {
-          // fill in the GPU AQL template
-          hsa_kernel_dispatch_packet_t *k_packet = &(ke_template->k_packet);
-          k_packet->header = 0;  // ATMI_DEVTYPE_GPU;
-          k_packet->kernarg_address = NULL;
-          k_packet->kernel_object = this_impl->kernel_objects[0];
-          k_packet->private_segment_size = this_impl->private_segment_sizes[0];
-          k_packet->group_segment_size = this_impl->group_segment_sizes[0];
-        } else if (this_impl->devtype == ATMI_DEVTYPE_CPU) {
-          // fill in the CPU AQL template
-          hsa_agent_dispatch_packet_t *a_packet = &(ke_template->a_packet);
-          a_packet->header = 0;  // ATMI_DEVTYPE_CPU;
-          a_packet->type = (uint16_t)this_impl_id;
-          /* FIXME: We are considering only void return types for now.*/
-          // a_packet->return_address = NULL;
-          /* Set function args */
-          a_packet->arg[0] = (uint64_t)ATMI_NULL_TASK_HANDLE;
-          a_packet->arg[1] = (uint64_t)NULL;
-          a_packet->arg[2] =
-              (uint64_t)kernel;  // pass task handle to fill in metrics
-          a_packet->arg[3] = 0;  // tasks can query for current task ID
+    int kernel_impl_id = 0;
+    for (auto kernel_impl : kernel->impls) {
+      if (kernel_impl->devtype == ATMI_DEVTYPE_GPU) {
+        // fill in the GPU AQL template
+        hsa_kernel_dispatch_packet_t *k_packet = &(ke_template->k_packet);
+        k_packet->header = 0;  // ATMI_DEVTYPE_GPU;
+        k_packet->kernarg_address = NULL;
+        k_packet->kernel_object = kernel_impl->kernel_objects[0];
+        k_packet->private_segment_size = kernel_impl->private_segment_sizes[0];
+        k_packet->group_segment_size = kernel_impl->group_segment_sizes[0];
+        for (int k = 0; k < MAX_NUM_KERNELS; k++) {
+          atmi_implicit_args_t *impl_args =
+            reinterpret_cast<atmi_implicit_args_t *>(
+                reinterpret_cast<char *>(kernel_impl->kernarg_region) +
+                (((k + 1) * kernel_impl->kernarg_segment_size) -
+                 sizeof(atmi_implicit_args_t)));
+          // fill in the queue
+          impl_args->num_gpu_queues = g_ke_args.num_gpu_queues;
+          impl_args->gpu_queue_ptr = (uint64_t)g_ke_args.gpu_queue_ptr;
+          impl_args->num_cpu_queues = g_ke_args.num_cpu_queues;
+          impl_args->cpu_queue_ptr = (uint64_t)g_ke_args.cpu_queue_ptr;
+          impl_args->cpu_worker_signals =
+            (uint64_t)g_ke_args.cpu_worker_signals;
+
+          // fill in the signals?
+          impl_args->kernarg_template_ptr =
+            (uint64_t)g_ke_args.kernarg_template_ptr;
+
+          // *** fill in implicit args for kernel enqueue ***
+          atmi_implicit_args_t *ke_impl_args =
+            reinterpret_cast<atmi_implicit_args_t *>(
+                reinterpret_cast<char *>(ke_kernargs) +
+                (((k + 1) * kernel_impl->kernarg_segment_size) -
+                 sizeof(atmi_implicit_args_t)));
+          // SHARE the same pipe for printf etc
+          *ke_impl_args = *impl_args;
         }
-        this_impl_id++;
-      }
-      for (impl_it = kernel->impls.begin(); impl_it != kernel->impls.end();
-           impl_it++) {
-        atl_kernel_impl_t *this_impl = *impl_it;
-        if (this_impl->devtype == ATMI_DEVTYPE_GPU) {
-          for (int k = 0; k < MAX_NUM_KERNELS; k++) {
-            atmi_implicit_args_t *impl_args =
-                reinterpret_cast<atmi_implicit_args_t *>(
-                    reinterpret_cast<char *>(this_impl->kernarg_region) +
-                    (((k + 1) * this_impl->kernarg_segment_size) -
-                     sizeof(atmi_implicit_args_t)));
-            // fill in the queue
-            impl_args->num_gpu_queues = g_ke_args.num_gpu_queues;
-            impl_args->gpu_queue_ptr = (uint64_t)g_ke_args.gpu_queue_ptr;
-            impl_args->num_cpu_queues = g_ke_args.num_cpu_queues;
-            impl_args->cpu_queue_ptr = (uint64_t)g_ke_args.cpu_queue_ptr;
-            impl_args->cpu_worker_signals =
-                (uint64_t)g_ke_args.cpu_worker_signals;
-
-            // fill in the signals?
-            impl_args->kernarg_template_ptr =
-                (uint64_t)g_ke_args.kernarg_template_ptr;
-
-            // *** fill in implicit args for kernel enqueue ***
-            atmi_implicit_args_t *ke_impl_args =
-                reinterpret_cast<atmi_implicit_args_t *>(
-                    reinterpret_cast<char *>(ke_kernargs) +
-                    (((k + 1) * this_impl->kernarg_segment_size) -
-                     sizeof(atmi_implicit_args_t)));
-            // SHARE the same pipe for printf etc
-            *ke_impl_args = *impl_args;
-          }
-        }
+      } else if (kernel_impl->devtype == ATMI_DEVTYPE_CPU) {
+        // fill in the CPU AQL template
+        hsa_agent_dispatch_packet_t *a_packet = &(ke_template->a_packet);
+        a_packet->header = 0;  // ATMI_DEVTYPE_CPU;
+        a_packet->type = (uint16_t)kernel_impl_id;
+        /* FIXME: We are considering only void return types for now.*/
+        // a_packet->return_address = NULL;
+        /* Set function args */
+        a_packet->arg[0] = (uint64_t)ATMI_NULL_TASK_HANDLE;
+        a_packet->arg[1] = (uint64_t)NULL;
+        a_packet->arg[2] =
+          (uint64_t)kernel;  // pass task handle to fill in metrics
+        a_packet->arg[3] = 0;  // tasks can query for current task ID
         // CPU impls dont use implicit args for now
       }
+      kernel_impl_id++;
+    }
   }
   return ATMI_STATUS_SUCCESS;
 }

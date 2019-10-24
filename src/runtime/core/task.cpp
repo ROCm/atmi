@@ -704,28 +704,28 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
   // we need to define dependencies between tasks and task groups better...
 
   // release resources
-  lock(&(taskgroup->_group_mutex));
-  hsa_signal_wait_acquire(taskgroup->_group_signal, HSA_SIGNAL_CONDITION_EQ, 0,
+  lock(&(taskgroup->group_mutex_));
+  hsa_signal_wait_acquire(taskgroup->group_signal_, HSA_SIGNAL_CONDITION_EQ, 0,
                           UINT64_MAX, ATMI_WAIT_STATE);
 
-  std::vector<atl_task_t *> group_tasks = taskgroup->_running_groupable_tasks;
-  taskgroup->_running_groupable_tasks.clear();
-  if (taskgroup->_ordered) {
+  std::vector<atl_task_t *> group_tasks = taskgroup->running_groupable_tasks_;
+  taskgroup->running_groupable_tasks_.clear();
+  if (taskgroup->ordered_) {
     DEBUG_PRINT("Handling group signal callback for task group: %p size: %lu\n",
                 taskgroup, group_tasks.size());
     for (int t = 0; t < group_tasks.size(); t++) {
       // does it matter which task was enqueued first, as long as we are
       // popping one task for every push?
-      if (!taskgroup->_running_ordered_tasks.empty()) {
+      if (!taskgroup->running_ordered_tasks_.empty()) {
         DEBUG_PRINT("Removing task %lu with state: %d\n",
-                    taskgroup->_running_ordered_tasks.front()->id,
-                    taskgroup->_running_ordered_tasks.front()->state.load());
-        taskgroup->_running_ordered_tasks.pop_front();
+                    taskgroup->running_ordered_tasks_.front()->id,
+                    taskgroup->running_ordered_tasks_.front()->state.load());
+        taskgroup->running_ordered_tasks_.pop_front();
       }
     }
   }
-  taskgroup->_callback_started.clear();
-  unlock(&(taskgroup->_group_mutex));
+  taskgroup->callback_started_.clear();
+  unlock(&(taskgroup->group_mutex_));
 
   std::set<pthread_mutex_t *> mutexes;
   for (auto task : group_tasks) {
@@ -809,9 +809,9 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
   do_progress(taskgroup, group_tasks.size());
   DEBUG_PRINT("Releasing %lu tasks from %p task group\n", group_tasks.size(),
               taskgroup);
-  taskgroup->_task_count -= group_tasks.size();
+  taskgroup->task_count_ -= group_tasks.size();
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
-    if (!taskgroup->_task_count.load()) {
+    if (!taskgroup->task_count_.load()) {
       // after predecessor is done, decrement all successor's dependency count.
       // If count reaches zero, then add them to a 'ready' task list. Next,
       // dispatch all ready tasks in a round-robin manner to the available
@@ -819,10 +819,10 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       // decrement reference count of its dependencies; add those with ref count
       // = 0 to a
       // “ready” list
-      lock(&(taskgroup->_group_mutex));
-      atl_task_vector_t& successors = taskgroup->_and_successors;
-      taskgroup->_and_successors.clear();
-      unlock(&(taskgroup->_group_mutex));
+      lock(&(taskgroup->group_mutex_));
+      atl_task_vector_t& successors = taskgroup->and_successors_;
+      taskgroup->and_successors_.clear();
+      unlock(&(taskgroup->group_mutex_));
       DEBUG_PRINT("Deps list of %p [%lu]: ", taskgroup, successors.size());
       atl_task_vector_t temp_list;
       for (auto successor : successors) {
@@ -860,18 +860,18 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
 
 void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
-    if (taskgroup && taskgroup->_ordered) {
+    if (taskgroup && taskgroup->ordered_) {
       // pop from front of ordered task list and try dispatch as many as
       // possible
       bool should_dispatch = false;
       do {
         atl_task_t *ready_task = NULL;
         should_dispatch = false;
-        lock(&taskgroup->_group_mutex);
-        if (!taskgroup->_running_ordered_tasks.empty()) {
-          ready_task = taskgroup->_running_ordered_tasks.front();
+        lock(&taskgroup->group_mutex_);
+        if (!taskgroup->running_ordered_tasks_.empty()) {
+          ready_task = taskgroup->running_ordered_tasks_.front();
         }
-        unlock(&taskgroup->_group_mutex);
+        unlock(&taskgroup->group_mutex_);
         if (ready_task) {
           should_dispatch =
               try_dispatch(ready_task, NULL, ready_task->synchronous);
@@ -1001,9 +1001,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       /*  FIXME: We need to check for queue overflow here. */
       // SignalAddTimer.Start();
       if (task->groupable == ATMI_TRUE) {
-        lock(&(taskgroup_obj->_group_mutex));
-        taskgroup_obj->_running_groupable_tasks.push_back(task);
-        unlock(&(taskgroup_obj->_group_mutex));
+        lock(&(taskgroup_obj->group_mutex_));
+        taskgroup_obj->running_groupable_tasks_.push_back(task);
+        unlock(&(taskgroup_obj->group_mutex_));
       }
       // SignalAddTimer.Stop();
       this_aql->completion_signal = task->signal;
@@ -1081,7 +1081,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       packet_store_release(
           reinterpret_cast<uint32_t *>(this_aql),
           create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH,
-                        taskgroup_obj->_ordered, task->acquire_scope,
+                        taskgroup_obj->ordered_, task->acquire_scope,
                         task->release_scope),
           this_aql->setup);
       /* Increment write index and ring doorbell to dispatch the kernel.  */
@@ -1098,9 +1098,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
        * data parallel SPMD style of processing
        */
       if (task->groupable == ATMI_TRUE) {
-        lock(&(taskgroup_obj->_group_mutex));
-        taskgroup_obj->_running_groupable_tasks.push_back(task);
-        unlock(&(taskgroup_obj->_group_mutex));
+        lock(&(taskgroup_obj->group_mutex_));
+        taskgroup_obj->running_groupable_tasks_.push_back(task);
+        unlock(&(taskgroup_obj->group_mutex_));
       }
       for (int tid = 0; tid < thread_count; tid++) {
         hsa_agent_dispatch_packet_t *this_aql = NULL;
@@ -1143,7 +1143,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         packet_store_release(
             reinterpret_cast<uint32_t *>(this_aql),
             create_header(HSA_PACKET_TYPE_AGENT_DISPATCH,
-                          taskgroup_obj->_ordered, task->acquire_scope,
+                          taskgroup_obj->ordered_, task->acquire_scope,
                           task->release_scope),
             this_aql->type);
       }
@@ -1237,7 +1237,7 @@ void acquire_aql_packet(atl_task_t *task) {
       uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
       // Wait until the queue is not full before writing the packet
       DEBUG_PRINT("Queue %p ordered? %d task: %lu index: %lu\n", this_Q,
-                  taskgroup_obj->_ordered, task->id, index);
+                  taskgroup_obj->ordered_, task->id, index);
       // printf("%lu, %lu, K\n", task->id, index);
       while (index - hsa_queue_load_read_index_acquire(this_Q) >=
              this_Q->size) {
@@ -1493,7 +1493,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
       // Later, enqueue barrier SDMA or CPU/GPU to GPU/CPU. If CPU/GPU to SDMA,
       // then
       // ROCr SDMA API handles dependencies separately.
-      if (taskgroup_obj->_ordered && ret->prev_ordered_task) {
+      if (taskgroup_obj->ordered_ && ret->prev_ordered_task) {
         if ((ret->prev_ordered_task->type == ATL_DATA_MOVEMENT &&
              ret->type == ATL_KERNEL_EXECUTION) ||
             (ret->prev_ordered_task->type == ATL_KERNEL_EXECUTION &&
@@ -1554,7 +1554,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
   if (ret->prev_ordered_task)
     req_mutexes.insert(&(ret->prev_ordered_task->mutex));
   TaskgroupImpl *taskgroup_obj = ret->taskgroup_obj;
-  req_mutexes.insert(&(taskgroup_obj->_group_mutex));
+  req_mutexes.insert(&(taskgroup_obj->group_mutex_));
   atl_kernel_impl_t *kernel_impl = NULL;
   if (ret->kernel) {
     kernel_impl = get_kernel_impl(ret->kernel, ret->kernel_id);
@@ -1596,12 +1596,12 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
         TaskgroupImpl *pred_tg = ret->pred_taskgroup_objs[idx];
         DEBUG_PRINT("Task %p depends on %p as predecessor task group ", ret,
                     pred_tg);
-        if (pred_tg && pred_tg->_task_count.load() > 0) {
+        if (pred_tg && pred_tg->task_count_.load() > 0) {
           // predecessor task group is still running, so add yourself to its
           // successor list
           should_try_dispatch = false;
           predecessors_complete = false;
-          pred_tg->_and_successors.push_back(ret);
+          pred_tg->and_successors_.push_back(ret);
           ret->num_predecessors++;
           DEBUG_PRINT("(waiting)\n");
         } else {
@@ -1722,8 +1722,8 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
       }
     }
 
-    if (taskgroup_obj->_ordered)
-      taskgroup_obj->_running_ordered_tasks.pop_front();
+    if (taskgroup_obj->ordered_)
+      taskgroup_obj->running_ordered_tasks_.pop_front();
 
     acquire_aql_packet(ret);
 
@@ -1740,7 +1740,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     set_task_state(ret, ATMI_INITIALIZED);
   }
   if (predecessors_complete == true && resources_available == false &&
-      ret->taskgroup_obj->_ordered == false) {
+      ret->taskgroup_obj->ordered_ == false) {
     // Ready task but no resources available. So, we push it to a
     // ready queue
     ReadyTaskQueue.push(ret);
@@ -1819,7 +1819,7 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
         ErrorCheck(Creating signal handler, err);
       }
     } else {
-      if (!ret->taskgroup_obj->_callback_started.test_and_set()) {
+      if (!ret->taskgroup_obj->callback_started_.test_and_set()) {
         DEBUG_PRINT("Registering callback for task groups\n");
         hsa_status_t err = hsa_amd_signal_async_handler(
             ret->signal, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,
@@ -2032,18 +2032,18 @@ void set_task_params(atl_task_t *task_obj, const atmi_lparm_t *lparm,
   ret->data_dest_ptr = NULL;
   ret->data_size = 0;
 
-  lock(&(ret->taskgroup_obj->_group_mutex));
-  if (ret->taskgroup_obj->_ordered) {
-    ret->taskgroup_obj->_running_ordered_tasks.push_back(ret);
-    ret->prev_ordered_task = ret->taskgroup_obj->_last_task;
-    ret->taskgroup_obj->_last_task = ret;
+  lock(&(ret->taskgroup_obj->group_mutex_));
+  if (ret->taskgroup_obj->ordered_) {
+    ret->taskgroup_obj->running_ordered_tasks_.push_back(ret);
+    ret->prev_ordered_task = ret->taskgroup_obj->last_task_;
+    ret->taskgroup_obj->last_task_ = ret;
   } else {
-    ret->taskgroup_obj->_running_default_tasks.push_back(ret);
+    ret->taskgroup_obj->running_default_tasks_.push_back(ret);
   }
-  unlock(&(ret->taskgroup_obj->_group_mutex));
+  unlock(&(ret->taskgroup_obj->group_mutex_));
   if (ret->groupable) {
     DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
-    (ret->taskgroup_obj->_task_count)++;
+    (ret->taskgroup_obj->task_count_)++;
   }
   TryLaunchInitTimer.Stop();
 }
@@ -2190,7 +2190,7 @@ atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
         req_mutexes.insert(&(ret_obj->prev_ordered_task->mutex));
 #endif
       TaskgroupImpl *taskgroup_obj = ret_obj->taskgroup_obj;
-      req_mutexes.insert(&(taskgroup_obj->_group_mutex));
+      req_mutexes.insert(&(taskgroup_obj->group_mutex_));
       lock_set(req_mutexes);
       // populate its predecessors' successor list
       // similar to a double linked list
@@ -2221,12 +2221,12 @@ atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
           TaskgroupImpl *pred_tg = ret_obj->pred_taskgroup_objs[idx];
           DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
                       ret_obj, pred_tg);
-          if (pred_tg && pred_tg->_task_count.load() > 0) {
+          if (pred_tg && pred_tg->task_count_.load() > 0) {
             // predecessor task group is still running, so add yourself to its
             // successor list
             // should_try_dispatch = false;
             // predecessors_complete = false;
-            pred_tg->_and_successors.push_back(ret_obj);
+            pred_tg->and_successors_.push_back(ret_obj);
             ret_obj->num_predecessors++;
             DEBUG_PRINT("(waiting)\n");
           } else {
@@ -2283,18 +2283,18 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
       }
     } while (should_dispatch);
   } else {
-    if (ret_obj->taskgroup_obj && ret_obj->taskgroup_obj->_ordered) {
+    if (ret_obj->taskgroup_obj && ret_obj->taskgroup_obj->ordered_) {
       // pop from front of ordered task list and try dispatch as many as
       // possible
       bool should_dispatch = false;
       do {
         atl_task_t *ready_task = NULL;
         should_dispatch = false;
-        lock(&ret_obj->taskgroup_obj->_group_mutex);
-        if (!ret_obj->taskgroup_obj->_running_ordered_tasks.empty()) {
-          ready_task = ret_obj->taskgroup_obj->_running_ordered_tasks.front();
+        lock(&ret_obj->taskgroup_obj->group_mutex_);
+        if (!ret_obj->taskgroup_obj->running_ordered_tasks_.empty()) {
+          ready_task = ret_obj->taskgroup_obj->running_ordered_tasks_.front();
         }
-        unlock(&ret_obj->taskgroup_obj->_group_mutex);
+        unlock(&ret_obj->taskgroup_obj->group_mutex_);
         if (ready_task) {
           should_dispatch =
               try_dispatch(ready_task, NULL, ready_task->synchronous);

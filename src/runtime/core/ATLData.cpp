@@ -398,18 +398,18 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
         get_taskgroup_impl(lparm->required_groups[idx]);
   }
 
-  lock(&(ret->taskgroup_obj->_group_mutex));
-  if (ret->taskgroup_obj->_ordered) {
-    ret->taskgroup_obj->_running_ordered_tasks.push_back(ret);
-    ret->prev_ordered_task = ret->taskgroup_obj->_last_task;
-    ret->taskgroup_obj->_last_task = ret;
+  lock(&(ret->taskgroup_obj->group_mutex_));
+  if (ret->taskgroup_obj->ordered_) {
+    ret->taskgroup_obj->running_ordered_tasks_.push_back(ret);
+    ret->prev_ordered_task = ret->taskgroup_obj->last_task_;
+    ret->taskgroup_obj->last_task_ = ret;
   } else {
-    ret->taskgroup_obj->_running_default_tasks.push_back(ret);
+    ret->taskgroup_obj->running_default_tasks_.push_back(ret);
   }
-  unlock(&(ret->taskgroup_obj->_group_mutex));
+  unlock(&(ret->taskgroup_obj->group_mutex_));
   if (ret->groupable) {
     DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
-    (ret->taskgroup_obj->_task_count)++;
+    (ret->taskgroup_obj->task_count_)++;
   }
   atl_dep_sync_t dep_sync_type =
       (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
@@ -510,11 +510,11 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
 
   if (type == ATMI_H2D || type == ATMI_D2H) {
     if (task->groupable == ATMI_TRUE) {
-      lock(&(taskgroup_obj->_group_mutex));
+      lock(&(taskgroup_obj->group_mutex_));
       // barrier pkt already sets the signal values when the signal resource
       // is available
-      taskgroup_obj->_running_groupable_tasks.push_back(task);
-      unlock(&(taskgroup_obj->_group_mutex));
+      taskgroup_obj->running_groupable_tasks_.push_back(task);
+      unlock(&(taskgroup_obj->group_mutex_));
     }
     // For malloc'ed buffers, additional atmi_malloc/memcpy/free
     // steps are needed. So, fire and forget a copy thread with
@@ -568,11 +568,11 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
         .detach();
   } else {
     if (task->groupable == ATMI_TRUE) {
-      lock(&(taskgroup_obj->_group_mutex));
+      lock(&(taskgroup_obj->group_mutex_));
       // barrier pkt already sets the signal values when the signal resource
       // is available
-      taskgroup_obj->_running_groupable_tasks.push_back(task);
-      unlock(&(taskgroup_obj->_group_mutex));
+      taskgroup_obj->running_groupable_tasks_.push_back(task);
+      unlock(&(taskgroup_obj->group_mutex_));
     }
 
     // set task state to dispatched; then dispatch

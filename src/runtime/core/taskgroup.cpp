@@ -35,9 +35,9 @@ atmi_status_t Runtime::TaskGroupCreate(atmi_taskgroup_handle_t *group_handle,
     AllTaskgroups.push_back(taskgroup_obj);
     // the below assert is always true because we insert into the
     // vector but dont delete that slot upon release.
-    assert((AllTaskgroups.size() - 1) == taskgroup_obj->_id &&
+    assert((AllTaskgroups.size() - 1) == taskgroup_obj->id_ &&
            "Taskgroup ID and vec size mismatch");
-    *group_handle = taskgroup_obj->_id;
+    *group_handle = taskgroup_obj->id_;
     unlock(&mutex_all_tasks_);
     status = ATMI_STATUS_SUCCESS;
   }
@@ -69,22 +69,22 @@ atmi_status_t Runtime::TaskGroupSync(atmi_taskgroup_handle_t group_handle) {
 }
 
 void TaskgroupImpl::sync() {
-  DEBUG_PRINT("Waiting for %u group tasks to complete\n", _task_count.load());
+  DEBUG_PRINT("Waiting for %u group tasks to complete\n", task_count_.load());
   // if tasks are groupable
-  while (_task_count.load() != 0) {
+  while (task_count_.load() != 0) {
   }
 
-  if (_ordered == ATMI_TRUE) {
+  if (ordered_ == ATMI_TRUE) {
     // if tasks are ordered, just wait for the last launched/created task in
     // this group
-    atl_task_wait(_last_task);
-    lock(&(_group_mutex));
-    _last_task = NULL;
-    unlock(&(_group_mutex));
+    atl_task_wait(last_task_);
+    lock(&(group_mutex_));
+    last_task_ = NULL;
+    unlock(&(group_mutex_));
   } else {
     // if tasks are neither groupable or ordered, wait for every task in the
     // taskgroup
-    for (atl_task_t *task : _running_default_tasks) {
+    for (atl_task_t *task : running_default_tasks_) {
       atl_task_wait(task);
     }
   }
@@ -92,11 +92,11 @@ void TaskgroupImpl::sync() {
 }
 
 atmi_status_t TaskgroupImpl::clearSavedTasks() {
-  lock(&_group_mutex);
-  _running_ordered_tasks.clear();
-  _running_default_tasks.clear();
-  _running_groupable_tasks.clear();
-  unlock(&_group_mutex);
+  lock(&group_mutex_);
+  running_ordered_tasks_.clear();
+  running_default_tasks_.clear();
+  running_groupable_tasks_.clear();
+  unlock(&group_mutex_);
   return ATMI_STATUS_SUCCESS;
 }
 
@@ -104,10 +104,10 @@ int TaskgroupImpl::getBestQueueID(atmi_scheduler_t sched) {
   int ret = 0;
   switch (sched) {
     case ATMI_SCHED_NONE:
-      ret = __atomic_load_n(&_next_best_queue_id, __ATOMIC_ACQUIRE);
+      ret = __atomic_load_n(&next_best_queue_id_, __ATOMIC_ACQUIRE);
       break;
     case ATMI_SCHED_RR:
-      ret = __atomic_fetch_add(&_next_best_queue_id, 1, __ATOMIC_ACQ_REL);
+      ret = __atomic_fetch_add(&next_best_queue_id_, 1, __ATOMIC_ACQ_REL);
       break;
   }
   return ret;
@@ -130,40 +130,40 @@ pthread_mutex_t *m) {
 
 // constructor
 core::TaskgroupImpl::TaskgroupImpl(bool ordered, atmi_place_t place)
-    : _ordered(ordered),
-      _place(place),
-      _next_best_queue_id(0),
-      _last_task(NULL),
-      _cpu_queue(NULL),
-      _gpu_queue(NULL) {
+    : ordered_(ordered),
+      place_(place),
+      next_best_queue_id_(0),
+      last_task_(NULL),
+      cpu_queue_(NULL),
+      gpu_queue_(NULL) {
   static unsigned int taskgroup_id = 0;
-  _id = taskgroup_id++;
+  id_ = taskgroup_id++;
 
-  _running_groupable_tasks.clear();
-  _running_ordered_tasks.clear();
-  _running_default_tasks.clear();
-  _and_successors.clear();
-  _task_count.store(0);
-  _callback_started.clear();
+  running_groupable_tasks_.clear();
+  running_ordered_tasks_.clear();
+  running_default_tasks_.clear();
+  and_successors_.clear();
+  task_count_.store(0);
+  callback_started_.clear();
 
-  pthread_mutex_init(&(_group_mutex), NULL);
+  pthread_mutex_init(&(group_mutex_), NULL);
 
   // create the group signal with initial value 0; task dispatch is
   // then responsible for incrementing this value before ringing the
   // doorbell.
-  hsa_status_t err = hsa_signal_create(0, 0, NULL, &_group_signal);
+  hsa_status_t err = hsa_signal_create(0, 0, NULL, &group_signal_);
   ErrorCheck(Taskgroup signal creation, err);
 }
 
 // destructor
 core::TaskgroupImpl::~TaskgroupImpl() {
-  hsa_status_t err = hsa_signal_destroy(_group_signal);
+  hsa_status_t err = hsa_signal_destroy(group_signal_);
   ErrorCheck(Taskgroup signal destruction, err);
 
-  _running_groupable_tasks.clear();
-  _running_ordered_tasks.clear();
-  _running_default_tasks.clear();
-  _and_successors.clear();
+  running_groupable_tasks_.clear();
+  running_ordered_tasks_.clear();
+  running_default_tasks_.clear();
+  and_successors_.clear();
 }
 
 }  // namespace core

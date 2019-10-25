@@ -179,14 +179,6 @@ typedef struct atl_kernel_impl_s {
   std::queue<int> free_kernarg_segments;
 } atl_kernel_impl_t;
 
-typedef struct atl_kernel_s {
-  uint64_t pif_id;
-  int num_args;
-  std::vector<size_t> arg_sizes;
-  std::vector<atl_kernel_impl_t *> impls;
-  std::map<unsigned int, unsigned int> id_map;
-} atl_kernel_t;
-
 typedef struct atl_kernel_info_s {
   uint64_t kernel_object;
   uint32_t group_segment_size;
@@ -206,7 +198,6 @@ typedef struct atl_symbol_info_s {
 extern std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
 extern std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
 
-extern std::map<uint64_t, atl_kernel_t *> KernelImplMap;
 
 // ---------------------- Kernel End -------------
 
@@ -228,6 +219,8 @@ extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
 namespace core {
 class TaskgroupImpl;
+class Kernel;
+//class KernelImpl;
 }
 
 typedef struct atl_task_s {
@@ -238,7 +231,7 @@ typedef struct atl_task_s {
   // all encmopassing task packet
   std::vector<std::pair<hsa_queue_t *, uint64_t> > packets;
 
-  atl_kernel_t *kernel;
+  core::Kernel *kernel;
   uint32_t kernel_id;
   void *kernarg_region;  // malloced or acquired from a pool
   size_t kernarg_region_size;
@@ -348,8 +341,6 @@ void clear_container(T *q) {
   std::swap(*q, empty);
 }
 
-bool is_valid_kernel_id(atl_kernel_t *kernel, unsigned int kernel_id);
-
 long int get_nanosecs(struct timespec start_time, struct timespec end_time);
 
 extern void register_allocation(void *addr, size_t size,
@@ -384,9 +375,6 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue,
                      int wait_flag, int barrier_flag, atmi_devtype_t devtype,
                      bool need_completion = false);
 
-atl_kernel_impl_t *get_kernel_impl(atl_kernel_t *kernel,
-                                   unsigned int kernel_id);
-int get_kernel_index(atl_kernel_t *kernel, unsigned int kernel_id);
 void set_task_state(atl_task_t *t, atmi_state_t state);
 void set_task_metrics(atl_task_t *task);
 

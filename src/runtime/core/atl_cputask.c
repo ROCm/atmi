@@ -13,7 +13,9 @@
 #include "ATLMachine.h"
 #include "atl_bindthread.h"
 #include "atl_internal.h"
+#include "kernel.h"
 
+using core::Kernel;
 using core::lock;
 using core::unlock;
 using core::create_header;
@@ -211,18 +213,18 @@ int process_packet(agent_t *agent) {
           start_time_ns = get_nanosecs(context_init_time, start_time);
         }
         DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id);
-        atl_kernel_t *kernel = reinterpret_cast<atl_kernel_t *>(packet->arg[2]);
+        Kernel *kernel = reinterpret_cast<Kernel *>(packet->arg[2]);
         int kernel_id = packet->type;
-        atl_kernel_impl_t *kernel_impl = kernel->impls[kernel_id];
+        atl_kernel_impl_t *kernel_impl = kernel->impls()[kernel_id];
         std::vector<void *> kernel_args;
         void *kernel_args_region = reinterpret_cast<void *>(packet->arg[1]);
         kernel_name = const_cast<char *>(
             reinterpret_cast<const char *>(kernel_impl->kernel_name.c_str()));
-        uint64_t num_params = kernel->num_args;
+        uint64_t num_params = kernel->num_args();
         char *thisKernargAddress = reinterpret_cast<char *>(kernel_args_region);
-        for (int i = 0; i < kernel->num_args; i++) {
+        for (int i = 0; i < kernel->num_args(); i++) {
           kernel_args.push_back(reinterpret_cast<void *>(thisKernargAddress));
-          thisKernargAddress += kernel->arg_sizes[i];
+          thisKernargAddress += kernel->arg_sizes()[i];
         }
         switch (num_params) {
           case 0: {

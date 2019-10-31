@@ -56,7 +56,7 @@ class TaskgroupImpl {
     return ret_queue;
   }
 
-  hsa_signal_t getSignal() const { return group_signal_; }
+  hsa_signal_t signal() const { return group_signal_; }
 
  private:
   atmi_status_t clearSavedTasks();

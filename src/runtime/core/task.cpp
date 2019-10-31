@@ -1414,7 +1414,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
       FreeSignalPool.pop();
       ret->signal = new_signal;
     } else {
-      ret->signal = taskgroup_obj->getSignal();
+      ret->signal = taskgroup_obj->signal();
     }
     if (ret->kernel) {
       // get kernarg resource
@@ -1661,7 +1661,7 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     // b) you are using barrier packets, in which case always try
     // to launch if you have a free signal at hand
     if (ret->groupable == ATMI_TRUE) {
-      ret->signal = taskgroup_obj->getSignal();
+      ret->signal = taskgroup_obj->signal();
     } else {
       // get a free signal
       hsa_signal_t new_signal = FreeSignalPool.front();

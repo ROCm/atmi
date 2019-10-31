@@ -147,7 +147,7 @@ int process_packet(thread_agent_t *agent) {
     DEBUG_PRINT("Read Index: %" PRIu64 " Queue Size: %" PRIu32 "\n", read_index,
                 queue->size);
     hsa_signal_value_t doorbell_value = INT_MAX;
-    agent->timer.Start();
+    agent->timer.start();
     while ((doorbell_value = hsa_signal_wait_acquire(
                 doorbell, HSA_SIGNAL_CONDITION_GTE, read_index, UINT64_MAX,
                 ATMI_WAIT_STATE)) < (hsa_signal_value_t)read_index) {
@@ -496,7 +496,7 @@ int process_packet(thread_agent_t *agent) {
     }
     read_index++;
     hsa_queue_store_read_index_release(queue, read_index);
-    agent->timer.Stop();
+    agent->timer.stop();
   }
 
   DEBUG_PRINT("Finished executing agent dispatch\n");
@@ -574,7 +574,7 @@ void agent_fini() {
       hsa_signal_store_release(agent->worker_sig, FINISH);
       pthread_join(agent->thread, NULL);
       std::string str(std::string("CPU[" + std::to_string(i) + "] Timer"));
-      agent->timer.BufPrint(std::cout, str);
+      agent->timer.bufPrint(std::cout, str);
     }
   }
   DEBUG_PRINT("agent_fini completed\n");

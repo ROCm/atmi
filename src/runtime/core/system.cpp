@@ -19,7 +19,7 @@
 #include "amd_comgr.h"
 #include "atl_internal.h"
 #include "rt.h"
-using Global::RealTimer;
+using core::RealTimer;
 
 typedef unsigned char *address;
 /*
@@ -405,15 +405,15 @@ atmi_status_t Runtime::Finalize() {
   std::cout << HandleSignalTimer;
   std::cout << RegisterCallbackTimer;
 
-  ParamsInitTimer.Reset();
-  TryLaunchTimer.Reset();
-  TryLaunchInitTimer.Reset();
-  ShouldDispatchTimer.Reset();
-  HandleSignalTimer.Reset();
-  HandleSignalInvokeTimer.Reset();
-  TryDispatchTimer.Reset();
-  LockTimer.Reset();
-  RegisterCallbackTimer.Reset();
+  ParamsInitTimer.reset();
+  TryLaunchTimer.reset();
+  TryLaunchInitTimer.reset();
+  ShouldDispatchTimer.reset();
+  HandleSignalTimer.reset();
+  HandleSignalInvokeTimer.reset();
+  TryDispatchTimer.reset();
+  LockTimer.reset();
+  RegisterCallbackTimer.reset();
   max_ready_queue_sz = 0;
   waiting_count = 0;
   direct_dispatch = 0;

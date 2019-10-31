@@ -29,7 +29,7 @@
 #include "kernel.h"
 #include "rt.h"
 #include "taskgroup.h"
-using Global::RealTimer;
+using core::RealTimer;
 using core::Kernel;
 using core::KernelImpl;
 
@@ -289,7 +289,7 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue,
 }
 
 extern void atl_task_wait(atl_task_t *task) {
-  TaskWaitTimer.Start();
+  TaskWaitTimer.start();
   if (task != NULL) {
     // if task is not yet ready, then it has not gotten all resources yet, so we
     // wait
@@ -339,7 +339,7 @@ extern void atl_task_wait(atl_task_t *task) {
     set_task_state(task, ATMI_COMPLETED);
   }
 
-  TaskWaitTimer.Stop();
+  TaskWaitTimer.stop();
   return;  // ATMI_STATUS_SUCCESS;
 }
 
@@ -440,16 +440,16 @@ pthread_mutex_t sort_mutex_2(pthread_mutex_t *addr1, pthread_mutex_t *addr2,
 
 void lock(pthread_mutex_t *m) {
   // printf("Locked Mutex: %p\n", m);
-  // LockTimer.Start();
+  // LockTimer.start();
   pthread_mutex_lock(m);
-  // LockTimer.Stop();
+  // LockTimer.stop();
 }
 
 void unlock(pthread_mutex_t *m) {
   // printf("Unlocked Mutex: %p\n", m);
-  // LockTimer.Start();
+  // LockTimer.start();
   pthread_mutex_unlock(m);
-  // LockTimer.Stop();
+  // LockTimer.stop();
 }
 
 // lock set of mutexes in order of the set, but unlock them
@@ -647,7 +647,7 @@ void handle_signal_barrier_pkt(atl_task_t *task,
 }
 
 bool handle_signal(hsa_signal_value_t value, void *arg) {
-  // HandleSignalInvokeTimer.Stop();
+  // HandleSignalInvokeTimer.stop();
   static bool is_called = false;
   if (!is_called) {
     set_thread_affinity(1);
@@ -662,7 +662,7 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
        */
     is_called = true;
   }
-  HandleSignalTimer.Start();
+  HandleSignalTimer.start();
   atl_task_t *task = NULL;
   atl_task_vector_t *dispatched_tasks_ptr = NULL;
 
@@ -679,13 +679,13 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
     handle_signal_barrier_pkt(task, dispatched_tasks_ptr);
   }
-  HandleSignalTimer.Stop();
-  // HandleSignalInvokeTimer.Start();
+  HandleSignalTimer.stop();
+  // HandleSignalInvokeTimer.start();
   return false;
 }
 
 bool handle_group_signal(hsa_signal_value_t value, void *arg) {
-  // HandleSignalInvokeTimer.Stop();
+  // HandleSignalInvokeTimer.stop();
   static bool is_called = false;
   if (!is_called) {
     set_thread_affinity(1);
@@ -700,7 +700,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
        */
     is_called = true;
   }
-  HandleSignalTimer.Start();
+  HandleSignalTimer.start();
   TaskgroupImpl *taskgroup = reinterpret_cast<TaskgroupImpl *>(arg);
   // TODO(ashwinma): what if the group task has dependents? this is not clear as
   // of now.
@@ -852,8 +852,8 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       if (!temp_list.empty()) do_progress(taskgroup);
     }
   }
-  HandleSignalTimer.Stop();
-  // HandleSignalInvokeTimer.Start();
+  HandleSignalTimer.stop();
+  // HandleSignalInvokeTimer.start();
   // return true because we want the callback function to always be
   // 'registered' for any more incoming tasks belonging to this task group
   DEBUG_PRINT("Done handle_group_signal\n");
@@ -959,7 +959,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
     return dispatch_data_movement(task, task->data_dest_ptr, task->data_src_ptr,
                                   task->data_size);
   } else {
-    TryDispatchTimer.Start();
+    TryDispatchTimer.start();
     TaskgroupImpl *taskgroup_obj = task->taskgroup_obj;
     /* get this taskgroup's HSA queue (could be dynamically mapped or round
      * robin
@@ -1000,13 +1000,13 @@ atmi_status_t dispatch_task(atl_task_t *task) {
       // this_aql->header = create_header(HSA_PACKET_TYPE_INVALID, ATMI_FALSE);
       // memset(this_aql, 0, sizeof(hsa_kernel_dispatch_packet_t));
       /*  FIXME: We need to check for queue overflow here. */
-      // SignalAddTimer.Start();
+      // SignalAddTimer.start();
       if (task->groupable == ATMI_TRUE) {
         lock(&(taskgroup_obj->group_mutex_));
         taskgroup_obj->running_groupable_tasks_.push_back(task);
         unlock(&(taskgroup_obj->group_mutex_));
       }
-      // SignalAddTimer.Stop();
+      // SignalAddTimer.stop();
       this_aql->completion_signal = task->signal;
 
       /* pass this task handle to the kernel as an argument */
@@ -1119,9 +1119,9 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
         /*  FIXME: We need to check for queue overflow here. Do we need
          *  to do this for CPU agents too? */
-        // SignalAddTimer.Start();
+        // SignalAddTimer.start();
         // hsa_signal_store_relaxed(task->signal, 1);
-        // SignalAddTimer.Stop();
+        // SignalAddTimer.stop();
         this_aql->completion_signal = task->signal;
 
         /* Set the type and return args.*/
@@ -1169,7 +1169,7 @@ atmi_status_t dispatch_task(atl_task_t *task) {
         signal_worker(this_queues[q], PROCESS_PKT);
       }
     }
-    TryDispatchTimer.Stop();
+    TryDispatchTimer.stop();
     DEBUG_PRINT("Task %lu (%d) Dispatched\n", task->id, task->devtype);
     return ATMI_STATUS_SUCCESS;
   }
@@ -1783,7 +1783,7 @@ void enqueue_barrier_tasks(atl_task_vector_t tasks) {
 }
 
 bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
-  ShouldDispatchTimer.Start();
+  ShouldDispatchTimer.start();
   bool should_dispatch = true;
   bool register_task_callback = (ret->groupable != ATMI_TRUE);
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
@@ -1791,13 +1791,13 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
     should_dispatch = try_dispatch_barrier_pkt(ret, args);
   }
-  ShouldDispatchTimer.Stop();
+  ShouldDispatchTimer.stop();
 
   if (should_dispatch) {
     // direct_dispatch++;
     dispatch_task(ret);
 
-    RegisterCallbackTimer.Start();
+    RegisterCallbackTimer.start();
     if (register_task_callback) {
       if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
         DEBUG_PRINT("Registering callback for task %lu\n", ret->id);
@@ -1815,7 +1815,7 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
         ErrorCheck(Creating signal handler, err);
       }
     }
-    RegisterCallbackTimer.Stop();
+    RegisterCallbackTimer.stop();
   } else {
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
       // We could not dispatch the packet because of lack of resources.
@@ -1856,7 +1856,7 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
   }
   if (synchronous == ATMI_TRUE) { /*  Sychronous execution */
     /* For default synchrnous execution, wait til kernel is finished.  */
-    //    TaskWaitTimer.Start();
+    //    TaskWaitTimer.start();
     if (ret->groupable != ATMI_TRUE) {
       atl_task_wait(ret);
     } else {
@@ -1864,7 +1864,7 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
     }
     set_task_metrics(ret);
     set_task_state(ret, ATMI_COMPLETED);
-    //  TaskWaitTimer.Stop();
+    //  TaskWaitTimer.stop();
     // std::cout << "Task Wait Interim Timer " << TaskWaitTimer << std::endl;
     // std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
   }
@@ -1879,7 +1879,7 @@ atl_task_t *atl_trycreate_task(Kernel *kernel) {
 
 void set_task_params(atl_task_t *task_obj, const atmi_lparm_t *lparm,
                      unsigned int kernel_id, void **args) {
-  TryLaunchInitTimer.Start();
+  TryLaunchInitTimer.start();
   if (!task_obj) return;
   DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id,
               lparm->place.type, lparm->place.device_id, lparm->place.cu_mask);
@@ -2033,7 +2033,7 @@ void set_task_params(atl_task_t *task_obj, const atmi_lparm_t *lparm,
     DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
     (ret->taskgroup_obj->task_count_)++;
   }
-  TryLaunchInitTimer.Stop();
+  TryLaunchInitTimer.stop();
 }
 
 atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
@@ -2301,7 +2301,7 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
 atmi_task_handle_t Runtime::LaunchTask(
     atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,
     void **args /*, more params for place info? */) {
-  ParamsInitTimer.Start();
+  ParamsInitTimer.start();
   atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
   if ((lparm->place.type & ATMI_DEVTYPE_GPU && !atlc.g_gpu_initialized) ||
       (lparm->place.type & ATMI_DEVTYPE_CPU && !atlc.g_cpu_initialized))
@@ -2318,11 +2318,11 @@ atmi_task_handle_t Runtime::LaunchTask(
   }
   unlock(&(kernel_impl->mutex));
   */
-  ParamsInitTimer.Stop();
-  TryLaunchTimer.Start();
+  ParamsInitTimer.stop();
+  TryLaunchTimer.start();
   atl_task_t *ret_obj = atl_trycreate_task(kernel);
   ret = atl_trylaunch_kernel(lparm, ret_obj, kernel_id, args);
-  TryLaunchTimer.Stop();
+  TryLaunchTimer.stop();
   DEBUG_PRINT("[Returned Task: %lu]\n", ret);
   return ret;
 }

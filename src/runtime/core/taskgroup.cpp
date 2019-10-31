@@ -1,7 +1,7 @@
 #include "taskgroup.h"
 #include <cassert>
 #include "RealTimerClass.h"
-using Global::RealTimer;
+using core::RealTimer;
 extern RealTimer TaskWaitTimer;
 
 /* Taskgroup specific globals */
@@ -59,12 +59,12 @@ atmi_status_t Runtime::TaskGroupRelease(atmi_taskgroup_handle_t group_handle) {
 
 atmi_status_t Runtime::TaskGroupSync(atmi_taskgroup_handle_t group_handle) {
   TaskgroupImpl *taskgroup_obj = get_taskgroup_impl(group_handle);
-  TaskWaitTimer.Start();
+  TaskWaitTimer.start();
   if (taskgroup_obj)
     taskgroup_obj->sync();
   else
     DEBUG_PRINT("Waiting for invalid task group signal!\n");
-  TaskWaitTimer.Stop();
+  TaskWaitTimer.stop();
   return ATMI_STATUS_SUCCESS;
 }
 

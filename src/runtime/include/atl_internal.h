@@ -140,7 +140,7 @@ typedef struct thread_agent_s {
   hsa_signal_t worker_sig;
   hsa_queue_t *queue;
   pthread_t thread;
-  Global::RealTimer timer;
+  core::RealTimer timer;
 } thread_agent_t;
 
 enum { PROCESS_PKT = 0, FINISH, IDLE };

@@ -16,6 +16,7 @@
 #include "kernel.h"
 
 using core::Kernel;
+using core::CPUKernelImpl;
 using core::lock;
 using core::unlock;
 using core::create_header;
@@ -215,11 +216,12 @@ int process_packet(agent_t *agent) {
         DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id);
         Kernel *kernel = reinterpret_cast<Kernel *>(packet->arg[2]);
         int kernel_id = packet->type;
-        atl_kernel_impl_t *kernel_impl = kernel->impls()[kernel_id];
+        CPUKernelImpl *kernel_impl =
+            dynamic_cast<CPUKernelImpl *>(kernel->impls()[kernel_id]);
         std::vector<void *> kernel_args;
         void *kernel_args_region = reinterpret_cast<void *>(packet->arg[1]);
         kernel_name = const_cast<char *>(
-            reinterpret_cast<const char *>(kernel_impl->kernel_name.c_str()));
+            reinterpret_cast<const char *>(kernel_impl->name().c_str()));
         uint64_t num_params = kernel->num_args();
         char *thisKernargAddress = reinterpret_cast<char *>(kernel_args_region);
         for (int i = 0; i < kernel->num_args(); i++) {
@@ -229,28 +231,28 @@ int process_packet(agent_t *agent) {
         switch (num_params) {
           case 0: {
             ;
-            void (*function0)(void) = (void (*)(void))kernel_impl->function;
+            void (*function0)(void) = (void (*)(void))kernel_impl->function();
             DEBUG_PRINT("Func Ptr: %p Args: NONE\n", function0);
             function0();
           } break;
           case 1: {
             ;
             void (*function1)(ARG_TYPE) =
-                (void (*)(ARG_TYPE))kernel_impl->function;
+                (void (*)(ARG_TYPE))kernel_impl->function();
             DEBUG_PRINT("Args: %p\n", kernel_args[0]);
             function1(kernel_args[0]);
           } break;
           case 2: {
             ;
             void (*function2)(ARG_TYPE, ARG_TYPE) =
-                (void (*)(ARG_TYPE, ARG_TYPE))kernel_impl->function;
+                (void (*)(ARG_TYPE, ARG_TYPE))kernel_impl->function();
             DEBUG_PRINT("Args: %p %p\n", kernel_args[0], kernel_args[1]);
             function2(kernel_args[0], kernel_args[1]);
           } break;
           case 3: {
             ;
             void (*function3)(ARG_TYPE REPEAT2(ARG_TYPE)) =
-                (void (*)(ARG_TYPE REPEAT2(ARG_TYPE)))kernel_impl->function;
+                (void (*)(ARG_TYPE REPEAT2(ARG_TYPE)))kernel_impl->function();
             DEBUG_PRINT("Args: %p %p %p\n", kernel_args[0], kernel_args[1],
                         kernel_args[2]);
             function3(kernel_args[0], kernel_args[1], kernel_args[2]);
@@ -259,14 +261,14 @@ int process_packet(agent_t *agent) {
             ;
             void (*function4)(ARG_TYPE REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT2(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function4(kernel_args[0], kernel_args[1], kernel_args[2],
                       kernel_args[3]);
           } break;
           case 5: {
             ;
             void (*function5)(ARG_TYPE REPEAT4(ARG_TYPE)) =
-                (void (*)(ARG_TYPE REPEAT4(ARG_TYPE)))kernel_impl->function;
+                (void (*)(ARG_TYPE REPEAT4(ARG_TYPE)))kernel_impl->function();
             function5(kernel_args[0], kernel_args[1], kernel_args[2],
                       kernel_args[3], kernel_args[4]);
           } break;
@@ -274,7 +276,7 @@ int process_packet(agent_t *agent) {
             ;
             void (*function6)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT4(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function6(kernel_args[0], kernel_args[1], kernel_args[2],
                       kernel_args[3], kernel_args[4], kernel_args[5]);
           } break;
@@ -282,7 +284,7 @@ int process_packet(agent_t *agent) {
             ;
             void (*function7)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT4(ARG_TYPE)
-                              REPEAT2(ARG_TYPE)))kernel_impl->function;
+                              REPEAT2(ARG_TYPE)))kernel_impl->function();
             function7(kernel_args[0], kernel_args[1], kernel_args[2],
                       kernel_args[3], kernel_args[4], kernel_args[5],
                       kernel_args[6]);
@@ -292,7 +294,7 @@ int process_packet(agent_t *agent) {
             void (*function8)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)
                                   REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT4(ARG_TYPE) REPEAT2(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function8(kernel_args[0], kernel_args[1], kernel_args[2],
                       kernel_args[3], kernel_args[4], kernel_args[5],
                       kernel_args[6], kernel_args[7]);
@@ -300,7 +302,7 @@ int process_packet(agent_t *agent) {
           case 9: {
             ;
             void (*function9)(ARG_TYPE REPEAT8(ARG_TYPE)) =
-                (void (*)(ARG_TYPE REPEAT8(ARG_TYPE)))kernel_impl->function;
+                (void (*)(ARG_TYPE REPEAT8(ARG_TYPE)))kernel_impl->function();
             function9(kernel_args[0], kernel_args[1], kernel_args[2],
                       kernel_args[3], kernel_args[4], kernel_args[5],
                       kernel_args[6], kernel_args[7], kernel_args[8]);
@@ -309,7 +311,7 @@ int process_packet(agent_t *agent) {
             ;
             void (*function10)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT8(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function10(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -319,7 +321,7 @@ int process_packet(agent_t *agent) {
             ;
             void (*function11)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT8(ARG_TYPE)
-                              REPEAT2(ARG_TYPE)))kernel_impl->function;
+                              REPEAT2(ARG_TYPE)))kernel_impl->function();
             function11(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -330,7 +332,7 @@ int process_packet(agent_t *agent) {
             void (*function12)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE)
                                    REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT2(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function12(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -340,7 +342,7 @@ int process_packet(agent_t *agent) {
             ;
             void (*function13)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT8(ARG_TYPE)
-                              REPEAT4(ARG_TYPE)))kernel_impl->function;
+                              REPEAT4(ARG_TYPE)))kernel_impl->function();
             function13(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -352,7 +354,7 @@ int process_packet(agent_t *agent) {
             void (*function14)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)
                                    REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function14(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -364,7 +366,7 @@ int process_packet(agent_t *agent) {
             void (*function15)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)
                                    REPEAT2(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)
-                              REPEAT2(ARG_TYPE)))kernel_impl->function;
+                              REPEAT2(ARG_TYPE)))kernel_impl->function();
             function15(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -376,7 +378,7 @@ int process_packet(agent_t *agent) {
             void (*function16)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE)
                                    REPEAT2(ARG_TYPE) REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT8(ARG_TYPE) REPEAT4(ARG_TYPE) REPEAT2(
-                    ARG_TYPE) REPEAT(ARG_TYPE)))kernel_impl->function;
+                    ARG_TYPE) REPEAT(ARG_TYPE)))kernel_impl->function();
             function16(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -387,7 +389,7 @@ int process_packet(agent_t *agent) {
           case 17: {
             ;
             void (*function17)(ARG_TYPE REPEAT16(ARG_TYPE)) =
-                (void (*)(ARG_TYPE REPEAT16(ARG_TYPE)))kernel_impl->function;
+                (void (*)(ARG_TYPE REPEAT16(ARG_TYPE)))kernel_impl->function();
             function17(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -399,7 +401,7 @@ int process_packet(agent_t *agent) {
             ;
             void (*function18)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT16(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function18(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -411,7 +413,7 @@ int process_packet(agent_t *agent) {
             ;
             void (*function19)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT16(ARG_TYPE)
-                              REPEAT2(ARG_TYPE)))kernel_impl->function;
+                              REPEAT2(ARG_TYPE)))kernel_impl->function();
             function19(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -425,7 +427,7 @@ int process_packet(agent_t *agent) {
             void (*function20)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE)
                                    REPEAT(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT2(ARG_TYPE)
-                              REPEAT(ARG_TYPE)))kernel_impl->function;
+                              REPEAT(ARG_TYPE)))kernel_impl->function();
             function20(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],
@@ -439,7 +441,7 @@ int process_packet(agent_t *agent) {
             void (*function37)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT16(ARG_TYPE)
                                    REPEAT4(ARG_TYPE)) =
                 (void (*)(ARG_TYPE REPEAT16(ARG_TYPE) REPEAT16(ARG_TYPE)
-                              REPEAT4(ARG_TYPE)))kernel_impl->function;
+                              REPEAT4(ARG_TYPE)))kernel_impl->function();
             function37(kernel_args[0], kernel_args[1], kernel_args[2],
                        kernel_args[3], kernel_args[4], kernel_args[5],
                        kernel_args[6], kernel_args[7], kernel_args[8],

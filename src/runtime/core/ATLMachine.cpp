@@ -36,7 +36,7 @@ void ATLMemory::free(void *ptr) {
 }*/
 
 void ATLProcessor::addMemory(const ATLMemory &mem) {
-  for (auto& mem_obj : _memories) {
+  for (auto &mem_obj : _memories) {
     // if the memory already exists, then just return
     if (mem.getMemory().handle == mem_obj.getMemory().handle) return;
   }

@@ -776,7 +776,7 @@ hsa_status_t init_comute_and_memory() {
     int fine_memories_size = 0;
     int coarse_memories_size = 0;
     DEBUG_PRINT("CPU memory types:\t");
-    for (auto& memory : memories) {
+    for (auto &memory : memories) {
       atmi_memtype_t type = memory.getType();
       if (type == ATMI_MEMTYPE_FINE_GRAINED) {
         fine_memories_size++;
@@ -800,7 +800,7 @@ hsa_status_t init_comute_and_memory() {
     int fine_memories_size = 0;
     int coarse_memories_size = 0;
     DEBUG_PRINT("GPU memory types:\t");
-    for (auto& memory : memories) {
+    for (auto &memory : memories) {
       atmi_memtype_t type = memory.getType();
       if (type == ATMI_MEMTYPE_FINE_GRAINED) {
         fine_memories_size++;

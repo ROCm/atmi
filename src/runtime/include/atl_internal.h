@@ -155,30 +155,6 @@ void *agent_worker(void *agent_args);
 int process_packet(hsa_queue_t *queue, int id);
 
 // ---------------------- Kernel Start -------------
-typedef struct atl_kernel_impl_s {
-  // FIXME: would anyone need to reverse engineer the
-  // user-specified ID from the impls index?
-  unsigned int kernel_id;
-  std::string kernel_name;
-  atmi_platform_type_t kernel_type;
-  atmi_devtype_t devtype;
-
-  /* CPU kernel info */
-  atmi_generic_fp function;
-
-  /* GPU kernel info */
-  uint64_t *kernel_objects;
-  uint32_t *group_segment_sizes;
-  uint32_t *private_segment_sizes;
-  uint32_t kernarg_segment_size;  // differs for CPU vs GPU
-  std::vector<uint64_t> arg_offsets;
-
-  /* Kernel argument map */
-  pthread_mutex_t mutex;  // to lock changes to the free pool
-  void *kernarg_region;
-  std::queue<int> free_kernarg_segments;
-} atl_kernel_impl_t;
-
 typedef struct atl_kernel_info_s {
   uint64_t kernel_object;
   uint32_t group_segment_size;
@@ -197,7 +173,6 @@ typedef struct atl_symbol_info_s {
 
 extern std::vector<std::map<std::string, atl_kernel_info_t> > KernelInfoTable;
 extern std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
-
 
 // ---------------------- Kernel End -------------
 
@@ -220,7 +195,7 @@ extern pthread_mutex_t mutex_readyq_;
 namespace core {
 class TaskgroupImpl;
 class Kernel;
-//class KernelImpl;
+class KernelImpl;
 }
 
 typedef struct atl_task_s {

@@ -57,8 +57,11 @@ typedef enum {
   AMDGCN_HIP = 1,
   AMDGCN_CL = 1,
   AMDGCN_OMP = 1,
+  /*
+   * Target platform is CPU
+   */
+  X86 = 2,
   /* -- support in the future? --
-  x86,
   PTX
   */
 } atmi_platform_type_t;

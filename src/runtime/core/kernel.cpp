@@ -179,7 +179,7 @@ atmi_status_t Runtime::AddGPUKernelImpl(atmi_kernel_t atmi_kernel,
     return ATMI_STATUS_ERROR;
   }
   std::vector<ATLGPUProcessor> &gpu_procs =
-      g_atl_machine.getProcessors<ATLGPUProcessor>();
+      g_atl_machine.processors<ATLGPUProcessor>();
   int gpu_count = gpu_procs.size();
 
   std::string hsaco_name = std::string(impl);
@@ -250,7 +250,7 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
                              const Kernel &kernel)
     : KernelImpl(id, name, platform_type, kernel) {
   std::vector<ATLGPUProcessor> &gpu_procs =
-      g_atl_machine.getProcessors<ATLGPUProcessor>();
+      g_atl_machine.processors<ATLGPUProcessor>();
   int gpu_count = gpu_procs.size();
 
   kernel_objects_.reserve(gpu_count);

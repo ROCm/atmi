@@ -234,10 +234,10 @@ bool atl_is_atmi_initialized() { return g_atmi_initialized; }
 void allow_access_to_all_gpu_agents(void *ptr) {
   hsa_status_t err;
   std::vector<ATLGPUProcessor> &gpu_procs =
-      g_atl_machine.getProcessors<ATLGPUProcessor>();
+      g_atl_machine.processors<ATLGPUProcessor>();
   std::vector<hsa_agent_t> agents;
   for (int i = 0; i < gpu_procs.size(); i++) {
-    agents.push_back(gpu_procs[i].getAgent());
+    agents.push_back(gpu_procs[i].agent());
   }
   err = hsa_amd_agents_allow_access(agents.size(), &agents[0], NULL, ptr);
   ErrorCheck(Allow agents ptr access, err);
@@ -248,12 +248,12 @@ atmi_status_t atmi_ke_init() {
   // fill in gpu queues
   hsa_status_t err;
   std::vector<hsa_queue_t *> gpu_queues;
-  int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
+  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
   for (int gpu = 0; gpu < gpu_count; gpu++) {
     int num_queues = 0;
     atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
     ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    std::vector<hsa_queue_t *> qs = proc.getQueues();
+    std::vector<hsa_queue_t *> qs = proc.queues();
     num_queues = qs.size();
     gpu_queues.insert(gpu_queues.end(), qs.begin(), qs.end());
     // TODO(ashwinma): how to handle queues from multiple devices? keep them
@@ -278,12 +278,12 @@ atmi_status_t atmi_ke_init() {
 
   // fill in cpu queues
   std::vector<hsa_queue_t *> cpu_queues;
-  int cpu_count = g_atl_machine.getProcessorCount<ATLCPUProcessor>();
+  int cpu_count = g_atl_machine.processorCount<ATLCPUProcessor>();
   for (int cpu = 0; cpu < cpu_count; cpu++) {
     int num_queues = 0;
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
     ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-    std::vector<hsa_queue_t *> qs = proc.getQueues();
+    std::vector<hsa_queue_t *> qs = proc.queues();
     num_queues = qs.size();
     cpu_queues.insert(cpu_queues.end(), qs.begin(), qs.end());
     // TODO(ashwinma): how to handle queues from multiple devices? keep them
@@ -637,18 +637,18 @@ hsa_status_t init_comute_and_memory() {
 
   /* Init all devices or individual device types? */
   std::vector<ATLCPUProcessor> &cpu_procs =
-      g_atl_machine.getProcessors<ATLCPUProcessor>();
+      g_atl_machine.processors<ATLCPUProcessor>();
   std::vector<ATLGPUProcessor> &gpu_procs =
-      g_atl_machine.getProcessors<ATLGPUProcessor>();
+      g_atl_machine.processors<ATLGPUProcessor>();
   std::vector<ATLDSPProcessor> &dsp_procs =
-      g_atl_machine.getProcessors<ATLDSPProcessor>();
+      g_atl_machine.processors<ATLDSPProcessor>();
   /* For CPU memory pools, add other devices that can access them directly
    * or indirectly */
   for (auto &cpu_proc : cpu_procs) {
-    for (auto &cpu_mem : cpu_proc.getMemories()) {
-      hsa_amd_memory_pool_t pool = cpu_mem.getMemory();
+    for (auto &cpu_mem : cpu_proc.memories()) {
+      hsa_amd_memory_pool_t pool = cpu_mem.memory();
       for (auto &gpu_proc : gpu_procs) {
-        hsa_agent_t agent = gpu_proc.getAgent();
+        hsa_agent_t agent = gpu_proc.agent();
         hsa_amd_memory_pool_access_t access;
         hsa_amd_agent_memory_pool_get_info(
             agent, pool, HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, &access);
@@ -659,7 +659,7 @@ hsa_status_t init_comute_and_memory() {
         }
       }
       for (auto &dsp_proc : dsp_procs) {
-        hsa_agent_t agent = dsp_proc.getAgent();
+        hsa_agent_t agent = dsp_proc.agent();
         hsa_amd_memory_pool_access_t access;
         hsa_amd_agent_memory_pool_get_info(
             agent, pool, HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, &access);
@@ -676,10 +676,10 @@ hsa_status_t init_comute_and_memory() {
    * all to all compare procs with their memory pools and add those memory
    * pools that are accessible by the target procs */
   for (auto &gpu_proc : gpu_procs) {
-    for (auto &gpu_mem : gpu_proc.getMemories()) {
-      hsa_amd_memory_pool_t pool = gpu_mem.getMemory();
+    for (auto &gpu_mem : gpu_proc.memories()) {
+      hsa_amd_memory_pool_t pool = gpu_mem.memory();
       for (auto &dsp_proc : dsp_procs) {
-        hsa_agent_t agent = dsp_proc.getAgent();
+        hsa_agent_t agent = dsp_proc.agent();
         hsa_amd_memory_pool_access_t access;
         hsa_amd_agent_memory_pool_get_info(
             agent, pool, HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, &access);
@@ -691,7 +691,7 @@ hsa_status_t init_comute_and_memory() {
       }
 
       for (auto &cpu_proc : cpu_procs) {
-        hsa_agent_t agent = cpu_proc.getAgent();
+        hsa_agent_t agent = cpu_proc.agent();
         hsa_amd_memory_pool_access_t access;
         hsa_amd_agent_memory_pool_get_info(
             agent, pool, HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, &access);
@@ -705,10 +705,10 @@ hsa_status_t init_comute_and_memory() {
   }
 
   for (auto &dsp_proc : dsp_procs) {
-    for (auto &dsp_mem : dsp_proc.getMemories()) {
-      hsa_amd_memory_pool_t pool = dsp_mem.getMemory();
+    for (auto &dsp_mem : dsp_proc.memories()) {
+      hsa_amd_memory_pool_t pool = dsp_mem.memory();
       for (auto &gpu_proc : gpu_procs) {
-        hsa_agent_t agent = gpu_proc.getAgent();
+        hsa_agent_t agent = gpu_proc.agent();
         hsa_amd_memory_pool_access_t access;
         hsa_amd_agent_memory_pool_get_info(
             agent, pool, HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, &access);
@@ -720,7 +720,7 @@ hsa_status_t init_comute_and_memory() {
       }
 
       for (auto &cpu_proc : cpu_procs) {
-        hsa_agent_t agent = cpu_proc.getAgent();
+        hsa_agent_t agent = cpu_proc.agent();
         hsa_amd_memory_pool_access_t access;
         hsa_amd_agent_memory_pool_get_info(
             agent, pool, HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, &access);
@@ -744,7 +744,7 @@ hsa_status_t init_comute_and_memory() {
   int num_iGPUs = 0;
   int num_dGPUs = 0;
   for (int i = 0; i < gpu_procs.size(); i++) {
-    if (gpu_procs[i].getType() == ATMI_DEVTYPE_iGPU)
+    if (gpu_procs[i].type() == ATMI_DEVTYPE_iGPU)
       num_iGPUs++;
     else
       num_dGPUs++;
@@ -769,15 +769,15 @@ hsa_status_t init_comute_and_memory() {
   g_atmi_machine.devices_by_type[ATMI_DEVTYPE_dGPU] = &all_devices[gpus_begin];
   int proc_index = 0;
   for (int i = cpus_begin; i < cpus_end; i++) {
-    all_devices[i].type = cpu_procs[proc_index].getType();
-    all_devices[i].core_count = cpu_procs[proc_index].getNumCUs();
+    all_devices[i].type = cpu_procs[proc_index].type();
+    all_devices[i].core_count = cpu_procs[proc_index].num_cus();
 
-    std::vector<ATLMemory> memories = cpu_procs[proc_index].getMemories();
+    std::vector<ATLMemory> memories = cpu_procs[proc_index].memories();
     int fine_memories_size = 0;
     int coarse_memories_size = 0;
     DEBUG_PRINT("CPU memory types:\t");
     for (auto &memory : memories) {
-      atmi_memtype_t type = memory.getType();
+      atmi_memtype_t type = memory.type();
       if (type == ATMI_MEMTYPE_FINE_GRAINED) {
         fine_memories_size++;
         DEBUG_PRINT("Fine\t");
@@ -793,15 +793,15 @@ hsa_status_t init_comute_and_memory() {
   }
   proc_index = 0;
   for (int i = gpus_begin; i < gpus_end; i++) {
-    all_devices[i].type = gpu_procs[proc_index].getType();
-    all_devices[i].core_count = gpu_procs[proc_index].getNumCUs();
+    all_devices[i].type = gpu_procs[proc_index].type();
+    all_devices[i].core_count = gpu_procs[proc_index].num_cus();
 
-    std::vector<ATLMemory> memories = gpu_procs[proc_index].getMemories();
+    std::vector<ATLMemory> memories = gpu_procs[proc_index].memories();
     int fine_memories_size = 0;
     int coarse_memories_size = 0;
     DEBUG_PRINT("GPU memory types:\t");
     for (auto &memory : memories) {
-      atmi_memtype_t type = memory.getType();
+      atmi_memtype_t type = memory.type();
       if (type == ATMI_MEMTYPE_FINE_GRAINED) {
         fine_memories_size++;
         DEBUG_PRINT("Fine\t");
@@ -818,7 +818,7 @@ hsa_status_t init_comute_and_memory() {
   proc_index = 0;
   atl_cpu_kernarg_region.handle = (uint64_t)-1;
   if (cpu_procs.size() > 0) {
-    err = hsa_agent_iterate_regions(cpu_procs[0].getAgent(),
+    err = hsa_agent_iterate_regions(cpu_procs[0].agent(),
                                     get_fine_grained_region,
                                     &atl_cpu_kernarg_region);
     if (err == HSA_STATUS_INFO_BREAK) {
@@ -831,7 +831,7 @@ hsa_status_t init_comute_and_memory() {
   /* Find a memory region that supports kernel arguments.  */
   atl_gpu_kernarg_region.handle = (uint64_t)-1;
   if (gpu_procs.size() > 0) {
-    hsa_agent_iterate_regions(gpu_procs[0].getAgent(),
+    hsa_agent_iterate_regions(gpu_procs[0].agent(),
                               get_kernarg_memory_region,
                               &atl_gpu_kernarg_region);
     err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR
@@ -873,11 +873,11 @@ void init_tasks() {
   hsa_status_t err;
   int task_num;
   std::vector<hsa_agent_t> gpu_agents;
-  int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
+  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
   for (int gpu = 0; gpu < gpu_count; gpu++) {
     atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
     ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    gpu_agents.push_back(proc.getAgent());
+    gpu_agents.push_back(proc.agent());
   }
   int max_signals = core::Runtime::getInstance().getMaxSignals();
   for (task_num = 0; task_num < max_signals; task_num++) {
@@ -953,13 +953,13 @@ atmi_status_t atl_init_gpu_context() {
   err = init_hsa();
   if (err != HSA_STATUS_SUCCESS) return ATMI_STATUS_ERROR;
 
-  int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
+  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
   for (int gpu = 0; gpu < gpu_count; gpu++) {
     atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
     ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
     int num_gpu_queues = core::Runtime::getInstance().getNumGPUQueues();
     if (num_gpu_queues == -1) {
-      num_gpu_queues = proc.getNumCUs();
+      num_gpu_queues = proc.num_cus();
       num_gpu_queues = (num_gpu_queues > 8) ? 8 : num_gpu_queues;
     }
     proc.createQueues(num_gpu_queues);
@@ -989,7 +989,7 @@ atmi_status_t atl_init_cpu_context() {
 
   /* Get a CPU agent, create a pthread to handle packets*/
   /* Iterate over the agents and pick the cpu agent */
-  int cpu_count = g_atl_machine.getProcessorCount<ATLCPUProcessor>();
+  int cpu_count = g_atl_machine.processorCount<ATLCPUProcessor>();
   for (int cpu = 0; cpu < cpu_count; cpu++) {
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
     ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
@@ -999,7 +999,7 @@ atmi_status_t atl_init_cpu_context() {
     // restricting the number of queues to num_cus - 2?
     int num_cpu_queues = core::Runtime::getInstance().getNumCPUQueues();
     if (num_cpu_queues == -1) {
-      num_cpu_queues = proc.getNumCUs();
+      num_cpu_queues = proc.num_cus();
     }
     cpu_agent_init(cpu, num_cpu_queues);
   }
@@ -1838,7 +1838,7 @@ atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
     modules_str.push_back(std::string(reinterpret_cast<char *>(modules[i])));
   }
 
-  int gpu_count = g_atl_machine.getProcessorCount<ATLGPUProcessor>();
+  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
 
   KernelInfoTable.resize(gpu_count);
   SymbolInfoTable.resize(gpu_count);
@@ -1847,7 +1847,7 @@ atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
     DEBUG_PRINT("Trying to load module to GPU-%d\n", gpu);
     atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
     ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    hsa_agent_t agent = proc.getAgent();
+    hsa_agent_t agent = proc.agent();
     hsa_executable_t executable = {0};
     hsa_profile_t agent_profile;
 

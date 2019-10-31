@@ -16,51 +16,49 @@ class ATLMemory;
 class ATLProcessor {
  public:
   explicit ATLProcessor(hsa_agent_t agent)
-      : _next_best_queue_id(0), _agent(agent) {
-    _queues.clear();
-    _memories.clear();
+      : next_best_queue_id_(0), agent_(agent) {
+    queues_.clear();
+    memories_.clear();
   }
   void addMemory(const ATLMemory &p);
-  hsa_agent_t getAgent() const { return _agent; }
+  hsa_agent_t agent() const { return agent_; }
   // TODO(ashwinma): Do we need this or are we building the machine structure
-  // just once in
-  // the program?
+  // just once in the program?
   // void removeMemory(ATLMemory &p);
-  const std::vector<ATLMemory> &getMemories() const;
-  virtual atmi_devtype_t getType() { return ATMI_DEVTYPE_ALL; }
+  const std::vector<ATLMemory> &memories() const;
+  virtual atmi_devtype_t type() { return ATMI_DEVTYPE_ALL; }
 
   virtual void createQueues(const int count) {}
   virtual void destroyQueues();
-  virtual hsa_queue_t *getQueue(const int index);
-  std::vector<hsa_queue_t *> getQueues() const { return _queues; }
+  virtual hsa_queue_t *getQueueAt(const int index);
+  std::vector<hsa_queue_t *> queues() const { return queues_; }
   virtual hsa_queue_t *getBestQueue(atmi_scheduler_t sched);
-  int getNumCUs() const;
-  int getWavefrontSize() const;
+  int num_cus() const;
+  int wavefront_size() const;
 
  protected:
-  hsa_agent_t _agent;
-  std::vector<hsa_queue_t *> _queues;
-  unsigned int
-      _next_best_queue_id;  // schedule queues by setting this to best queue ID
-
-  std::vector<ATLMemory> _memories;
+  hsa_agent_t agent_;
+  std::vector<hsa_queue_t *> queues_;
+  // schedule queues by setting this to best queue ID
+  unsigned int next_best_queue_id_;
+  std::vector<ATLMemory> memories_;
 };
 
 class ATLCPUProcessor : public ATLProcessor {
  public:
   explicit ATLCPUProcessor(hsa_agent_t agent) : ATLProcessor(agent) {
-    _agents.clear();
+    thread_agents_.clear();
   }
-  atmi_devtype_t getType() const { return ATMI_DEVTYPE_CPU; }
+  atmi_devtype_t type() const { return ATMI_DEVTYPE_CPU; }
   void createQueues(const int count);
 
-  agent_t *getThreadAgent(const int index);
-  const std::vector<agent_t *> &getThreadAgents() const { return _agents; }
+  thread_agent_t *getThreadAgentAt(const int index);
+  const std::vector<thread_agent_t *> &thread_agents() const { return thread_agents_; }
   // misc helper functions needed by ATMI DP
   hsa_signal_t *get_worker_sig(hsa_queue_t *q);
 
  private:
-  std::vector<agent_t *> _agents;
+  std::vector<thread_agent_t *> thread_agents_;
 };
 
 class ATLGPUProcessor : public ATLProcessor {
@@ -68,61 +66,61 @@ class ATLGPUProcessor : public ATLProcessor {
   explicit ATLGPUProcessor(hsa_agent_t agent,
                            atmi_devtype_t type = ATMI_DEVTYPE_dGPU)
       : ATLProcessor(agent) {
-    _type = type;
+    type_ = type;
   }
-  atmi_devtype_t getType() const { return _type; }
+  atmi_devtype_t type() const { return type_; }
   void createQueues(const int count);
 
  private:
-  atmi_devtype_t _type;
+  atmi_devtype_t type_;
 };
 
 class ATLDSPProcessor : public ATLProcessor {
  public:
   explicit ATLDSPProcessor(hsa_agent_t agent) : ATLProcessor(agent) {}
-  atmi_devtype_t getType() const { return ATMI_DEVTYPE_DSP; }
+  atmi_devtype_t type() const { return ATMI_DEVTYPE_DSP; }
   void createQueues(const int count);
 };
 
 class ATLMemory {
  public:
   ATLMemory(hsa_amd_memory_pool_t pool, ATLProcessor p, atmi_memtype_t t)
-      : _memory_pool(pool), _processor(p), _type(t) {}
-  ATLProcessor &getProcessor() { return _processor; }
-  hsa_amd_memory_pool_t getMemory() const { return _memory_pool; }
+      : memory_pool_(pool), processor_(p), type_(t) {}
+  ATLProcessor &processor() { return processor_; }
+  hsa_amd_memory_pool_t memory() const { return memory_pool_; }
 
-  atmi_memtype_t getType() const { return _type; }
-  // uint32_t getAccessType () { return fine of coarse grained? ;}
+  atmi_memtype_t type() const { return type_; }
+  // uint32_t access_type() { return fine of coarse grained? ;}
   /* memory alloc/free */
   void *alloc(size_t s);
   void free(void *p);
   // atmi_task_handle_t copy(ATLMemory &m, bool async = false);
  private:
-  hsa_amd_memory_pool_t _memory_pool;
-  ATLProcessor _processor;
-  atmi_memtype_t _type;
+  hsa_amd_memory_pool_t memory_pool_;
+  ATLProcessor processor_;
+  atmi_memtype_t type_;
 };
 
 class ATLMachine {
  public:
   ATLMachine() {
-    _cpu_processors.clear();
-    _gpu_processors.clear();
-    _dsp_processors.clear();
+    cpu_processors_.clear();
+    gpu_processors_.clear();
+    dsp_processors_.clear();
   }
   template <typename T>
   void addProcessor(const T &p);
   template <typename T>
-  std::vector<T> &getProcessors();
+  std::vector<T> &processors();
   template <typename T>
-  size_t getProcessorCount() {
-    return getProcessors<T>().size();
+  size_t processorCount() {
+    return processors<T>().size();
   }
 
  private:
-  std::vector<ATLCPUProcessor> _cpu_processors;
-  std::vector<ATLGPUProcessor> _gpu_processors;
-  std::vector<ATLDSPProcessor> _dsp_processors;
+  std::vector<ATLCPUProcessor> cpu_processors_;
+  std::vector<ATLGPUProcessor> gpu_processors_;
+  std::vector<ATLDSPProcessor> dsp_processors_;
 };
 
 hsa_amd_memory_pool_t get_memory_pool(const ATLProcessor &proc,

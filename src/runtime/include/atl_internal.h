@@ -135,17 +135,17 @@ typedef struct atl_kernel_enqueue_args_s {
   // ___________________________________________________________________________
 } atl_kernel_enqueue_args_t;
 
-typedef struct agent_t {
+typedef struct thread_agent_s {
   int id;
   hsa_signal_t worker_sig;
   hsa_queue_t *queue;
   pthread_t thread;
   Global::RealTimer timer;
-} agent_t;
+} thread_agent_t;
 
 enum { PROCESS_PKT = 0, FINISH, IDLE };
 
-agent_t *get_cpu_q_agent(int cpu_id, int id);
+thread_agent_t *get_cpu_q_agent(int cpu_id, int id);
 void cpu_agent_init(int cpu_id, const size_t num_queues);
 void agent_fini();
 void signal_worker_id(int cpu_id, int tid, int signal);
@@ -194,6 +194,7 @@ extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
 namespace core {
 class TaskgroupImpl;
+// class TaskImpl;
 class Kernel;
 class KernelImpl;
 }

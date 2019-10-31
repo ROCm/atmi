@@ -948,7 +948,7 @@ void *acquire_kernarg_segment(KernelImpl *impl, int *segment_id) {
 
 std::vector<hsa_queue_t *> get_cpu_queues(atmi_place_t place) {
   ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-  return proc.getQueues();
+  return proc.queues();
 }
 
 atmi_status_t dispatch_task(atl_task_t *task) {
@@ -1294,9 +1294,9 @@ void acquire_aql_packet(atl_task_t *task) {
         reinterpret_cast<ATLData *>(dest_ptr_info.userData);
 #endif
     bool is_src_host =
-        (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+        (!src_data || src_data->place().dev_type == ATMI_DEVTYPE_CPU);
     bool is_dest_host =
-        (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+        (!dest_data || dest_data->place().dev_type == ATMI_DEVTYPE_CPU);
     void *temp_host_ptr;
     const void *src_ptr = src;
     void *dest_ptr = dest;

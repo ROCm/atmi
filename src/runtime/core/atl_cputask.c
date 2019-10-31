@@ -85,13 +85,13 @@ void set_task_packet(hsa_agent_dispatch_packet_t *packet) {
 hsa_queue_t *get_cpu_queue(int cpu_id, int tid) {
   atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
   ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-  return proc.getQueue(tid);
+  return proc.getQueueAt(tid);
 }
 
-agent_t *get_cpu_q_agent(int cpu_id, int tid) {
+thread_agent_t *get_cpu_q_agent(int cpu_id, int tid) {
   atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
   ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-  return proc.getThreadAgent(tid);
+  return proc.getThreadAgentAt(tid);
 }
 
 hsa_signal_t *get_worker_sig(hsa_queue_t *queue) {
@@ -119,7 +119,7 @@ void signal_worker_id(int cpu_id, int tid, int signal) {
   DEBUG_PRINT("Signaling work %d\n", signal);
   atmi_place_t place = ATMI_PLACE_CPU(0, cpu_id);
   ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-  agent_t *agent = proc.getThreadAgent(tid);
+  thread_agent_t *agent = proc.getThreadAgentAt(tid);
   hsa_signal_store_release(agent->worker_sig, signal);
 }
 
@@ -131,7 +131,7 @@ uint8_t get_packet_type(uint16_t header) {
   return (header >> HSA_PACKET_HEADER_TYPE) & 0xFF;
 }
 
-int process_packet(agent_t *agent) {
+int process_packet(thread_agent_t *agent) {
   hsa_queue_t *queue = agent->queue;
   int id = agent->id;
   DEBUG_PRINT("Processing Packet from CPU Queue\n");
@@ -508,7 +508,7 @@ int process_packet(agent_t *agent) {
 }
 
 void *agent_worker(void *agent_args) {
-  agent_t *agent = reinterpret_cast<agent_t *>(agent_args);
+  thread_agent_t *agent = reinterpret_cast<thread_agent_t *>(agent_args);
 
   unsigned num_cpus = std::thread::hardware_concurrency();
   // pin this thread to the core number as its agent ID...
@@ -565,10 +565,10 @@ void agent_fini() {
        cpu++) {
     atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
     ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-    const std::vector<agent_t *> &agents = proc.getThreadAgents();
+    const std::vector<thread_agent_t *> &agents = proc.thread_agents();
     uint32_t i;
     for (i = 0; i < agents.size(); i++) {
-      agent_t *agent = agents[i];
+      thread_agent_t *agent = agents[i];
       DEBUG_PRINT("Setting doorbell[%d] to INT_MAX\n", i);
       hsa_signal_store_release(agent->queue->doorbell_signal, INT_MAX);
       hsa_signal_store_release(agent->worker_sig, FINISH);

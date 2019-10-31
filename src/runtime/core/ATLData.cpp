@@ -43,9 +43,9 @@ const char *getPlaceStr(atmi_devtype_t type) {
 }
 
 std::ostream &operator<<(std::ostream &os, const ATLData *ap) {
-  atmi_mem_place_t place = ap->getPlace();
-  os << "hostPointer:" << ap->getHostAliasPtr()
-     << " devicePointer:" << ap->getPtr() << " sizeBytes:" << ap->getSize()
+  atmi_mem_place_t place = ap->place();
+  os << "hostPointer:" << ap->host_aliasptr()
+     << " devicePointer:" << ap->ptr() << " sizeBytes:" << ap->size()
      << " place:(" << getPlaceStr(place.dev_type) << ", " << place.dev_id
      << ", " << place.mem_id << ")";
   return os;
@@ -53,24 +53,24 @@ std::ostream &operator<<(std::ostream &os, const ATLData *ap) {
 
 #ifndef USE_ROCR_PTR_INFO
 void ATLPointerTracker::insert(void *pointer, ATLData *p) {
-  std::lock_guard<std::mutex> l(_mutex);
+  std::lock_guard<std::mutex> l(mutex_);
 
-  DEBUG_PRINT("insert: %p + %zu\n", pointer, p->getSize());
-  _tracker.insert(std::make_pair(ATLMemoryRange(pointer, p->getSize()), p));
+  DEBUG_PRINT("insert: %p + %zu\n", pointer, p->size());
+  tracker_.insert(std::make_pair(ATLMemoryRange(pointer, p->size()), p));
 }
 
 void ATLPointerTracker::remove(void *pointer) {
-  std::lock_guard<std::mutex> l(_mutex);
+  std::lock_guard<std::mutex> l(mutex_);
   DEBUG_PRINT("remove: %p\n", pointer);
-  _tracker.erase(ATLMemoryRange(pointer, 1));
+  tracker_.erase(ATLMemoryRange(pointer, 1));
 }
 
 ATLData *ATLPointerTracker::find(const void *pointer) {
-  std::lock_guard<std::mutex> l(_mutex);
+  std::lock_guard<std::mutex> l(mutex_);
   ATLData *ret = NULL;
-  auto iter = _tracker.find(ATLMemoryRange(pointer, 1));
+  auto iter = tracker_.find(ATLMemoryRange(pointer, 1));
   DEBUG_PRINT("find: %p\n", pointer);
-  if (iter != _tracker.end())  // found
+  if (iter != tracker_.end())  // found
     ret = iter->second;
   return ret;
 }
@@ -80,11 +80,11 @@ ATLProcessor &get_processor_by_compute_place(atmi_place_t place) {
   int dev_id = place.device_id;
   switch (place.type) {
     case ATMI_DEVTYPE_CPU:
-      return g_atl_machine.getProcessors<ATLCPUProcessor>()[dev_id];
+      return g_atl_machine.processors<ATLCPUProcessor>()[dev_id];
     case ATMI_DEVTYPE_GPU:
-      return g_atl_machine.getProcessors<ATLGPUProcessor>()[dev_id];
+      return g_atl_machine.processors<ATLGPUProcessor>()[dev_id];
     case ATMI_DEVTYPE_DSP:
-      return g_atl_machine.getProcessors<ATLDSPProcessor>()[dev_id];
+      return g_atl_machine.processors<ATLDSPProcessor>()[dev_id];
   }
 }
 
@@ -92,20 +92,20 @@ ATLProcessor &get_processor_by_mem_place(atmi_mem_place_t place) {
   int dev_id = place.dev_id;
   switch (place.dev_type) {
     case ATMI_DEVTYPE_CPU:
-      return g_atl_machine.getProcessors<ATLCPUProcessor>()[dev_id];
+      return g_atl_machine.processors<ATLCPUProcessor>()[dev_id];
     case ATMI_DEVTYPE_GPU:
-      return g_atl_machine.getProcessors<ATLGPUProcessor>()[dev_id];
+      return g_atl_machine.processors<ATLGPUProcessor>()[dev_id];
     case ATMI_DEVTYPE_DSP:
-      return g_atl_machine.getProcessors<ATLDSPProcessor>()[dev_id];
+      return g_atl_machine.processors<ATLDSPProcessor>()[dev_id];
   }
 }
 
 hsa_agent_t get_compute_agent(atmi_place_t place) {
-  return get_processor_by_compute_place(place).getAgent();
+  return get_processor_by_compute_place(place).agent();
 }
 
 hsa_agent_t get_mem_agent(atmi_mem_place_t place) {
-  return get_processor_by_mem_place(place).getAgent();
+  return get_processor_by_mem_place(place).agent();
 }
 
 hsa_amd_memory_pool_t get_memory_pool_by_mem_place(atmi_mem_place_t place) {
@@ -166,12 +166,12 @@ atmi_status_t atmi_data_map_sync(void *ptr, size_t size, atmi_mem_place_t place,
 atmi_status_t atmi_data_unmap_sync(void *ptr, void *mapped_ptr) {
     if(!mapped_ptr || !ptr) return ATMI_STATUS_ERROR;
     ATLData *m = MemoryMap[mapped_ptr];
-    if(m->getHostAliasPtr() != ptr) return ATMI_STATUS_ERROR;
-    if(m->getSize() == 0) return ATMI_STATUS_ERROR;
+    if(m->host_aliasptr() != ptr) return ATMI_STATUS_ERROR;
+    if(m->size() == 0) return ATMI_STATUS_ERROR;
 
     hsa_status_t err;
-    if(m->getArgType() != ATMI_IN) {
-        atmi_mem_place_t place = m->getPlace();
+    if(m->arg_type() != ATMI_IN) {
+        atmi_mem_place_t place = m->place();
         // 1) copy data to staging buffer of ptr
         // 2) unlock staging buffer
         // OR
@@ -179,18 +179,18 @@ atmi_status_t atmi_data_unmap_sync(void *ptr, void *mapped_ptr) {
         void *host_ptr;
         atmi_mem_place_t cpu_place = {0, ATMI_DEVTYPE_CPU, 0, 0};
         hsa_amd_memory_pool_t host_pool = get_memory_pool_by_mem_place(cpu_place);
-        err = hsa_amd_memory_pool_allocate(host_pool, m->getSize(), 0, &host_ptr);
+        err = hsa_amd_memory_pool_allocate(host_pool, m->size(), 0, &host_ptr);
         ErrorCheck(Host staging buffer alloc, err);
 
         hsa_signal_add_acq_rel(IdentityCopySignal, 1);
         err = hsa_amd_memory_async_copy(host_ptr, get_mem_agent(cpu_place),
-                mapped_ptr, get_mem_agent(m->getPlace()),
-                m->getSize(),
+                mapped_ptr, get_mem_agent(m->place()),
+                m->size(),
                 0, NULL, IdentityCopySignal);
         ErrorCheck(Copy async between memory pools, err);
         hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX, ATMI_WAIT_STATE);
 
-        memcpy(ptr, host_ptr, m->getSize());
+        memcpy(ptr, host_ptr, m->size());
 
         err = hsa_amd_memory_pool_free(host_ptr);
         ErrorCheck(atmi_data_create_sync, err);
@@ -469,9 +469,9 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
       reinterpret_cast<ATLData *>(dest_ptr_info.userData);
 #endif
   bool is_src_host =
-      (!src_data || src_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+      (!src_data || src_data->place().dev_type == ATMI_DEVTYPE_CPU);
   bool is_dest_host =
-      (!dest_data || dest_data->getPlace().dev_type == ATMI_DEVTYPE_CPU);
+      (!dest_data || dest_data->place().dev_type == ATMI_DEVTYPE_CPU);
   atmi_mem_place_t cpu = ATMI_MEM_PLACE_CPU_MEM(0, 0, 0);
   hsa_agent_t cpu_agent = get_mem_agent(cpu);
   hsa_agent_t src_agent;
@@ -488,20 +488,20 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     dest_ptr = dest;
   } else if (src_data && !dest_data) {
     type = ATMI_D2H;
-    src_agent = get_mem_agent(src_data->getPlace());
+    src_agent = get_mem_agent(src_data->place());
     dest_agent = src_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else if (!src_data && dest_data) {
     type = ATMI_H2D;
-    dest_agent = get_mem_agent(dest_data->getPlace());
+    dest_agent = get_mem_agent(dest_data->place());
     src_agent = dest_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else {
     type = ATMI_D2D;
-    src_agent = get_mem_agent(src_data->getPlace());
-    dest_agent = get_mem_agent(dest_data->getPlace());
+    src_agent = get_mem_agent(src_data->place());
+    dest_agent = get_mem_agent(dest_data->place());
     src_ptr = src;
     dest_ptr = dest;
   }
@@ -632,7 +632,7 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
   volatile unsigned type;
   if (src_data && !dest_data) {
     type = ATMI_D2H;
-    src_agent = get_mem_agent(src_data->getPlace());
+    src_agent = get_mem_agent(src_data->place());
     dest_agent = src_agent;
     // dest_agent = cpu_agent; // FIXME: can the two agents be the GPU agent
     // itself?
@@ -643,7 +643,7 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     dest_ptr = temp_host_ptr;
   } else if (!src_data && dest_data) {
     type = ATMI_H2D;
-    dest_agent = get_mem_agent(dest_data->getPlace());
+    dest_agent = get_mem_agent(dest_data->place());
     // src_agent = cpu_agent; // FIXME: can the two agents be the GPU agent
     // itself?
     src_agent = dest_agent;
@@ -663,8 +663,8 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     dest_ptr = dest;
   } else {
     type = ATMI_D2D;
-    src_agent = get_mem_agent(src_data->getPlace());
-    dest_agent = get_mem_agent(dest_data->getPlace());
+    src_agent = get_mem_agent(src_data->place());
+    dest_agent = get_mem_agent(dest_data->place());
     src_ptr = src;
     dest_ptr = dest;
   }

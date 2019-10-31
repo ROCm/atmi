@@ -17,7 +17,7 @@ extern hsa_region_t atl_cpu_kernarg_region;
 
 void *ATLMemory::alloc(size_t sz) {
   void *ret;
-  hsa_status_t err = hsa_amd_memory_pool_allocate(_memory_pool, sz, 0, &ret);
+  hsa_status_t err = hsa_amd_memory_pool_allocate(memory_pool_, sz, 0, &ret);
   ErrorCheck(Allocate from memory pool, err);
   return ret;
 }
@@ -36,55 +36,55 @@ void ATLMemory::free(void *ptr) {
 }*/
 
 void ATLProcessor::addMemory(const ATLMemory &mem) {
-  for (auto &mem_obj : _memories) {
+  for (auto &mem_obj : memories_) {
     // if the memory already exists, then just return
-    if (mem.getMemory().handle == mem_obj.getMemory().handle) return;
+    if (mem.memory().handle == mem_obj.memory().handle) return;
   }
-  _memories.push_back(mem);
+  memories_.push_back(mem);
 }
 
-const std::vector<ATLMemory> &ATLProcessor::getMemories() const {
-  return _memories;
-}
-
-template <>
-std::vector<ATLCPUProcessor> &ATLMachine::getProcessors() {
-  return _cpu_processors;
+const std::vector<ATLMemory> &ATLProcessor::memories() const {
+  return memories_;
 }
 
 template <>
-std::vector<ATLGPUProcessor> &ATLMachine::getProcessors() {
-  return _gpu_processors;
+std::vector<ATLCPUProcessor> &ATLMachine::processors() {
+  return cpu_processors_;
 }
 
 template <>
-std::vector<ATLDSPProcessor> &ATLMachine::getProcessors() {
-  return _dsp_processors;
+std::vector<ATLGPUProcessor> &ATLMachine::processors() {
+  return gpu_processors_;
+}
+
+template <>
+std::vector<ATLDSPProcessor> &ATLMachine::processors() {
+  return dsp_processors_;
 }
 
 hsa_amd_memory_pool_t get_memory_pool(const ATLProcessor &proc,
                                       const int mem_id) {
   hsa_amd_memory_pool_t pool;
-  const std::vector<ATLMemory> &mems = proc.getMemories();
+  const std::vector<ATLMemory> &mems = proc.memories();
   assert(mems.size() && mem_id >= 0 && mem_id < mems.size() &&
          "Invalid memory pools for this processor");
-  pool = mems[mem_id].getMemory();
+  pool = mems[mem_id].memory();
   return pool;
 }
 
 template <>
 void ATLMachine::addProcessor(const ATLCPUProcessor &p) {
-  _cpu_processors.push_back(p);
+  cpu_processors_.push_back(p);
 }
 
 template <>
 void ATLMachine::addProcessor(const ATLGPUProcessor &p) {
-  _gpu_processors.push_back(p);
+  gpu_processors_.push_back(p);
 }
 
 template <>
 void ATLMachine::addProcessor(const ATLDSPProcessor &p) {
-  _dsp_processors.push_back(p);
+  dsp_processors_.push_back(p);
 }
 
 int cu_mask_parser(char *gpu_workers, uint64_t *cu_masks, int count) {
@@ -156,7 +156,7 @@ void ATLGPUProcessor::createQueues(const int count) {
   hsa_status_t err;
   /* Query the maximum size of the queue.  */
   uint32_t queue_size = 0;
-  err = hsa_agent_get_info(_agent, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
+  err = hsa_agent_get_info(agent_, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
   ErrorCheck(Querying the agent maximum queue size, err);
   /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size);  */
 
@@ -165,7 +165,7 @@ void ATLGPUProcessor::createQueues(const int count) {
   for (qid = 0; qid < count; qid++) {
     hsa_queue_t *this_Q;
     err =
-        hsa_queue_create(_agent, queue_size, HSA_QUEUE_TYPE_MULTI,
+        hsa_queue_create(agent_, queue_size, HSA_QUEUE_TYPE_MULTI,
                          callbackQueue, NULL, UINT32_MAX, UINT32_MAX, &this_Q);
     ErrorCheck(Creating the queue, err);
     err = hsa_amd_profiling_set_profiler_enabled(this_Q, 1);
@@ -184,7 +184,7 @@ void ATLGPUProcessor::createQueues(const int count) {
         fprintf(stderr, "Error: hsa_amd_queue_cu_set_mask\n");
     }
 
-    _queues.push_back(this_Q);
+    queues_.push_back(this_Q);
 
     DEBUG_PRINT("Queue[%d]: %p\n", qid, this_Q);
   }
@@ -193,15 +193,15 @@ void ATLGPUProcessor::createQueues(const int count) {
   free(num_cus);
 }
 
-agent_t *ATLCPUProcessor::getThreadAgent(const int index) {
-  if (index < 0 || index >= _agents.size())
+thread_agent_t *ATLCPUProcessor::getThreadAgentAt(const int index) {
+  if (index < 0 || index >= thread_agents_.size())
     DEBUG_PRINT("CPU Agent index out of bounds!\n");
-  return _agents[index];
+  return thread_agents_[index];
 }
 
 hsa_signal_t *ATLCPUProcessor::get_worker_sig(hsa_queue_t *q) {
   hsa_signal_t *ret = NULL;
-  for (auto agent : _agents) {
+  for (auto agent : thread_agents_) {
     if (agent->queue == q) {
       ret = &(agent->worker_sig);
       break;
@@ -215,7 +215,7 @@ void *agent_worker(void *agent_args);
 void ATLCPUProcessor::createQueues(const int count) {
   hsa_status_t err;
   for (int qid = 0; qid < count; qid++) {
-    agent_t *agent = new agent_t;
+    thread_agent_t *agent = new thread_agent_t;
     agent->id = qid;
     // signal between the host thread and the CPU tasking queue thread
     err = hsa_signal_create(IDLE, 0, NULL, &(agent->worker_sig));
@@ -235,7 +235,7 @@ void ATLCPUProcessor::createQueues(const int count) {
             atl_cpu_kernarg_region, capacity, HSA_QUEUE_TYPE_SINGLE,
             HSA_QUEUE_FEATURE_AGENT_DISPATCH, db_signal, &this_Q);
         ErrorCheck(Creating an agent queue, err);
-        _queues.push_back(this_Q);
+        queues_.push_back(this_Q);
         agent->queue = this_Q;
 
         hsa_queue_t *q = this_Q;
@@ -247,8 +247,8 @@ void ATLCPUProcessor::createQueues(const int count) {
          * manually set it again like below.
          */
         q->doorbell_signal = db_signal;
-        _agents.push_back(agent);
-        int last_index = _agents.size() - 1;
+        thread_agents_.push_back(agent);
+        int last_index = thread_agents_.size() - 1;
         pthread_create(&(agent->thread), NULL, agent_worker,
                        reinterpret_cast<void *>(agent));
   }
@@ -257,7 +257,7 @@ void ATLCPUProcessor::createQueues(const int count) {
 void ATLDSPProcessor::createQueues(const int count) {}
 
 void ATLProcessor::destroyQueues() {
-  for (auto queue : _queues) {
+  for (auto queue : queues_) {
     hsa_status_t err = hsa_queue_destroy(queue);
     ErrorCheck(Destroying the queue, err);
   }
@@ -267,40 +267,40 @@ hsa_queue_t *ATLProcessor::getBestQueue(atmi_scheduler_t sched) {
   hsa_queue_t *ret = NULL;
   switch (sched) {
     case ATMI_SCHED_NONE:
-      ret = getQueue(__atomic_load_n(&_next_best_queue_id, __ATOMIC_ACQUIRE) %
-                     _queues.size());
+      ret = getQueueAt(__atomic_load_n(&next_best_queue_id_, __ATOMIC_ACQUIRE) %
+                     queues_.size());
       break;
     case ATMI_SCHED_RR:
-      ret = getQueue(
-          __atomic_fetch_add(&_next_best_queue_id, 1, __ATOMIC_ACQ_REL) %
-          _queues.size());
+      ret = getQueueAt(
+          __atomic_fetch_add(&next_best_queue_id_, 1, __ATOMIC_ACQ_REL) %
+          queues_.size());
       break;
   }
   return ret;
 }
 
-hsa_queue_t *ATLProcessor::getQueue(const int index) {
-  return _queues[index % _queues.size()];
+hsa_queue_t *ATLProcessor::getQueueAt(const int index) {
+  return queues_[index % queues_.size()];
 }
 
-int ATLProcessor::getNumCUs() const {
+int ATLProcessor::num_cus() const {
   hsa_status_t err;
   /* Query the number of compute units.  */
   uint32_t num_cus = 0;
   err = hsa_agent_get_info(
-      _agent, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_COMPUTE_UNIT_COUNT,
+      agent_, (hsa_agent_info_t)HSA_AMD_AGENT_INFO_COMPUTE_UNIT_COUNT,
       &num_cus);
   ErrorCheck(Querying the agent number of compute units, err);
 
   return num_cus;
 }
 
-int ATLProcessor::getWavefrontSize() const {
+int ATLProcessor::wavefront_size() const {
   hsa_status_t err;
   /* Query the number of compute units.  */
   uint32_t w_size = 0;
   err = hsa_agent_get_info(
-      _agent, (hsa_agent_info_t)HSA_AGENT_INFO_WAVEFRONT_SIZE, &w_size);
+      agent_, (hsa_agent_info_t)HSA_AGENT_INFO_WAVEFRONT_SIZE, &w_size);
   ErrorCheck(Querying the agent wavefront size, err);
 
   return w_size;

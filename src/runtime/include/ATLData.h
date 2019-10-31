@@ -22,50 +22,50 @@ namespace core {
 class ATLData {
  public:
   ATLData(void *ptr, size_t size, atmi_mem_place_t place, atmi_arg_type_t type)
-      : _ptr(ptr),
-        _host_alias_ptr(NULL),
-        _size(size),
-        _place(place),
-        _arg_type(type) {}
+      : ptr_(ptr),
+        host_aliasptr_(NULL),
+        size_(size),
+        place_(place),
+        arg_type_(type) {}
 
-  ATLData(void *ptr, void *host_ptr, size_t size, atmi_mem_place_t place,
+  ATLData(void *ptr, void *hostptr, size_t size, atmi_mem_place_t place,
           atmi_arg_type_t type)
-      : _ptr(ptr),
-        _host_alias_ptr(host_ptr),
-        _size(size),
-        _place(place),
-        _arg_type(type) {}
+      : ptr_(ptr),
+        host_aliasptr_(hostptr),
+        size_(size),
+        place_(place),
+        arg_type_(type) {}
 
-  void *getPtr() const { return _ptr; }
-  void *getHostAliasPtr() const { return _host_alias_ptr; }
-  size_t getSize() const { return _size; }
-  atmi_mem_place_t getPlace() const { return _place; }
-  atmi_arg_type_t getArgType() const { return _arg_type; }
+  void *ptr() const { return ptr_; }
+  void *host_aliasptr() const { return host_aliasptr_; }
+  size_t size() const { return size_; }
+  atmi_mem_place_t place() const { return place_; }
+  atmi_arg_type_t arg_type() const { return arg_type_; }
 
  private:
   // make this a vector of pointers?
-  void *_ptr;
-  void *_host_alias_ptr;
-  size_t _size;
-  atmi_mem_place_t _place;
-  atmi_arg_type_t _arg_type;
+  void *ptr_;
+  void *host_aliasptr_;
+  size_t size_;
+  atmi_mem_place_t place_;
+  atmi_arg_type_t arg_type_;
 };
 
 #ifndef USE_ROCR_PTR_INFO
 //---
 struct ATLMemoryRange {
-  const void *_basePointer;
-  const void *_endPointer;
-  ATLMemoryRange(const void *basePointer, size_t sizeBytes)
-      : _basePointer(basePointer),
-        _endPointer((const unsigned char *)basePointer + sizeBytes - 1) {}
+  const void *base_pointer;
+  const void *end_pointer;
+  ATLMemoryRange(const void *bp, size_t size_bytes)
+      : base_pointer(bp),
+        end_pointer((const unsigned char *)bp + size_bytes - 1) {}
 };
 
 // Functor to compare ranges:
 struct ATLMemoryRangeCompare {
   // Return true is LHS range is less than RHS - used to order the ranges
   bool operator()(const ATLMemoryRange &lhs, const ATLMemoryRange &rhs) const {
-    return lhs._endPointer < rhs._basePointer;
+    return lhs.end_pointer < rhs.base_pointer;
   }
 };
 
@@ -88,8 +88,8 @@ class ATLPointerTracker {
   ATLData *find(const void *pointer);
 
  private:
-  MapTrackerType _tracker;
-  std::mutex _mutex;
+  MapTrackerType tracker_;
+  std::mutex mutex_;
   // std::shared_timed_mutex _mut;
 };
 

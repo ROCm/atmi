@@ -41,7 +41,7 @@ class TaskgroupImpl {
       hsa_queue_t *generic_queue =
           (place.type == ATMI_DEVTYPE_GPU) ? gpu_queue_ : cpu_queue_;
       if (generic_queue == NULL) {
-        generic_queue = proc.getQueue(id_);
+        generic_queue = proc.getQueueAt(id_);
         // put the chosen queue as the taskgroup's designated CPU or GPU queue
         if (place.type == ATMI_DEVTYPE_GPU)
           gpu_queue_ = generic_queue;
@@ -50,7 +50,7 @@ class TaskgroupImpl {
       }
       ret_queue = generic_queue;
     } else {
-      ret_queue = proc.getQueue(getBestQueueID(sched));
+      ret_queue = proc.getQueueAt(getBestQueueID(sched));
     }
     DEBUG_PRINT("Returned Queue: %p\n", ret_queue);
     return ret_queue;

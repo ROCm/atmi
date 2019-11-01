@@ -38,15 +38,10 @@ endif()
 #pkg_check_modules(ATMI_SEARCH_LIBHSA QUIET libhsa-runtime64)
 
 string(TOLOWER "${ATMI_WITH_AOMP}" ATMI_WITH_AOMP_STR)
-if(ATMI_WITH_AOMP_STR MATCHES on)
-  set(ATMI_WITH_AOMP_VAR TRUE)
-  set(ROC_DIR ${CMAKE_INSTALL_PREFIX})
+if(ROCM_DIR)
+  set(ROC_DIR ${ROCM_DIR})
 else()
-  if(HSA_DIR)
-    set(ROC_DIR ${HSA_DIR})
-  else()
-    set(ROC_DIR "/opt/rocm")
-  endif()
+  set(ROC_DIR "/opt/rocm")
 endif()
 
 # Find ROCm

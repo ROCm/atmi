@@ -41,7 +41,7 @@ cmake \
     -DDEVICE_LIB_DIR=<path>  \ # root of ROCm Device Library to link
     -DATMI_DEVICE_RUNTIME=ON \ # (optional) to build ATMI device runtime (default: OFF)
     -DATMI_HSA_INTEROP=ON    \ # (optional) to build ATMI with HSA interop functionality (default: OFF)
-    -DROCM_DIR=/path/to/hsa   \ # (optional) root of ROCm/HSA runtime (default: /opt/rocm)
+    -DROCM_DIR=/path/to/hsa  \ # (optional) root of ROCm/HSA runtime (default: /opt/rocm)
     ..
 # make all components (Host runtime and device runtime)
 make

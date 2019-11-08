@@ -16,11 +16,14 @@
 #include "atl_internal.h"
 #include "atmi_runtime.h"
 #include "rt.h"
+#include "task.h"
 #include "taskgroup.h"
 
+using core::TaskImpl;
+using core::DataTaskImpl;
 extern ATLMachine g_atl_machine;
 extern hsa_signal_t IdentityCopySignal;
-extern std::deque<atl_task_t *> TaskList;
+extern std::deque<TaskImpl *> TaskList;
 
 namespace core {
 #ifndef USE_ROCR_PTR_INFO
@@ -347,102 +350,157 @@ atmi_status_t Runtime::Memfree(void *ptr) {
   return ret;
 }
 
-atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
-                                        const void *src, size_t size) {
-  // TODO(ashwinma): Reuse code in atl_rt for setting up default task params
+DataTaskImpl::DataTaskImpl(atmi_cparm_t* lparm, void* dest,
+                           const void* src,
+                           const size_t size) :
+          TaskImpl(),
+          data_dest_ptr_(dest),
+          data_src_ptr_(const_cast<void*>(src)),
+          data_size_(size)
+{
+  lock(&mutex_all_tasks_);
+  AllTasks.push_back(this);
+  atmi_task_handle_t new_id;
+  set_task_handle_ID(&new_id, AllTasks.size() - 1);
+  unlock(&mutex_all_tasks_);
+  id_ = new_id;
 
-  atl_task_t *ret = get_new_task();
+  taskgroup_ = lparm->group;
+  taskgroup_obj_ = getTaskgroupImpl(taskgroup_);
 
-  /* Add row to taskgroup table for purposes of future synchronizations */
-  ret->taskgroup = lparm->group;
-  ret->taskgroup_obj = get_taskgroup_impl(ret->taskgroup);
+  profilable_ = lparm->profilable;
+  groupable_ = lparm->groupable;
+  atmi_task_ = lparm->task_info;
 
-  ret->data_dest_ptr = dest;
-  ret->data_src_ptr = const_cast<void *>(reinterpret_cast<const void *>(src));
-  ret->data_size = size;
-
-  ret->profilable = lparm->profilable;
-  ret->groupable = lparm->groupable;
-  ret->atmi_task = lparm->task_info;
-  ret->type = ATL_DATA_MOVEMENT;
-
-  // FIXME: assign the memory scope; change this if it makes sense to have an
-  // API for
-  // doing data copies in non-system scope
-  ret->acquire_scope = ATMI_FENCE_SCOPE_SYSTEM;
-  ret->release_scope = ATMI_FENCE_SCOPE_SYSTEM;
+  // FIXME: assign the memory scope differently if it makes sense to have an
+  // API for doing data copies in non-system scope
+  // acquire_scope_ = ATMI_FENCE_SCOPE_SYSTEM;
+  // release_scopei_ = ATMI_FENCE_SCOPE_SYSTEM;
 
   // TODO(ashwinma): performance fix if there are more CPU agents to improve
   // locality
-  ret->place = ATMI_PLACE_GPU(0, 0);
+  place_ = ATMI_PLACE_GPU(0, 0);
 
-  ret->num_predecessors = 0;
-  ret->num_successors = 0;
-
-  ret->devtype = ATMI_DEVTYPE_GPU;
-  ret->kernel = NULL;
-  ret->kernarg_region = NULL;
-  ret->kernarg_region_size = 0;
-
-  ret->predecessors.clear();
-  ret->predecessors.resize(lparm->num_required);
+  predecessors_.resize(lparm->num_required);
   for (int idx = 0; idx < lparm->num_required; idx++) {
-    atl_task_t *pred_task = get_task(lparm->requires[idx]);
+    TaskImpl *pred_task = getTaskImpl(lparm->requires[idx]);
     assert(pred_task != NULL);
-    ret->predecessors[idx] = pred_task;
+    predecessors_[idx] = pred_task;
   }
-  ret->pred_taskgroup_objs.clear();
-  ret->pred_taskgroup_objs.resize(lparm->num_required_groups);
+  pred_taskgroup_objs_.clear();
+  pred_taskgroup_objs_.resize(lparm->num_required_groups);
   for (int idx = 0; idx < lparm->num_required_groups; idx++) {
-    ret->pred_taskgroup_objs[idx] =
-        get_taskgroup_impl(lparm->required_groups[idx]);
+    pred_taskgroup_objs_[idx] =
+        getTaskgroupImpl(lparm->required_groups[idx]);
   }
 
-  lock(&(ret->taskgroup_obj->group_mutex_));
-  if (ret->taskgroup_obj->ordered_) {
-    ret->taskgroup_obj->running_ordered_tasks_.push_back(ret);
-    ret->prev_ordered_task = ret->taskgroup_obj->last_task_;
-    ret->taskgroup_obj->last_task_ = ret;
+  lock(&(taskgroup_obj_->group_mutex_));
+  if (taskgroup_obj_->ordered_) {
+    taskgroup_obj_->running_ordered_tasks_.push_back(this);
+    prev_ordered_task_ = taskgroup_obj_->last_task_;
+    taskgroup_obj_->last_task_ = this;
   } else {
-    ret->taskgroup_obj->running_default_tasks_.push_back(ret);
+    taskgroup_obj_->running_default_tasks_.push_back(this);
   }
-  unlock(&(ret->taskgroup_obj->group_mutex_));
-  if (ret->groupable) {
-    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
-    (ret->taskgroup_obj->task_count_)++;
+  unlock(&(taskgroup_obj_->group_mutex_));
+  if (groupable_) {
+    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", taskgroup_obj_);
+    (taskgroup_obj_->task_count_)++;
   }
+}
+
+atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
+                                        const void *src, size_t size) {
+  //TaskImpl *task = get_new_task();
+  DataTaskImpl* task = new DataTaskImpl(lparm, dest, src, size);
   atl_dep_sync_t dep_sync_type =
       (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
   if (dep_sync_type == ATL_SYNC_BARRIER_PKT) {
     lock(&mutex_readyq_);
-    TaskList.push_back(ret);
+    TaskList.push_back(task);
     unlock(&mutex_readyq_);
   }
-  try_dispatch(ret, NULL, lparm->synchronous);
+  task->tryDispatch(NULL);
 
-  return ret->id;
+  return task->id_;
 }
 
-atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
-                                     const void *src, const size_t size) {
+void DataTaskImpl::acquireAqlPacket() {
+  // get signal for SDMA and increment it accordingly
+  hsa_status_t err;
+  void *src = data_src_ptr_;
+  void *dest = data_dest_ptr_;
+  size_t size = data_size_;
+#ifndef USE_ROCR_PTR_INFO
+  ATLData *volatile src_data = g_data_map.find(src);
+  ATLData *volatile dest_data = g_data_map.find(dest);
+#else
+  hsa_amd_pointer_info_t src_ptr_info;
+  hsa_amd_pointer_info_t dest_ptr_info;
+  src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+  dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(src), &src_ptr_info,
+      NULL,  /* alloc fn ptr */
+      NULL,  /* num_agents_accessible */
+      NULL); /* accessible agents */
+  ErrorCheck(Checking src pointer info, err);
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(dest), &dest_ptr_info,
+      NULL,  /* alloc fn ptr */
+      NULL,  /* num_agents_accessible */
+      NULL); /* accessible agents */
+  ErrorCheck(Checking dest pointer info, err);
+  ATLData *volatile src_data =
+    reinterpret_cast<ATLData *>(src_ptr_info.userData);
+  ATLData *volatile dest_data =
+    reinterpret_cast<ATLData *>(dest_ptr_info.userData);
+#endif
+  bool is_src_host =
+    (!src_data || src_data->place().dev_type == ATMI_DEVTYPE_CPU);
+  bool is_dest_host =
+    (!dest_data || dest_data->place().dev_type == ATMI_DEVTYPE_CPU);
+  void *temp_host_ptr;
+  const void *src_ptr = src;
+  void *dest_ptr = dest;
+  volatile unsigned type;
+  if (is_src_host && is_dest_host) {
+    type = ATMI_H2H;
+  } else if (src_data && !dest_data) {
+    type = ATMI_D2H;
+  } else if (!src_data && dest_data) {
+    type = ATMI_H2D;
+  } else {
+    type = ATMI_D2D;
+  }
+
+  if (type == ATMI_H2D || type == ATMI_D2H)
+    hsa_signal_add_acq_rel(signal_, 2);
+  else
+    hsa_signal_add_acq_rel(signal_, 1);
+}
+
+atmi_status_t DataTaskImpl::dispatch() {
   atmi_status_t ret;
   hsa_status_t err;
 
-  TaskgroupImpl *taskgroup_obj = task->taskgroup_obj;
+  void* dest = data_dest_ptr_;
+  const void* src = data_src_ptr_;
+  const size_t size = data_size_;
+
+  TaskgroupImpl *taskgroup_obj = taskgroup_obj_;
   atl_dep_sync_t dep_sync_type =
       (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
   std::vector<hsa_signal_t> dep_signals;
   int val = 0;
   DEBUG_PRINT("(");
-  for (auto pred_task : task->and_predecessors) {
-    dep_signals.push_back(pred_task->signal);
-    if (pred_task->state < ATMI_DISPATCHED) val++;
-    assert(pred_task->state >= ATMI_DISPATCHED);
-    DEBUG_PRINT("%lu ", pred_task->id);
+  for (auto pred_task : and_predecessors_) {
+    dep_signals.push_back(pred_task->signal_);
+    if (pred_task->state_ < ATMI_DISPATCHED) val++;
+    assert(pred_task->state_ >= ATMI_DISPATCHED);
+    DEBUG_PRINT("%lu ", pred_task->id_);
   }
   DEBUG_PRINT(")\n");
   if (val > 0)
-    DEBUG_PRINT("Task[%lu] has %d not-dispatched predecessor tasks\n", task->id,
+    DEBUG_PRINT("Task[%lu] has %d not-dispatched predecessor tasks\n", id_,
                 val);
 
 #ifndef USE_ROCR_PTR_INFO
@@ -509,11 +567,11 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
   DEBUG_PRINT("Memcpy dest agent: %lu\n", dest_agent.handle);
 
   if (type == ATMI_H2D || type == ATMI_D2H) {
-    if (task->groupable == ATMI_TRUE) {
+    if (groupable_ == ATMI_TRUE) {
       lock(&(taskgroup_obj->group_mutex_));
       // barrier pkt already sets the signal values when the signal resource
       // is available
-      taskgroup_obj->running_groupable_tasks_.push_back(task);
+      taskgroup_obj->running_groupable_tasks_.push_back(this);
       unlock(&(taskgroup_obj->group_mutex_));
     }
     // For malloc'ed buffers, additional atmi_malloc/memcpy/free
@@ -523,7 +581,7 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
     std::thread(
         [](void *dst, const void *src, size_t size, hsa_agent_t agent,
            unsigned type, atmi_mem_place_t cpu, hsa_signal_t signal,
-           std::vector<hsa_signal_t> dep_signals, atl_task_t *task) {
+           std::vector<hsa_signal_t> dep_signals, TaskImpl *task) {
           atmi_status_t ret;
           hsa_status_t err;
           atl_dep_sync_t dep_sync_type =
@@ -543,18 +601,18 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
 
           if (dep_sync_type == ATL_SYNC_BARRIER_PKT && !dep_signals.empty()) {
             DEBUG_PRINT("SDMA-host for %p (%lu) with %lu dependencies\n", task,
-                        task->id, dep_signals.size());
+                        task->id_, dep_signals.size());
             err = hsa_amd_memory_async_copy(dest_ptr, agent, src_ptr, agent,
                                             size, dep_signals.size(),
                                             &(dep_signals[0]), signal);
             ErrorCheck(Copy async between memory pools, err);
           } else {
-            DEBUG_PRINT("SDMA-host for %p (%lu)\n", task, task->id);
+            DEBUG_PRINT("SDMA-host for %p (%lu)\n", task, task->id_);
             err = hsa_amd_memory_async_copy(dest_ptr, agent, src_ptr, agent,
                                             size, 0, NULL, signal);
             ErrorCheck(Copy async between memory pools, err);
           }
-          set_task_state(task, ATMI_DISPATCHED);
+          task->set_state(ATMI_DISPATCHED);
           hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 1,
                                   UINT64_MAX, ATMI_WAIT_STATE);
           // cleanup for D2H and H2D
@@ -564,31 +622,31 @@ atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
           atmi_free(temp_host_ptr);
           hsa_signal_subtract_acq_rel(signal, 1);
         },
-        dest, src, size, src_agent, type, cpu, task->signal, dep_signals, task)
+        dest, src, size, src_agent, type, cpu, signal_, dep_signals, this)
         .detach();
   } else {
-    if (task->groupable == ATMI_TRUE) {
-      lock(&(taskgroup_obj->group_mutex_));
+    if (groupable_ == ATMI_TRUE) {
+      lock(&(taskgroup_obj_->group_mutex_));
       // barrier pkt already sets the signal values when the signal resource
       // is available
-      taskgroup_obj->running_groupable_tasks_.push_back(task);
-      unlock(&(taskgroup_obj->group_mutex_));
+      taskgroup_obj_->running_groupable_tasks_.push_back(this);
+      unlock(&(taskgroup_obj_->group_mutex_));
     }
 
     // set task state to dispatched; then dispatch
-    set_task_state(task, ATMI_DISPATCHED);
+    set_state(ATMI_DISPATCHED);
 
     if (dep_sync_type == ATL_SYNC_BARRIER_PKT && !dep_signals.empty()) {
-      DEBUG_PRINT("SDMA for %p (%lu) with %lu dependencies\n", task, task->id,
+      DEBUG_PRINT("SDMA for %p (%lu) with %lu dependencies\n", this, id_,
                   dep_signals.size());
       err = hsa_amd_memory_async_copy(dest_ptr, dest_agent, src_ptr, src_agent,
                                       size, dep_signals.size(),
-                                      &(dep_signals[0]), task->signal);
+                                      &(dep_signals[0]), signal_);
       ErrorCheck(Copy async between memory pools, err);
     } else {
-      DEBUG_PRINT("SDMA for %p (%lu)\n", task, task->id);
+      DEBUG_PRINT("SDMA for %p (%lu)\n", this, id_);
       err = hsa_amd_memory_async_copy(dest_ptr, dest_agent, src_ptr, src_agent,
-                                      size, 0, NULL, task->signal);
+                                      size, 0, NULL, signal_);
       ErrorCheck(Copy async between memory pools, err);
     }
   }

@@ -406,6 +406,39 @@ KernelImpl *Kernel::getKernelImpl(unsigned int kernel_id) {
   return impls_[idx];
 }
 
+int Kernel::getKernelImplId(atmi_lparm_t *lparm) {
+  int kernel_id = lparm->kernel_id;
+  if (kernel_id == -1) {
+    // choose the first available kernel for the given devtype
+    for (auto kernel_impl : impls_) {
+      if (kernel_impl->devtype() == lparm->place.type) {
+        kernel_id = kernel_impl->id();
+        break;
+      }
+    }
+    if (kernel_id == -1) {
+      fprintf(stderr,
+          "ERROR: Kernel/PIF %lu doesn't have any implementations\n",
+          id_);
+      return -1;
+    }
+  } else {
+    if (!isValidId(kernel_id)) {
+      DEBUG_PRINT("ERROR: Kernel ID %d not found\n", kernel_id);
+      return -1;
+    }
+  }
+  KernelImpl *kernel_impl = getKernelImpl(kernel_id);
+  if (num_args_ && kernel_impl->kernarg_region() == NULL) {
+    fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n",
+        kernel_impl->name().c_str());
+    return -1;
+  }
+
+  return kernel_id;
+}
+
+
 Kernel::Kernel(uint64_t id, const int num_args, const size_t *arg_sizes)
     : id_(id), num_args_(num_args) {
   id_map_.clear();

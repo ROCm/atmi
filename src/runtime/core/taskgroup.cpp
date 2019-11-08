@@ -15,7 +15,7 @@ namespace core {
  * pool of tasks for synchronization if need be */
 std::vector<core::TaskgroupImpl *> AllTaskgroups;
 
-TaskgroupImpl *get_taskgroup_impl(atmi_taskgroup_handle_t t) {
+TaskgroupImpl *getTaskgroupImpl(atmi_taskgroup_handle_t t) {
   TaskgroupImpl *taskgroup_obj = NULL;
   lock(&mutex_all_tasks_);
   if (t < AllTaskgroups.size()) {
@@ -46,7 +46,7 @@ atmi_status_t Runtime::TaskGroupCreate(atmi_taskgroup_handle_t *group_handle,
 
 atmi_status_t Runtime::TaskGroupRelease(atmi_taskgroup_handle_t group_handle) {
   atmi_status_t status = ATMI_STATUS_ERROR;
-  TaskgroupImpl *taskgroup_obj = get_taskgroup_impl(group_handle);
+  TaskgroupImpl *taskgroup_obj = getTaskgroupImpl(group_handle);
   if (taskgroup_obj) {
     lock(&mutex_all_tasks_);
     delete taskgroup_obj;
@@ -58,7 +58,7 @@ atmi_status_t Runtime::TaskGroupRelease(atmi_taskgroup_handle_t group_handle) {
 }
 
 atmi_status_t Runtime::TaskGroupSync(atmi_taskgroup_handle_t group_handle) {
-  TaskgroupImpl *taskgroup_obj = get_taskgroup_impl(group_handle);
+  TaskgroupImpl *taskgroup_obj = getTaskgroupImpl(group_handle);
   TaskWaitTimer.start();
   if (taskgroup_obj)
     taskgroup_obj->sync();
@@ -77,15 +77,15 @@ void TaskgroupImpl::sync() {
   if (ordered_ == ATMI_TRUE) {
     // if tasks are ordered, just wait for the last launched/created task in
     // this group
-    atl_task_wait(last_task_);
+    last_task_->wait();
     lock(&(group_mutex_));
     last_task_ = NULL;
     unlock(&(group_mutex_));
   } else {
     // if tasks are neither groupable or ordered, wait for every task in the
     // taskgroup
-    for (atl_task_t *task : running_default_tasks_) {
-      atl_task_wait(task);
+    for (auto task : running_default_tasks_) {
+      task->wait();
     }
   }
   clearSavedTasks();

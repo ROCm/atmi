@@ -28,10 +28,12 @@
 #include "atl_internal.h"
 #include "kernel.h"
 #include "rt.h"
+#include "task.h"
 #include "taskgroup.h"
 using core::RealTimer;
 using core::Kernel;
 using core::KernelImpl;
+using core::TaskImpl;
 
 pthread_mutex_t mutex_all_tasks_;
 pthread_mutex_t mutex_readyq_;
@@ -44,15 +46,15 @@ extern bool handle_signal(hsa_signal_value_t value, void *arg);
 
 void print_atl_kernel(const char *str, const int i);
 
-std::vector<atl_task_t *> AllTasks;
-std::queue<atl_task_t *> ReadyTaskQueue;
-std::deque<atl_task_t *> TaskList;
+std::vector<TaskImpl *> AllTasks;
+std::queue<TaskImpl *> ReadyTaskQueue;
+std::deque<TaskImpl *> TaskList;
 std::queue<hsa_signal_t> FreeSignalPool;
-std::set<atl_task_t *> SinkTasks;
+std::set<TaskImpl *> SinkTasks;
 
 std::map<uint64_t, Kernel *> KernelImplMap;
 // std::map<uint64_t, std::vector<std::string> > ModuleMap;
-std::vector<atl_task_t *> DispatchedTasks;
+std::vector<TaskImpl *> DispatchedTasks;
 bool setCallbackToggle = false;
 
 static atl_dep_sync_t g_dep_sync_type =
@@ -141,16 +143,9 @@ void set_task_handle_ID(atmi_task_handle_t *t, int ID) {
 #endif
 }
 
-atmi_taskgroup_handle_t get_taskgroup(atmi_task_handle_t t) {
-  atl_task_t *task = get_task(t);
-  atmi_taskgroup_handle_t ret;
-  if (task) ret = task->taskgroup;
-  return ret;
-}
-
-atl_task_t *get_task(atmi_task_handle_t t) {
+TaskImpl *getTaskImpl(atmi_task_handle_t t) {
   /* FIXME: node 0 only for now */
-  atl_task_t *ret = NULL;
+  TaskImpl *ret = NULL;
   if (t != ATMI_NULL_TASK_HANDLE) {
     lock(&mutex_all_tasks_);
     ret = AllTasks[get_task_handle_ID(t)];
@@ -160,15 +155,22 @@ atl_task_t *get_task(atmi_task_handle_t t) {
   // return AllTasks[t.lo];
 }
 
-atl_task_t *get_continuation_task(atmi_task_handle_t t) {
+atmi_taskgroup_handle_t get_taskgroup(atmi_task_handle_t t) {
+  TaskImpl *task = getTaskImpl(t);
+  atmi_taskgroup_handle_t ret;
+  if (task) ret = task->taskgroup_;
+  return ret;
+}
+
+TaskImpl *get_continuation_task(atmi_task_handle_t t) {
   /* FIXME: node 0 only for now */
   // return AllTasks[t.hi];
   return NULL;
 }
 
-hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue,
+hsa_signal_t enqueue_barrier_async(TaskImpl *task, hsa_queue_t *queue,
                                    const int dep_task_count,
-                                   atl_task_t **dep_task_list, int barrier_flag,
+                                   TaskImpl **dep_task_list, int barrier_flag,
                                    bool need_completion) {
   /* This routine will enqueue a barrier packet for all dependent packets to
      complete
@@ -186,7 +188,7 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue,
     identity_signal = IdentityORSignal;
   else
     identity_signal = IdentityANDSignal;
-  atl_task_t **tasks = dep_task_list;
+  TaskImpl **tasks = dep_task_list;
   int tasks_remaining = dep_task_count;
   /* Keep adding barrier packets in multiples of 5 because that is the maximum
      signals that
@@ -252,9 +254,9 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue,
         DEBUG_PRINT("Barrier Packet %d\n", iter);
         iter++;
         /* fill out the barrier packet and ring doorbell */
-        barrier->dep_signal[dep_signal_id] = (*tasks)->signal;
+        barrier->dep_signal[dep_signal_id] = (*tasks)->signal_;
         DEBUG_PRINT("Enqueue wait for task %lu signal handle: %" PRIu64 "\n",
-                    (*tasks)->id, barrier->dep_signal[dep_signal_id].handle);
+                    (*tasks)->id_, barrier->dep_signal[dep_signal_id].handle);
         tasks++;
         tasks_remaining--;
       }
@@ -270,8 +272,8 @@ hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue,
   return last_signal;
 }
 
-void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue,
-                     const int dep_task_count, atl_task_t **dep_task_list,
+void enqueue_barrier(TaskImpl *task, hsa_queue_t *queue,
+                     const int dep_task_count, TaskImpl **dep_task_list,
                      int wait_flag, int barrier_flag, atmi_devtype_t devtype,
                      bool need_completion) {
   hsa_signal_t last_signal =
@@ -288,56 +290,54 @@ void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue,
   }
 }
 
-extern void atl_task_wait(atl_task_t *task) {
+extern void TaskImpl::wait() {
   TaskWaitTimer.start();
-  if (task != NULL) {
-    // if task is not yet ready, then it has not gotten all resources yet, so we
-    // wait
-    // for resources and then issue a callback; only then we can wait for the
-    // task to
-    // complete
-    if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      while (task->state < ATMI_DISPATCHED) {
-      }
-      if (task->state < ATMI_EXECUTED) {
-        // Now, this task has the resources, so it can get dispatched any time.
-        // So, create a barrier packet for current sink tasks and add async
-        // handler
-        // for its completion.
-        // All dispatched tasks get signal from device-only signal pool. All
-        // async
-        // handlers are registered to interruptible signals
-        lock(&mutex_readyq_);
-        atl_task_vector_t tasks;
-        atl_task_vector_t *dispatched_tasks_ptr = NULL;
-        tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
-        SinkTasks.clear();
-        // will be deleted in the callback
-        dispatched_tasks_ptr = new atl_task_vector_t;
-        dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
-                                     DispatchedTasks.begin(),
-                                     DispatchedTasks.end());
-        DispatchedTasks.clear();
-        unlock(&mutex_readyq_);
-        if (dispatched_tasks_ptr) {
-          enqueue_barrier_tasks(tasks);
-          if (!tasks.empty()) {
-            DEBUG_PRINT("Registering callback for task %lu\n", task->id);
-            hsa_status_t err = hsa_amd_signal_async_handler(
-                IdentityANDSignal, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
-                reinterpret_cast<void *>(dispatched_tasks_ptr));
-            ErrorCheck(Creating signal handler, err);
-          }
+  // if task is not yet ready, then it has not gotten all resources yet, so we
+  // wait
+  // for resources and then issue a callback; only then we can wait for the
+  // task to
+  // complete
+  if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+    while (state_ < ATMI_DISPATCHED) {
+    }
+    if (state_ < ATMI_EXECUTED) {
+      // Now, this task has the resources, so it can get dispatched any time.
+      // So, create a barrier packet for current sink tasks and add async
+      // handler
+      // for its completion.
+      // All dispatched tasks get signal from device-only signal pool. All
+      // async
+      // handlers are registered to interruptible signals
+      lock(&mutex_readyq_);
+      TaskImplVecTy tasks;
+      TaskImplVecTy *dispatched_tasks_ptr = NULL;
+      tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
+      SinkTasks.clear();
+      // will be deleted in the callback
+      dispatched_tasks_ptr = new TaskImplVecTy;
+      dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
+          DispatchedTasks.begin(),
+          DispatchedTasks.end());
+      DispatchedTasks.clear();
+      unlock(&mutex_readyq_);
+      if (dispatched_tasks_ptr) {
+        enqueue_barrier_tasks(tasks);
+        if (!tasks.empty()) {
+          DEBUG_PRINT("Registering callback for task %lu\n", id_);
+          hsa_status_t err = hsa_amd_signal_async_handler(
+              IdentityANDSignal, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
+              reinterpret_cast<void *>(dispatched_tasks_ptr));
+          ErrorCheck(Creating signal handler, err);
         }
       }
     }
-    while (task->state != ATMI_COMPLETED) {
-    }
-
-    /* Flag this task as completed */
-    /* FIXME: How can HSA tell us if and when a task has failed? */
-    set_task_state(task, ATMI_COMPLETED);
   }
+  while (state_ != ATMI_COMPLETED) {
+  }
+
+  /* Flag this task as completed */
+  /* FIXME: How can HSA tell us if and when a task has failed? */
+  set_state(ATMI_COMPLETED);
 
   TaskWaitTimer.stop();
   return;  // ATMI_STATUS_SUCCESS;
@@ -345,8 +345,13 @@ extern void atl_task_wait(atl_task_t *task) {
 
 extern atmi_status_t Runtime::TaskWait(atmi_task_handle_t task) {
   DEBUG_PRINT("Waiting for task ID: %lu\n", task);
-  atl_task_wait(get_task(task));
-  return ATMI_STATUS_SUCCESS;
+  atmi_status_t status = ATMI_STATUS_ERROR;
+  TaskImpl* task_impl = getTaskImpl(task);
+  if(task_impl) {
+    task_impl->wait();
+    status = ATMI_STATUS_SUCCESS;
+  }
+  return status;
 }
 
 void init_dag_scheduler() {
@@ -373,23 +378,23 @@ unlock(int *mutex) {
 }
 #endif
 
-void set_task_state(atl_task_t *t, const atmi_state_t state) {
-  t->state = state;
-  // t->state.store(state, std::memory_order_seq_cst);
-  if (t->atmi_task != NULL) t->atmi_task->state = state;
+void TaskImpl::set_state(const atmi_state_t state) {
+  state_ = state;
+  // state_.store(state, std::memory_order_seq_cst);
+  if (atmi_task_ != NULL) atmi_task_->state = state;
 }
 
-void set_task_metrics(atl_task_t *task) {
+void TaskImpl::updateMetrics() {
   hsa_status_t err = HSA_STATUS_SUCCESS;
-  // if(task->profile != NULL) {
-  if (task->profilable == ATMI_TRUE) {
-    hsa_signal_t signal = task->signal;
+  // if(profile != NULL) {
+  if (profilable_ == ATMI_TRUE) {
+    hsa_signal_t signal = signal_;
     hsa_amd_profiling_dispatch_time_t metrics;
-    if (task->devtype == ATMI_DEVTYPE_GPU) {
-      err = hsa_amd_profiling_get_dispatch_time(get_compute_agent(task->place),
+    if (devtype_ == ATMI_DEVTYPE_GPU) {
+      err = hsa_amd_profiling_get_dispatch_time(get_compute_agent(place_),
                                                 signal, &metrics);
       ErrorCheck(Profiling GPU dispatch, err);
-      if (task->atmi_task) {
+      if (atmi_task_) {
         uint64_t freq;
         err = hsa_system_get_info(HSA_SYSTEM_INFO_TIMESTAMP_FREQUENCY, &freq);
         ErrorCheck(Getting system timestamp frequency info, err);
@@ -397,10 +402,10 @@ void set_task_metrics(atl_task_t *task) {
         uint64_t end = metrics.end / (freq / NANOSECS);
         DEBUG_PRINT("Ticks: (%lu->%lu)\nFreq: %lu\nTime(ns: (%lu->%lu)\n",
                     metrics.start, metrics.end, freq, start, end);
-        task->atmi_task->profile.start_time = start;
-        task->atmi_task->profile.end_time = end;
-        task->atmi_task->profile.dispatch_time = start;
-        task->atmi_task->profile.ready_time = start;
+        atmi_task_->profile.start_time = start;
+        atmi_task_->profile.end_time = end;
+        atmi_task_->profile.dispatch_time = start;
+        atmi_task_->profile.ready_time = start;
       }
     } else {
       /* metrics for CPU tasks will be populated in the
@@ -478,26 +483,27 @@ void unlock_set(const std::set<pthread_mutex_t *> &mutexes) {
   DEBUG_PRINT("]\n");
 }
 
-void handle_signal_callback(atl_task_t *task) {
+void handle_signal_callback(TaskImpl *task) {
   // tasks without atmi_task handle should not be added to callbacks anyway
-  assert(task->groupable != ATMI_TRUE);
+  assert(task->groupable_ != ATMI_TRUE);
+  ComputeTaskImpl* compute_task = dynamic_cast<ComputeTaskImpl*>(task);
 
   // process printf buffer
   {
     KernelImpl *kernel_impl = NULL;
     if (task_process_fini_buffer) {
-      if (task->kernel) {
-        kernel_impl = task->kernel->getKernelImpl(task->kernel_id);
-        // printf("Task Id: %lu, kernel name: %s\n", task->id,
+      if (compute_task) {
+        kernel_impl = compute_task->kernel_->getKernelImpl(compute_task->kernel_id_);
+        // printf("Task Id: %lu, kernel name: %s\n", compute_task->id_,
         // kernel_impl->kernel_name.c_str());
-        char *kargs = reinterpret_cast<char *>(task->kernarg_region);
-        if (task->type == ATL_KERNEL_EXECUTION &&
-            task->devtype == ATMI_DEVTYPE_GPU &&
+        char *kargs = reinterpret_cast<char *>(compute_task->kernarg_region_);
+        if (compute_task->type() == ATL_KERNEL_EXECUTION &&
+            compute_task->devtype_ == ATMI_DEVTYPE_GPU &&
             kernel_impl->platform_type() == AMDGCN) {
           atmi_implicit_args_t *impl_args =
               reinterpret_cast<atmi_implicit_args_t *>(
                   kargs +
-                  (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+                  (compute_task->kernarg_region_size_ - sizeof(atmi_implicit_args_t)));
 
           (*task_process_fini_buffer)(
               reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
@@ -506,39 +512,42 @@ void handle_signal_callback(atl_task_t *task) {
     }
   }
 
-  lock(&(task->mutex));
-  set_task_state(task, ATMI_EXECUTED);
-  unlock(&(task->mutex));
+  lock(&(task->mutex_));
+  task->set_state(ATMI_EXECUTED);
+  unlock(&(task->mutex_));
   // after predecessor is done, decrement all successor's dependency count.
   // If count reaches zero, then add them to a 'ready' task list. Next,
   // dispatch all ready tasks in a round-robin manner to the available
   // GPU/CPU queues.
   // decrement reference count of its dependencies; add those with ref count = 0
   // to a 'ready' list.
-  atl_task_vector_t &successors = task->and_successors;
-  DEBUG_PRINT("Deps list of %lu [%lu]: ", task->id, successors.size());
-  atl_task_vector_t temp_list;
+  TaskImplVecTy &successors = task->and_successors_;
+  DEBUG_PRINT("Deps list of %lu [%lu]: ", task->id_, successors.size());
+  TaskImplVecTy temp_list;
   for (auto successor : successors) {
     // FIXME: should we be grabbing a lock on each successor before
     // decrementing their predecessor count? Currently, it may not be
     // required because there is only one callback thread, but what if there
     // were more?
-    lock(&(successor->mutex));
-    DEBUG_PRINT(" %lu(%d) ", successor->id, successor->num_predecessors);
-    successor->num_predecessors--;
-    if (successor->num_predecessors == 0) {
+    lock(&(successor->mutex_));
+    DEBUG_PRINT(" %lu(%d) ", successor->id_, successor->num_predecessors_);
+    successor->num_predecessors_--;
+    if (successor->num_predecessors_ == 0) {
       // add to ready list
       temp_list.push_back(successor);
     }
-    unlock(&(successor->mutex));
+    unlock(&(successor->mutex_));
   }
   std::set<pthread_mutex_t *> mutexes;
   // release the kernarg segment back to the kernarg pool
-  Kernel *kernel = task->kernel;
+  Kernel *kernel = NULL;
   KernelImpl *kernel_impl = NULL;
-  if (kernel) {
-    kernel_impl = kernel->getKernelImpl(task->kernel_id);
-    mutexes.insert(&(kernel_impl->mutex()));
+  if (compute_task) {
+    kernel = compute_task->kernel_;
+    if (kernel) {
+      kernel_impl = kernel->getKernelImpl(compute_task->kernel_id_);
+      mutexes.insert(&(kernel_impl->mutex()));
+    }
   }
   mutexes.insert(&mutex_readyq_);
   lock_set(mutexes);
@@ -549,55 +558,58 @@ void handle_signal_callback(atl_task_t *task) {
     ReadyTaskQueue.push(t);
   }
   // release your own signal to the pool
-  FreeSignalPool.push(task->signal);
-  DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", task->kernarg_region_index);
+  FreeSignalPool.push(task->signal_);
   // release your kernarg region to the pool
-  if (kernel)
-    kernel_impl->free_kernarg_segments().push(task->kernarg_region_index);
+  if (kernel && compute_task) {
+    DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", compute_task->kernarg_region_index_);
+    kernel_impl->free_kernarg_segments().push(compute_task->kernarg_region_index_);
+  }
   unlock_set(mutexes);
   DEBUG_PRINT(
       "[Handle Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue Size: "
       "%lu\n",
-      task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+      task->id_, FreeSignalPool.size(), ReadyTaskQueue.size());
   // dispatch from ready queue if any task exists
-  lock(&(task->mutex));
-  set_task_metrics(task);
-  set_task_state(task, ATMI_COMPLETED);
-  unlock(&(task->mutex));
-  do_progress(task->taskgroup_obj);
+  lock(&(task->mutex_));
+  //set_task_metrics(task);
+  task->updateMetrics();
+  task->set_state(ATMI_COMPLETED);
+  unlock(&(task->mutex_));
+  do_progress(task->taskgroup_obj_);
   // dispatch_ready_task_for_free_signal();
   // dispatch_ready_task_or_release_signal(task);
 }
 
-void handle_signal_barrier_pkt(atl_task_t *task,
-                               atl_task_vector_t *dispatched_tasks_ptr) {
+void handle_signal_barrier_pkt(TaskImpl *task,
+                               TaskImplVecTy *dispatched_tasks_ptr) {
   // list of signals that can be reclaimed at every iteration
   std::vector<hsa_signal_t> temp_list;
 
   // since we attach barrier packet to sink tasks, at this point in the
   // callback,
   // we are guaranteed that all dispatched_tasks have completed execution.
-  atl_task_vector_t dispatched_tasks = *dispatched_tasks_ptr;
+  TaskImplVecTy dispatched_tasks = *dispatched_tasks_ptr;
 
   for (auto task : dispatched_tasks) {
-    assert(task->groupable != ATMI_TRUE);
+    assert(task->groupable_ != ATMI_TRUE);
+    ComputeTaskImpl* compute_task = dynamic_cast<ComputeTaskImpl*>(task);
 
     // process printf buffer
     {
       KernelImpl *kernel_impl = NULL;
       if (task_process_fini_buffer) {
-        if (task->kernel) {
-          kernel_impl = task->kernel->getKernelImpl(task->kernel_id);
-          // printf("Task Id: %lu, kernel name: %s\n", task->id,
+        if (compute_task) {
+          kernel_impl = compute_task->kernel_->getKernelImpl(compute_task->kernel_id_);
+          // printf("Task Id: %lu, kernel name: %s\n", compute_task->id_,
           // kernel_impl->kernel_name.c_str());
-          char *kargs = reinterpret_cast<char *>(task->kernarg_region);
-          if (task->type == ATL_KERNEL_EXECUTION &&
-              task->devtype == ATMI_DEVTYPE_GPU &&
+          char *kargs = reinterpret_cast<char *>(compute_task->kernarg_region_);
+          if (compute_task->type() == ATL_KERNEL_EXECUTION &&
+              compute_task->devtype_ == ATMI_DEVTYPE_GPU &&
               kernel_impl->platform_type() == AMDGCN) {
             atmi_implicit_args_t *impl_args =
                 reinterpret_cast<atmi_implicit_args_t *>(
                     kargs +
-                    (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
+                    (compute_task->kernarg_region_size_ - sizeof(atmi_implicit_args_t)));
 
             (*task_process_fini_buffer)(
                 reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
@@ -607,34 +619,40 @@ void handle_signal_barrier_pkt(atl_task_t *task,
     }
 
     // This dispatched task is now executed
-    lock(&(task->mutex));
-    set_task_state(task, ATMI_EXECUTED);
-    unlock(&(task->mutex));
+    lock(&(task->mutex_));
+    task->set_state(ATMI_EXECUTED);
+    unlock(&(task->mutex_));
 
     // now reclaim its resources (kernel args and signal)
     std::set<pthread_mutex_t *> mutexes;
-    Kernel *kernel = task->kernel;
+    Kernel *kernel = NULL;
     KernelImpl *kernel_impl = NULL;
-    if (kernel) {
-      kernel_impl = kernel->getKernelImpl(task->kernel_id);
-      mutexes.insert(&(kernel_impl->mutex()));
+    if (compute_task) {
+      kernel = compute_task->kernel_;
+      if (kernel) {
+        kernel_impl = kernel->getKernelImpl(compute_task->kernel_id_);
+        mutexes.insert(&(kernel_impl->mutex()));
+      }
     }
-    mutexes.insert(&(task->mutex));
+    mutexes.insert(&(task->mutex_));
     mutexes.insert(&mutex_readyq_);
 
     lock_set(mutexes);
 
     // release the kernarg segment back to the kernarg pool
-    DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", task->kernarg_region_index);
-    if (kernel)
-      kernel_impl->free_kernarg_segments().push(task->kernarg_region_index);
+    if (kernel && compute_task) {
+      DEBUG_PRINT("Freeing Kernarg Segment Id: %d\n", compute_task->kernarg_region_index_);
+      kernel_impl->free_kernarg_segments().push(compute_task->kernarg_region_index_);
+    }
 
     // release the signal back to the signal pool
-    DEBUG_PRINT("Task %lu completed\n", task->id);
-    FreeSignalPool.push(task->signal);
+    DEBUG_PRINT("Task %lu completed\n", task->id_);
+    FreeSignalPool.push(task->signal_);
 
-    set_task_metrics(task);
-    set_task_state(task, ATMI_COMPLETED);
+    task->updateMetrics();
+    task->set_state(ATMI_COMPLETED);
+    //set_task_metrics(task);
+    //set_task_state(task, ATMI_COMPLETED);
 
     unlock_set(mutexes);
   }
@@ -663,16 +681,16 @@ bool handle_signal(hsa_signal_value_t value, void *arg) {
     is_called = true;
   }
   HandleSignalTimer.start();
-  atl_task_t *task = NULL;
-  atl_task_vector_t *dispatched_tasks_ptr = NULL;
+  TaskImpl *task = NULL;
+  TaskImplVecTy *dispatched_tasks_ptr = NULL;
 
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
-    task = reinterpret_cast<atl_task_t *>(arg);
+    task = reinterpret_cast<TaskImpl *>(arg);
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-    dispatched_tasks_ptr = reinterpret_cast<atl_task_vector_t *>(arg);
+    dispatched_tasks_ptr = reinterpret_cast<TaskImplVecTy *>(arg);
     task = (*dispatched_tasks_ptr)[0];
   }
-  DEBUG_PRINT("Handle signal from task %lu\n", task->id);
+  DEBUG_PRINT("Handle signal from task %lu\n", task->id_);
 
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
     handle_signal_callback(task);
@@ -711,7 +729,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
   hsa_signal_wait_acquire(taskgroup->group_signal_, HSA_SIGNAL_CONDITION_EQ, 0,
                           UINT64_MAX, ATMI_WAIT_STATE);
 
-  std::vector<atl_task_t *> group_tasks = taskgroup->running_groupable_tasks_;
+  std::vector<TaskImpl *> group_tasks = taskgroup->running_groupable_tasks_;
   taskgroup->running_groupable_tasks_.clear();
   if (taskgroup->ordered_) {
     DEBUG_PRINT("Handling group signal callback for task group: %p size: %lu\n",
@@ -721,8 +739,8 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       // popping one task for every push?
       if (!taskgroup->running_ordered_tasks_.empty()) {
         DEBUG_PRINT("Removing task %lu with state: %d\n",
-                    taskgroup->running_ordered_tasks_.front()->id,
-                    taskgroup->running_ordered_tasks_.front()->state.load());
+                    taskgroup->running_ordered_tasks_.front()->id_,
+                    taskgroup->running_ordered_tasks_.front()->state_.load());
         taskgroup->running_ordered_tasks_.pop_front();
       }
     }
@@ -732,26 +750,28 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
 
   std::set<pthread_mutex_t *> mutexes;
   for (auto task : group_tasks) {
-    mutexes.insert(&(task->mutex));
-    Kernel *kernel = task->kernel;
+    ComputeTaskImpl* compute_task = dynamic_cast<ComputeTaskImpl*>(task);
+    mutexes.insert(&(task->mutex_));
+    Kernel *kernel = NULL;
     KernelImpl *kernel_impl = NULL;
-    if (kernel) {
-      kernel_impl = kernel->getKernelImpl(task->kernel_id);
+    if (compute_task) {
+      kernel = compute_task->kernel_;
+      kernel_impl = kernel->getKernelImpl(compute_task->kernel_id_);
       mutexes.insert(&(kernel_impl->mutex()));
 
       // process printf buffer
       {
         if (task_process_fini_buffer) {
-          if (task->kernel) {
-            // printf("Task Id: %lu, kernel name: %s\n", task->id,
+          if (compute_task->kernel_) {
+            // printf("Task Id: %lu, kernel name: %s\n", compute_task->id_,
             // kernel_impl->kernel_name.c_str());
-            char *kargs = reinterpret_cast<char *>(task->kernarg_region);
-            if (task->type == ATL_KERNEL_EXECUTION &&
-                task->devtype == ATMI_DEVTYPE_GPU &&
+            char *kargs = reinterpret_cast<char *>(compute_task->kernarg_region_);
+            if (compute_task->type() == ATL_KERNEL_EXECUTION &&
+                compute_task->devtype_ == ATMI_DEVTYPE_GPU &&
                 kernel_impl->platform_type() == AMDGCN) {
               atmi_implicit_args_t *impl_args =
                   reinterpret_cast<atmi_implicit_args_t *>(
-                      kargs + (task->kernarg_region_size -
+                      kargs + (compute_task->kernarg_region_size_ -
                                sizeof(atmi_implicit_args_t)));
               (*task_process_fini_buffer)(
                   reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
@@ -761,31 +781,33 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       }
     }
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      for (auto &t : task->and_predecessors) {
-        mutexes.insert(&(t->mutex));
+      for (auto &t : task->and_predecessors_) {
+        mutexes.insert(&(t->mutex_));
       }
     }
   }
   mutexes.insert(&mutex_readyq_);
   lock_set(mutexes);
   for (auto task : group_tasks) {
-    Kernel *kernel = task->kernel;
+    ComputeTaskImpl* compute_task = dynamic_cast<ComputeTaskImpl*>(task);
+    Kernel *kernel = NULL;
     KernelImpl *kernel_impl = NULL;
-    if (kernel) {
-      kernel_impl = kernel->getKernelImpl(task->kernel_id);
-      kernel_impl->free_kernarg_segments().push(task->kernarg_region_index);
+    if (compute_task) {
+      kernel = compute_task->kernel_;
+      kernel_impl = kernel->getKernelImpl(compute_task->kernel_id_);
+      kernel_impl->free_kernarg_segments().push(compute_task->kernarg_region_index_);
     }
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
       std::vector<hsa_signal_t> temp_list;
       temp_list.clear();
       // if num_successors == 0 then we can reuse their signal.
-      for (auto pred_task : task->and_predecessors) {
-        assert(pred_task->state >= ATMI_DISPATCHED);
-        pred_task->num_successors--;
-        if (pred_task->state >= ATMI_EXECUTED &&
-            pred_task->num_successors == 0) {
+      for (auto pred_task : task->and_predecessors_) {
+        assert(pred_task->state_ >= ATMI_DISPATCHED);
+        pred_task->num_successors_--;
+        if (pred_task->state_ >= ATMI_EXECUTED &&
+            pred_task->num_successors_ == 0) {
           // release signal because this predecessor is done waiting for
-          temp_list.push_back(pred_task->signal);
+          temp_list.push_back(pred_task->signal_);
         }
       }
       for (auto signal : temp_list) {
@@ -793,7 +815,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
         DEBUG_PRINT(
             "[Handle Signal %lu ] Free Signal Pool Size: %lu; Ready Task Queue "
             "Size: %lu\n",
-            task->id, FreeSignalPool.size(), ReadyTaskQueue.size());
+            task->id_, FreeSignalPool.size(), ReadyTaskQueue.size());
       }
     } else if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
       // TODO(ashwinma): we dont know how to specify dependencies between task
@@ -801,9 +823,11 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       // individual tasks yet. once we figure that out, we need to include
       // logic here to push the successor tasks to the ready task queue.
     }
-    DEBUG_PRINT("Completed task %lu in group\n", task->id);
-    set_task_metrics(task);
-    set_task_state(task, ATMI_COMPLETED);
+    DEBUG_PRINT("Completed task %lu in group\n", task->id_);
+    task->updateMetrics();
+    task->set_state(ATMI_COMPLETED);
+    //set_task_metrics(task);
+    //set_task_state(task, ATMI_COMPLETED);
   }
   unlock_set(mutexes);
 
@@ -819,27 +843,26 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       // dispatch all ready tasks in a round-robin manner to the available
       // GPU/CPU queues.
       // decrement reference count of its dependencies; add those with ref count
-      // = 0 to a
-      // “ready” list
+      // = 0 to a 'ready' list
       lock(&(taskgroup->group_mutex_));
-      atl_task_vector_t &successors = taskgroup->and_successors_;
+      TaskImplVecTy &successors = taskgroup->and_successors_;
       taskgroup->and_successors_.clear();
       unlock(&(taskgroup->group_mutex_));
       DEBUG_PRINT("Deps list of %p [%lu]: ", taskgroup, successors.size());
-      atl_task_vector_t temp_list;
+      TaskImplVecTy temp_list;
       for (auto successor : successors) {
         // FIXME: should we be grabbing a lock on each successor before
         // decrementing their predecessor count? Currently, it may not be
         // required because there is only one callback thread, but what if there
         // were more?
-        lock(&(successor->mutex));
-        DEBUG_PRINT(" %lu(%d) ", successor->id, successor->num_predecessors);
-        successor->num_predecessors--;
-        if (successor->num_predecessors == 0) {
+        lock(&(successor->mutex_));
+        DEBUG_PRINT(" %lu(%d) ", successor->id_, successor->num_predecessors_);
+        successor->num_predecessors_--;
+        if (successor->num_predecessors_ == 0) {
           // add to ready list
           temp_list.push_back(successor);
         }
-        unlock(&(successor->mutex));
+        unlock(&(successor->mutex_));
       }
       lock(&mutex_readyq_);
       for (auto t : temp_list) {
@@ -867,7 +890,7 @@ void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
       // possible
       bool should_dispatch = false;
       do {
-        atl_task_t *ready_task = NULL;
+        TaskImpl *ready_task = NULL;
         should_dispatch = false;
         lock(&taskgroup->group_mutex_);
         if (!taskgroup->running_ordered_tasks_.empty()) {
@@ -875,8 +898,7 @@ void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
         }
         unlock(&taskgroup->group_mutex_);
         if (ready_task) {
-          should_dispatch =
-              try_dispatch(ready_task, NULL, ready_task->synchronous);
+          should_dispatch = ready_task->tryDispatch(NULL);
         }
       } while (should_dispatch);
     } else {
@@ -885,7 +907,7 @@ void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
       unlock(&mutex_readyq_);
 
       for (int i = 0; i < queue_sz; i++) {
-        atl_task_t *ready_task = NULL;
+        TaskImpl *ready_task = NULL;
         lock(&mutex_readyq_);
         if (!ReadyTaskQueue.empty()) {
           ready_task = ReadyTaskQueue.front();
@@ -894,14 +916,14 @@ void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
         unlock(&mutex_readyq_);
 
         if (ready_task) {
-          try_dispatch(ready_task, NULL, ATMI_FALSE);
+          ready_task->tryDispatch(NULL);
         }
       }
     }
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
     bool should_dispatch = false;
     do {
-      atl_task_t *ready_task = NULL;
+      TaskImpl *ready_task = NULL;
       should_dispatch = false;
       lock(&mutex_readyq_);
       if (!TaskList.empty()) {
@@ -909,7 +931,7 @@ void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
       }
       unlock(&mutex_readyq_);
       if (ready_task) {
-        should_dispatch = try_dispatch(ready_task, NULL, ATMI_FALSE);
+        should_dispatch = ready_task->tryDispatch(NULL);
       }
     } while (should_dispatch);
   }
@@ -951,427 +973,372 @@ std::vector<hsa_queue_t *> get_cpu_queues(atmi_place_t place) {
   return proc.queues();
 }
 
-atmi_status_t dispatch_task(atl_task_t *task) {
+atmi_status_t ComputeTaskImpl::dispatch() {
   // DEBUG_PRINT("GPU Place Info: %d, %lx %lx\n", lparm->place.node_id,
   // lparm->place.cpu_set, lparm->place.gpu_set);
 
-  if (task->type == ATL_DATA_MOVEMENT) {
-    return dispatch_data_movement(task, task->data_dest_ptr, task->data_src_ptr,
-                                  task->data_size);
-  } else {
-    TryDispatchTimer.start();
-    TaskgroupImpl *taskgroup_obj = task->taskgroup_obj;
-    /* get this taskgroup's HSA queue (could be dynamically mapped or round
-     * robin
-     * if it is an unordered taskgroup */
-    // FIXME: round robin for now, but may use some other load balancing algo
-    // enqueue task's packet to that queue
+  TryDispatchTimer.start();
+  TaskgroupImpl *taskgroup_obj = taskgroup_obj_;
+  /* get this taskgroup's HSA queue (could be dynamically mapped or round
+   * robin
+   * if it is an unordered taskgroup */
+  // FIXME: round robin for now, but may use some other load balancing algo
+  // enqueue task's packet to that queue
 
-    int proc_id = task->place.device_id;
-    if (proc_id == -1) {
-      // user is asking runtime to pick a device
-      // TODO(ashwinma): best device of this type? pick 0 for now
-      proc_id = 0;
+  int proc_id = place_.device_id;
+  if (proc_id == -1) {
+    // user is asking runtime to pick a device
+    // TODO(ashwinma): best device of this type? pick 0 for now
+    proc_id = 0;
+  }
+  hsa_queue_t *this_Q = packets_[0].first;
+  // printf("Task already populated with Q[%p, %lu]\n", this_Q,
+  // packets[0].second);
+  if (!this_Q) return ATMI_STATUS_ERROR;
+
+  int ndim = -1;
+  if (gridDim_[2] > 1)
+    ndim = 3;
+  else if (gridDim_[1] > 1)
+    ndim = 2;
+  else
+    ndim = 1;
+  if (devtype_ == ATMI_DEVTYPE_GPU) {
+    hsa_kernel_dispatch_packet_t *this_aql = NULL;
+    uint64_t index = 0ull;
+    index = packets_[0].second;
+    /* Find the queue index address to write the packet info into.  */
+    const uint32_t queueMask = this_Q->size - 1;
+    this_aql = &(((hsa_kernel_dispatch_packet_t
+            *)(this_Q->base_address))[index & queueMask]);
+    DEBUG_PRINT("K for %p (%lu) %p [%lu]\n", this, id_, this_Q,
+        index & queueMask);
+
+    KernelImpl *kernel_impl = kernel_->getKernelImpl(kernel_id_);
+    // this_aql->header = create_header(HSA_PACKET_TYPE_INVALID, ATMI_FALSE);
+    // memset(this_aql, 0, sizeof(hsa_kernel_dispatch_packet_t));
+    /*  FIXME: We need to check for queue overflow here. */
+    // SignalAddTimer.start();
+    if (groupable_ == ATMI_TRUE) {
+      lock(&(taskgroup_obj->group_mutex_));
+      taskgroup_obj->running_groupable_tasks_.push_back(this);
+      unlock(&(taskgroup_obj->group_mutex_));
     }
-    hsa_queue_t *this_Q = task->packets[0].first;
-    // printf("Task already populated with Q[%p, %lu]\n", this_Q,
-    // task->packets[0].second);
-    if (!this_Q) return ATMI_STATUS_ERROR;
+    // SignalAddTimer.stop();
+    this_aql->completion_signal = signal_;
 
-    int ndim = -1;
-    if (task->gridDim[2] > 1)
-      ndim = 3;
-    else if (task->gridDim[1] > 1)
-      ndim = 2;
-    else
-      ndim = 1;
-    if (task->devtype == ATMI_DEVTYPE_GPU) {
-      hsa_kernel_dispatch_packet_t *this_aql = NULL;
-      uint64_t index = 0ull;
-      index = task->packets[0].second;
-      /* Find the queue index address to write the packet info into.  */
-      const uint32_t queueMask = this_Q->size - 1;
-      this_aql = &(((hsa_kernel_dispatch_packet_t
-                         *)(this_Q->base_address))[index & queueMask]);
-      DEBUG_PRINT("K for %p (%lu) %p [%lu]\n", task, task->id, this_Q,
-                  index & queueMask);
+    /* pass this task handle to the kernel as an argument */
+    char *kargs = reinterpret_cast<char *>(kernarg_region_);
+    // AMDGCN device libs assume that first three args beyond the kernel args
+    // are grid
+    // offsets in X, Y and Z dimensions
+    atmi_implicit_args_t *impl_args =
+      reinterpret_cast<atmi_implicit_args_t *>(
+          kargs +
+          (kernarg_region_size_ - sizeof(atmi_implicit_args_t)));
+    impl_args->offset_x = 0;
+    impl_args->offset_y = 0;
+    impl_args->offset_z = 0;
+    // char *pipe_ptr = impl_args->pipe_ptr;
 
-      KernelImpl *kernel_impl = task->kernel->getKernelImpl(task->kernel_id);
-      // this_aql->header = create_header(HSA_PACKET_TYPE_INVALID, ATMI_FALSE);
-      // memset(this_aql, 0, sizeof(hsa_kernel_dispatch_packet_t));
-      /*  FIXME: We need to check for queue overflow here. */
-      // SignalAddTimer.start();
-      if (task->groupable == ATMI_TRUE) {
-        lock(&(taskgroup_obj->group_mutex_));
-        taskgroup_obj->running_groupable_tasks_.push_back(task);
-        unlock(&(taskgroup_obj->group_mutex_));
-      }
-      // SignalAddTimer.stop();
-      this_aql->completion_signal = task->signal;
+    // initialize printf buffer
+    {
+      KernelImpl *kernel_impl = NULL;
+      if (task_process_init_buffer) {
+        if (kernel_) {
+          kernel_impl = kernel_->getKernelImpl(kernel_id_);
+          // printf("Task Id: %lu, kernel name: %s\n", id_,
+          // kernel_impl->kernel_name.c_str());
+          char *kargs = reinterpret_cast<char *>(kernarg_region_);
+          if (type() == ATL_KERNEL_EXECUTION &&
+              devtype_ == ATMI_DEVTYPE_GPU &&
+              kernel_impl->platform_type() == AMDGCN) {
+            atmi_implicit_args_t *impl_args =
+              reinterpret_cast<atmi_implicit_args_t *>(
+                  kargs + (kernarg_region_size_ -
+                    sizeof(atmi_implicit_args_t)));
 
-      /* pass this task handle to the kernel as an argument */
-      char *kargs = reinterpret_cast<char *>(task->kernarg_region);
-      // AMDGCN device libs assume that first three args beyond the kernel args
-      // are grid
-      // offsets in X, Y and Z dimensions
-      atmi_implicit_args_t *impl_args =
-          reinterpret_cast<atmi_implicit_args_t *>(
-              kargs +
-              (task->kernarg_region_size - sizeof(atmi_implicit_args_t)));
-      impl_args->offset_x = 0;
-      impl_args->offset_y = 0;
-      impl_args->offset_z = 0;
-      // char *pipe_ptr = impl_args->pipe_ptr;
-
-      // initialize printf buffer
-      {
-        KernelImpl *kernel_impl = NULL;
-        if (task_process_init_buffer) {
-          if (task->kernel) {
-            kernel_impl = task->kernel->getKernelImpl(task->kernel_id);
-            // printf("Task Id: %lu, kernel name: %s\n", task->id,
-            // kernel_impl->kernel_name.c_str());
-            char *kargs = reinterpret_cast<char *>(task->kernarg_region);
-            if (task->type == ATL_KERNEL_EXECUTION &&
-                task->devtype == ATMI_DEVTYPE_GPU &&
-                kernel_impl->platform_type() == AMDGCN) {
-              atmi_implicit_args_t *impl_args =
-                  reinterpret_cast<atmi_implicit_args_t *>(
-                      kargs + (task->kernarg_region_size -
-                               sizeof(atmi_implicit_args_t)));
-
-              // initalize printf buffer
-              (*task_process_init_buffer)(
-                  reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
-            }
+            // initalize printf buffer
+            (*task_process_init_buffer)(
+                reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
           }
         }
       }
+    }
 
-      /*  Process task values */
-      /*  this_aql.dimensions=(uint16_t) ndim; */
-      this_aql->setup |= (uint16_t)ndim
-                         << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
-      this_aql->grid_size_x = task->gridDim[0];
-      this_aql->workgroup_size_x = task->groupDim[0];
-      if (ndim > 1) {
-        this_aql->grid_size_y = task->gridDim[1];
-        this_aql->workgroup_size_y = task->groupDim[1];
-      } else {
-        this_aql->grid_size_y = 1;
-        this_aql->workgroup_size_y = 1;
-      }
-      if (ndim > 2) {
-        this_aql->grid_size_z = task->gridDim[2];
-        this_aql->workgroup_size_z = task->groupDim[2];
-      } else {
-        this_aql->grid_size_z = 1;
-        this_aql->workgroup_size_z = 1;
-      }
+    /*  Process task values */
+    /*  this_aql.dimensions=(uint16_t) ndim; */
+    this_aql->setup |= (uint16_t)ndim
+      << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
+    this_aql->grid_size_x = gridDim_[0];
+    this_aql->workgroup_size_x = groupDim_[0];
+    if (ndim > 1) {
+      this_aql->grid_size_y = gridDim_[1];
+      this_aql->workgroup_size_y = groupDim_[1];
+    } else {
+      this_aql->grid_size_y = 1;
+      this_aql->workgroup_size_y = 1;
+    }
+    if (ndim > 2) {
+      this_aql->grid_size_z = gridDim_[2];
+      this_aql->workgroup_size_z = groupDim_[2];
+    } else {
+      this_aql->grid_size_z = 1;
+      this_aql->workgroup_size_z = 1;
+    }
 
-      /*  Bind kernel argument buffer to the aql packet.  */
-      this_aql->kernarg_address = task->kernarg_region;
-      this_aql->kernel_object =
-          dynamic_cast<GPUKernelImpl *>(kernel_impl)->kernel_objects_[proc_id];
-      this_aql->private_segment_size =
-          dynamic_cast<GPUKernelImpl *>(kernel_impl)
-              ->private_segment_sizes_[proc_id];
-      this_aql->group_segment_size = dynamic_cast<GPUKernelImpl *>(kernel_impl)
-                                         ->group_segment_sizes_[proc_id];
+    /*  Bind kernel argument buffer to the aql packet.  */
+    this_aql->kernarg_address = kernarg_region_;
+    this_aql->kernel_object =
+      dynamic_cast<GPUKernelImpl *>(kernel_impl)->kernel_objects_[proc_id];
+    this_aql->private_segment_size =
+      dynamic_cast<GPUKernelImpl *>(kernel_impl)
+      ->private_segment_sizes_[proc_id];
+    this_aql->group_segment_size = dynamic_cast<GPUKernelImpl *>(kernel_impl)
+      ->group_segment_sizes_[proc_id];
 
-      this_aql->reserved2 = task->id;
-      set_task_state(task, ATMI_DISPATCHED);
+    this_aql->reserved2 = id_;
+    set_state(ATMI_DISPATCHED);
+    /*  Prepare and set the packet header */
+    packet_store_release(
+        reinterpret_cast<uint32_t *>(this_aql),
+        create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH,
+          taskgroup_obj->ordered_, acquire_scope_,
+          release_scope_),
+        this_aql->setup);
+    /* Increment write index and ring doorbell to dispatch the kernel.  */
+    // hsa_queue_store_write_index_relaxed(this_Q, index+1);
+    hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
+  } else if (devtype_ == ATMI_DEVTYPE_CPU) {
+    int thread_count = gridDim_[0] * gridDim_[1] * gridDim_[2];
+    std::vector<hsa_queue_t *> this_queues = get_cpu_queues(place_);
+    int q_count = this_queues.size();
+    struct timespec dispatch_time;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &dispatch_time);
+    /* this "virtual" task encompasses thread_count number of ATMI CPU tasks
+     * performing
+     * data parallel SPMD style of processing
+     */
+    if (groupable_ == ATMI_TRUE) {
+      lock(&(taskgroup_obj->group_mutex_));
+      taskgroup_obj->running_groupable_tasks_.push_back(this);
+      unlock(&(taskgroup_obj->group_mutex_));
+    }
+    for (int tid = 0; tid < thread_count; tid++) {
+      hsa_agent_dispatch_packet_t *this_aql = NULL;
+      uint64_t index = 0ull;
+      hsa_queue_t *this_Q = packets_[tid].first;
+      index = packets_[tid].second;
+      /* Find the queue index address to write the packet info into.  */
+      const uint32_t queueMask = this_Q->size - 1;
+      this_aql = &(((hsa_agent_dispatch_packet_t
+              *)(this_Q->base_address))[index & queueMask]);
+
+      memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
+      /*  FIXME: We need to check for queue overflow here. Do we need
+       *  to do this for CPU agents too? */
+      // SignalAddTimer.start();
+      // hsa_signal_store_relaxed(signal, 1);
+      // SignalAddTimer.stop();
+      this_aql->completion_signal = signal_;
+
+      /* Set the type and return args.*/
+      // TODO(ashwinma): Consider a better algorithm to choose
+      // the best kernel implementation for the task at hand.
+      this_aql->type = static_cast<uint16_t>(
+          kernel_->getKernelIdMapIndex(kernel_id_));
+      /* FIXME: We are considering only void return types for now.*/
+      // this_aql->return_address = NULL;
+      /* Set function args */
+      this_aql->arg[0] = (uint64_t)id_;
+      this_aql->arg[1] = (uint64_t)kernarg_region_;
+      this_aql->arg[2] =
+        (uint64_t)kernel_;  // pass task handle to fill in metrics
+      this_aql->arg[3] = tid;      // tasks can query for current task ID
+
       /*  Prepare and set the packet header */
+      /* FIXME: CPU tasks ignore barrier bit as of now. Change
+       * implementation? I think it doesn't matter because we are
+       * executing the subroutines one-by-one, so barrier bit is
+       * inconsequential.
+       */
       packet_store_release(
           reinterpret_cast<uint32_t *>(this_aql),
-          create_header(HSA_PACKET_TYPE_KERNEL_DISPATCH,
-                        taskgroup_obj->ordered_, task->acquire_scope,
-                        task->release_scope),
-          this_aql->setup);
-      /* Increment write index and ring doorbell to dispatch the kernel.  */
-      // hsa_queue_store_write_index_relaxed(this_Q, index+1);
-      hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
-    } else if (task->devtype == ATMI_DEVTYPE_CPU) {
-      int thread_count = task->gridDim[0] * task->gridDim[1] * task->gridDim[2];
-      std::vector<hsa_queue_t *> this_queues = get_cpu_queues(task->place);
-      int q_count = this_queues.size();
-      struct timespec dispatch_time;
-      clock_gettime(CLOCK_MONOTONIC_RAW, &dispatch_time);
-      /* this "virtual" task encompasses thread_count number of ATMI CPU tasks
-       * performing
-       * data parallel SPMD style of processing
-       */
-      if (task->groupable == ATMI_TRUE) {
-        lock(&(taskgroup_obj->group_mutex_));
-        taskgroup_obj->running_groupable_tasks_.push_back(task);
-        unlock(&(taskgroup_obj->group_mutex_));
-      }
-      for (int tid = 0; tid < thread_count; tid++) {
-        hsa_agent_dispatch_packet_t *this_aql = NULL;
-        uint64_t index = 0ull;
-        hsa_queue_t *this_Q = task->packets[tid].first;
-        index = task->packets[tid].second;
-        /* Find the queue index address to write the packet info into.  */
-        const uint32_t queueMask = this_Q->size - 1;
-        this_aql = &(((hsa_agent_dispatch_packet_t
-                           *)(this_Q->base_address))[index & queueMask]);
-
-        memset(this_aql, 0, sizeof(hsa_agent_dispatch_packet_t));
-        /*  FIXME: We need to check for queue overflow here. Do we need
-         *  to do this for CPU agents too? */
-        // SignalAddTimer.start();
-        // hsa_signal_store_relaxed(task->signal, 1);
-        // SignalAddTimer.stop();
-        this_aql->completion_signal = task->signal;
-
-        /* Set the type and return args.*/
-        // FIXME FIXME FIXME: Use the hierarchical pif-kernel table to
-        // choose the best kernel. Don't use a flat table structure
-        this_aql->type = static_cast<uint16_t>(
-            task->kernel->getKernelIdMapIndex(task->kernel_id));
-        /* FIXME: We are considering only void return types for now.*/
-        // this_aql->return_address = NULL;
-        /* Set function args */
-        this_aql->arg[0] = (uint64_t)task->id;
-        this_aql->arg[1] = (uint64_t)task->kernarg_region;
-        this_aql->arg[2] =
-            (uint64_t)task->kernel;  // pass task handle to fill in metrics
-        this_aql->arg[3] = tid;      // tasks can query for current task ID
-
-        /*  Prepare and set the packet header */
-        /* FIXME: CPU tasks ignore barrier bit as of now. Change
-         * implementation? I think it doesn't matter because we are
-         * executing the subroutines one-by-one, so barrier bit is
-         * inconsequential.
-         */
-        packet_store_release(
-            reinterpret_cast<uint32_t *>(this_aql),
-            create_header(HSA_PACKET_TYPE_AGENT_DISPATCH,
-                          taskgroup_obj->ordered_, task->acquire_scope,
-                          task->release_scope),
-            this_aql->type);
-      }
-      set_task_state(task, ATMI_DISPATCHED);
-      /* Store dispatched time */
-      if (task->profilable == ATMI_TRUE && task->atmi_task)
-        task->atmi_task->profile.dispatch_time =
-            get_nanosecs(context_init_time, dispatch_time);
-      // FIXME: in the current logic, multiple CPU threads are round-robin
-      // scheduled across queues from Q0. So, just ring the doorbell on only
-      // the queues that are touched and leave the other queues alone
-      int doorbell_count = (q_count < thread_count) ? q_count : thread_count;
-      for (int q = 0; q < doorbell_count; q++) {
-        /* fetch write index and ring doorbell on one lesser value
-         * (because the add index call will have incremented it already by
-         * 1 and dispatch the kernel.  */
-        uint64_t index = hsa_queue_load_write_index_acquire(this_queues[q]) - 1;
-        hsa_signal_store_relaxed(this_queues[q]->doorbell_signal, index);
-        signal_worker(this_queues[q], PROCESS_PKT);
-      }
+          create_header(HSA_PACKET_TYPE_AGENT_DISPATCH,
+            taskgroup_obj->ordered_, acquire_scope_,
+            release_scope_),
+          this_aql->type);
     }
-    TryDispatchTimer.stop();
-    DEBUG_PRINT("Task %lu (%d) Dispatched\n", task->id, task->devtype);
-    return ATMI_STATUS_SUCCESS;
+    set_state(ATMI_DISPATCHED);
+    /* Store dispatched time */
+    if (profilable_ == ATMI_TRUE && atmi_task_)
+      atmi_task_->profile.dispatch_time =
+        get_nanosecs(context_init_time, dispatch_time);
+    // FIXME: in the current logic, multiple CPU threads are round-robin
+    // scheduled across queues from Q0. So, just ring the doorbell on only
+    // the queues that are touched and leave the other queues alone
+    int doorbell_count = (q_count < thread_count) ? q_count : thread_count;
+    for (int q = 0; q < doorbell_count; q++) {
+      /* fetch write index and ring doorbell on one lesser value
+       * (because the add index call will have incremented it already by
+       * 1 and dispatch the kernel.  */
+      uint64_t index = hsa_queue_load_write_index_acquire(this_queues[q]) - 1;
+      hsa_signal_store_relaxed(this_queues[q]->doorbell_signal, index);
+      signal_worker(this_queues[q], PROCESS_PKT);
+    }
   }
+  TryDispatchTimer.stop();
+  DEBUG_PRINT("Task %lu (%d) Dispatched\n", id_, devtype_);
+  return ATMI_STATUS_SUCCESS;
 }
 
-void set_kernarg_region(atl_task_t *ret, void **args) {
-  char *thisKernargAddress = reinterpret_cast<char *>(ret->kernarg_region);
-  if (ret->kernel->num_args() && thisKernargAddress == NULL) {
+void ComputeTaskImpl::updateKernargRegion(void **args) {
+  char *thisKernargAddress = reinterpret_cast<char *>(kernarg_region_);
+  if (kernel_->num_args() && thisKernargAddress == NULL) {
     fprintf(stderr, "Unable to allocate/find free kernarg segment\n");
   }
-  KernelImpl *kernel_impl = ret->kernel->getKernelImpl(ret->kernel_id);
+  KernelImpl *kernel_impl = kernel_->getKernelImpl(kernel_id_);
 
   // Argument references will be copied to a contiguous memory region here
   // TODO(ashwinma): resolve all data affinities before copying, depending on
   // atmi_data_affinity_policy_t: ATMI_COPY, ATMI_NOCOPY
-  atmi_place_t place = ret->place;
-  for (int i = 0; i < ret->kernel->num_args(); i++) {
+  atmi_place_t place = place_;
+  for (int i = 0; i < kernel_->num_args(); i++) {
     memcpy(thisKernargAddress + kernel_impl->arg_offsets()[i], args[i],
-           ret->kernel->arg_sizes()[i]);
+           kernel_->arg_sizes()[i]);
     // hsa_memory_register(thisKernargAddress, ???
     DEBUG_PRINT("Arg[%d] = %p\n", i, *(void **)((char *)thisKernargAddress +
                                                 kernel_impl->arg_offsets()[i]));
   }
 }
 
-void acquire_aql_packet(atl_task_t *task) {
-  TaskgroupImpl *taskgroup_obj = task->taskgroup_obj;
-  if (task->type == ATL_KERNEL_EXECUTION) {
-    // get AQL queue for GPU tasks and CPU tasks
-    hsa_queue_t *this_Q = NULL;
-    if (task->devtype == ATMI_DEVTYPE_GPU)
-      this_Q =
-          taskgroup_obj->chooseQueueFromPlace<ATLGPUProcessor>(task->place);
-    else if (task->devtype == ATMI_DEVTYPE_CPU)
-      this_Q =
-          taskgroup_obj->chooseQueueFromPlace<ATLCPUProcessor>(task->place);
-    if (!this_Q) ATMIErrorCheck(Getting queue for dispatch, ATMI_STATUS_ERROR);
-    if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      // enqueue barrier if and_predecessors is not empty
-      if (!(task->and_predecessors.empty())) {
-        enqueue_barrier(task, this_Q, task->and_predecessors.size(),
-                        &(task->and_predecessors[0]), SNK_NOWAIT, SNK_AND,
-                        task->devtype);
-      }
+void ComputeTaskImpl::acquireAqlPacket() {
+  TaskgroupImpl *taskgroup_obj = taskgroup_obj_;
+  // get AQL queue for GPU tasks and CPU tasks
+  hsa_queue_t *this_Q = NULL;
+  if (devtype_ == ATMI_DEVTYPE_GPU)
+    this_Q =
+      taskgroup_obj->chooseQueueFromPlace<ATLGPUProcessor>(place_);
+  else if (devtype_ == ATMI_DEVTYPE_CPU)
+    this_Q =
+      taskgroup_obj->chooseQueueFromPlace<ATLCPUProcessor>(place_);
+  if (!this_Q) ATMIErrorCheck(Getting queue for dispatch, ATMI_STATUS_ERROR);
+  if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+    // enqueue barrier if and_predecessors is not empty
+    if (!(and_predecessors_.empty())) {
+      enqueue_barrier(this, this_Q, and_predecessors_.size(),
+          &(and_predecessors_[0]), SNK_NOWAIT, SNK_AND,
+          devtype_);
     }
+  }
 
-    if (task->devtype == ATMI_DEVTYPE_GPU) {
-      hsa_signal_add_acq_rel(task->signal, 1);
+  if (devtype_ == ATMI_DEVTYPE_GPU) {
+    hsa_signal_add_acq_rel(signal_, 1);
+    /*  Obtain the current queue write index. increases with each call to
+     * kernel  */
+    // uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
+    // Atomically request a new packet ID.
+    uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
+    // Wait until the queue is not full before writing the packet
+    DEBUG_PRINT("Queue %p ordered? %d task: %lu index: %lu\n", this_Q,
+        taskgroup_obj->ordered_, id_, index);
+    // printf("%lu, %lu, K\n", id_, index);
+    while (index - hsa_queue_load_read_index_acquire(this_Q) >=
+        this_Q->size) {
+    }
+    packets_.push_back(std::make_pair(this_Q, index));
+  } else if (devtype_ == ATMI_DEVTYPE_CPU) {
+    std::vector<hsa_queue_t *> this_queues = get_cpu_queues(place_);
+    int q_count = this_queues.size();
+    int thread_count = gridDim_[0] * gridDim_[1] * gridDim_[2];
+    if (thread_count == 0) {
+      std::string warning =
+        "WARNING: one of the dimensions is set to 0 threads. Choosing 1 "
+        "thread by default.";
+      fprintf(stderr, "%s\n", warning.c_str());
+      thread_count = 1;
+    }
+    if (thread_count == 1) {
+      int q;
+      for (q = 0; q < q_count; q++) {
+        if (this_queues[q] == this_Q) break;
+      }
+      hsa_queue_t *tmp = this_queues[0];
+      this_queues[0] = this_queues[q];
+      this_queues[q] = tmp;
+    }
+    hsa_signal_add_acq_rel(signal_, thread_count);
+    for (int tid = 0; tid < thread_count; tid++) {
+      hsa_queue_t *this_queue = this_queues[tid % q_count];
       /*  Obtain the current queue write index. increases with each call to
        * kernel  */
-      // uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
-      // Atomically request a new packet ID.
-      uint64_t index = hsa_queue_add_write_index_relaxed(this_Q, 1);
-      // Wait until the queue is not full before writing the packet
-      DEBUG_PRINT("Queue %p ordered? %d task: %lu index: %lu\n", this_Q,
-                  taskgroup_obj->ordered_, task->id, index);
-      // printf("%lu, %lu, K\n", task->id, index);
-      while (index - hsa_queue_load_read_index_acquire(this_Q) >=
-             this_Q->size) {
+      uint64_t index = hsa_queue_add_write_index_relaxed(this_queue, 1);
+      while (index - hsa_queue_load_read_index_acquire(this_queue) >=
+          this_queue->size) {
       }
-      task->packets.push_back(std::make_pair(this_Q, index));
-    } else if (task->devtype == ATMI_DEVTYPE_CPU) {
-      std::vector<hsa_queue_t *> this_queues = get_cpu_queues(task->place);
-      int q_count = this_queues.size();
-      int thread_count = task->gridDim[0] * task->gridDim[1] * task->gridDim[2];
-      if (thread_count == 0) {
-        std::string warning =
-            "WARNING: one of the dimensions is set to 0 threads. Choosing 1 "
-            "thread by default.";
-        fprintf(stderr, "%s\n", warning.c_str());
-        thread_count = 1;
-      }
-      if (thread_count == 1) {
-        int q;
-        for (q = 0; q < q_count; q++) {
-          if (this_queues[q] == this_Q) break;
-        }
-        hsa_queue_t *tmp = this_queues[0];
-        this_queues[0] = this_queues[q];
-        this_queues[q] = tmp;
-      }
-      hsa_signal_add_acq_rel(task->signal, thread_count);
-      for (int tid = 0; tid < thread_count; tid++) {
-        hsa_queue_t *this_queue = this_queues[tid % q_count];
-        /*  Obtain the current queue write index. increases with each call to
-         * kernel  */
-        uint64_t index = hsa_queue_add_write_index_relaxed(this_queue, 1);
-        while (index - hsa_queue_load_read_index_acquire(this_queue) >=
-               this_queue->size) {
-        }
-        /* Find the queue index address to write the packet info into.  */
-        task->packets.push_back(std::make_pair(this_queue, index));
-      }
+      /* Find the queue index address to write the packet info into.  */
+      packets_.push_back(std::make_pair(this_queue, index));
     }
-  } else {
-    // get signal for SDMA and increment it accordingly
-    hsa_status_t err;
-    void *src = task->data_src_ptr;
-    void *dest = task->data_dest_ptr;
-    size_t size = task->data_size;
-#ifndef USE_ROCR_PTR_INFO
-    ATLData *volatile src_data = g_data_map.find(src);
-    ATLData *volatile dest_data = g_data_map.find(dest);
-#else
-    hsa_amd_pointer_info_t src_ptr_info;
-    hsa_amd_pointer_info_t dest_ptr_info;
-    src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-    dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-    err = hsa_amd_pointer_info(reinterpret_cast<void *>(src), &src_ptr_info,
-                               NULL,  /* alloc fn ptr */
-                               NULL,  /* num_agents_accessible */
-                               NULL); /* accessible agents */
-    ErrorCheck(Checking src pointer info, err);
-    err = hsa_amd_pointer_info(reinterpret_cast<void *>(dest), &dest_ptr_info,
-                               NULL,  /* alloc fn ptr */
-                               NULL,  /* num_agents_accessible */
-                               NULL); /* accessible agents */
-    ErrorCheck(Checking dest pointer info, err);
-    ATLData *volatile src_data =
-        reinterpret_cast<ATLData *>(src_ptr_info.userData);
-    ATLData *volatile dest_data =
-        reinterpret_cast<ATLData *>(dest_ptr_info.userData);
-#endif
-    bool is_src_host =
-        (!src_data || src_data->place().dev_type == ATMI_DEVTYPE_CPU);
-    bool is_dest_host =
-        (!dest_data || dest_data->place().dev_type == ATMI_DEVTYPE_CPU);
-    void *temp_host_ptr;
-    const void *src_ptr = src;
-    void *dest_ptr = dest;
-    volatile unsigned type;
-    if (is_src_host && is_dest_host) {
-      type = ATMI_H2H;
-    } else if (src_data && !dest_data) {
-      type = ATMI_D2H;
-    } else if (!src_data && dest_data) {
-      type = ATMI_H2D;
-    } else {
-      type = ATMI_D2D;
-    }
-
-    if (type == ATMI_H2D || type == ATMI_D2H)
-      hsa_signal_add_acq_rel(task->signal, 2);
-    else
-      hsa_signal_add_acq_rel(task->signal, 1);
   }
 }
 
-bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
+bool TaskImpl::tryDispatchBarrierPacket(void **args) {
   bool resources_available = true;
   bool should_dispatch = true;
   hsa_signal_t new_signal;
 
   // lock(&mutex_readyq_);
   // try dispatching the head of TaskList
-  // atl_task_t *ret = TaskList.front();
+  // TaskImpl *ret = TaskList.front();
   // unlock(&mutex_readyq_);
 
   std::set<pthread_mutex_t *> req_mutexes;
-  std::vector<atl_task_t *> &temp_vecs = ret->predecessors;
+  std::vector<TaskImpl *> &temp_vecs = predecessors_;
   req_mutexes.clear();
-  for (int idx = 0; idx < ret->predecessors.size(); idx++) {
-    atl_task_t *pred_task = temp_vecs[idx];
-    req_mutexes.insert(&(pred_task->mutex));
+  for (int idx = 0; idx < predecessors_.size(); idx++) {
+    TaskImpl *pred_task = temp_vecs[idx];
+    req_mutexes.insert(&(pred_task->mutex_));
   }
-  req_mutexes.insert(&(ret->mutex));
+  req_mutexes.insert(&(mutex_));
   req_mutexes.insert(&mutex_readyq_);
-  if (ret->prev_ordered_task)
-    req_mutexes.insert(&(ret->prev_ordered_task->mutex));
+  if (prev_ordered_task_)
+    req_mutexes.insert(&(prev_ordered_task_->mutex_));
+
+  ComputeTaskImpl* compute_task = dynamic_cast<ComputeTaskImpl*>(this);
+
   KernelImpl *kernel_impl = NULL;
-  if (ret->kernel) {
-    kernel_impl = ret->kernel->getKernelImpl(ret->kernel_id);
+  if (compute_task) {
+    kernel_impl = compute_task->kernel_->getKernelImpl(compute_task->kernel_id_);
     if (kernel_impl) req_mutexes.insert(&(kernel_impl->mutex()));
   }
-  TaskgroupImpl *taskgroup_obj = ret->taskgroup_obj;
+  TaskgroupImpl *taskgroup_obj = taskgroup_obj_;
 
   lock_set(req_mutexes);
   // assert that this task is TaskList.front() because there should be no other
   // scenario
   // assert(ret == TaskList.front());
   // if(ret != TaskList.front()) {
-  //  fprintf(stderr, "Task (%p --> %lu) not at front!\n", ret, ret->id);
+  //  fprintf(stderr, "Task (%p --> %lu) not at front!\n", ret, id_);
   //  exit(-1);
   //}
-  // std::cout << "[" << ret->id << "]Signals Before: " << FreeSignalPool.size()
+  // std::cout << "[" << id_ << "]Signals Before: " << FreeSignalPool.size()
   // << std::endl;
 
-  if (ret->state >= ATMI_READY) {
+  if (state_ >= ATMI_READY) {
     // If someone else is trying to dispatch this task, give up
     DEBUG_PRINT("Some other thread trying to dispatch task %lu, giving up\n",
-                ret->id);
+                id_);
     unlock_set(req_mutexes);
     return false;
   }
   if (should_dispatch) {
     // find if all dependencies are satisfied
     int dep_count = 0;
-    for (int idx = 0; idx < ret->predecessors.size(); idx++) {
-      atl_task_t *pred_task = temp_vecs[idx];
-      DEBUG_PRINT("Task %lu depends on %lu as %d th predecessor ", ret->id,
-                  pred_task->id, idx);
-      if (pred_task->state < ATMI_DISPATCHED) {
+    for (int idx = 0; idx < predecessors_.size(); idx++) {
+      TaskImpl *pred_task = temp_vecs[idx];
+      DEBUG_PRINT("Task %lu depends on %lu as %d th predecessor ", id_,
+                  pred_task->id_, idx);
+      if (pred_task->state_ < ATMI_DISPATCHED) {
         /* still in ready queue and not received a signal */
         should_dispatch = false;
         DEBUG_PRINT("(waiting)\n");
@@ -1380,10 +1347,10 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         DEBUG_PRINT("(dispatched)\n");
       }
     }
-    if (ret->prev_ordered_task) {
-      DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ", ret->id,
-                  ret->prev_ordered_task->id);
-      if (ret->prev_ordered_task->state < ATMI_DISPATCHED) {
+    if (prev_ordered_task_) {
+      DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ", id_,
+                  prev_ordered_task_->id_);
+      if (prev_ordered_task_->state_ < ATMI_DISPATCHED) {
         should_dispatch = false;
         DEBUG_PRINT("(waiting)\n");
         waiting_count++;
@@ -1398,7 +1365,7 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
         (kernel_impl && kernel_impl->free_kernarg_segments().empty())) {
       should_dispatch = false;
       resources_available = false;
-      ret->and_predecessors.clear();
+      and_predecessors_.clear();
       DEBUG_PRINT(
           "Do not dispatch because (signals: %lu, kernels: %lu, ready tasks: "
           "%lu)\n",
@@ -1408,71 +1375,71 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
   }
 
   if (should_dispatch) {
-    if (ret->groupable != ATMI_TRUE) {
+    if (groupable_ != ATMI_TRUE) {
       // this is a task that uses individual signals (not taskgroup-signals)
       new_signal = FreeSignalPool.front();
       FreeSignalPool.pop();
-      ret->signal = new_signal;
+      signal_ = new_signal;
     } else {
-      ret->signal = taskgroup_obj->signal();
+      signal_ = taskgroup_obj->signal();
     }
-    if (ret->kernel) {
+    if (compute_task) {
       // get kernarg resource
       uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size();
       int free_idx = kernel_impl->free_kernarg_segments().front();
-      ret->kernarg_region_index = free_idx;
+      compute_task->kernarg_region_index_ = free_idx;
       DEBUG_PRINT("Acquiring Kernarg Segment Id: %d\n", free_idx);
       void *addr = reinterpret_cast<void *>(
           reinterpret_cast<char *>(kernel_impl->kernarg_region()) +
           (free_idx * kernarg_segment_size));
       kernel_impl->free_kernarg_segments().pop();
-      if (ret->kernarg_region != NULL) {
+      if (compute_task->kernarg_region_ != NULL) {
         // we had already created a memory region using malloc. Copy it
         // to the newly availed space
-        size_t size_to_copy = ret->kernarg_region_size;
-        if (ret->devtype == ATMI_DEVTYPE_GPU &&
+        size_t size_to_copy = compute_task->kernarg_region_size_;
+        if (devtype_ == ATMI_DEVTYPE_GPU &&
             kernel_impl->platform_type() == AMDGCN) {
           // do not copy the implicit args from saved region
           // they are to be set/reset during task dispatch
           size_to_copy -= sizeof(atmi_implicit_args_t);
         }
-        memcpy(addr, ret->kernarg_region, size_to_copy);
+        memcpy(addr, compute_task->kernarg_region_, size_to_copy);
         // free existing region
-        free(ret->kernarg_region);
-        ret->kernarg_region = addr;
+        free(compute_task->kernarg_region_);
+        compute_task->kernarg_region_ = addr;
       } else {
         // first time allocation/assignment
-        ret->kernarg_region = addr;
-        set_kernarg_region(ret, args);
+        compute_task->kernarg_region_ = addr;
+        compute_task->updateKernargRegion(args);
       }
     }
 
-    for (int idx = 0; idx < ret->predecessors.size(); idx++) {
-      atl_task_t *pred_task = temp_vecs[idx];
-      if (pred_task->state /*.load(std::memory_order_seq_cst)*/ <
+    for (int idx = 0; idx < predecessors_.size(); idx++) {
+      TaskImpl *pred_task = temp_vecs[idx];
+      if (pred_task->state_ /*.load(std::memory_order_seq_cst)*/ <
           ATMI_EXECUTED) {
-        pred_task->num_successors++;
+        pred_task->num_successors_++;
         DEBUG_PRINT("Task %p (%lu) adding %p (%lu) as successor\n", pred_task,
-                    pred_task->id, ret, ret->id);
-        ret->and_predecessors.push_back(pred_task);
+                    pred_task->id_, this, id_);
+        and_predecessors_.push_back(pred_task);
       }
     }
-    DispatchedTasks.push_back(ret);
+    DispatchedTasks.push_back(this);
     // we will be dispatching the task in front of the deque, pop it
-    // what if two threads have peeked at a different task and try_dispatch
+    // what if two threads have peeked at a different task and tryDispatch
     // is called in a different order? does it matter if the tasks are popped
     // out of order?
     TaskList.pop_front();
     // save the current set of sink tasks
-    SinkTasks.insert(ret);
-    for (auto &pred_task : ret->and_predecessors) {
+    SinkTasks.insert(this);
+    for (auto &pred_task : and_predecessors_) {
       // The predecessors are no longer sink tasks (if they were until now). The
       // current task will be the sink task for its predecessors
       SinkTasks.erase(pred_task);
     }
-    if (ret->prev_ordered_task) {
+    if (prev_ordered_task_) {
       // remove previous task in the ordered list from sink tasks
-      SinkTasks.erase(ret->prev_ordered_task);
+      SinkTasks.erase(prev_ordered_task_);
 
       // If the previous ordered task was for a different queue type, then add
       // to
@@ -1481,41 +1448,43 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
       // Later, enqueue barrier SDMA or CPU/GPU to GPU/CPU. If CPU/GPU to SDMA,
       // then
       // ROCr SDMA API handles dependencies separately.
-      if (taskgroup_obj->ordered_ && ret->prev_ordered_task) {
-        if ((ret->prev_ordered_task->type == ATL_DATA_MOVEMENT &&
-             ret->type == ATL_KERNEL_EXECUTION) ||
-            (ret->prev_ordered_task->type == ATL_KERNEL_EXECUTION &&
-             ret->type == ATL_DATA_MOVEMENT) ||
-            (ret->prev_ordered_task->devtype == ATMI_DEVTYPE_GPU &&
-             ret->devtype == ATMI_DEVTYPE_CPU) ||
-            (ret->prev_ordered_task->devtype == ATMI_DEVTYPE_CPU &&
-             ret->devtype == ATMI_DEVTYPE_GPU)) {
-          atl_task_t *pred_task = ret->prev_ordered_task;
-          if (pred_task->state /*.load(std::memory_order_seq_cst)*/ <
+      if (taskgroup_obj->ordered_ && prev_ordered_task_) {
+        if ((prev_ordered_task_->type() == ATL_DATA_MOVEMENT &&
+             type() == ATL_KERNEL_EXECUTION) ||
+            (prev_ordered_task_->type() == ATL_KERNEL_EXECUTION &&
+             type() == ATL_DATA_MOVEMENT) ||
+            (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_GPU &&
+             devtype_ == ATMI_DEVTYPE_CPU) ||
+            (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_CPU &&
+             devtype_ == ATMI_DEVTYPE_GPU)) {
+          TaskImpl *pred_task = prev_ordered_task_;
+          if (pred_task->state_ /*.load(std::memory_order_seq_cst)*/ <
               ATMI_EXECUTED) {
-            pred_task->num_successors++;
+            pred_task->num_successors_++;
             DEBUG_PRINT("Task %p (%lu) adding %p (%lu) as successor\n",
-                        pred_task, pred_task->id, ret, ret->id);
-            ret->and_predecessors.push_back(pred_task);
+                        pred_task, pred_task->id_, this, id_);
+            and_predecessors_.push_back(pred_task);
           }
         }
       }
     }
 
-    acquire_aql_packet(ret);
+    acquireAqlPacket();
 
     // now the task (kernel/data movement) has the signal/kernarg resource
     // and can be set to the "ready" state
-    set_task_state(ret, ATMI_READY);
+    set_state(ATMI_READY);
   } else {
-    if (ret->kernel && ret->kernarg_region == NULL) {
-      // first time allocation/assignment
-      ret->kernarg_region = malloc(ret->kernarg_region_size);
-      // ret->kernarg_region_copied = true;
-      set_kernarg_region(ret, args);
+    if (compute_task) {
+      if (compute_task->kernel_ && compute_task->kernarg_region_ == NULL) {
+        // first time allocation/assignment
+        compute_task->kernarg_region_ = malloc(compute_task->kernarg_region_size_);
+        // kernarg_region_copied = true;
+        compute_task->updateKernargRegion(args);
+      }
     }
     max_ready_queue_sz++;
-    set_task_state(ret, ATMI_INITIALIZED);
+    set_state(ATMI_INITIALIZED);
   }
   DEBUG_PRINT(
       "[Try Dispatch] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n",
@@ -1524,51 +1493,51 @@ bool try_dispatch_barrier_pkt(atl_task_t *ret, void **args) {
   return should_dispatch;
 }
 
-bool try_dispatch_callback(atl_task_t *ret, void **args) {
-  bool should_try_dispatch = true;
+bool TaskImpl::tryDispatchHostCallback(void **args) {
+  bool should_tryDispatch = true;
   bool resources_available = true;
   bool predecessors_complete = true;
   bool should_dispatch = false;
 
   std::set<pthread_mutex_t *> req_mutexes;
-  std::vector<atl_task_t *> &temp_vecs = ret->predecessors;
+  std::vector<TaskImpl *> &temp_vecs = predecessors_;
   req_mutexes.clear();
-  for (int idx = 0; idx < ret->predecessors.size(); idx++) {
-    atl_task_t *pred_task = ret->predecessors[idx];
-    req_mutexes.insert(&(pred_task->mutex));
+  for (auto pred_task : predecessors_) {
+    req_mutexes.insert(&(pred_task->mutex_));
   }
-  req_mutexes.insert(&(ret->mutex));
+  req_mutexes.insert(&(mutex_));
   req_mutexes.insert(&mutex_readyq_);
-  if (ret->prev_ordered_task)
-    req_mutexes.insert(&(ret->prev_ordered_task->mutex));
-  TaskgroupImpl *taskgroup_obj = ret->taskgroup_obj;
+  if (prev_ordered_task_)
+    req_mutexes.insert(&(prev_ordered_task_->mutex_));
+  TaskgroupImpl *taskgroup_obj = taskgroup_obj_;
   req_mutexes.insert(&(taskgroup_obj->group_mutex_));
+  ComputeTaskImpl* compute_task = dynamic_cast<ComputeTaskImpl*>(this);
+
   KernelImpl *kernel_impl = NULL;
-  if (ret->kernel) {
-    kernel_impl = ret->kernel->getKernelImpl(ret->kernel_id);
+  if (compute_task) {
+    kernel_impl = compute_task->kernel_->getKernelImpl(compute_task->kernel_id_);
     req_mutexes.insert(&(kernel_impl->mutex()));
   }
   lock_set(req_mutexes);
 
-  if (ret->state >= ATMI_READY) {
+  if (state_ >= ATMI_READY) {
     // If someone else is trying to dispatch this task, give up
     unlock_set(req_mutexes);
     return false;
   }
   // do not add predecessor-successor link if task is already initialized using
   // create-activate pattern
-  if (ret->state < ATMI_INITIALIZED && should_try_dispatch) {
-    if (!ret->predecessors.empty()) {
+  if (state_ < ATMI_INITIALIZED && should_tryDispatch) {
+    if (!predecessors_.empty()) {
       // add to its predecessor's dependents list and return
-      for (int idx = 0; idx < ret->predecessors.size(); idx++) {
-        atl_task_t *pred_task = ret->predecessors[idx];
-        DEBUG_PRINT("Task %p depends on %p as predecessor ", ret, pred_task);
-        if (pred_task->state /*.load(std::memory_order_seq_cst)*/ <
+      for (auto pred_task : predecessors_) {
+        DEBUG_PRINT("Task %p depends on %p as predecessor ", this, pred_task);
+        if (pred_task->state_ /*.load(std::memory_order_seq_cst)*/ <
             ATMI_EXECUTED) {
-          should_try_dispatch = false;
+          should_tryDispatch = false;
           predecessors_complete = false;
-          pred_task->and_successors.push_back(ret);
-          ret->num_predecessors++;
+          pred_task->and_successors_.push_back(this);
+          num_predecessors_++;
           DEBUG_PRINT("(waiting)\n");
           waiting_count++;
         } else {
@@ -1576,21 +1545,20 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
         }
       }
     }
-    if (ret->pred_taskgroup_objs.size() > 0) {
+    if (pred_taskgroup_objs_.size() > 0) {
       // add to its predecessor's dependents list and return
-      DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret->id,
-                  ret->pred_taskgroup_objs.size());
-      for (int idx = 0; idx < ret->pred_taskgroup_objs.size(); idx++) {
-        TaskgroupImpl *pred_tg = ret->pred_taskgroup_objs[idx];
-        DEBUG_PRINT("Task %p depends on %p as predecessor task group ", ret,
+      DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", id_,
+                  pred_taskgroup_objs_.size());
+      for (auto pred_tg : pred_taskgroup_objs_) {
+        DEBUG_PRINT("Task %p depends on %p as predecessor task group ", this,
                     pred_tg);
         if (pred_tg && pred_tg->task_count_.load() > 0) {
           // predecessor task group is still running, so add yourself to its
           // successor list
-          should_try_dispatch = false;
+          should_tryDispatch = false;
           predecessors_complete = false;
-          pred_tg->and_successors_.push_back(ret);
-          ret->num_predecessors++;
+          pred_tg->and_successors_.push_back(this);
+          num_predecessors_++;
           DEBUG_PRINT("(waiting)\n");
         } else {
           DEBUG_PRINT("(completed)\n");
@@ -1599,45 +1567,45 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     }
   }
 
-  if (ret->prev_ordered_task && should_try_dispatch) {
-    DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ", ret->id,
-                ret->prev_ordered_task->id);
+  if (prev_ordered_task_ && should_tryDispatch) {
+    DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ", id_,
+                prev_ordered_task_->id_);
     // if this task is of a certain type and its previous task was also of the
     // same type,
     // then we can dispatch this task if the previous task has also been
     // dispatched
     // (received task signal and set its value)
-    if (ret->prev_ordered_task->state < ATMI_READY &&
-        ((ret->prev_ordered_task->type == ATL_DATA_MOVEMENT &&
-          ret->type == ATL_DATA_MOVEMENT) ||
-         (ret->prev_ordered_task->type == ATL_KERNEL_EXECUTION &&
-          ret->type == ATL_KERNEL_EXECUTION &&
-          ((ret->prev_ordered_task->devtype == ATMI_DEVTYPE_CPU &&
-            ret->devtype == ATMI_DEVTYPE_CPU) ||
-           (ret->prev_ordered_task->devtype == ATMI_DEVTYPE_GPU &&
-            ret->devtype == ATMI_DEVTYPE_GPU))))) {
-      should_try_dispatch = false;
+    if (prev_ordered_task_->state_ < ATMI_READY &&
+        ((prev_ordered_task_->type() == ATL_DATA_MOVEMENT &&
+          type() == ATL_DATA_MOVEMENT) ||
+         (prev_ordered_task_->type() == ATL_KERNEL_EXECUTION &&
+          type() == ATL_KERNEL_EXECUTION &&
+          ((prev_ordered_task_->devtype_ == ATMI_DEVTYPE_CPU &&
+            devtype_ == ATMI_DEVTYPE_CPU) ||
+           (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_GPU &&
+            devtype_ == ATMI_DEVTYPE_GPU))))) {
+      should_tryDispatch = false;
       predecessors_complete = false;
       DEBUG_PRINT("(waiting)\n");
       waiting_count++;
-    } else if (ret->prev_ordered_task->state < ATMI_EXECUTED &&
-               ((ret->prev_ordered_task->type == ATL_DATA_MOVEMENT &&
-                 ret->type == ATL_KERNEL_EXECUTION) ||
-                (ret->prev_ordered_task->type == ATL_KERNEL_EXECUTION &&
-                 ret->type == ATL_DATA_MOVEMENT) ||
-                (ret->prev_ordered_task->devtype == ATMI_DEVTYPE_GPU &&
-                 ret->devtype == ATMI_DEVTYPE_CPU) ||
-                (ret->prev_ordered_task->devtype == ATMI_DEVTYPE_CPU &&
-                 ret->devtype == ATMI_DEVTYPE_GPU))) {
+    } else if (prev_ordered_task_->state_ < ATMI_EXECUTED &&
+               ((prev_ordered_task_->type() == ATL_DATA_MOVEMENT &&
+                 type() == ATL_KERNEL_EXECUTION) ||
+                (prev_ordered_task_->type() == ATL_KERNEL_EXECUTION &&
+                 type() == ATL_DATA_MOVEMENT) ||
+                (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_GPU &&
+                 devtype_ == ATMI_DEVTYPE_CPU) ||
+                (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_CPU &&
+                 devtype_ == ATMI_DEVTYPE_GPU))) {
       // if this task is of a certain type and its previous task
       // is of a different type, then we can dispatch this task
       // ONLY if the previous task has been at least
       // executed; and also add the previous task as a predecessor
-      should_try_dispatch = false;
+      should_tryDispatch = false;
       predecessors_complete = false;
-      if (ret->state < ATMI_INITIALIZED) {
-        ret->prev_ordered_task->and_successors.push_back(ret);
-        ret->num_predecessors++;
+      if (state_ < ATMI_INITIALIZED) {
+        prev_ordered_task_->and_successors_.push_back(this);
+        num_predecessors_++;
       }
       DEBUG_PRINT("(waiting)\n");
       waiting_count++;
@@ -1646,29 +1614,29 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
     }
   }
 
-  if (should_try_dispatch) {
+  if (should_tryDispatch) {
     if ((kernel_impl && kernel_impl->free_kernarg_segments().empty()) ||
-        (ret->groupable == ATMI_FALSE && FreeSignalPool.empty())) {
-      should_try_dispatch = false;
+        (groupable_ == ATMI_FALSE && FreeSignalPool.empty())) {
+      should_tryDispatch = false;
       resources_available = false;
     }
   }
 
-  if (should_try_dispatch) {
+  if (should_tryDispatch) {
     // try to dispatch if
     // a) you are using callbacks to resolve dependencies and all
     // your predecessors are done executing, OR
     // b) you are using barrier packets, in which case always try
     // to launch if you have a free signal at hand
-    if (ret->groupable == ATMI_TRUE) {
-      ret->signal = taskgroup_obj->signal();
+    if (groupable_ == ATMI_TRUE) {
+      signal_ = taskgroup_obj->signal();
     } else {
       // get a free signal
       hsa_signal_t new_signal = FreeSignalPool.front();
-      ret->signal = new_signal;
+      signal_ = new_signal;
       DEBUG_PRINT("Before pop Signal handle: %" PRIu64
                   " Signal value:%ld (Signal pool sz: %lu)\n",
-                  ret->signal.handle, hsa_signal_load_relaxed(ret->signal),
+                  signal_.handle, hsa_signal_load_relaxed(signal_),
                   FreeSignalPool.size());
       FreeSignalPool.pop();
       DEBUG_PRINT(
@@ -1677,141 +1645,297 @@ bool try_dispatch_callback(atl_task_t *ret, void **args) {
           FreeSignalPool.size(), ReadyTaskQueue.size());
       // unlock(&mutex_readyq_);
     }
-    if (ret->kernel) {
+    if (compute_task) {
       // get kernarg resource
       uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size();
       int free_idx = kernel_impl->free_kernarg_segments().front();
       DEBUG_PRINT("Acquiring Kernarg Segment Id: %d\n", free_idx);
-      ret->kernarg_region_index = free_idx;
+      compute_task->kernarg_region_index_ = free_idx;
       void *addr = reinterpret_cast<void *>(
           reinterpret_cast<char *>(kernel_impl->kernarg_region()) +
           (free_idx * kernarg_segment_size));
       kernel_impl->free_kernarg_segments().pop();
-      assert(!(ret->kernel->num_args()) ||
-             (ret->kernel->num_args() && (ret->kernarg_region || args)));
-      if (ret->kernarg_region != NULL) {
+      assert(!(compute_task->kernel_->num_args()) ||
+             (compute_task->kernel_->num_args() && (compute_task->kernarg_region_ || args)));
+      if (compute_task->kernarg_region_ != NULL) {
         // we had already created a memory region using malloc. Copy it
         // to the newly availed space
-        size_t size_to_copy = ret->kernarg_region_size;
-        if (ret->devtype == ATMI_DEVTYPE_GPU &&
+        size_t size_to_copy = compute_task->kernarg_region_size_;
+        if (devtype_ == ATMI_DEVTYPE_GPU &&
             kernel_impl->platform_type() == AMDGCN) {
           // do not copy the implicit args from saved region
           // they are to be set/reset during task dispatch
           size_to_copy -= sizeof(atmi_implicit_args_t);
         }
-        if (size_to_copy) memcpy(addr, ret->kernarg_region, size_to_copy);
+        if (size_to_copy) memcpy(addr, compute_task->kernarg_region_, size_to_copy);
         // free existing region
-        free(ret->kernarg_region);
-        ret->kernarg_region = addr;
+        free(compute_task->kernarg_region_);
+        compute_task->kernarg_region_ = addr;
       } else {
         // first time allocation/assignment
-        ret->kernarg_region = addr;
-        set_kernarg_region(ret, args);
+        compute_task->kernarg_region_ = addr;
+        compute_task->updateKernargRegion(args);
       }
     }
 
     if (taskgroup_obj->ordered_)
       taskgroup_obj->running_ordered_tasks_.pop_front();
 
-    acquire_aql_packet(ret);
+    acquireAqlPacket();
 
     // now the task (kernel/data movement) has the signal/kernarg resource
     // and can be set to the "ready" state
-    set_task_state(ret, ATMI_READY);
+    set_state(ATMI_READY);
   } else {
-    if (ret->kernel && ret->kernarg_region == NULL) {
-      // first time allocation/assignment
-      ret->kernarg_region = malloc(ret->kernarg_region_size);
-      // ret->kernarg_region_copied = true;
-      set_kernarg_region(ret, args);
+    if (compute_task) {
+      if (compute_task->kernel_ && compute_task->kernarg_region_ == NULL) {
+        // first time allocation/assignment
+        compute_task->kernarg_region_ = malloc(compute_task->kernarg_region_size_);
+        // kernarg_region_copied = true;
+        compute_task->updateKernargRegion(args);
+      }
     }
-    set_task_state(ret, ATMI_INITIALIZED);
+    set_state(ATMI_INITIALIZED);
   }
   if (predecessors_complete == true && resources_available == false &&
-      ret->taskgroup_obj->ordered_ == false) {
+      taskgroup_obj_->ordered_ == false) {
     // Ready task but no resources available. So, we push it to a
     // ready queue
-    ReadyTaskQueue.push(ret);
+    ReadyTaskQueue.push(this);
     max_ready_queue_sz++;
   }
 
   unlock_set(req_mutexes);
-  return should_try_dispatch;
+  return should_tryDispatch;
 }
 
-atl_task_t *get_new_task() {
-  atl_task_t *ret = new atl_task_t;
-  memset(ret, 0, sizeof(atl_task_t));
-  // ret->is_continuation = false;
+TaskImpl::TaskImpl() : id_(ATMI_NULL_TASK_HANDLE),
+          place_(ATMI_DEFAULT_PLACE),
+          devtype_(ATMI_DEVTYPE_ALL),
+          state_(ATMI_UNINITIALIZED),
+          atmi_task_(NULL),
+          taskgroup_obj_(NULL),
+          num_predecessors_(0),
+          num_successors_(0),
+          prev_ordered_task_(NULL),
+          acquire_scope_(ATMI_FENCE_SCOPE_SYSTEM),
+          release_scope_(ATMI_FENCE_SCOPE_SYSTEM),
+          profilable_(false),
+          groupable_(false),
+          synchronous_(false)
+          // is_continuation_(false),
+          // continuation_task_(NULL)
+{
+  pthread_mutex_init(&mutex_, NULL);
+}
+
+TaskImpl::~TaskImpl() {
+  // packets_.clear();  
+}
+
+ComputeTaskImpl::ComputeTaskImpl(Kernel* kernel) :
+          TaskImpl(),
+          kernel_(kernel),
+          kernel_id_(-1),
+          kernarg_region_(NULL)
+{
   lock(&mutex_all_tasks_);
-  AllTasks.push_back(ret);
-  set_task_state(ret, ATMI_UNINITIALIZED);
+  AllTasks.push_back(this);
   atmi_task_handle_t new_id;
-  // new_id.node = 0;
   set_task_handle_ID(&new_id, AllTasks.size() - 1);
-  // new_id.lo = AllTasks.size() - 1;
-  // PublicTaskMap[new_id] = ret;
   unlock(&mutex_all_tasks_);
-  ret->id = new_id;
-  ret->and_successors.clear();
-  ret->and_predecessors.clear();
-  ret->predecessors.clear();
-  ret->continuation_task = NULL;
-  ret->pred_taskgroup_objs.clear();
-  pthread_mutex_init(&(ret->mutex), NULL);
-  return ret;
+  id_ = new_id;
 }
 
-void enqueue_barrier_tasks(atl_task_vector_t tasks) {
-  if (!tasks.empty()) {
-    hsa_signal_store_relaxed(IdentityANDSignal, 1);
-    atl_task_t *task = tasks[tasks.size() - 1];
-    // for all sink tasks, enqueue a barrier packet
-    hsa_queue_t *queue = NULL;
-    // task->packets will be set by try_dispatch only for
-    // kernel tasks and not data movement tasks; so we pick
-    // an arbitrary queue just to place the BP if no obvious
-    // queue is found.
-    if (!task->packets.empty())
-      queue = task->packets[0].first;
-    else
-      queue = task->taskgroup_obj->chooseQueueFromPlace<ATLGPUProcessor>(
-          task->place);
-    enqueue_barrier(task, queue, tasks.size(), &(tasks[0]), SNK_NOWAIT, SNK_AND,
-                    task->devtype, true);
+ComputeTaskImpl::ComputeTaskImpl(atmi_lparm_t* lparm,
+                                 Kernel* kernel,
+                                 int kernel_id) :
+          TaskImpl(),
+          kernel_(kernel),
+          kernel_id_(kernel_id),
+          kernarg_region_(NULL)
+{
+  lock(&mutex_all_tasks_);
+  AllTasks.push_back(this);
+  atmi_task_handle_t new_id;
+  set_task_handle_ID(&new_id, AllTasks.size() - 1);
+  unlock(&mutex_all_tasks_);
+  id_ = new_id;
+
+  setParams(lparm);
+}
+
+void ComputeTaskImpl::setParams(const atmi_lparm_t *lparm) {
+  static bool is_called = false;
+  if (!is_called) {
+    set_thread_affinity(0);
+
+    /* int policy;
+       struct sched_param param;
+       pthread_getschedparam(pthread_self(), &policy, &param);
+       param.sched_priority = sched_get_priority_min(policy);
+       printf("Setting Priority Policy for %d: %d\n", policy,
+       param.sched_priority);
+       pthread_setschedparam(pthread_self(), policy, &param);
+       */
+    is_called = true;
+  }
+
+  KernelImpl *kernel_impl = kernel_->getKernelImpl(kernel_id_);
+  kernarg_region_ = NULL;
+  kernarg_region_size_ = kernel_impl->kernarg_segment_size();
+  devtype_ = kernel_impl->devtype();
+  profilable_ = lparm->profilable;
+  groupable_ = lparm->groupable;
+  atmi_task_ = lparm->task_info;
+
+  // assign the memory scope
+  acquire_scope_ = lparm->acquire_scope;
+  release_scope_ = lparm->release_scope;
+
+  // fill in from lparm
+  for (int i = 0; i < 3 /* 3dims */; i++) {
+    gridDim_[i] = lparm->gridDim[i];
+    groupDim_[i] = lparm->groupDim[i];
+  }
+  // DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", lparm.requires,
+  // lparm->requires);
+  // DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n",
+  // lparm.task_info, lparm->task_info);
+
+  /* Add row to taskgroup table for purposes of future synchronizations */
+  taskgroup_ = lparm->group;
+  taskgroup_obj_ = getTaskgroupImpl(taskgroup_);
+
+  place_ = lparm->place;
+  synchronous_ = lparm->synchronous;
+  // DEBUG_PRINT("Taskgroup LHS: %p and RHS: %p\n", lparm.group,
+  // lparm->group);
+  num_predecessors_ = 0;
+  num_successors_ = 0;
+
+  /* For dependent child tasks, add dependent parent kernels to barriers.  */
+  DEBUG_PRINT("Pif %s requires %d task\n", kernel_impl->name().c_str(),
+              lparm->num_required);
+
+  predecessors_.clear();
+  // predecessors.resize(lparm->num_required);
+  for (int idx = 0; idx < lparm->num_required; idx++) {
+    TaskImpl *pred_task = getTaskImpl(lparm->requires[idx]);
+    // assert(pred_task != NULL);
+    if (pred_task) {
+      DEBUG_PRINT("Task %lu adding %lu task as predecessor\n", id_,
+                  pred_task->id_);
+      predecessors_.push_back(pred_task);
+    }
+  }
+  pred_taskgroup_objs_.clear();
+  pred_taskgroup_objs_.resize(lparm->num_required_groups);
+  for (int idx = 0; idx < lparm->num_required_groups; idx++) {
+    pred_taskgroup_objs_[idx] =
+        getTaskgroupImpl(lparm->required_groups[idx]);
+  }
+
+  lock(&(taskgroup_obj_->group_mutex_));
+  if (taskgroup_obj_->ordered_) {
+    taskgroup_obj_->running_ordered_tasks_.push_back(this);
+    prev_ordered_task_ = taskgroup_obj_->last_task_;
+    taskgroup_obj_->last_task_ = this;
+  } else {
+    taskgroup_obj_->running_default_tasks_.push_back(this);
+  }
+  unlock(&(taskgroup_obj_->group_mutex_));
+  if (groupable_) {
+    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", taskgroup_obj_);
+    (taskgroup_obj_->task_count_)++;
   }
 }
 
-bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
+ComputeTaskImpl* createComputeTaskTemplateImpl(atmi_kernel_t atmi_kernel) {
+  ComputeTaskImpl* task = NULL;
+  Kernel *kernel = get_kernel_obj(atmi_kernel);
+  if(kernel)
+    task = new ComputeTaskImpl(kernel);
+  return task;
+}
+
+ComputeTaskImpl* createComputeTaskImpl(atmi_lparm_t* lparm,
+    atmi_kernel_t atmi_kernel) {
+  ComputeTaskImpl * task = NULL;
+  // get kernel impl object and set all relevant 
+  // task params  
+  int kernel_id = -1;
+  Kernel *kernel = get_kernel_obj(atmi_kernel);
+  if(kernel) {
+    kernel_id = kernel->getKernelImplId(lparm);
+  }
+  if (kernel_id == -1) return NULL;
+
+  /*lock(&(kernel_impl->mutex));
+    if(kernel_impl->free_kernarg_segments().empty()) {
+  // no free kernarg segments -- allocate some more?
+  // FIXME: realloc instead? HSA realloc?
+  }
+  unlock(&(kernel_impl->mutex));
+  */
+  task = new ComputeTaskImpl(lparm, kernel, kernel_id);
+ 
+  return task;
+}
+
+void enqueue_barrier_tasks(TaskImplVecTy tasks) {
+  if (!tasks.empty()) {
+    hsa_signal_store_relaxed(IdentityANDSignal, 1);
+    TaskImpl *task = tasks[tasks.size() - 1];
+    // for all sink tasks, enqueue a barrier packet
+    hsa_queue_t *queue = NULL;
+    // task->packets will be set by tryDispatch only for
+    // kernel tasks and not data movement tasks; so we pick
+    // an arbitrary queue just to place the BP if no obvious
+    // queue is found.
+    if (!task->packets_.empty())
+      queue = task->packets_[0].first;
+    else
+      queue = task->taskgroup_obj_->chooseQueueFromPlace<ATLGPUProcessor>(
+          task->place_);
+    enqueue_barrier(task, queue, tasks.size(), &(tasks[0]), SNK_NOWAIT, SNK_AND,
+                    task->devtype_, true);
+  }
+}
+
+bool TaskImpl::tryDispatch(void **args) {
   ShouldDispatchTimer.start();
   bool should_dispatch = true;
-  bool register_task_callback = (ret->groupable != ATMI_TRUE);
+  bool register_task_callback = (groupable_ != ATMI_TRUE);
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
-    should_dispatch = try_dispatch_callback(ret, args);
+    should_dispatch = tryDispatchHostCallback(args);
+    //should_dispatch = tryDispatch_callback(this, args);
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-    should_dispatch = try_dispatch_barrier_pkt(ret, args);
+    should_dispatch = tryDispatchBarrierPacket(args);
+    //should_dispatch = tryDispatch_barrier_pkt(this, args);
   }
   ShouldDispatchTimer.stop();
 
   if (should_dispatch) {
     // direct_dispatch++;
-    dispatch_task(ret);
+    ATMIErrorCheck(Dispatch compute kernel, dispatch());
+    //dispatch_task(this);
 
     RegisterCallbackTimer.start();
     if (register_task_callback) {
       if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
-        DEBUG_PRINT("Registering callback for task %lu\n", ret->id);
+        DEBUG_PRINT("Registering callback for task %lu\n", id_);
         hsa_status_t err = hsa_amd_signal_async_handler(
-            ret->signal, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
-            reinterpret_cast<void *>(ret));
+            signal_, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
+            reinterpret_cast<void *>(this));
         ErrorCheck(Creating signal handler, err);
       }
     } else {
-      if (!ret->taskgroup_obj->callback_started_.test_and_set()) {
+      if (!taskgroup_obj_->callback_started_.test_and_set()) {
         DEBUG_PRINT("Registering callback for task groups\n");
         hsa_status_t err = hsa_amd_signal_async_handler(
-            ret->signal, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,
-            reinterpret_cast<void *>(ret->taskgroup_obj));
+            signal_, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,
+            reinterpret_cast<void *>(taskgroup_obj_));
         ErrorCheck(Creating signal handler, err);
       }
     }
@@ -1824,16 +1948,16 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
       // for its completion.
       // All dispatched tasks get signal from device-only signal pool. All async
       // handlers are registered to interruptible signals
-      atl_task_t *last_dispatched_task = NULL;
-      atl_task_vector_t tasks;
-      atl_task_vector_t *dispatched_tasks_ptr = NULL;
+      TaskImpl *last_dispatched_task = NULL;
+      TaskImplVecTy tasks;
+      TaskImplVecTy *dispatched_tasks_ptr = NULL;
       lock(&mutex_readyq_);
       if (!SinkTasks.empty()) {
         // this also means that DispatchedTasks is not empty
         tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
         SinkTasks.clear();
         // will be deleted in the callback
-        dispatched_tasks_ptr = new atl_task_vector_t;
+        dispatched_tasks_ptr = new TaskImplVecTy;
         dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
                                      DispatchedTasks.begin(),
                                      DispatchedTasks.end());
@@ -1854,16 +1978,17 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
       // when do_progress handles the TaskList
     }
   }
-  if (synchronous == ATMI_TRUE) { /*  Sychronous execution */
+  if (synchronous_ == ATMI_TRUE) { /*  Sychronous execution */
     /* For default synchrnous execution, wait til kernel is finished.  */
     //    TaskWaitTimer.start();
-    if (ret->groupable != ATMI_TRUE) {
-      atl_task_wait(ret);
+    if (groupable_ != ATMI_TRUE) {
+      wait();
     } else {
-      ret->taskgroup_obj->sync();
+      taskgroup_obj_->sync();
     }
-    set_task_metrics(ret);
-    set_task_state(ret, ATMI_COMPLETED);
+    updateMetrics();
+    //set_task_metrics(ret);
+    set_state(ATMI_COMPLETED);
     //  TaskWaitTimer.stop();
     // std::cout << "Task Wait Interim Timer " << TaskWaitTimer << std::endl;
     // std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
@@ -1871,264 +1996,56 @@ bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous) {
   return should_dispatch;
 }
 
-atl_task_t *atl_trycreate_task(Kernel *kernel) {
-  atl_task_t *ret = get_new_task();
-  ret->kernel = kernel;
-  return ret;
-}
+atmi_task_handle_t ComputeTaskImpl::tryLaunchKernel(void** args) {
+  atmi_task_handle_t task_handle = ATMI_NULL_TASK_HANDLE;
+  // set_task_params(ret, lparm, kernel_id, args);
+  if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+    std::set<pthread_mutex_t *> req_mutexes;
+    req_mutexes.clear();
 
-void set_task_params(atl_task_t *task_obj, const atmi_lparm_t *lparm,
-                     unsigned int kernel_id, void **args) {
-  TryLaunchInitTimer.start();
-  if (!task_obj) return;
-  DEBUG_PRINT("GPU Place Info: %d, %d, %d : %lx\n", lparm->place.node_id,
-              lparm->place.type, lparm->place.device_id, lparm->place.cu_mask);
-  static bool is_called = false;
-  if (!is_called) {
-    set_thread_affinity(0);
-
-    /* int policy;
-       struct sched_param param;
-       pthread_getschedparam(pthread_self(), &policy, &param);
-       param.sched_priority = sched_get_priority_min(policy);
-       printf("Setting Priority Policy for %d: %d\n", policy,
-       param.sched_priority);
-       pthread_setschedparam(pthread_self(), policy, &param);
-       */
-    is_called = true;
-  }
-
-  uint16_t i;
-  atl_task_t *ret = task_obj;
-  atl_task_t *continuation_task = NULL;
-  bool has_continuation = false;
-#if 0
-  if(lparm->task) {
-    has_continuation = (lparm->task->continuation != NULL);
-    if(PublicTaskMap.find(lparm->task) != PublicTaskMap.end()) {
-      // task is already found, so use it and dont create a new one
-      ret = PublicTaskMap[lparm->task];
-      DEBUG_PRINT("Task %p found\n", lparm->task);
+    req_mutexes.insert(&mutex_readyq_);
+    req_mutexes.insert(&(mutex_));
+    lock_set(req_mutexes);
+    // Save kernel args because it will be activated
+    // later. This way, the user will be able to
+    // reuse their kernarg region that was created
+    // in the application space.
+    if (kernel_ && kernarg_region_ == NULL) {
+      // first time allocation/assignment
+      kernarg_region_ = malloc(kernarg_region_size_);
+      // kernarg_region_copied = true;
+      updateKernargRegion(args);
     }
+    TaskList.push_back(this);
+    unlock_set(req_mutexes);
   }
-  if(ret == NULL || ret->is_continuation == false) {
-    /* create anyway if not part of a continuation? */
-    ret = new atl_task_t;
-    memset(ret, 0, sizeof(atl_task_t));
-    ret->is_continuation = false;
-    lock(&mutex_all_tasks_);
-    AllTasks.push_back(ret);
-    //AllTasks.push_back(atl_task_t());
-    //AllTasks.emplace_back();
-    //ret = AllTasks[AllTasks.size() - 1];
-    atmi_task_handle_t new_id;
-    new_id.node = 0;
-    new_id.hi = 0;
-    new_id.lo = AllTasks.size() - 1;
-    ret->id = new_id;
-    ret->and_successors.clear();
-    ret->and_predecessors.clear();
-    ret->predecessors.clear();
-    //AllTasks.push_back(task);
-    //atl_task_t *ret = task; //AllTasks[AllTasks.size() - 1];
-    unlock(&mutex_all_tasks_);
-    if(lparm->task) {
-      PublicTaskMap[lparm->task] = ret;
-      DEBUG_PRINT("Task Map[%p] = %p (%s)\n", lparm->task, PublicTaskMap[lparm->task], kernel_name);
-    }
-    pthread_mutex_init(&(ret->mutex), NULL);
-  }
-  if(has_continuation) {
-    continuation_task = new atl_task_t;
-    memset(continuation_task, 0, sizeof(atl_task_t));
-    continuation_task->is_continuation = true;
-    lock(&mutex_all_tasks_);
-    AllTasks.push_back(continuation_task);
-    atmi_task_handle_t new_id;
-    new_id.node = 0;
-    new_id.hi = 0;
-    new_id.lo = AllTasks.size() - 1;
-    continuation_task->id = new_id;
-    ret->id.hi = AllTasks.size();
-    unlock(&mutex_all_tasks_);
-    PublicTaskMap[lparm->task->continuation] = continuation_task;
-    DEBUG_PRINT("Continuation Map[%p] = %p (%s)\n",
-      lparm->task->continuation, PublicTaskMap[lparm->task->continuation], kernel_name);
-    pthread_mutex_init(&(continuation_task->mutex), NULL);
-  }
-#else
-#endif
-  Kernel *kernel = ret->kernel;
-  ret->kernel_id = kernel_id;
-  KernelImpl *kernel_impl = kernel->getKernelImpl(ret->kernel_id);
-  ret->kernarg_region = NULL;
-  ret->kernarg_region_size = kernel_impl->kernarg_segment_size();
-  ret->devtype = kernel_impl->devtype();
-  ret->profilable = lparm->profilable;
-  ret->groupable = lparm->groupable;
-  ret->atmi_task = lparm->task_info;
-
-  // assign the memory scope
-  ret->acquire_scope = lparm->acquire_scope;
-  ret->release_scope = lparm->release_scope;
-
-  // fill in from lparm
-  for (int i = 0; i < 3 /* 3dims */; i++) {
-    ret->gridDim[i] = lparm->gridDim[i];
-    ret->groupDim[i] = lparm->groupDim[i];
-  }
-  // DEBUG_PRINT("Requires LHS: %p and RHS: %p\n", ret->lparm.requires,
-  // lparm->requires);
-  // DEBUG_PRINT("Requires ThisTask: %p and ThisTask: %p\n",
-  // ret->lparm.task_info, lparm->task_info);
-
-  /* Add row to taskgroup table for purposes of future synchronizations */
-  ret->taskgroup = lparm->group;
-  ret->taskgroup_obj = get_taskgroup_impl(ret->taskgroup);
-
-  ret->place = lparm->place;
-  ret->synchronous = lparm->synchronous;
-  // DEBUG_PRINT("Taskgroup LHS: %p and RHS: %p\n", ret->lparm.group,
-  // lparm->group);
-  ret->num_predecessors = 0;
-  ret->num_successors = 0;
-
-  /* For dependent child tasks, add dependent parent kernels to barriers.  */
-  DEBUG_PRINT("Pif %s requires %d task\n", kernel_impl->name().c_str(),
-              lparm->num_required);
-
-  ret->predecessors.clear();
-  // ret->predecessors.resize(lparm->num_required);
-  for (int idx = 0; idx < lparm->num_required; idx++) {
-    atl_task_t *pred_task = get_task(lparm->requires[idx]);
-    // assert(pred_task != NULL);
-    if (pred_task) {
-      DEBUG_PRINT("Task %lu adding %lu task as predecessor\n", ret->id,
-                  pred_task->id);
-      ret->predecessors.push_back(pred_task);
-    }
-  }
-  ret->pred_taskgroup_objs.clear();
-  ret->pred_taskgroup_objs.resize(lparm->num_required_groups);
-  for (int idx = 0; idx < lparm->num_required_groups; idx++) {
-    ret->pred_taskgroup_objs[idx] =
-        get_taskgroup_impl(lparm->required_groups[idx]);
-  }
-
-  ret->type = ATL_KERNEL_EXECUTION;
-  ret->data_src_ptr = NULL;
-  ret->data_dest_ptr = NULL;
-  ret->data_size = 0;
-
-  lock(&(ret->taskgroup_obj->group_mutex_));
-  if (ret->taskgroup_obj->ordered_) {
-    ret->taskgroup_obj->running_ordered_tasks_.push_back(ret);
-    ret->prev_ordered_task = ret->taskgroup_obj->last_task_;
-    ret->taskgroup_obj->last_task_ = ret;
-  } else {
-    ret->taskgroup_obj->running_default_tasks_.push_back(ret);
-  }
-  unlock(&(ret->taskgroup_obj->group_mutex_));
-  if (ret->groupable) {
-    DEBUG_PRINT("Add ref_cnt 1 to task group %p\n", ret->taskgroup_obj);
-    (ret->taskgroup_obj->task_count_)++;
-  }
-  TryLaunchInitTimer.stop();
-}
-
-atmi_task_handle_t atl_trylaunch_kernel(const atmi_lparm_t *lparm,
-                                        atl_task_t *task_obj,
-                                        unsigned int kernel_id, void **args) {
-  atmi_task_handle_t ret_handle = ATMI_NULL_TASK_HANDLE;
-  atl_task_t *ret = task_obj;
-  if (ret) {
-    set_task_params(ret, lparm, kernel_id, args);
-    if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      std::set<pthread_mutex_t *> req_mutexes;
-      req_mutexes.clear();
-
-      req_mutexes.insert(&mutex_readyq_);
-      req_mutexes.insert(&(ret->mutex));
-      lock_set(req_mutexes);
-      // Save kernel args because it will be activated
-      // later. This way, the user will be able to
-      // reuse their kernarg region that was created
-      // in the application space.
-      if (ret->kernel && ret->kernarg_region == NULL) {
-        // first time allocation/assignment
-        ret->kernarg_region = malloc(ret->kernarg_region_size);
-        // ret->kernarg_region_copied = true;
-        set_kernarg_region(ret, args);
-      }
-      TaskList.push_back(ret);
-      unlock_set(req_mutexes);
-    }
-    try_dispatch(ret, args, lparm->synchronous);
-    ret_handle = ret->id;
-  }
-  return ret_handle;
+  tryDispatch(args);
+  task_handle = id_;
+  return task_handle;
 }
 
 Kernel *get_kernel_obj(atmi_kernel_t atmi_kernel) {
-  uint64_t pif_id = atmi_kernel.handle;
   std::map<uint64_t, Kernel *>::iterator map_iter;
-  map_iter = KernelImplMap.find(pif_id);
+  map_iter = KernelImplMap.find(atmi_kernel.handle);
   if (map_iter == KernelImplMap.end()) {
-    DEBUG_PRINT("ERROR: Kernel/PIF %lu not found\n", pif_id);
+    DEBUG_PRINT("ERROR: Kernel/PIF %lu not found\n", atmi_kernel.handle);
     return NULL;
   }
-  Kernel *kernel = map_iter->second;
-  return kernel;
+  return map_iter->second;
 }
 
 atmi_task_handle_t Runtime::CreateTaskTemplate(atmi_kernel_t atmi_kernel) {
-  atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
-  Kernel *kernel = get_kernel_obj(atmi_kernel);
-  if (kernel) {
-    atl_task_t *ret_obj = atl_trycreate_task(kernel);
-    if (ret_obj) ret = ret_obj->id;
-  }
-  return ret;
-}
-
-int get_kernel_id(atmi_lparm_t *lparm, Kernel *kernel) {
-  int num_args = kernel->num_args();
-  int kernel_id = lparm->kernel_id;
-  if (kernel_id == -1) {
-    // choose the first available kernel for the given devtype
-    for (auto kernel_impl : kernel->impls()) {
-      if (kernel_impl->devtype() == lparm->place.type) {
-        kernel_id = kernel_impl->id();
-        break;
-      }
-    }
-    if (kernel_id == -1) {
-      fprintf(stderr,
-              "ERROR: Kernel/PIF %lu doesn't have any implementations\n",
-              kernel->id_);
-      return -1;
-    }
-  } else {
-    if (!kernel->isValidId(kernel_id)) {
-      DEBUG_PRINT("ERROR: Kernel ID %d not found\n", kernel_id);
-      return -1;
-    }
-  }
-  KernelImpl *kernel_impl = kernel->getKernelImpl(kernel_id);
-  if (kernel->num_args() && kernel_impl->kernarg_region() == NULL) {
-    fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n",
-            kernel_impl->name().c_str());
-    return -1;
-  }
-
-  return kernel_id;
+  atmi_task_handle_t task_handle = ATMI_NULL_TASK_HANDLE;
+  ComputeTaskImpl *task_template = createComputeTaskTemplateImpl(atmi_kernel);
+  if (task_template) task_handle = task_template->id_;
+  return task_handle;
 }
 
 atmi_task_handle_t Runtime::ActivateTaskTemplate(atmi_task_handle_t task,
-                                                 atmi_lparm_t *lparm,
-                                                 void **args) {
+    atmi_lparm_t *lparm,
+    void **args) {
   atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
-  atl_task_t *task_obj = get_task(task);
+  ComputeTaskImpl *task_obj = dynamic_cast<ComputeTaskImpl*>(getTaskImpl(task));
   if (!task_obj) return ret;
 
   /*if(lparm == NULL && args == NULL) {
@@ -2137,120 +2054,118 @@ atmi_task_handle_t Runtime::ActivateTaskTemplate(atmi_task_handle_t task,
     return task;
     }*/
 
-  Kernel *kernel = task_obj->kernel;
-  int kernel_id = get_kernel_id(lparm, kernel);
+  Kernel *kernel = task_obj->kernel_;
+  int kernel_id = kernel->getKernelImplId(lparm);
   if (kernel_id == -1) return ret;
+  
+  task_obj->kernel_id_ = kernel_id;
 
-  ret = atl_trylaunch_kernel(lparm, task_obj, kernel_id, args);
+  task_obj->setParams(lparm);
+  ret = task_obj->tryLaunchKernel(args);
+  //ret = atl_trylaunch_kernel(lparm, task_obj, kernel_id, args);
   DEBUG_PRINT("[Returned Task: %lu]\n", ret);
   return ret;
 }
 
 atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
-                                       atmi_kernel_t atmi_kernel, void **args) {
-  atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+                                       atmi_kernel_t atmi_kernel,
+                                       void **args) {
+  atmi_task_handle_t task_handle = ATMI_NULL_TASK_HANDLE;
   if ((lparm->place.type & ATMI_DEVTYPE_GPU && !atlc.g_gpu_initialized) ||
       (lparm->place.type & ATMI_DEVTYPE_CPU && !atlc.g_cpu_initialized))
-    return ret;
-  Kernel *kernel = get_kernel_obj(atmi_kernel);
-  if (kernel) {
-    atl_task_t *ret_obj = atl_trycreate_task(kernel);
-    if (ret_obj) {
-      int kernel_id = get_kernel_id(lparm, kernel);
-      if (kernel_id == -1) return ret;
-      set_task_params(ret_obj, lparm, kernel_id, args);
+    return task_handle;
+  ComputeTaskImpl* task = createComputeTaskImpl(lparm, atmi_kernel);
+  if (task) {
+    std::set<pthread_mutex_t *> req_mutexes;
+    req_mutexes.clear();
 
-      std::set<pthread_mutex_t *> req_mutexes;
-      req_mutexes.clear();
+    if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT)  // may need to add to readyQ
+      req_mutexes.insert(&mutex_readyq_);
 
-      if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT)  // may need to add to readyQ
-        req_mutexes.insert(&mutex_readyq_);
-
-      req_mutexes.insert(&(ret_obj->mutex));
-      std::vector<atl_task_t *> &temp_vecs = ret_obj->predecessors;
-      for (int idx = 0; idx < ret_obj->predecessors.size(); idx++) {
-        atl_task_t *pred_task = ret_obj->predecessors[idx];
-        req_mutexes.insert(&(pred_task->mutex));
-      }
+    req_mutexes.insert(&(task->mutex_));
+    for (auto pred_task : task->predecessors_) {
+      req_mutexes.insert(&(pred_task->mutex_));
+    }
 #if 0
-      // FIXME: do we care about locking for ordered and task group mutexes?
-      if (ret_obj->prev_ordered_task)
-        req_mutexes.insert(&(ret_obj->prev_ordered_task->mutex));
+    // FIXME: do we care about locking for ordered and task group mutexes?
+    if (task->prev_ordered_task)
+      req_mutexes.insert(&(task->prev_ordered_task->mutex));
 #endif
-      TaskgroupImpl *taskgroup_obj = ret_obj->taskgroup_obj;
-      req_mutexes.insert(&(taskgroup_obj->group_mutex_));
-      lock_set(req_mutexes);
-      // populate its predecessors' successor list
-      // similar to a double linked list
-      if (ret_obj->predecessors.size() > 0) {
-        // add to its predecessor's dependents list and ret_objurn
-        for (int idx = 0; idx < ret_obj->predecessors.size(); idx++) {
-          atl_task_t *pred_task = ret_obj->predecessors[idx];
-          DEBUG_PRINT("Task %p depends on %p as predecessor ", ret_obj,
-                      pred_task);
-          if (pred_task->state /*.load(std::memory_order_seq_cst)*/ <
-              ATMI_EXECUTED) {
-            // should_try_dispatch = false;
-            // predecessors_complete = false;
-            pred_task->and_successors.push_back(ret_obj);
-            ret_obj->num_predecessors++;
-            DEBUG_PRINT("(waiting)\n");
-            // waiting_count++;
-          } else {
-            DEBUG_PRINT("(completed)\n");
-          }
+    TaskgroupImpl *taskgroup_obj = task->taskgroup_obj_;
+    req_mutexes.insert(&(taskgroup_obj->group_mutex_));
+    lock_set(req_mutexes);
+    // populate its predecessors' successor list
+    // similar to a double linked list
+    if (!task->predecessors_.empty()) {
+      // add to its predecessor's dependents list and taskurn
+      for (auto pred_task : task->predecessors_) {
+        DEBUG_PRINT("Task %p depends on %p as predecessor ", task,
+            pred_task);
+        if (pred_task->state_ /*.load(std::memory_order_seq_cst)*/ <
+            ATMI_EXECUTED) {
+          // should_tryDispatch = false;
+          // predecessors_complete = false;
+          pred_task->and_successors_.push_back(task);
+          task->num_predecessors_++;
+          DEBUG_PRINT("(waiting)\n");
+          // waiting_count++;
+        } else {
+          DEBUG_PRINT("(completed)\n");
         }
       }
-      if (ret_obj->pred_taskgroup_objs.size() > 0) {
-        // add to its predecessor's dependents list and ret_objurn
-        DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", ret_obj->id,
-                    ret_obj->pred_taskgroup_objs.size());
-        for (int idx = 0; idx < ret_obj->pred_taskgroup_objs.size(); idx++) {
-          TaskgroupImpl *pred_tg = ret_obj->pred_taskgroup_objs[idx];
-          DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
-                      ret_obj, pred_tg);
-          if (pred_tg && pred_tg->task_count_.load() > 0) {
-            // predecessor task group is still running, so add yourself to its
-            // successor list
-            // should_try_dispatch = false;
-            // predecessors_complete = false;
-            pred_tg->and_successors_.push_back(ret_obj);
-            ret_obj->num_predecessors++;
-            DEBUG_PRINT("(waiting)\n");
-          } else {
-            DEBUG_PRINT("(completed)\n");
-          }
+    }
+    if (!task->pred_taskgroup_objs_.empty()) {
+      // add to its predecessor's dependents list and taskurn
+      DEBUG_PRINT("Task %lu has %lu predecessor task groups\n", task->id_,
+          task->pred_taskgroup_objs_.size());
+      for (auto pred_tg : task->pred_taskgroup_objs_) {
+        DEBUG_PRINT("Task %p depends on %p as predecessor task group ",
+            task, pred_tg);
+        if (pred_tg && pred_tg->task_count_.load() > 0) {
+          // predecessor task group is still running, so add yourself to its
+          // successor list
+          // should_tryDispatch = false;
+          // predecessors_complete = false;
+          pred_tg->and_successors_.push_back(task);
+          task->num_predecessors_++;
+          DEBUG_PRINT("(waiting)\n");
+        } else {
+          DEBUG_PRINT("(completed)\n");
         }
       }
+    }
 
+    ComputeTaskImpl* compute_task = dynamic_cast<ComputeTaskImpl*>(task);
+    if (compute_task) {
       // Save kernel args because it will be activated
       // later. This way, the user will be able to
       // reuse their kernarg region that was created
       // in the application space.
-      if (ret_obj->kernel && ret_obj->kernarg_region == NULL) {
+      if (compute_task->kernel_ && compute_task->kernarg_region_ == NULL) {
         // first time allocation/assignment
-        ret_obj->kernarg_region = malloc(ret_obj->kernarg_region_size);
-        // ret->kernarg_region_copied = true;
-        set_kernarg_region(ret_obj, args);
+        compute_task->kernarg_region_ = malloc(compute_task->kernarg_region_size_);
+        // task_handle->kernarg_region_copied = true;
+        compute_task->updateKernargRegion(args);
       }
-      if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-        TaskList.push_back(ret_obj);
-      }
-
-      set_task_state(ret_obj, ATMI_INITIALIZED);
-
-      unlock_set(req_mutexes);
-      ret = ret_obj->id;
     }
+    if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+      TaskList.push_back(task);
+    }
+
+    task->set_state(ATMI_INITIALIZED);
+    //set_task_state(task, ATMI_INITIALIZED);
+
+    unlock_set(req_mutexes);
+    task_handle = task->id_;
   }
-  return ret;
+  return task_handle;
 }
 
-atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
-  atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
-  atl_task_t *ret_obj = get_task(task);
-  if (!ret_obj) return ret;
-  ret = ret_obj->id;
+atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t t) {
+  atmi_task_handle_t task_handle = ATMI_NULL_TASK_HANDLE;
+  TaskImpl *task = getTaskImpl(t);
+  if (!task) return task_handle;
+  task_handle = task->id_;
   // On activate, tasks in TaskList will be dispatched
   if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
     bool should_dispatch = false;
@@ -2258,7 +2173,7 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
     // activate the task graph while at the same time trying to
     // add nodes to it? If yes, we can remove the locks surrounding TaskList.
     do {
-      atl_task_t *ready_task = NULL;
+      TaskImpl *ready_task = NULL;
       should_dispatch = false;
       lock(&mutex_readyq_);
       if (!TaskList.empty()) {
@@ -2266,51 +2181,45 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t task) {
       }
       unlock(&mutex_readyq_);
       if (ready_task) {
-        should_dispatch =
-            try_dispatch(ready_task, NULL, ready_task->synchronous);
+        should_dispatch = ready_task->tryDispatch(NULL);
       }
     } while (should_dispatch);
   } else {
-    if (ret_obj->taskgroup_obj && ret_obj->taskgroup_obj->ordered_) {
+    if (task->taskgroup_obj_ && task->taskgroup_obj_->ordered_) {
       // pop from front of ordered task list and try dispatch as many as
       // possible
       bool should_dispatch = false;
       do {
-        atl_task_t *ready_task = NULL;
+        TaskImpl *ready_task = NULL;
         should_dispatch = false;
-        lock(&ret_obj->taskgroup_obj->group_mutex_);
-        if (!ret_obj->taskgroup_obj->running_ordered_tasks_.empty()) {
-          ready_task = ret_obj->taskgroup_obj->running_ordered_tasks_.front();
+        lock(&task->taskgroup_obj_->group_mutex_);
+        if (!task->taskgroup_obj_->running_ordered_tasks_.empty()) {
+          ready_task = task->taskgroup_obj_->running_ordered_tasks_.front();
         }
-        unlock(&ret_obj->taskgroup_obj->group_mutex_);
+        unlock(&task->taskgroup_obj_->group_mutex_);
         if (ready_task) {
-          should_dispatch =
-              try_dispatch(ready_task, NULL, ready_task->synchronous);
+          should_dispatch = ready_task->tryDispatch(NULL);
         }
       } while (should_dispatch);
-    } else if (ret_obj->predecessors.size() <= 0) {
+    } else if (task->predecessors_.size() <= 0) {
       // If the task has predecessors then you cannot activate this task. Task
       // activation is supported only for tasks without predecessors.
-      try_dispatch(ret_obj, NULL, ret_obj->synchronous);
+      task->tryDispatch(NULL);
     }
-    DEBUG_PRINT("[Returned Task: %lu]\n", ret);
+    DEBUG_PRINT("[Returned Task: %lu]\n", task_handle);
   }
-  return ret;
+  return task_handle;
 }
 
 atmi_task_handle_t Runtime::LaunchTask(
     atmi_lparm_t *lparm, atmi_kernel_t atmi_kernel,
     void **args /*, more params for place info? */) {
   ParamsInitTimer.start();
-  atmi_task_handle_t ret = ATMI_NULL_TASK_HANDLE;
+  atmi_task_handle_t task_handle = ATMI_NULL_TASK_HANDLE;
   if ((lparm->place.type & ATMI_DEVTYPE_GPU && !atlc.g_gpu_initialized) ||
       (lparm->place.type & ATMI_DEVTYPE_CPU && !atlc.g_cpu_initialized))
-    return ret;
-  Kernel *kernel = get_kernel_obj(atmi_kernel);
-  if (!kernel) return ret;
-
-  int kernel_id = get_kernel_id(lparm, kernel);
-  if (kernel_id == -1) return ret;
+    return task_handle;
+  
   /*lock(&(kernel_impl->mutex));
     if(kernel_impl->free_kernarg_segments().empty()) {
   // no free kernarg segments -- allocate some more?
@@ -2318,13 +2227,15 @@ atmi_task_handle_t Runtime::LaunchTask(
   }
   unlock(&(kernel_impl->mutex));
   */
-  ParamsInitTimer.stop();
-  TryLaunchTimer.start();
-  atl_task_t *ret_obj = atl_trycreate_task(kernel);
-  ret = atl_trylaunch_kernel(lparm, ret_obj, kernel_id, args);
-  TryLaunchTimer.stop();
-  DEBUG_PRINT("[Returned Task: %lu]\n", ret);
-  return ret;
+  //TaskImpl *task = atl_trycreate_task(kernel);
+
+  ComputeTaskImpl* task = createComputeTaskImpl(lparm, atmi_kernel);
+  if(task) {
+    task_handle = task->tryLaunchKernel(args);
+    //task_handle = atl_trylaunch_kernel(lparm, task, kernel_id, args);
+    DEBUG_PRINT("[Returned Task: %lu]\n", task_handle);
+  }
+  return task_handle;
 }
 
 }  // namespace core

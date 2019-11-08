@@ -15,6 +15,7 @@
 #include "ATLMachine.h"
 #include "atl_internal.h"
 #include "atmi.h"
+#include "task.h"
 
 namespace core {
 class TaskgroupImpl {
@@ -65,7 +66,7 @@ class TaskgroupImpl {
  public:
   uint32_t id_;
   bool ordered_;
-  atl_task_t *last_task_;
+  TaskImpl *last_task_;
   hsa_queue_t *gpu_queue_;
   hsa_queue_t *cpu_queue_;
   atmi_devtype_t last_device_type_;
@@ -74,18 +75,18 @@ class TaskgroupImpl {
   //    int next_gpu_qid;
   //    int next_cpu_qid;
   // dependent tasks for the entire task group
-  atl_task_vector_t and_successors_;
+  TaskImplVecTy and_successors_;
   hsa_signal_t group_signal_;
   std::atomic<unsigned int> task_count_;
   pthread_mutex_t group_mutex_;
-  std::deque<atl_task_t *> running_ordered_tasks_;
-  std::vector<atl_task_t *> running_default_tasks_;
-  std::vector<atl_task_t *> running_groupable_tasks_;
+  std::deque<TaskImpl *> running_ordered_tasks_;
+  std::vector<TaskImpl *> running_default_tasks_;
+  std::vector<TaskImpl *> running_groupable_tasks_;
   // TODO(ashwinma): for now, all waiting tasks (groupable and individual) are
   // placed in a single queue. does it make sense to have groupable waiting
   // tasks separately waiting in their own queue? perhaps not for now.
   // Should revisit if there are more than one callback threads
-  // std::vector<atl_task_t *> waiting_groupable_tasks;
+  // std::vector<TaskImpl *> waiting_groupable_tasks;
   std::atomic_flag callback_started_;
 
   // int                maxsize;      /**< Number of tasks allowed in group */

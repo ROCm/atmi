@@ -176,9 +176,6 @@ extern std::vector<std::map<std::string, atl_symbol_info_t> > SymbolInfoTable;
 
 // ---------------------- Kernel End -------------
 
-typedef struct atl_task_s atl_task_t;
-typedef std::vector<atl_task_t *> atl_task_vector_t;
-
 typedef enum atl_task_type_s {
   ATL_KERNEL_EXECUTION = 0,
   ATL_DATA_MOVEMENT = 1
@@ -194,11 +191,12 @@ extern pthread_mutex_t mutex_all_tasks_;
 extern pthread_mutex_t mutex_readyq_;
 namespace core {
 class TaskgroupImpl;
-// class TaskImpl;
+class TaskImpl;
 class Kernel;
 class KernelImpl;
 }
 
+#if 0
 typedef struct atl_task_s {
   // reference to HSA signal and the applications task structure
   hsa_signal_t signal;
@@ -230,7 +228,7 @@ typedef struct atl_task_s {
   boolean synchronous;
 
   // for ordered task groups
-  atl_task_t *prev_ordered_task;
+  TaskImpl *prev_ordered_task;
 
   // other miscellaneous flags
   atmi_devtype_t devtype;
@@ -243,15 +241,15 @@ typedef struct atl_task_s {
   unsigned long gridDim[3];  /* # of global threads for each dimension */
   unsigned long groupDim[3]; /* Thread group size for each dimension   */
   // FIXME: queue or vector?
-  atl_task_vector_t and_successors;
-  atl_task_vector_t and_predecessors;
-  atl_task_vector_t predecessors;
+  std::vector<TaskImpl *> and_successors;
+  std::vector<TaskImpl *> and_predecessors;
+  std::vector<TaskImpl *> predecessors;
   std::vector<core::TaskgroupImpl *> pred_taskgroup_objs;
   atmi_task_handle_t id;
   // flag to differentiate between a regular task and a continuation
   // FIXME: probably make this a class hierarchy?
   boolean is_continuation;
-  atl_task_t *continuation_task;
+  TaskImpl *continuation_task;
 
   atmi_place_t place;
 
@@ -273,11 +271,12 @@ typedef struct atl_task_s {
   }
 #endif
 } atl_task_t;
+#endif
 
 extern std::vector<core::TaskgroupImpl *> AllTaskgroups;
 // atmi_task_table_t TaskTable[SNK_MAX_TASKS];
-extern std::vector<atl_task_t *> AllTasks;
-extern std::queue<atl_task_t *> ReadyTaskQueue;
+extern std::vector<core::TaskImpl *> AllTasks;
+extern std::queue<core::TaskImpl *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
 
 namespace core {
@@ -326,7 +325,7 @@ extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(
     atmi_mem_place_t place);
 extern bool atl_is_atmi_initialized();
 
-extern void atl_task_wait(atl_task_t *task);
+//extern void atl_task_wait(TaskImpl *task);
 
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
@@ -336,23 +335,15 @@ extern task_process_init_buffer_t task_process_init_buffer;
 extern task_process_fini_buffer_t task_process_fini_buffer;
 
 void do_progress(core::TaskgroupImpl *taskgroup, int progress_count = 0);
-void dispatch_ready_task_for_free_signal();
-void dispatch_ready_task_or_release_signal(atl_task_t *task);
-atmi_status_t dispatch_task(atl_task_t *task);
-atmi_status_t dispatch_data_movement(atl_task_t *task, void *dest,
-                                     const void *src, const size_t size);
-void enqueue_barrier_tasks(atl_task_vector_t tasks);
-hsa_signal_t enqueue_barrier_async(atl_task_t *task, hsa_queue_t *queue,
+void enqueue_barrier_tasks(std::vector<TaskImpl *> tasks);
+hsa_signal_t enqueue_barrier_async(TaskImpl *task, hsa_queue_t *queue,
                                    const int dep_task_count,
-                                   atl_task_t **dep_task_list, int barrier_flag,
+                                   TaskImpl **dep_task_list, int barrier_flag,
                                    bool need_completion);
-void enqueue_barrier(atl_task_t *task, hsa_queue_t *queue,
-                     const int dep_task_count, atl_task_t **dep_task_list,
+void enqueue_barrier(TaskImpl *task, hsa_queue_t *queue,
+                     const int dep_task_count, TaskImpl **dep_task_list,
                      int wait_flag, int barrier_flag, atmi_devtype_t devtype,
                      bool need_completion = false);
-
-void set_task_state(atl_task_t *t, atmi_state_t state);
-void set_task_metrics(atl_task_t *task);
 
 void packet_store_release(uint32_t *packet, uint16_t header, uint16_t rest);
 uint16_t create_header(
@@ -360,17 +351,14 @@ uint16_t create_header(
     atmi_task_fence_scope_t acq_fence = ATMI_FENCE_SCOPE_SYSTEM,
     atmi_task_fence_scope_t rel_fence = ATMI_FENCE_SCOPE_SYSTEM);
 
-bool try_dispatch_barrier_pkt(atl_task_t *ret);
-atl_task_t *get_task(atmi_task_handle_t t);
-core::TaskgroupImpl *get_taskgroup_impl(atmi_taskgroup_handle_t t);
-bool try_dispatch_callback(atl_task_t *t, void **args);
-bool try_dispatch_barrier_pkt(atl_task_t *t, void **args);
+Kernel *get_kernel_obj(atmi_kernel_t atmi_kernel);
+TaskImpl *getTaskImpl(atmi_task_handle_t t);
+core::TaskgroupImpl *getTaskgroupImpl(atmi_taskgroup_handle_t t);
 void set_task_handle_ID(atmi_task_handle_t *t, int ID);
 void lock(pthread_mutex_t *m);
 void unlock(pthread_mutex_t *m);
 
-bool try_dispatch(atl_task_t *ret, void **args, boolean synchronous);
-atl_task_t *get_new_task();
+TaskImpl *get_new_task();
 }  // namespace core
 hsa_signal_t *get_worker_sig(hsa_queue_t *queue);
 

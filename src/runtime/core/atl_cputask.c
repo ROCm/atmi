@@ -14,14 +14,17 @@
 #include "atl_bindthread.h"
 #include "atl_internal.h"
 #include "kernel.h"
+#include "task.h"
 
+using core::TaskImpl;
+using core::ComputeTaskImpl;
 using core::Kernel;
 using core::CPUKernelImpl;
 using core::lock;
 using core::unlock;
 using core::create_header;
 using core::packet_store_release;
-using core::get_task;
+using core::getTaskImpl;
 using core::get_nanosecs;
 
 extern struct timespec context_init_time;
@@ -153,7 +156,7 @@ int process_packet(thread_agent_t *agent) {
                 ATMI_WAIT_STATE)) < (hsa_signal_value_t)read_index) {
     }
     if (doorbell_value == INT_MAX) break;
-    atl_task_t *this_task = NULL;  // will be assigned to collect metrics
+    TaskImpl *this_task = NULL;  // will be assigned to collect metrics
     char *kernel_name = NULL;
     hsa_agent_dispatch_packet_t *packets =
         reinterpret_cast<hsa_agent_dispatch_packet_t *>(queue->base_address);
@@ -208,12 +211,12 @@ int process_packet(thread_agent_t *agent) {
         DEBUG_PRINT("%lu --> %p\n", pthread_self(), packet);
         set_task_packet(packet);
 
-        atl_task_t *task = get_task(packet->arg[0]);
-        if (task->profilable == ATMI_TRUE) {
+        TaskImpl *task = getTaskImpl(packet->arg[0]);
+        if (task->profilable_ == ATMI_TRUE) {
           clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
           start_time_ns = get_nanosecs(context_init_time, start_time);
         }
-        DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id);
+        DEBUG_PRINT("{{{ Thread[%lu] --> ID[%lu]\n", pthread_self(), task->id_);
         Kernel *kernel = reinterpret_cast<Kernel *>(packet->arg[2]);
         int kernel_id = packet->type;
         CPUKernelImpl *kernel_impl =
@@ -476,17 +479,17 @@ int process_packet(thread_agent_t *agent) {
                              packet->type);
         kernel_args.clear();
         DEBUG_PRINT("End Thread[%lu] --> ID[%lu] }}}\n", pthread_self(),
-                    task->id);
-        if (task->profilable == ATMI_TRUE) {
+                    task->id_);
+        if (task->profilable_ == ATMI_TRUE) {
           clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
           end_time_ns = get_nanosecs(context_init_time, end_time);
-          if (task->atmi_task) {
-            task->atmi_task->profile.start_time = start_time_ns;
-            task->atmi_task->profile.end_time = end_time_ns;
-            task->atmi_task->profile.dispatch_time = start_time_ns;
-            task->atmi_task->profile.ready_time = start_time_ns;
+          if (task->atmi_task_) {
+            task->atmi_task_->profile.start_time = start_time_ns;
+            task->atmi_task_->profile.end_time = end_time_ns;
+            task->atmi_task_->profile.dispatch_time = start_time_ns;
+            task->atmi_task_->profile.ready_time = start_time_ns;
             DEBUG_PRINT("Task %p timing info (%" PRIu64 ", %" PRIu64 ")\n",
-                        task->atmi_task, start_time_ns, end_time_ns);
+                        task->atmi_task_, start_time_ns, end_time_ns);
           }
         }
       } break;
@@ -580,23 +583,23 @@ void agent_fini() {
   DEBUG_PRINT("agent_fini completed\n");
 }
 
-atl_task_t *get_cur_thread_task_impl() {
+TaskImpl *get_cur_thread_task_impl() {
   hsa_agent_dispatch_packet_t *packet = get_task_packet();
   if (!packet) {
     DEBUG_PRINT(
         "WARNING! Cannot query thread diagnostics outside an ATMI CPU task\n");
   }
   DEBUG_PRINT("(Get) %lu --> %p\n", pthread_self(), packet);
-  atl_task_t *task = NULL;
-  if (packet) task = get_task(packet->arg[0]);
+  TaskImpl *task = NULL;
+  if (packet) task = getTaskImpl(packet->arg[0]);
   return task;
 }
 
 atmi_task_handle_t get_atmi_task_handle() {
-  atl_task_t *task = get_cur_thread_task_impl();
+  TaskImpl *task = get_cur_thread_task_impl();
   if (task) {
-    DEBUG_PRINT("Task ID: %lu\n", task->id);
-    return task->id;
+    DEBUG_PRINT("Task ID: %lu\n", task->id_);
+    return task->id_;
   } else {
     DEBUG_PRINT("Task ID: NULL\n");
     return ATMI_NULL_TASK_HANDLE;
@@ -604,20 +607,20 @@ atmi_task_handle_t get_atmi_task_handle() {
 }
 
 atmi_taskgroup_handle_t get_atmi_taskgroup() {
-  atl_task_t *task = get_cur_thread_task_impl();
+  TaskImpl *task = get_cur_thread_task_impl();
   atmi_taskgroup_handle_t ret;
   if (task) {
-    DEBUG_PRINT("Returning task group with ID: %lu\n", task->taskgroup);
-    ret = task->taskgroup;
+    DEBUG_PRINT("Returning task group with ID: %lu\n", task->taskgroup_);
+    ret = task->taskgroup_;
   }
   return ret;
 }
 
 unsigned long get_global_size(unsigned int dim) {
-  atl_task_t *task = get_cur_thread_task_impl();
+  TaskImpl *task = get_cur_thread_task_impl();
   if (task) {
     if (dim >= 0 && dim < 3)
-      return task->gridDim[dim];
+      return dynamic_cast<ComputeTaskImpl*>(task)->gridDim_[dim];
     else
       return 1;
   } else {
@@ -626,9 +629,9 @@ unsigned long get_global_size(unsigned int dim) {
 }
 
 unsigned long get_local_size(unsigned int dim) {
-  /*atl_task_t *task = get_cur_thread_task_impl();
+  /*TaskImpl *task = get_cur_thread_task_impl();
   if(dim >=0 && dim < 3)
-      return task->groupDim[dim];
+      return task->groupDim_[dim];
   else
   */
   // TODO(ashwinma): Current CPU task model is to have a single thread per

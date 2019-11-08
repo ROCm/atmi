@@ -121,6 +121,7 @@ class Kernel {
   bool isValidId(unsigned int id);
   KernelImpl* getKernelImpl(unsigned int id);
   int getKernelIdMapIndex(unsigned int kernel_id);
+  int getKernelImplId(atmi_lparm_t *lparm);
 
   // ID
   uint64_t id_;

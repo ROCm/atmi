@@ -268,7 +268,7 @@ hsa_queue_t *ATLProcessor::getBestQueue(atmi_scheduler_t sched) {
   switch (sched) {
     case ATMI_SCHED_NONE:
       ret = getQueueAt(__atomic_load_n(&next_best_queue_id_, __ATOMIC_ACQUIRE) %
-                     queues_.size());
+                       queues_.size());
       break;
     case ATMI_SCHED_RR:
       ret = getQueueAt(

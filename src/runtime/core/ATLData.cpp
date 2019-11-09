@@ -47,10 +47,9 @@ const char *getPlaceStr(atmi_devtype_t type) {
 
 std::ostream &operator<<(std::ostream &os, const ATLData *ap) {
   atmi_mem_place_t place = ap->place();
-  os << "hostPointer:" << ap->host_aliasptr()
-     << " devicePointer:" << ap->ptr() << " sizeBytes:" << ap->size()
-     << " place:(" << getPlaceStr(place.dev_type) << ", " << place.dev_id
-     << ", " << place.mem_id << ")";
+  os << "hostPointer:" << ap->host_aliasptr() << " devicePointer:" << ap->ptr()
+     << " sizeBytes:" << ap->size() << " place:(" << getPlaceStr(place.dev_type)
+     << ", " << place.dev_id << ", " << place.mem_id << ")";
   return os;
 }
 
@@ -282,7 +281,6 @@ atmi_status_t atmi_data_destroy_sync(atmi_data_t *data) {
 
     if(err != HSA_STATUS_SUCCESS) ret = ATMI_STATUS_ERROR;
     return ret;
-
 }
 #endif
 
@@ -350,14 +348,12 @@ atmi_status_t Runtime::Memfree(void *ptr) {
   return ret;
 }
 
-DataTaskImpl::DataTaskImpl(atmi_cparm_t* lparm, void* dest,
-                           const void* src,
-                           const size_t size) :
-          TaskImpl(),
-          data_dest_ptr_(dest),
-          data_src_ptr_(const_cast<void*>(src)),
-          data_size_(size)
-{
+DataTaskImpl::DataTaskImpl(atmi_cparm_t *lparm, void *dest, const void *src,
+                           const size_t size)
+    : TaskImpl(),
+      data_dest_ptr_(dest),
+      data_src_ptr_(const_cast<void *>(src)),
+      data_size_(size) {
   lock(&mutex_all_tasks_);
   AllTasks.push_back(this);
   atmi_task_handle_t new_id;
@@ -390,8 +386,7 @@ DataTaskImpl::DataTaskImpl(atmi_cparm_t* lparm, void* dest,
   pred_taskgroup_objs_.clear();
   pred_taskgroup_objs_.resize(lparm->num_required_groups);
   for (int idx = 0; idx < lparm->num_required_groups; idx++) {
-    pred_taskgroup_objs_[idx] =
-        getTaskgroupImpl(lparm->required_groups[idx]);
+    pred_taskgroup_objs_[idx] = getTaskgroupImpl(lparm->required_groups[idx]);
   }
 
   lock(&(taskgroup_obj_->group_mutex_));
@@ -411,8 +406,8 @@ DataTaskImpl::DataTaskImpl(atmi_cparm_t* lparm, void* dest,
 
 atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
                                         const void *src, size_t size) {
-  //TaskImpl *task = get_new_task();
-  DataTaskImpl* task = new DataTaskImpl(lparm, dest, src, size);
+  // TaskImpl *task = get_new_task();
+  DataTaskImpl *task = new DataTaskImpl(lparm, dest, src, size);
   atl_dep_sync_t dep_sync_type =
       (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
   if (dep_sync_type == ATL_SYNC_BARRIER_PKT) {
@@ -440,24 +435,24 @@ void DataTaskImpl::acquireAqlPacket() {
   src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
   dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
   err = hsa_amd_pointer_info(reinterpret_cast<void *>(src), &src_ptr_info,
-      NULL,  /* alloc fn ptr */
-      NULL,  /* num_agents_accessible */
-      NULL); /* accessible agents */
+                             NULL,  /* alloc fn ptr */
+                             NULL,  /* num_agents_accessible */
+                             NULL); /* accessible agents */
   ErrorCheck(Checking src pointer info, err);
   err = hsa_amd_pointer_info(reinterpret_cast<void *>(dest), &dest_ptr_info,
-      NULL,  /* alloc fn ptr */
-      NULL,  /* num_agents_accessible */
-      NULL); /* accessible agents */
+                             NULL,  /* alloc fn ptr */
+                             NULL,  /* num_agents_accessible */
+                             NULL); /* accessible agents */
   ErrorCheck(Checking dest pointer info, err);
   ATLData *volatile src_data =
-    reinterpret_cast<ATLData *>(src_ptr_info.userData);
+      reinterpret_cast<ATLData *>(src_ptr_info.userData);
   ATLData *volatile dest_data =
-    reinterpret_cast<ATLData *>(dest_ptr_info.userData);
+      reinterpret_cast<ATLData *>(dest_ptr_info.userData);
 #endif
   bool is_src_host =
-    (!src_data || src_data->place().dev_type == ATMI_DEVTYPE_CPU);
+      (!src_data || src_data->place().dev_type == ATMI_DEVTYPE_CPU);
   bool is_dest_host =
-    (!dest_data || dest_data->place().dev_type == ATMI_DEVTYPE_CPU);
+      (!dest_data || dest_data->place().dev_type == ATMI_DEVTYPE_CPU);
   void *temp_host_ptr;
   const void *src_ptr = src;
   void *dest_ptr = dest;
@@ -482,8 +477,8 @@ atmi_status_t DataTaskImpl::dispatch() {
   atmi_status_t ret;
   hsa_status_t err;
 
-  void* dest = data_dest_ptr_;
-  const void* src = data_src_ptr_;
+  void *dest = data_dest_ptr_;
+  const void *src = data_src_ptr_;
   const size_t size = data_size_;
 
   TaskgroupImpl *taskgroup_obj = taskgroup_obj_;

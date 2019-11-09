@@ -818,9 +818,8 @@ hsa_status_t init_comute_and_memory() {
   proc_index = 0;
   atl_cpu_kernarg_region.handle = (uint64_t)-1;
   if (cpu_procs.size() > 0) {
-    err = hsa_agent_iterate_regions(cpu_procs[0].agent(),
-                                    get_fine_grained_region,
-                                    &atl_cpu_kernarg_region);
+    err = hsa_agent_iterate_regions(
+        cpu_procs[0].agent(), get_fine_grained_region, &atl_cpu_kernarg_region);
     if (err == HSA_STATUS_INFO_BREAK) {
       err = HSA_STATUS_SUCCESS;
     }
@@ -831,8 +830,7 @@ hsa_status_t init_comute_and_memory() {
   /* Find a memory region that supports kernel arguments.  */
   atl_gpu_kernarg_region.handle = (uint64_t)-1;
   if (gpu_procs.size() > 0) {
-    hsa_agent_iterate_regions(gpu_procs[0].agent(),
-                              get_kernarg_memory_region,
+    hsa_agent_iterate_regions(gpu_procs[0].agent(), get_kernarg_memory_region,
                               &atl_gpu_kernarg_region);
     err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR
                                                           : HSA_STATUS_SUCCESS;

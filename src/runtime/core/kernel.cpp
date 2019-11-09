@@ -241,8 +241,7 @@ atmi_status_t Runtime::AddCPUKernelImpl(atmi_kernel_t atmi_kernel,
 }
 
 KernelImpl::KernelImpl(unsigned int id, const std::string &name,
-                       atmi_platform_type_t platform_type,
-                       const Kernel &kernel)
+                       atmi_platform_type_t platform_type, const Kernel &kernel)
     : id_(id), name_(name), platform_type_(platform_type), kernel_(kernel) {}
 
 GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
@@ -418,8 +417,7 @@ int Kernel::getKernelImplId(atmi_lparm_t *lparm) {
     }
     if (kernel_id == -1) {
       fprintf(stderr,
-          "ERROR: Kernel/PIF %lu doesn't have any implementations\n",
-          id_);
+              "ERROR: Kernel/PIF %lu doesn't have any implementations\n", id_);
       return -1;
     }
   } else {
@@ -431,13 +429,12 @@ int Kernel::getKernelImplId(atmi_lparm_t *lparm) {
   KernelImpl *kernel_impl = getKernelImpl(kernel_id);
   if (num_args_ && kernel_impl->kernarg_region() == NULL) {
     fprintf(stderr, "ERROR: Kernel Arguments not initialized for Kernel %s\n",
-        kernel_impl->name().c_str());
+            kernel_impl->name().c_str());
     return -1;
   }
 
   return kernel_id;
 }
-
 
 Kernel::Kernel(uint64_t id, const int num_args, const size_t *arg_sizes)
     : id_(id), num_args_(num_args) {

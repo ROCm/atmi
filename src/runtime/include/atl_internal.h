@@ -325,7 +325,7 @@ extern hsa_amd_memory_pool_t get_memory_pool_by_mem_place(
     atmi_mem_place_t place);
 extern bool atl_is_atmi_initialized();
 
-//extern void atl_task_wait(TaskImpl *task);
+// extern void atl_task_wait(TaskImpl *task);
 
 void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);

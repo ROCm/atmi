@@ -53,7 +53,9 @@ class ATLCPUProcessor : public ATLProcessor {
   void createQueues(const int count);
 
   thread_agent_t *getThreadAgentAt(const int index);
-  const std::vector<thread_agent_t *> &thread_agents() const { return thread_agents_; }
+  const std::vector<thread_agent_t *> &thread_agents() const {
+    return thread_agents_;
+  }
   // misc helper functions needed by ATMI DP
   hsa_signal_t *get_worker_sig(hsa_queue_t *q);
 

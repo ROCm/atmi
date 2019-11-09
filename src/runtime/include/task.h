@@ -7,6 +7,7 @@
 #ifndef SRC_RUNTIME_INCLUDE_TASK_H_
 #define SRC_RUNTIME_INCLUDE_TASK_H_
 
+#include <utility>
 #include <vector>
 #include "atl_internal.h"
 
@@ -25,6 +26,7 @@ class TaskImpl {
   void wait();
 
   bool tryDispatch(void **args);
+
  private:
   bool tryDispatchBarrierPacket(void **args);
   bool tryDispatchHostCallback(void **args);
@@ -110,62 +112,64 @@ class TaskImpl {
 };  // class TaskImpl
 
 class ComputeTaskImpl : public TaskImpl {
-  public:
-    // partial construction allowed for the experimental task template creation
-    // and activation.
-    explicit ComputeTaskImpl(Kernel* kernel);
-    ComputeTaskImpl(atmi_lparm_t* lparm,
-                    Kernel* kernel,
-                    int kernel_id);
-    ~ComputeTaskImpl();
+ public:
+  // partial construction allowed for the experimental task template creation
+  // and activation.
+  explicit ComputeTaskImpl(Kernel *kernel);
+  ComputeTaskImpl(atmi_lparm_t *lparm, Kernel *kernel, int kernel_id);
+  ~ComputeTaskImpl();
 
-    virtual atl_task_type_t type() const override { return ATL_KERNEL_EXECUTION; };
-    
-    void updateKernargRegion(void **args);
-    // if the construction of this object is split so that we dont 
-    // assign all params at once, we have a function to help set the 
-    // remaining params -- used by the experimental template task creation
-    // and activation.
-    void setParams(const atmi_lparm_t *lparm);
-  private:
-    virtual atmi_status_t dispatch() override;
-    virtual void acquireAqlPacket() override;
-  public:
-    atmi_task_handle_t tryLaunchKernel(void** args);
+  atl_task_type_t type() const override { return ATL_KERNEL_EXECUTION; };
 
-    // the kernel object that defines what this task will execute
-    core::Kernel *kernel_;
-    // A kernel may have different implementations. kernel_id_ indexes
-    // into the implementation of the kernel (via an id map).
-    uint32_t kernel_id_;
-    // malloced or acquired from a pool
-    void *kernarg_region_;
-    size_t kernarg_region_size_;
-    // this is an index into the free kernarg segment pool
-    int kernarg_region_index_;
-    bool kernarg_region_copied_;
-    // dimensions of the compute grid to be launched
-    unsigned long gridDim_[3];
-    unsigned long groupDim_[3];
+  void updateKernargRegion(void **args);
+  // if the construction of this object is split so that we dont
+  // assign all params at once, we have a function to help set the
+  // remaining params -- used by the experimental template task creation
+  // and activation.
+  void setParams(const atmi_lparm_t *lparm);
+
+ private:
+  atmi_status_t dispatch() override;
+  void acquireAqlPacket() override;
+
+ public:
+  atmi_task_handle_t tryLaunchKernel(void **args);
+
+  // the kernel object that defines what this task will execute
+  core::Kernel *kernel_;
+  // A kernel may have different implementations. kernel_id_ indexes
+  // into the implementation of the kernel (via an id map).
+  uint32_t kernel_id_;
+  // malloced or acquired from a pool
+  void *kernarg_region_;
+  size_t kernarg_region_size_;
+  // this is an index into the free kernarg segment pool
+  int kernarg_region_index_;
+  bool kernarg_region_copied_;
+  // dimensions of the compute grid to be launched
+  unsigned long gridDim_[3];
+  unsigned long groupDim_[3];
 };  // class ComputeTaskImpl
 
 class DataTaskImpl : public TaskImpl {
-  public:
-    DataTaskImpl(atmi_cparm_t* lparm, void* dest,
-                 const void* src, const size_t size);
-    ~DataTaskImpl();
+ public:
+  DataTaskImpl(atmi_cparm_t *lparm, void *dest, const void *src,
+               const size_t size);
+  ~DataTaskImpl();
 
-    virtual atl_task_type_t type() const override { return ATL_DATA_MOVEMENT; };
-  private:    
-    virtual atmi_status_t dispatch() override;
-    virtual void acquireAqlPacket() override;
-  public:
-    // The runtime maintains information about the location of the ptr,
-    // so the runtime also moves data in the right direction (host to device
-    // or the other way around).
-    void *data_src_ptr_;
-    void *data_dest_ptr_;
-    size_t data_size_;
+  atl_task_type_t type() const override { return ATL_DATA_MOVEMENT; };
+
+ private:
+  atmi_status_t dispatch() override;
+  void acquireAqlPacket() override;
+
+ public:
+  // The runtime maintains information about the location of the ptr,
+  // so the runtime also moves data in the right direction (host to device
+  // or the other way around).
+  void *data_src_ptr_;
+  void *data_dest_ptr_;
+  size_t data_size_;
 };  // class DataTaskImpl
 
 }  // namespace core

@@ -620,7 +620,7 @@ unsigned long get_global_size(unsigned int dim) {
   TaskImpl *task = get_cur_thread_task_impl();
   if (task) {
     if (dim >= 0 && dim < 3)
-      return dynamic_cast<ComputeTaskImpl*>(task)->gridDim_[dim];
+      return dynamic_cast<ComputeTaskImpl *>(task)->gridDim_[dim];
     else
       return 1;
   } else {

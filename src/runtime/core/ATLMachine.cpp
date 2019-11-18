@@ -135,8 +135,8 @@ int cu_mask_parser(char *gpu_workers, uint64_t *cu_masks, int count) {
 
 void callbackQueue(hsa_status_t status, hsa_queue_t *source, void *data) {
   if (status != HSA_STATUS_SUCCESS) {
-    fprintf(stderr, "[%s:%d] GPU error in queue %p\n", __FILE__, __LINE__,
-            source);
+    fprintf(stderr, "[%s:%d] GPU error in queue %p %d\n", __FILE__, __LINE__,
+            source, status);
     abort();
   }
 }

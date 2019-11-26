@@ -337,7 +337,7 @@ namespace core {
     if(MAX_NUM_KERNEL_TYPES > 0) {
       // Allocate template space for shader kernels
       err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
-          sizeof(atmi_kernel_enqueue_template_t) * MAX_NUM_KERNEL_TYPES,
+          sizeof(atmi_kernel_enqueue_template_t) * MAX_NUM_KERNELS,
           0,
           &kernarg_template_ptr);
       ErrorCheck(Allocating kernel argument template pointer, err);

@@ -23,7 +23,6 @@ using core::TaskImpl;
 using core::DataTaskImpl;
 extern ATLMachine g_atl_machine;
 extern hsa_signal_t IdentityCopySignal;
-extern std::deque<TaskImpl *> TaskList;
 
 namespace core {
 #ifndef USE_ROCR_PTR_INFO
@@ -411,9 +410,9 @@ atmi_task_handle_t Runtime::MemcpyAsync(atmi_cparm_t *lparm, void *dest,
   atl_dep_sync_t dep_sync_type =
       (atl_dep_sync_t)core::Runtime::getInstance().getDepSyncType();
   if (dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-    lock(&mutex_readyq_);
-    TaskList.push_back(task);
-    unlock(&mutex_readyq_);
+    lock(&(task->taskgroup_obj_->group_mutex_));
+    task->taskgroup_obj_->created_tasks_.push_back(task);
+    unlock(&(task->taskgroup_obj_->group_mutex_));
   }
   task->tryDispatch(NULL);
 

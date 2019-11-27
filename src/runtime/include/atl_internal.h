@@ -196,83 +196,6 @@ class Kernel;
 class KernelImpl;
 }
 
-#if 0
-typedef struct atl_task_s {
-  // reference to HSA signal and the applications task structure
-  hsa_signal_t signal;
-  atmi_task_t *atmi_task;
-
-  // all encmopassing task packet
-  std::vector<std::pair<hsa_queue_t *, uint64_t> > packets;
-
-  core::Kernel *kernel;
-  uint32_t kernel_id;
-  void *kernarg_region;  // malloced or acquired from a pool
-  size_t kernarg_region_size;
-  int kernarg_region_index;
-  bool kernarg_region_copied;
-
-  // list of dependents
-  uint32_t num_predecessors;
-  uint32_t num_successors;
-  atl_task_type_t type;
-
-  void *data_src_ptr;
-  void *data_dest_ptr;
-  size_t data_size;
-
-  core::TaskgroupImpl *taskgroup_obj;
-  atmi_taskgroup_handle_t taskgroup;
-  // atmi_taskgroup_t group;
-  boolean groupable;
-  boolean synchronous;
-
-  // for ordered task groups
-  TaskImpl *prev_ordered_task;
-
-  // other miscellaneous flags
-  atmi_devtype_t devtype;
-  boolean profilable;
-  std::atomic<atmi_state_t> state;
-
-  // per task mutex to reduce contention
-  pthread_mutex_t mutex;
-
-  unsigned long gridDim[3];  /* # of global threads for each dimension */
-  unsigned long groupDim[3]; /* Thread group size for each dimension   */
-  // FIXME: queue or vector?
-  std::vector<TaskImpl *> and_successors;
-  std::vector<TaskImpl *> and_predecessors;
-  std::vector<TaskImpl *> predecessors;
-  std::vector<core::TaskgroupImpl *> pred_taskgroup_objs;
-  atmi_task_handle_t id;
-  // flag to differentiate between a regular task and a continuation
-  // FIXME: probably make this a class hierarchy?
-  boolean is_continuation;
-  TaskImpl *continuation_task;
-
-  atmi_place_t place;
-
-  // memory scope for the task
-  atmi_task_fence_scope_t acquire_scope;
-  atmi_task_fence_scope_t release_scope;
-
-  atl_task_s() : num_predecessors(0), num_successors(0), atmi_task(0) {
-    and_successors.clear();
-    and_predecessors.clear();
-  }
-
-#if 1
-  atl_task_s(const atl_task_s &task) {
-    //        cpu_kernelargs = task.cpu_kernelargs;i
-    //        cpu_kernelid = task.cpu_kernelid;
-    //        num_params = task.num_params;
-    //        gpu_kernargptr = task.gpu_kernargptr;
-  }
-#endif
-} atl_task_t;
-#endif
-
 extern std::vector<core::TaskgroupImpl *> AllTaskgroups;
 // atmi_task_table_t TaskTable[SNK_MAX_TASKS];
 extern std::vector<core::TaskImpl *> AllTasks;
@@ -334,7 +257,6 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg);
 extern task_process_init_buffer_t task_process_init_buffer;
 extern task_process_fini_buffer_t task_process_fini_buffer;
 
-void do_progress(core::TaskgroupImpl *taskgroup, int progress_count = 0);
 void enqueue_barrier_tasks(std::vector<TaskImpl *> tasks);
 hsa_signal_t enqueue_barrier_async(TaskImpl *task, hsa_queue_t *queue,
                                    const int dep_task_count,

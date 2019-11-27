@@ -25,10 +25,11 @@ class TaskImpl {
   void updateMetrics();
   void wait();
 
-  bool tryDispatch(void **args);
+  bool tryDispatch(void **args, bool callback = false);
 
+  void doProgress();
  private:
-  bool tryDispatchBarrierPacket(void **args);
+  bool tryDispatchBarrierPacket(void **args, TaskImpl **returned_task);
   bool tryDispatchHostCallback(void **args);
   virtual atmi_status_t dispatch() = 0;
   virtual void acquireAqlPacket() = 0;

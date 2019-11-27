@@ -10,6 +10,7 @@
 #include <hsa.h>
 
 #include <deque>
+#include <set>
 #include <vector>
 
 #include "ATLMachine.h"
@@ -82,6 +83,13 @@ class TaskgroupImpl {
   std::deque<TaskImpl *> running_ordered_tasks_;
   std::vector<TaskImpl *> running_default_tasks_;
   std::vector<TaskImpl *> running_groupable_tasks_;
+
+  std::deque<TaskImpl *> created_tasks_;
+  std::vector<TaskImpl *> dispatched_tasks_; // DispatchedTasks
+  std::set<TaskImpl *> dispatched_sink_tasks_; // SinkTasks
+  std::atomic<bool> first_created_tasks_dispatched_;
+
+  std::queue<TaskImpl *> ready_tasks_; // ReadyTaskQueue
   // TODO(ashwinma): for now, all waiting tasks (groupable and individual) are
   // placed in a single queue. does it make sense to have groupable waiting
   // tasks separately waiting in their own queue? perhaps not for now.

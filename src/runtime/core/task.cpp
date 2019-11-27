@@ -48,7 +48,6 @@ void print_atl_kernel(const char *str, const int i);
 
 std::vector<TaskImpl *> AllTasks;
 std::queue<TaskImpl *> ReadyTaskQueue;
-std::deque<TaskImpl *> TaskList;
 std::queue<hsa_signal_t> FreeSignalPool;
 std::set<TaskImpl *> SinkTasks;
 
@@ -574,13 +573,10 @@ void handle_signal_callback(TaskImpl *task) {
       task->id_, FreeSignalPool.size(), ReadyTaskQueue.size());
   // dispatch from ready queue if any task exists
   lock(&(task->mutex_));
-  // set_task_metrics(task);
   task->updateMetrics();
   task->set_state(ATMI_COMPLETED);
   unlock(&(task->mutex_));
-  do_progress(task->taskgroup_obj_);
-  // dispatch_ready_task_for_free_signal();
-  // dispatch_ready_task_or_release_signal(task);
+  task->doProgress();
 }
 
 void handle_signal_barrier_pkt(TaskImpl *task,
@@ -593,6 +589,10 @@ void handle_signal_barrier_pkt(TaskImpl *task,
   // we are guaranteed that all dispatched_tasks have completed execution.
   TaskImplVecTy dispatched_tasks = *dispatched_tasks_ptr;
 
+  // TODO(ashwinma): check the performance implication of locking 
+  // across the entire loop vs locking across selected sections
+  // of code inside the loop
+  // lock(&mutex_readyq_);
   for (auto task : dispatched_tasks) {
     assert(task->groupable_ != ATMI_TRUE);
     ComputeTaskImpl *compute_task = dynamic_cast<ComputeTaskImpl *>(task);
@@ -657,17 +657,19 @@ void handle_signal_barrier_pkt(TaskImpl *task,
 
     task->updateMetrics();
     task->set_state(ATMI_COMPLETED);
-    // set_task_metrics(task);
-    // set_task_state(task, ATMI_COMPLETED);
 
     unlock_set(mutexes);
   }
+  // TODO(ashwinma): check the performance implication of locking 
+  // across the entire loop vs locking across selected sections
+  // of code inside the loop
+  // unlock(&mutex_readyq_);
 
   // this was created on heap when sink tasks was cleared, so reclaim that
   // memory
   delete dispatched_tasks_ptr;
 
-  do_progress(NULL);
+  task->doProgress();
 }
 
 bool handle_signal(hsa_signal_value_t value, void *arg) {
@@ -795,6 +797,7 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
   }
   mutexes.insert(&mutex_readyq_);
   lock_set(mutexes);
+  TaskImpl *some_task = NULL;
   for (auto task : group_tasks) {
     ComputeTaskImpl *compute_task = dynamic_cast<ComputeTaskImpl *>(task);
     Kernel *kernel = NULL;
@@ -834,13 +837,13 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
     DEBUG_PRINT("Completed task %lu in group\n", task->id_);
     task->updateMetrics();
     task->set_state(ATMI_COMPLETED);
-    // set_task_metrics(task);
-    // set_task_state(task, ATMI_COMPLETED);
+    some_task = task;
   }
   unlock_set(mutexes);
 
-  // make progress on all other ready tasks
-  do_progress(taskgroup, group_tasks.size());
+  // make progress on all other ready tasks that are in the same 
+  // taskgroup as some task in the collection group_tasks.
+  if(some_task) some_task->doProgress();
   DEBUG_PRINT("Releasing %lu tasks from %p task group\n", group_tasks.size(),
               taskgroup);
   taskgroup->task_count_ -= group_tasks.size();
@@ -877,10 +880,11 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
         // FIXME: if groupable task, push it in the right taskgroup
         // else push it to readyqueue
         ReadyTaskQueue.push(t);
+        some_task = t;
       }
       unlock(&mutex_readyq_);
 
-      if (!temp_list.empty()) do_progress(taskgroup);
+      if (!temp_list.empty()) some_task->doProgress();
     }
   }
   HandleSignalTimer.stop();
@@ -891,22 +895,22 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
   return false;
 }
 
-void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
+void TaskImpl::doProgress() {
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
-    if (taskgroup && taskgroup->ordered_) {
+    if (taskgroup_obj_->ordered_) {
       // pop from front of ordered task list and try dispatch as many as
       // possible
       bool should_dispatch = false;
       do {
         TaskImpl *ready_task = NULL;
         should_dispatch = false;
-        lock(&taskgroup->group_mutex_);
-        if (!taskgroup->running_ordered_tasks_.empty()) {
-          ready_task = taskgroup->running_ordered_tasks_.front();
+        lock(&taskgroup_obj_->group_mutex_);
+        if (!taskgroup_obj_->running_ordered_tasks_.empty()) {
+          ready_task = taskgroup_obj_->running_ordered_tasks_.front();
         }
-        unlock(&taskgroup->group_mutex_);
+        unlock(&taskgroup_obj_->group_mutex_);
         if (ready_task) {
-          should_dispatch = ready_task->tryDispatch(NULL);
+          should_dispatch = ready_task->tryDispatch(NULL, /* callback */ true);
         }
       } while (should_dispatch);
     } else {
@@ -924,24 +928,39 @@ void do_progress(TaskgroupImpl *taskgroup, int progress_count) {
         unlock(&mutex_readyq_);
 
         if (ready_task) {
-          ready_task->tryDispatch(NULL);
+          ready_task->tryDispatch(NULL, /* callback */ true);
         }
       }
     }
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
     bool should_dispatch = false;
-    do {
-      TaskImpl *ready_task = NULL;
+    // TODO(ashwinma): tryDispatchBarrierPacket checks for
+    // created_tasks_.empty at the very beginning. It could
+    // set returned_task to NULL if that is the case. Then,
+    // tryDispatch can check for returned_task and the
+    // returned bool value to check if group dispatch
+    // should occur (if returned_task is true and should_dispatch
+    // is false) or just return (if returned_task is false)
+    lock(&(taskgroup_obj_->group_mutex_));
+    if(taskgroup_obj_->created_tasks_.empty()) {
+      // All tasks in this taskgroup have been completed, and
+      // there are no more created tasks too, so reset the 
+      // flag so next set of created_tasks_ are treated as 
+      // the first. The flag may be reset only by the callback
+      // thread during doProgress and not withing tryDispatch
+      // because tryDispatch could be called either by the main
+      // application thread or by the callback thread, so cannot
+      // differentiate.
+      taskgroup_obj_->first_created_tasks_dispatched_.store(false);
       should_dispatch = false;
-      lock(&mutex_readyq_);
-      if (!TaskList.empty()) {
-        ready_task = TaskList.front();
-      }
-      unlock(&mutex_readyq_);
-      if (ready_task) {
-        should_dispatch = ready_task->tryDispatch(NULL);
-      }
-    } while (should_dispatch);
+    }
+    else {
+      should_dispatch = true;
+    }
+    unlock(&(taskgroup_obj_->group_mutex_));
+    while(should_dispatch) {
+      should_dispatch = tryDispatch(NULL, /* callback */ true);
+    }
   }
 }
 
@@ -1280,28 +1299,43 @@ void ComputeTaskImpl::acquireAqlPacket() {
   }
 }
 
-bool TaskImpl::tryDispatchBarrierPacket(void **args) {
+// With Barrier Packets, try to enqueue the earliest created task first,
+// return the task pointer to the task that was successfully launched.
+// If no task can be successfully launched, return NULL task?
+bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
   bool resources_available = true;
   bool should_dispatch = true;
   hsa_signal_t new_signal;
 
-  // lock(&mutex_readyq_);
-  // try dispatching the head of TaskList
-  // TaskImpl *ret = TaskList.front();
-  // unlock(&mutex_readyq_);
+  // TODO(ashwinma): Do we assume that it is a logical error if someone wants to
+  // activate the task graph while at the same time trying to
+  // add nodes to it? If yes, we can remove the locks surrounding created_tasks_.
+  TaskImpl *task = NULL;
+  lock(&(taskgroup_obj_->group_mutex_));
+  // try dispatching the head of created_tasks_
+  if(!taskgroup_obj_->created_tasks_.empty())
+    task = taskgroup_obj_->created_tasks_.front();
+  unlock(&(taskgroup_obj_->group_mutex_));
+  
+  if(!task) {
+    // no more tasks in created_tasks_, so this task
+    // must have been executed already and no more 
+    // tasks to process. So, do not dispatch anything.
+    DEBUG_PRINT("No tasks to execute, created_tasks_ is empty %lu\n", taskgroup_obj_->created_tasks_.size());
+    return false;
+  }
 
   std::set<pthread_mutex_t *> req_mutexes;
-  std::vector<TaskImpl *> &temp_vecs = predecessors_;
+  std::vector<TaskImpl *> &temp_vecs = task->predecessors_;
   req_mutexes.clear();
-  for (int idx = 0; idx < predecessors_.size(); idx++) {
-    TaskImpl *pred_task = temp_vecs[idx];
+  for (auto &pred_task : task->predecessors_) {
     req_mutexes.insert(&(pred_task->mutex_));
   }
-  req_mutexes.insert(&(mutex_));
+  req_mutexes.insert(&(task->mutex_));
   req_mutexes.insert(&mutex_readyq_);
-  if (prev_ordered_task_) req_mutexes.insert(&(prev_ordered_task_->mutex_));
+  if (task->prev_ordered_task_) req_mutexes.insert(&(task->prev_ordered_task_->mutex_));
 
-  ComputeTaskImpl *compute_task = dynamic_cast<ComputeTaskImpl *>(this);
+  ComputeTaskImpl *compute_task = dynamic_cast<ComputeTaskImpl *>(task);
 
   KernelImpl *kernel_impl = NULL;
   if (compute_task) {
@@ -1309,33 +1343,23 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
         compute_task->kernel_->getKernelImpl(compute_task->kernel_id_);
     if (kernel_impl) req_mutexes.insert(&(kernel_impl->mutex()));
   }
-  TaskgroupImpl *taskgroup_obj = taskgroup_obj_;
 
   lock_set(req_mutexes);
-  // assert that this task is TaskList.front() because there should be no other
-  // scenario
-  // assert(ret == TaskList.front());
-  // if(ret != TaskList.front()) {
-  //  fprintf(stderr, "Task (%p --> %lu) not at front!\n", ret, id_);
-  //  exit(-1);
-  //}
-  // std::cout << "[" << id_ << "]Signals Before: " << FreeSignalPool.size()
-  // << std::endl;
 
-  if (state_ >= ATMI_READY) {
+  if (task->state_ >= ATMI_READY) {
     // If someone else is trying to dispatch this task, give up
     DEBUG_PRINT("Some other thread trying to dispatch task %lu, giving up\n",
-                id_);
+                task->id_);
     unlock_set(req_mutexes);
     return false;
   }
   if (should_dispatch) {
     // find if all dependencies are satisfied
     int dep_count = 0;
-    for (int idx = 0; idx < predecessors_.size(); idx++) {
-      TaskImpl *pred_task = temp_vecs[idx];
-      DEBUG_PRINT("Task %lu depends on %lu as %d th predecessor ", id_,
-                  pred_task->id_, idx);
+    int idx = 0;
+    for (auto &pred_task : task->predecessors_) {
+      DEBUG_PRINT("Task %lu depends on %lu as %d th predecessor ", task->id_,
+                  pred_task->id_, idx++);
       if (pred_task->state_ < ATMI_DISPATCHED) {
         /* still in ready queue and not received a signal */
         should_dispatch = false;
@@ -1345,8 +1369,8 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
         DEBUG_PRINT("(dispatched)\n");
       }
     }
-    if (prev_ordered_task_) {
-      DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ", id_,
+    if (task->prev_ordered_task_) {
+      DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ", task->id_,
                   prev_ordered_task_->id_);
       if (prev_ordered_task_->state_ < ATMI_DISPATCHED) {
         should_dispatch = false;
@@ -1363,7 +1387,7 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
         (kernel_impl && kernel_impl->free_kernarg_segments().empty())) {
       should_dispatch = false;
       resources_available = false;
-      and_predecessors_.clear();
+      task->and_predecessors_.clear();
       DEBUG_PRINT(
           "Do not dispatch because (signals: %lu, kernels: %lu, ready tasks: "
           "%lu)\n",
@@ -1373,13 +1397,13 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
   }
 
   if (should_dispatch) {
-    if (groupable_ != ATMI_TRUE) {
+    if (task->groupable_ != ATMI_TRUE) {
       // this is a task that uses individual signals (not taskgroup-signals)
       new_signal = FreeSignalPool.front();
       FreeSignalPool.pop();
-      signal_ = new_signal;
+      task->signal_ = new_signal;
     } else {
-      signal_ = taskgroup_obj->signal();
+      task->signal_ = taskgroup_obj_->signal();
     }
     if (compute_task) {
       // get kernarg resource
@@ -1395,7 +1419,7 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
         // we had already created a memory region using malloc. Copy it
         // to the newly availed space
         size_t size_to_copy = compute_task->kernarg_region_size_;
-        if (devtype_ == ATMI_DEVTYPE_GPU &&
+        if (task->devtype_ == ATMI_DEVTYPE_GPU &&
             kernel_impl->platform_type() == AMDGCN) {
           // do not copy the implicit args from saved region
           // they are to be set/reset during task dispatch
@@ -1412,32 +1436,32 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
       }
     }
 
-    for (int idx = 0; idx < predecessors_.size(); idx++) {
-      TaskImpl *pred_task = temp_vecs[idx];
+    for (auto &pred_task : task->predecessors_) {
       if (pred_task->state_ /*.load(std::memory_order_seq_cst)*/ <
           ATMI_EXECUTED) {
         pred_task->num_successors_++;
         DEBUG_PRINT("Task %p (%lu) adding %p (%lu) as successor\n", pred_task,
-                    pred_task->id_, this, id_);
-        and_predecessors_.push_back(pred_task);
+                    pred_task->id_, task, task->id_);
+        task->and_predecessors_.push_back(pred_task);
       }
     }
-    DispatchedTasks.push_back(this);
+    DispatchedTasks.push_back(task);
     // we will be dispatching the task in front of the deque, pop it
     // what if two threads have peeked at a different task and tryDispatch
     // is called in a different order? does it matter if the tasks are popped
     // out of order?
-    TaskList.pop_front();
+    DEBUG_PRINT("Popping one task from created_tasks_\n");
+    taskgroup_obj_->created_tasks_.pop_front();
     // save the current set of sink tasks
-    SinkTasks.insert(this);
-    for (auto &pred_task : and_predecessors_) {
+    SinkTasks.insert(task);
+    for (auto &pred_task : task->and_predecessors_) {
       // The predecessors are no longer sink tasks (if they were until now). The
       // current task will be the sink task for its predecessors
       SinkTasks.erase(pred_task);
     }
-    if (prev_ordered_task_) {
+    if (task->prev_ordered_task_) {
       // remove previous task in the ordered list from sink tasks
-      SinkTasks.erase(prev_ordered_task_);
+      SinkTasks.erase(task->prev_ordered_task_);
 
       // If the previous ordered task was for a different queue type, then add
       // to
@@ -1446,32 +1470,35 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
       // Later, enqueue barrier SDMA or CPU/GPU to GPU/CPU. If CPU/GPU to SDMA,
       // then
       // ROCr SDMA API handles dependencies separately.
-      if (taskgroup_obj->ordered_ && prev_ordered_task_) {
+      if (taskgroup_obj_->ordered_ && task->prev_ordered_task_) {
         if ((prev_ordered_task_->type() == ATL_DATA_MOVEMENT &&
-             type() == ATL_KERNEL_EXECUTION) ||
+             task->type() == ATL_KERNEL_EXECUTION) ||
             (prev_ordered_task_->type() == ATL_KERNEL_EXECUTION &&
-             type() == ATL_DATA_MOVEMENT) ||
+             task->type() == ATL_DATA_MOVEMENT) ||
             (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_GPU &&
-             devtype_ == ATMI_DEVTYPE_CPU) ||
+             task->devtype_ == ATMI_DEVTYPE_CPU) ||
             (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_CPU &&
-             devtype_ == ATMI_DEVTYPE_GPU)) {
-          TaskImpl *pred_task = prev_ordered_task_;
+             task->devtype_ == ATMI_DEVTYPE_GPU)) {
+          TaskImpl *pred_task = task->prev_ordered_task_;
           if (pred_task->state_ /*.load(std::memory_order_seq_cst)*/ <
               ATMI_EXECUTED) {
             pred_task->num_successors_++;
             DEBUG_PRINT("Task %p (%lu) adding %p (%lu) as successor\n",
-                        pred_task, pred_task->id_, this, id_);
-            and_predecessors_.push_back(pred_task);
+                        pred_task, pred_task->id_, task, task->id_);
+            task->and_predecessors_.push_back(pred_task);
           }
         }
       }
     }
 
-    acquireAqlPacket();
+    task->acquireAqlPacket();
+
+    // chosen task to be launched is assigned to *returned_task
+    *returned_task = task;
 
     // now the task (kernel/data movement) has the signal/kernarg resource
     // and can be set to the "ready" state
-    set_state(ATMI_READY);
+    task->set_state(ATMI_READY);
   } else {
     if (compute_task) {
       if (compute_task->kernel_ && compute_task->kernarg_region_ == NULL) {
@@ -1483,7 +1510,10 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args) {
       }
     }
     max_ready_queue_sz++;
-    set_state(ATMI_INITIALIZED);
+    // do no set *returned_task to anything else if no resources 
+    // are available.
+    // *returned_task = this;
+    task->set_state(ATMI_INITIALIZED);
   }
   DEBUG_PRINT(
       "[Try Dispatch] Free Signal Pool Size: %lu; Ready Task Queue Size: %lu\n",
@@ -1897,79 +1927,108 @@ void enqueue_barrier_tasks(TaskImplVecTy tasks) {
   }
 }
 
-bool TaskImpl::tryDispatch(void **args) {
+bool TaskImpl::tryDispatch(void **args, bool isCallback) {
   ShouldDispatchTimer.start();
   bool should_dispatch = true;
-  bool register_task_callback = (groupable_ != ATMI_TRUE);
+  TaskImpl *returned_task = this;
   if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
     should_dispatch = tryDispatchHostCallback(args);
     // should_dispatch = tryDispatch_callback(this, args);
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-    should_dispatch = tryDispatchBarrierPacket(args);
-    // should_dispatch = tryDispatch_barrier_pkt(this, args);
+    if(isCallback || 
+       (!isCallback && !taskgroup_obj_->first_created_tasks_dispatched_.load())) {
+      // dispatch if the call is from the callback thread, or if
+      // it is the first batch of create_tasks_ being dispatched
+      // from the application thread. Logic is that the application
+      // thread tries to launch just the first batch of tasks until it
+      // runs out of resources, after which the application thread simply
+      // adds tasks to a list and the entire tryDispatching of these
+      // tasks is performed by the callback thread. Once the created_tasks_
+      // are all tryDispatched, then a flag is reset and the application
+      // thread treats the next batch of tasks as first-timers again.
+      DEBUG_PRINT("Trying to dispatch task %lu\n", id_);
+      should_dispatch = tryDispatchBarrierPacket(args, &returned_task);
+      // should_dispatch = tryDispatch_barrier_pkt(this, args);
+    }
+    else {
+      should_dispatch = false;
+    }
   }
   ShouldDispatchTimer.stop();
-
+  
   if (should_dispatch) {
+    bool register_task_callback = (returned_task->groupable_ != ATMI_TRUE);
     // direct_dispatch++;
-    ATMIErrorCheck(Dispatch compute kernel, dispatch());
-    // dispatch_task(this);
+    DEBUG_PRINT("Dispatching task %lu\n", returned_task->id_);
+    ATMIErrorCheck(Dispatch compute kernel, returned_task->dispatch());
 
     RegisterCallbackTimer.start();
     if (register_task_callback) {
       if (g_dep_sync_type == ATL_SYNC_CALLBACK) {
-        DEBUG_PRINT("Registering callback for task %lu\n", id_);
+        DEBUG_PRINT("Registering callback for task %luthis, \n", id_);
         hsa_status_t err = hsa_amd_signal_async_handler(
-            signal_, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
-            reinterpret_cast<void *>(this));
+            returned_task->signal_, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
+            reinterpret_cast<void *>(returned_task));
         ErrorCheck(Creating signal handler, err);
       }
     } else {
-      if (!taskgroup_obj_->callback_started_.test_and_set()) {
+      if (!returned_task->taskgroup_obj_->callback_started_.test_and_set()) {
         DEBUG_PRINT("Registering callback for task groups\n");
         hsa_status_t err = hsa_amd_signal_async_handler(
-            signal_, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,
-            reinterpret_cast<void *>(taskgroup_obj_));
+            returned_task->signal_, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,
+            reinterpret_cast<void *>(returned_task->taskgroup_obj_));
         ErrorCheck(Creating signal handler, err);
       }
     }
     RegisterCallbackTimer.stop();
   } else {
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      // We could not dispatch the packet because of lack of resources.
-      // So, create a barrier packet for current sink tasks and add async
-      // handler
-      // for its completion.
-      // All dispatched tasks get signal from device-only signal pool. All async
-      // handlers are registered to interruptible signals
-      TaskImpl *last_dispatched_task = NULL;
-      TaskImplVecTy tasks;
-      TaskImplVecTy *dispatched_tasks_ptr = NULL;
-      lock(&mutex_readyq_);
-      if (!SinkTasks.empty()) {
-        // this also means that DispatchedTasks is not empty
-        tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
-        SinkTasks.clear();
-        // will be deleted in the callback
-        dispatched_tasks_ptr = new TaskImplVecTy;
-        dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
-                                     DispatchedTasks.begin(),
-                                     DispatchedTasks.end());
-        DispatchedTasks.clear();
-        last_dispatched_task = tasks[tasks.size() - 1];
-      }
-      unlock(&mutex_readyq_);
-      if (dispatched_tasks_ptr) {
-        enqueue_barrier_tasks(tasks);
-        if (last_dispatched_task) {
+      bool val_old = false;
+      bool cas_succeeded = taskgroup_obj_->first_created_tasks_dispatched_.compare_exchange_strong(val_old, true);
+      // initially the first_created_tasks_dispatched_ value is false. Whoever sets it to
+      // true (cas_succeeded) will execute the below if section. The below section has to be
+      // executed by only one task that fails to get resources, not all of them.
+      // TODO(ashwinma): this currently allows callback thread to dispatch the current set
+      // of dispatched tasks, but can this design work if there are multiple callback
+      // threads?
+      if(isCallback || 
+         (!isCallback && cas_succeeded)) {
+        // We could not dispatch the packet because of lack of resources.
+        // So, create a barrier packet for current sink tasks and add async
+        // handler for its completion.
+        // All dispatched tasks get signal from device-only signal pool. All async
+        // handlers are registered to interruptible signals
+        TaskImpl *last_dispatched_task = NULL;
+        TaskImplVecTy tasks;
+        TaskImplVecTy *dispatched_tasks_ptr = NULL;
+        
+        lock(&mutex_readyq_);
+        DEBUG_PRINT("Used up %lu signals, so signal pool has %lu signals\n", DispatchedTasks.size(), FreeSignalPool.size());
+        if (!SinkTasks.empty()) {
+          // this also means that DispatchedTasks is not empty
+          tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
+          SinkTasks.clear();
+          // will be deleted in the callback
+          dispatched_tasks_ptr = new TaskImplVecTy;
+          dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
+              DispatchedTasks.begin(),
+              DispatchedTasks.end());
+          DispatchedTasks.clear();
+          last_dispatched_task = tasks[tasks.size() - 1];
+
+          unlock(&mutex_readyq_);
+          enqueue_barrier_tasks(tasks);
           hsa_amd_signal_async_handler(
               IdentityANDSignal, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
               reinterpret_cast<void *>(dispatched_tasks_ptr));
         }
+        else {
+          unlock(&mutex_readyq_);
+        }
       }
       // else this task did not get the resources AND DispatchedTasks
       // is already being processed, so this task will be taken care of
-      // when do_progress handles the TaskList
+      // when doProgress handles the created_tasks_
     }
   }
   if (synchronous_ == ATMI_TRUE) { /*  Sychronous execution */
@@ -1999,6 +2058,7 @@ atmi_task_handle_t ComputeTaskImpl::tryLaunchKernel(void **args) {
 
     req_mutexes.insert(&mutex_readyq_);
     req_mutexes.insert(&(mutex_));
+    req_mutexes.insert(&(taskgroup_obj_->group_mutex_));
     lock_set(req_mutexes);
     // Save kernel args because it will be activated
     // later. This way, the user will be able to
@@ -2010,10 +2070,13 @@ atmi_task_handle_t ComputeTaskImpl::tryLaunchKernel(void **args) {
       // kernarg_region_copied = true;
       updateKernargRegion(args);
     }
-    TaskList.push_back(this);
+    DEBUG_PRINT("Pushing task %lu to created_tasks_\n", id_);
+    taskgroup_obj_->created_tasks_.push_back(this);
     unlock_set(req_mutexes);
   }
-  tryDispatch(args);
+  // perhaps second arg here should be null because it is 
+  // already set for both HC and BP?
+  tryDispatch(args, /* callback */ false);
   task_handle = id_;
   return task_handle;
 }
@@ -2143,7 +2206,7 @@ atmi_task_handle_t Runtime::CreateTask(atmi_lparm_t *lparm,
       }
     }
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-      TaskList.push_back(task);
+      task->taskgroup_obj_->created_tasks_.push_back(task);
     }
 
     task->set_state(ATMI_INITIALIZED);
@@ -2160,23 +2223,11 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t t) {
   TaskImpl *task = getTaskImpl(t);
   if (!task) return task_handle;
   task_handle = task->id_;
-  // On activate, tasks in TaskList will be dispatched
+  // On activate, tasks in created_tasks_ will be dispatched
   if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
     bool should_dispatch = false;
-    // Do we assume that it is a logical error if someone wants to
-    // activate the task graph while at the same time trying to
-    // add nodes to it? If yes, we can remove the locks surrounding TaskList.
     do {
-      TaskImpl *ready_task = NULL;
-      should_dispatch = false;
-      lock(&mutex_readyq_);
-      if (!TaskList.empty()) {
-        ready_task = TaskList.front();
-      }
-      unlock(&mutex_readyq_);
-      if (ready_task) {
-        should_dispatch = ready_task->tryDispatch(NULL);
-      }
+      should_dispatch = task->tryDispatch(NULL, /* callback */ false);
     } while (should_dispatch);
   } else {
     if (task->taskgroup_obj_ && task->taskgroup_obj_->ordered_) {
@@ -2192,13 +2243,13 @@ atmi_task_handle_t Runtime::ActivateTask(atmi_task_handle_t t) {
         }
         unlock(&task->taskgroup_obj_->group_mutex_);
         if (ready_task) {
-          should_dispatch = ready_task->tryDispatch(NULL);
+          should_dispatch = ready_task->tryDispatch(NULL, /* callback */ false);
         }
       } while (should_dispatch);
     } else if (task->predecessors_.size() <= 0) {
       // If the task has predecessors then you cannot activate this task. Task
       // activation is supported only for tasks without predecessors.
-      task->tryDispatch(NULL);
+      task->tryDispatch(NULL, /* callback */ false);
     }
     DEBUG_PRINT("[Returned Task: %lu]\n", task_handle);
   }
@@ -2223,9 +2274,20 @@ atmi_task_handle_t Runtime::LaunchTask(
   */
   // TaskImpl *task = atl_trycreate_task(kernel);
 
-  ComputeTaskImpl *task = createComputeTaskImpl(lparm, atmi_kernel);
-  if (task) {
-    task_handle = task->tryLaunchKernel(args);
+  ComputeTaskImpl *compute_task = createComputeTaskImpl(lparm, atmi_kernel);
+  if (compute_task) {
+    // Save kernel args because it will be activated
+    // later. This way, the user will be able to
+    // reuse their kernarg region that was created
+    // in the application space.
+    if (compute_task->kernel_ && compute_task->kernarg_region_ == NULL) {
+      // first time allocation/assignment
+      compute_task->kernarg_region_ =
+        malloc(compute_task->kernarg_region_size_);
+      // task_handle->kernarg_region_copied = true;
+      compute_task->updateKernargRegion(args);
+    }
+    task_handle = compute_task->tryLaunchKernel(args);
     // task_handle = atl_trylaunch_kernel(lparm, task, kernel_id, args);
     DEBUG_PRINT("[Returned Task: %lu]\n", task_handle);
   }

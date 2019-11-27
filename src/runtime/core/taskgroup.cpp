@@ -131,6 +131,7 @@ pthread_mutex_t *m) {
 // constructor
 core::TaskgroupImpl::TaskgroupImpl(bool ordered, atmi_place_t place)
     : ordered_(ordered),
+      first_created_tasks_dispatched_(false),
       place_(place),
       next_best_queue_id_(0),
       last_task_(NULL),

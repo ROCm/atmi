@@ -334,12 +334,13 @@ namespace core {
 
 
     void *kernarg_template_ptr = NULL;
-    if(MAX_NUM_KERNEL_TYPES > 0) {
+    int max_kernel_types = core::Runtime::getInstance().getMaxKernelTypes();
+    if (max_kernel_types > 0) {
       // Allocate template space for shader kernels
       err = hsa_amd_memory_pool_allocate(atl_gpu_kernarg_pool,
-          sizeof(atmi_kernel_enqueue_template_t) * MAX_NUM_KERNEL_TYPES,
-          0,
-          &kernarg_template_ptr);
+          sizeof(atmi_kernel_enqueue_template_t) *
+          max_kernel_types,
+          0, &kernarg_template_ptr);
       ErrorCheck(Allocating kernel argument template pointer, err);
       allow_access_to_all_gpu_agents(kernarg_template_ptr);
     }
@@ -2025,6 +2026,18 @@ namespace core {
     //// FIXME EEEEEE: for EVERY GPU impl, add all CPU/GPU implementations in
     //their templates!!!
     if(has_gpu_impl) {
+      // fill in the kernel template AQL packets
+      int cur_kernel = g_ke_args.kernel_counter++;
+      // FIXME: reformulate this for debug mode
+      // assert(cur_kernel < core::Runtime::getInstance().getMaxKernelTypes());
+      int max_kernel_types = core::Runtime::getInstance().getMaxKernelTypes();
+      if (cur_kernel >= max_kernel_types) {
+        fprintf(stderr, "Creating more than %d task types. Set "
+            "ATMI_MAX_KERNEL_TYPES environment variable to a larger "
+            "number and try again.\n",
+            max_kernel_types);
+        return ATMI_STATUS_KERNELCOUNT_OVERFLOW;
+      }
       // populate the AQL packet template for GPU kernel impls
       void *ke_kernarg_region;
       // first 4 bytes store the current index of the kernel arg region
@@ -2037,11 +2050,6 @@ namespace core {
       *(int *)ke_kernarg_region = 0;
       char *ke_kernargs = (char *)ke_kernarg_region + sizeof(int);
 
-      // fill in the kernel template AQL packets
-      int cur_kernel = g_ke_args.kernel_counter++;
-      // FIXME: reformulate this for debug mode
-      // assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
-      if(cur_kernel >= MAX_NUM_KERNEL_TYPES) return ATMI_STATUS_ERROR;
       atmi_kernel_enqueue_template_t *ke_template = &((atmi_kernel_enqueue_template_t *)g_ke_args.kernarg_template_ptr)[cur_kernel];
       ke_template->kernel_handle = atmi_kernel->handle; // To be used by device code to pick a task template
 

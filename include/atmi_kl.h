@@ -11,7 +11,6 @@
 #include "ockl_hsa.h"
 #endif
 #define MAX_NUM_KERNELS (1024 * 16)
-#define MAX_NUM_KERNEL_TYPES (8)
 /*typedef struct atmi_task_impl_s {
     unsigned long int signal;
     unsigned char reserved[376];

@@ -10,6 +10,7 @@
 #include <hsa.h>
 
 #include <deque>
+#include <queue>
 #include <set>
 #include <vector>
 
@@ -89,7 +90,7 @@ class TaskgroupImpl {
   std::set<TaskImpl *> dispatched_sink_tasks_;
   std::atomic<bool> first_created_tasks_dispatched_;
 
-  std::queue<TaskImpl *> ready_tasks_; // ReadyTaskQueue
+  std::queue<TaskImpl *> ready_tasks_;  // ReadyTaskQueue
   // TODO(ashwinma): for now, all waiting tasks (groupable and individual) are
   // placed in a single queue. does it make sense to have groupable waiting
   // tasks separately waiting in their own queue? perhaps not for now.

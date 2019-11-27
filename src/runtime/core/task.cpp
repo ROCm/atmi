@@ -308,7 +308,8 @@ extern void TaskImpl::wait() {
       lock(&mutex_readyq_);
       TaskImplVecTy tasks;
       TaskImplVecTy *dispatched_tasks_ptr = NULL;
-      tasks.insert(tasks.end(), taskgroup_obj_->dispatched_sink_tasks_.begin(), taskgroup_obj_->dispatched_sink_tasks_.end());
+      tasks.insert(tasks.end(), taskgroup_obj_->dispatched_sink_tasks_.begin(),
+                   taskgroup_obj_->dispatched_sink_tasks_.end());
       taskgroup_obj_->dispatched_sink_tasks_.clear();
       // will be deleted in the callback
       dispatched_tasks_ptr = new TaskImplVecTy;
@@ -587,7 +588,7 @@ void handle_signal_barrier_pkt(TaskImpl *task,
   // we are guaranteed that all dispatched_tasks have completed execution.
   TaskImplVecTy dispatched_tasks = *dispatched_tasks_ptr;
 
-  // TODO(ashwinma): check the performance implication of locking 
+  // TODO(ashwinma): check the performance implication of locking
   // across the entire loop vs locking across selected sections
   // of code inside the loop
   // lock(&mutex_readyq_);
@@ -658,7 +659,7 @@ void handle_signal_barrier_pkt(TaskImpl *task,
 
     unlock_set(mutexes);
   }
-  // TODO(ashwinma): check the performance implication of locking 
+  // TODO(ashwinma): check the performance implication of locking
   // across the entire loop vs locking across selected sections
   // of code inside the loop
   // unlock(&mutex_readyq_);
@@ -839,9 +840,9 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
   }
   unlock_set(mutexes);
 
-  // make progress on all other ready tasks that are in the same 
+  // make progress on all other ready tasks that are in the same
   // taskgroup as some task in the collection group_tasks.
-  if(some_task) some_task->doProgress();
+  if (some_task) some_task->doProgress();
   DEBUG_PRINT("Releasing %lu tasks from %p task group\n", group_tasks.size(),
               taskgroup);
   taskgroup->task_count_ -= group_tasks.size();
@@ -940,10 +941,10 @@ void TaskImpl::doProgress() {
     // should occur (if returned_task is true and should_dispatch
     // is false) or just return (if returned_task is false)
     lock(&(taskgroup_obj_->group_mutex_));
-    if(taskgroup_obj_->created_tasks_.empty()) {
+    if (taskgroup_obj_->created_tasks_.empty()) {
       // All tasks in this taskgroup have been completed, and
-      // there are no more created tasks too, so reset the 
-      // flag so next set of created_tasks_ are treated as 
+      // there are no more created tasks too, so reset the
+      // flag so next set of created_tasks_ are treated as
       // the first. The flag may be reset only by the callback
       // thread during doProgress and not withing tryDispatch
       // because tryDispatch could be called either by the main
@@ -951,12 +952,11 @@ void TaskImpl::doProgress() {
       // differentiate.
       taskgroup_obj_->first_created_tasks_dispatched_.store(false);
       should_dispatch = false;
-    }
-    else {
+    } else {
       should_dispatch = true;
     }
     unlock(&(taskgroup_obj_->group_mutex_));
-    while(should_dispatch) {
+    while (should_dispatch) {
       should_dispatch = tryDispatch(NULL, /* callback */ true);
     }
   }
@@ -1307,19 +1307,21 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
 
   // TODO(ashwinma): Do we assume that it is a logical error if someone wants to
   // activate the task graph while at the same time trying to
-  // add nodes to it? If yes, we can remove the locks surrounding created_tasks_.
+  // add nodes to it? If yes, we can remove the locks surrounding
+  // created_tasks_.
   TaskImpl *task = NULL;
   lock(&(taskgroup_obj_->group_mutex_));
   // try dispatching the head of created_tasks_
-  if(!taskgroup_obj_->created_tasks_.empty())
+  if (!taskgroup_obj_->created_tasks_.empty())
     task = taskgroup_obj_->created_tasks_.front();
   unlock(&(taskgroup_obj_->group_mutex_));
-  
-  if(!task) {
+
+  if (!task) {
     // no more tasks in created_tasks_, so this task
-    // must have been executed already and no more 
+    // must have been executed already and no more
     // tasks to process. So, do not dispatch anything.
-    DEBUG_PRINT("No tasks to execute, created_tasks_ is empty %lu\n", taskgroup_obj_->created_tasks_.size());
+    DEBUG_PRINT("No tasks to execute, created_tasks_ is empty %lu\n",
+                taskgroup_obj_->created_tasks_.size());
     return false;
   }
 
@@ -1331,7 +1333,8 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
   }
   req_mutexes.insert(&(task->mutex_));
   req_mutexes.insert(&mutex_readyq_);
-  if (task->prev_ordered_task_) req_mutexes.insert(&(task->prev_ordered_task_->mutex_));
+  if (task->prev_ordered_task_)
+    req_mutexes.insert(&(task->prev_ordered_task_->mutex_));
 
   ComputeTaskImpl *compute_task = dynamic_cast<ComputeTaskImpl *>(task);
 
@@ -1508,7 +1511,7 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
       }
     }
     max_ready_queue_sz++;
-    // do no set *returned_task to anything else if no resources 
+    // do no set *returned_task to anything else if no resources
     // are available.
     // *returned_task = this;
     task->set_state(ATMI_INITIALIZED);
@@ -1933,8 +1936,9 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
     should_dispatch = tryDispatchHostCallback(args);
     // should_dispatch = tryDispatch_callback(this, args);
   } else if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
-    if(isCallback || 
-       (!isCallback && !taskgroup_obj_->first_created_tasks_dispatched_.load())) {
+    if (isCallback ||
+        (!isCallback &&
+         !taskgroup_obj_->first_created_tasks_dispatched_.load())) {
       // dispatch if the call is from the callback thread, or if
       // it is the first batch of create_tasks_ being dispatched
       // from the application thread. Logic is that the application
@@ -1947,13 +1951,12 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
       DEBUG_PRINT("Trying to dispatch task %lu\n", id_);
       should_dispatch = tryDispatchBarrierPacket(args, &returned_task);
       // should_dispatch = tryDispatch_barrier_pkt(this, args);
-    }
-    else {
+    } else {
       should_dispatch = false;
     }
   }
   ShouldDispatchTimer.stop();
-  
+
   if (should_dispatch) {
     bool register_task_callback = (returned_task->groupable_ != ATMI_TRUE);
     // direct_dispatch++;
@@ -1973,7 +1976,8 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
       if (!returned_task->taskgroup_obj_->callback_started_.test_and_set()) {
         DEBUG_PRINT("Registering callback for task groups\n");
         hsa_status_t err = hsa_amd_signal_async_handler(
-            returned_task->signal_, HSA_SIGNAL_CONDITION_EQ, 0, handle_group_signal,
+            returned_task->signal_, HSA_SIGNAL_CONDITION_EQ, 0,
+            handle_group_signal,
             reinterpret_cast<void *>(returned_task->taskgroup_obj_));
         ErrorCheck(Creating signal handler, err);
       }
@@ -1982,33 +1986,43 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
   } else {
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
       bool val_old = false;
-      bool cas_succeeded = taskgroup_obj_->first_created_tasks_dispatched_.compare_exchange_strong(val_old, true);
-      // initially the first_created_tasks_dispatched_ value is false. Whoever sets it to
-      // true (cas_succeeded) will execute the below if section. The below section has to be
+      bool cas_succeeded = taskgroup_obj_->first_created_tasks_dispatched_
+                               .compare_exchange_strong(val_old, true);
+      // initially the first_created_tasks_dispatched_ value is false. Whoever
+      // sets it to
+      // true (cas_succeeded) will execute the below if section. The below
+      // section has to be
       // executed by only one task that fails to get resources, not all of them.
-      // TODO(ashwinma): this currently allows callback thread to dispatch the current set
-      // of dispatched tasks, but can this design work if there are multiple callback
+      // TODO(ashwinma): this currently allows callback thread to dispatch the
+      // current set
+      // of dispatched tasks, but can this design work if there are multiple
+      // callback
       // threads?
-      if(isCallback || 
-         (!isCallback && cas_succeeded)) {
+      if (isCallback || (!isCallback && cas_succeeded)) {
         // We could not dispatch the packet because of lack of resources.
         // So, create a barrier packet for current sink tasks and add async
         // handler for its completion.
-        // All dispatched tasks get signal from device-only signal pool. All async
+        // All dispatched tasks get signal from device-only signal pool. All
+        // async
         // handlers are registered to interruptible signals
         TaskImpl *last_dispatched_task = NULL;
         TaskImplVecTy tasks;
         TaskImplVecTy *dispatched_tasks_ptr = NULL;
-        
+
         lock(&mutex_readyq_);
-        DEBUG_PRINT("Used up %lu signals, so signal pool has %lu signals\n", taskgroup_obj_->dispatched_tasks_.size(), FreeSignalPool.size());
+        DEBUG_PRINT("Used up %lu signals, so signal pool has %lu signals\n",
+                    taskgroup_obj_->dispatched_tasks_.size(),
+                    FreeSignalPool.size());
         if (!taskgroup_obj_->dispatched_sink_tasks_.empty()) {
           // this also means that taskgroup_obj_->dispatched_tasks_ is not empty
-          tasks.insert(tasks.end(), taskgroup_obj_->dispatched_sink_tasks_.begin(), taskgroup_obj_->dispatched_sink_tasks_.end());
+          tasks.insert(tasks.end(),
+                       taskgroup_obj_->dispatched_sink_tasks_.begin(),
+                       taskgroup_obj_->dispatched_sink_tasks_.end());
           taskgroup_obj_->dispatched_sink_tasks_.clear();
           // will be deleted in the callback
           dispatched_tasks_ptr = new TaskImplVecTy;
-          dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
+          dispatched_tasks_ptr->insert(
+              dispatched_tasks_ptr->end(),
               taskgroup_obj_->dispatched_tasks_.begin(),
               taskgroup_obj_->dispatched_tasks_.end());
           taskgroup_obj_->dispatched_tasks_.clear();
@@ -2019,12 +2033,12 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
           hsa_amd_signal_async_handler(
               IdentityANDSignal, HSA_SIGNAL_CONDITION_EQ, 0, handle_signal,
               reinterpret_cast<void *>(dispatched_tasks_ptr));
-        }
-        else {
+        } else {
           unlock(&mutex_readyq_);
         }
       }
-      // else this task did not get the resources AND taskgroup_obj_->dispatched_tasks_
+      // else this task did not get the resources AND
+      // taskgroup_obj_->dispatched_tasks_
       // is already being processed, so this task will be taken care of
       // when doProgress handles the created_tasks_
     }
@@ -2072,7 +2086,7 @@ atmi_task_handle_t ComputeTaskImpl::tryLaunchKernel(void **args) {
     taskgroup_obj_->created_tasks_.push_back(this);
     unlock_set(req_mutexes);
   }
-  // perhaps second arg here should be null because it is 
+  // perhaps second arg here should be null because it is
   // already set for both HC and BP?
   tryDispatch(args, /* callback */ false);
   task_handle = id_;
@@ -2281,7 +2295,7 @@ atmi_task_handle_t Runtime::LaunchTask(
     if (compute_task->kernel_ && compute_task->kernarg_region_ == NULL) {
       // first time allocation/assignment
       compute_task->kernarg_region_ =
-        malloc(compute_task->kernarg_region_size_);
+          malloc(compute_task->kernarg_region_size_);
       // task_handle->kernarg_region_copied = true;
       compute_task->updateKernargRegion(args);
     }

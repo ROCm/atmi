@@ -28,6 +28,7 @@ class TaskImpl {
   bool tryDispatch(void **args, bool callback = false);
 
   void doProgress();
+
  private:
   bool tryDispatchBarrierPacket(void **args, TaskImpl **returned_task);
   bool tryDispatchHostCallback(void **args);

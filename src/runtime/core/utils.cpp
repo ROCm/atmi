@@ -12,7 +12,9 @@
 const char *get_atmi_error_string(atmi_status_t err) {
   switch(err) {
     case ATMI_STATUS_SUCCESS: return "ATMI_STATUS_SUCCESS";
+    case ATMI_STATUS_UNKNOWN: return "ATMI_STATUS_UNKNOWN";
     case ATMI_STATUS_ERROR: return "ATMI_STATUS_ERROR";
+    case ATMI_STATUS_KERNELCOUNT_OVERFLOW: return "ATMI_STATUS_KERNELCOUNT_OVERFLOW";
     default: return "";
   }
 }
@@ -60,6 +62,7 @@ namespace core {
                 << "ATMI_DEVICE_GPU_WORKERS : positive integer" << std::endl
                 << "ATMI_DEVICE_CPU_WORKERS : positive integer" << std::endl
                 << "ATMI_DEBUG : 1 for printing out trace/debug info" << std::endl
+                << "ATMI_MAX_KERNEL_TYPES : positive integer" << std::endl
                 << "ATMI_PROFILE : 1 for printing out timer info" << std::endl;
       exit(0);
     }
@@ -75,6 +78,9 @@ namespace core {
 
     var = GetEnv("ATMI_MAX_HSA_SIGNALS");
     if(!var.empty()) max_signals_ = std::stoi(var);
+
+    var = GetEnv("ATMI_MAX_KERNEL_TYPES");
+    if(!var.empty()) max_kernel_types_ = std::stoi(var);
 
     /* TODO: If we get a good use case for device-specific worker count, we
      * should explore it, but let us keep the worker count uniform for all

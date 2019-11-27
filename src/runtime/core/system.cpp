@@ -321,11 +321,12 @@ atmi_status_t atmi_ke_init() {
   g_ke_args.cpu_worker_signals = cpu_worker_signals;
 
   void *kernarg_template_ptr = NULL;
-  if (MAX_NUM_KERNEL_TYPES > 0) {
+  int max_kernel_types = core::Runtime::getInstance().getMaxKernelTypes();
+  if (max_kernel_types > 0) {
     // Allocate template space for shader kernels
     err = hsa_amd_memory_pool_allocate(
         atl_gpu_kernarg_pool,
-        sizeof(atmi_kernel_enqueue_template_t) * MAX_NUM_KERNEL_TYPES, 0,
+        sizeof(atmi_kernel_enqueue_template_t) * max_kernel_types, 0,
         &kernarg_template_ptr);
     ErrorCheck(Allocating kernel argument template pointer, err);
     allow_access_to_all_gpu_agents(kernarg_template_ptr);

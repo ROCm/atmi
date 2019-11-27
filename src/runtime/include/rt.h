@@ -16,6 +16,7 @@ class Environment {
  public:
   Environment()
       : max_signals_(24),
+        max_kernel_types_(32),
         num_gpu_queues_(-1),
         num_cpu_queues_(-1),
         debug_mode_(0),
@@ -29,6 +30,7 @@ class Environment {
 
   int getDepSyncType() const { return dep_sync_type_; }
   int getMaxSignals() const { return max_signals_; }
+  int getMaxKernelTypes() const { return max_kernel_types_; }
   int getNumGPUQueues() const { return num_gpu_queues_; }
   int getNumCPUQueues() const { return num_cpu_queues_; }
   // TODO(ashwinma): int may change to enum if we have more debug modes
@@ -48,6 +50,7 @@ class Environment {
 
   int dep_sync_type_;
   int max_signals_;
+  int max_kernel_types_;
   int num_gpu_queues_;
   int num_cpu_queues_;
   int debug_mode_;
@@ -107,6 +110,7 @@ class Runtime {
   const Environment &getEnvironment() const { return env_; }
   int getDepSyncType() const { return env_.getDepSyncType(); }
   int getMaxSignals() const { return env_.getMaxSignals(); }
+  int getMaxKernelTypes() const { return env_.getMaxKernelTypes(); }
   int getNumGPUQueues() const { return env_.getNumGPUQueues(); }
   int getNumCPUQueues() const { return env_.getNumCPUQueues(); }
   // TODO(ashwinma): int may change to enum if we have more debug modes

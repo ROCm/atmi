@@ -76,6 +76,19 @@ atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel,
   //// FIXME EEEEEE: for EVERY GPU impl, add all CPU/GPU implementations in
   // their templates!!!
   if (has_gpu_impl) {
+    // fill in the kernel template AQL packets
+    int cur_kernel = g_ke_args.kernel_counter++;
+    // FIXME: reformulate this for debug mode
+    // assert(cur_kernel < core::Runtime::getInstance().getMaxKernelTypes());
+    int max_kernel_types = core::Runtime::getInstance().getMaxKernelTypes();
+    if (cur_kernel >= max_kernel_types) {
+      fprintf(stderr,
+              "Creating more than %d task types. Set "
+              "ATMI_MAX_KERNEL_TYPES environment variable to a larger "
+              "number and try again.\n",
+              max_kernel_types);
+      return ATMI_STATUS_KERNELCOUNT_OVERFLOW;
+    }
     // populate the AQL packet template for GPU kernel impls
     void *ke_kernarg_region;
     // first 4 bytes store the current index of the kernel arg region
@@ -89,11 +102,6 @@ atmi_status_t Runtime::CreateKernel(atmi_kernel_t *atmi_kernel,
       char *ke_kernargs =
           reinterpret_cast<char *>(ke_kernarg_region) + sizeof(int);
 
-      // fill in the kernel template AQL packets
-      int cur_kernel = g_ke_args.kernel_counter++;
-      // FIXME: reformulate this for debug mode
-      // assert(cur_kernel < MAX_NUM_KERNEL_TYPES);
-      if (cur_kernel >= MAX_NUM_KERNEL_TYPES) return ATMI_STATUS_ERROR;
       atmi_kernel_enqueue_template_t *ke_template =
           &(reinterpret_cast<atmi_kernel_enqueue_template_t *>(
               g_ke_args.kernarg_template_ptr))[cur_kernel];

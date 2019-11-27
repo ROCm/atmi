@@ -85,8 +85,8 @@ class TaskgroupImpl {
   std::vector<TaskImpl *> running_groupable_tasks_;
 
   std::deque<TaskImpl *> created_tasks_;
-  std::vector<TaskImpl *> dispatched_tasks_; // DispatchedTasks
-  std::set<TaskImpl *> dispatched_sink_tasks_; // SinkTasks
+  std::vector<TaskImpl *> dispatched_tasks_;
+  std::set<TaskImpl *> dispatched_sink_tasks_;
   std::atomic<bool> first_created_tasks_dispatched_;
 
   std::queue<TaskImpl *> ready_tasks_; // ReadyTaskQueue

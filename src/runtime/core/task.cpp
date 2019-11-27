@@ -49,11 +49,9 @@ void print_atl_kernel(const char *str, const int i);
 std::vector<TaskImpl *> AllTasks;
 std::queue<TaskImpl *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
-std::set<TaskImpl *> SinkTasks;
 
 std::map<uint64_t, Kernel *> KernelImplMap;
 // std::map<uint64_t, std::vector<std::string> > ModuleMap;
-std::vector<TaskImpl *> DispatchedTasks;
 bool setCallbackToggle = false;
 
 static atl_dep_sync_t g_dep_sync_type =
@@ -310,14 +308,14 @@ extern void TaskImpl::wait() {
       lock(&mutex_readyq_);
       TaskImplVecTy tasks;
       TaskImplVecTy *dispatched_tasks_ptr = NULL;
-      tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
-      SinkTasks.clear();
+      tasks.insert(tasks.end(), taskgroup_obj_->dispatched_sink_tasks_.begin(), taskgroup_obj_->dispatched_sink_tasks_.end());
+      taskgroup_obj_->dispatched_sink_tasks_.clear();
       // will be deleted in the callback
       dispatched_tasks_ptr = new TaskImplVecTy;
       dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
-                                   DispatchedTasks.begin(),
-                                   DispatchedTasks.end());
-      DispatchedTasks.clear();
+                                   taskgroup_obj_->dispatched_tasks_.begin(),
+                                   taskgroup_obj_->dispatched_tasks_.end());
+      taskgroup_obj_->dispatched_tasks_.clear();
       unlock(&mutex_readyq_);
       if (dispatched_tasks_ptr) {
         enqueue_barrier_tasks(tasks);
@@ -1445,7 +1443,7 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
         task->and_predecessors_.push_back(pred_task);
       }
     }
-    DispatchedTasks.push_back(task);
+    taskgroup_obj_->dispatched_tasks_.push_back(task);
     // we will be dispatching the task in front of the deque, pop it
     // what if two threads have peeked at a different task and tryDispatch
     // is called in a different order? does it matter if the tasks are popped
@@ -1453,15 +1451,15 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
     DEBUG_PRINT("Popping one task from created_tasks_\n");
     taskgroup_obj_->created_tasks_.pop_front();
     // save the current set of sink tasks
-    SinkTasks.insert(task);
+    taskgroup_obj_->dispatched_sink_tasks_.insert(task);
     for (auto &pred_task : task->and_predecessors_) {
       // The predecessors are no longer sink tasks (if they were until now). The
       // current task will be the sink task for its predecessors
-      SinkTasks.erase(pred_task);
+      taskgroup_obj_->dispatched_sink_tasks_.erase(pred_task);
     }
     if (task->prev_ordered_task_) {
       // remove previous task in the ordered list from sink tasks
-      SinkTasks.erase(task->prev_ordered_task_);
+      taskgroup_obj_->dispatched_sink_tasks_.erase(task->prev_ordered_task_);
 
       // If the previous ordered task was for a different queue type, then add
       // to
@@ -2003,17 +2001,17 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
         TaskImplVecTy *dispatched_tasks_ptr = NULL;
         
         lock(&mutex_readyq_);
-        DEBUG_PRINT("Used up %lu signals, so signal pool has %lu signals\n", DispatchedTasks.size(), FreeSignalPool.size());
-        if (!SinkTasks.empty()) {
-          // this also means that DispatchedTasks is not empty
-          tasks.insert(tasks.end(), SinkTasks.begin(), SinkTasks.end());
-          SinkTasks.clear();
+        DEBUG_PRINT("Used up %lu signals, so signal pool has %lu signals\n", taskgroup_obj_->dispatched_tasks_.size(), FreeSignalPool.size());
+        if (!taskgroup_obj_->dispatched_sink_tasks_.empty()) {
+          // this also means that taskgroup_obj_->dispatched_tasks_ is not empty
+          tasks.insert(tasks.end(), taskgroup_obj_->dispatched_sink_tasks_.begin(), taskgroup_obj_->dispatched_sink_tasks_.end());
+          taskgroup_obj_->dispatched_sink_tasks_.clear();
           // will be deleted in the callback
           dispatched_tasks_ptr = new TaskImplVecTy;
           dispatched_tasks_ptr->insert(dispatched_tasks_ptr->end(),
-              DispatchedTasks.begin(),
-              DispatchedTasks.end());
-          DispatchedTasks.clear();
+              taskgroup_obj_->dispatched_tasks_.begin(),
+              taskgroup_obj_->dispatched_tasks_.end());
+          taskgroup_obj_->dispatched_tasks_.clear();
           last_dispatched_task = tasks[tasks.size() - 1];
 
           unlock(&mutex_readyq_);
@@ -2026,7 +2024,7 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
           unlock(&mutex_readyq_);
         }
       }
-      // else this task did not get the resources AND DispatchedTasks
+      // else this task did not get the resources AND taskgroup_obj_->dispatched_tasks_
       // is already being processed, so this task will be taken care of
       // when doProgress handles the created_tasks_
     }

@@ -997,7 +997,7 @@ atmi_status_t atl_init_cpu_context() {
     // restricting the number of queues to num_cus - 2?
     int num_cpu_queues = core::Runtime::getInstance().getNumCPUQueues();
     if (num_cpu_queues == -1) {
-      num_cpu_queues = proc.num_cus();
+      num_cpu_queues = (proc.num_cus() > 8) ? 8 : proc.num_cus();
     }
     cpu_agent_init(cpu, num_cpu_queues);
   }

@@ -12,6 +12,7 @@
 #include <string>
 
 namespace core {
+
 class Environment {
  public:
   Environment()

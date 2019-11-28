@@ -1955,3 +1955,4 @@ atmi_status_t Runtime::RegisterModule(const char **filenames,
   return status;
 }
 }  // namespace core
+

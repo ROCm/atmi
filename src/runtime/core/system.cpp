@@ -924,7 +924,7 @@ namespace core {
   }
 
   hsa_status_t callbackEvent(const hsa_amd_event_t *event, void *data) {
-#if ROCM_VERSION_MAJOR >= 2 && ROCM_VERSION_MINOR >= 3
+#if (ROCM_VERSION_MAJOR >= 3) || (ROCM_VERSION_MAJOR >= 2 && ROCM_VERSION_MINOR >= 3)
     if(event->event_type == HSA_AMD_GPU_MEMORY_FAULT_EVENT) {
 #else
     if(event->event_type == GPU_MEMORY_FAULT_EVENT) {

@@ -1372,8 +1372,8 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
     }
     if (task->prev_ordered_task_) {
       DEBUG_PRINT("Task %lu depends on %lu as ordered predecessor ", task->id_,
-                  prev_ordered_task_->id_);
-      if (prev_ordered_task_->state_ < ATMI_DISPATCHED) {
+                  task->prev_ordered_task_->id_);
+      if (task->prev_ordered_task_->state_ < ATMI_DISPATCHED) {
         should_dispatch = false;
         DEBUG_PRINT("(waiting)\n");
         waiting_count++;
@@ -1472,13 +1472,13 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
       // then
       // ROCr SDMA API handles dependencies separately.
       if (taskgroup_obj_->ordered_ && task->prev_ordered_task_) {
-        if ((prev_ordered_task_->type() == ATL_DATA_MOVEMENT &&
+        if ((task->prev_ordered_task_->type() == ATL_DATA_MOVEMENT &&
              task->type() == ATL_KERNEL_EXECUTION) ||
-            (prev_ordered_task_->type() == ATL_KERNEL_EXECUTION &&
+            (task->prev_ordered_task_->type() == ATL_KERNEL_EXECUTION &&
              task->type() == ATL_DATA_MOVEMENT) ||
-            (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_GPU &&
+            (task->prev_ordered_task_->devtype_ == ATMI_DEVTYPE_GPU &&
              task->devtype_ == ATMI_DEVTYPE_CPU) ||
-            (prev_ordered_task_->devtype_ == ATMI_DEVTYPE_CPU &&
+            (task->prev_ordered_task_->devtype_ == ATMI_DEVTYPE_CPU &&
              task->devtype_ == ATMI_DEVTYPE_GPU)) {
           TaskImpl *pred_task = task->prev_ordered_task_;
           if (pred_task->state_ /*.load(std::memory_order_seq_cst)*/ <

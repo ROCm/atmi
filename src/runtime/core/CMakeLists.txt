@@ -45,6 +45,12 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(ppc64le)|(aarch64)$")
    add_definitions(-DLITTLEENDIAN_CPU=1)
 endif()
 
+string( TOLOWER "${ATMI_DEVICE_RUNTIME}" ATMI_DEVICE_RUNTIME_VAR )
+if(ATMI_DEVICE_RUNTIME_VAR MATCHES on )
+  add_definitions(-DBUILD_WITH_DEVICE_RT)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../device_runtime)
+endif()
+
 # If building this library in debug mode, we define a macro to enable
 # dumping progress messages at runtime.
 string( TOLOWER "${CMAKE_BUILD_TYPE}" ATMI_CMAKE_BUILD_TYPE)

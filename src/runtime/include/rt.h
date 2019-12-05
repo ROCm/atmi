@@ -66,8 +66,8 @@ class Runtime {
   }
 
   // init/finalize
-  atmi_status_t Initialize(atmi_devtype_t);
-  atmi_status_t Finalize();
+  virtual atmi_status_t Initialize(atmi_devtype_t);
+  virtual atmi_status_t Finalize();
   // machine info
   atmi_machine_t *GetMachineInfo();
   // modules
@@ -76,9 +76,9 @@ class Runtime {
   atmi_status_t RegisterModule(const char **, atmi_platform_type_t *,
                                const int);
   // kernels
-  atmi_status_t CreateKernel(atmi_kernel_t *, const int, const size_t *,
+  virtual atmi_status_t CreateKernel(atmi_kernel_t *, const int, const size_t *,
                              const int, va_list);
-  atmi_status_t ReleaseKernel(atmi_kernel_t);
+  virtual atmi_status_t ReleaseKernel(atmi_kernel_t);
   atmi_status_t CreateEmptyKernel(atmi_kernel_t *, const int, const size_t *);
   atmi_status_t AddGPUKernelImpl(atmi_kernel_t, const char *,
                                  const unsigned int);
@@ -119,15 +119,38 @@ class Runtime {
   // TODO(ashwinma): int may change to enum if we have more profile modes
   int getProfileMode() const { return env_.getProfileMode(); }
 
- private:
+  #if 0
+  bool initialized() const { return initialized_; }
+  void set_initialized(const bool val) { initialized_ = val; }
+
+  bool hsa_initialized() const { return hsa_initialized_; }
+  void set_hsa_initialized(const bool val) { hsa_initialized_ = val; }
+
+  bool cpu_initialized() const { return cpu_initialized_; }
+  void set_cpu_initialized(const bool val) { cpu_initialized_ = val; }
+
+  bool gpu_initialized() const { return gpu_initialized_; }
+  void set_gpu_initialized(const bool val) { gpu_initialized_ = val; }
+
+  bool tasks_initialized() const { return tasks_initialized_; }
+  void set_tasks_initialized(const bool val) { tasks_initialized_ = val; }
+#endif
+ protected:
   Runtime() = default;
   ~Runtime() = default;
   Runtime(const Runtime &) = delete;
   Runtime &operator=(const Runtime &) = delete;
+  //bool initialized_;
+  //bool hsa_initialized_;
+  //bool cpu_initialized_;
+  //bool gpu_initialized_;
+  //bool tasks_initialized_;
 
+ protected:
   // variable to track environment variables
   Environment env_;
 };
+
 }  // namespace core
 
 #endif  // SRC_RUNTIME_INCLUDE_RT_H_

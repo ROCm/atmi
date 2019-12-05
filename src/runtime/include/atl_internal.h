@@ -201,6 +201,7 @@ extern std::vector<core::TaskgroupImpl *> AllTaskgroups;
 extern std::vector<core::TaskImpl *> AllTasks;
 extern std::queue<core::TaskImpl *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
+extern hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
 
 namespace core {
 atmi_status_t atl_init_context();
@@ -281,6 +282,7 @@ void lock(pthread_mutex_t *m);
 void unlock(pthread_mutex_t *m);
 
 TaskImpl *get_new_task();
+void allow_access_to_all_gpu_agents(void *ptr);
 }  // namespace core
 hsa_signal_t *get_worker_sig(hsa_queue_t *queue);
 

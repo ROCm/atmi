@@ -162,7 +162,6 @@ hsa_region_t atl_cpu_kernarg_region;
 hsa_agent_t atl_gpu_agent;
 hsa_profile_t atl_gpu_agent_profile;
 
-atl_kernel_enqueue_args_t g_ke_args;
 static std::vector<hsa_executable_t> g_executables;
 
 std::map<std::string, std::string> KernelNameMap;
@@ -243,99 +242,6 @@ void allow_access_to_all_gpu_agents(void *ptr) {
   ErrorCheck(Allow agents ptr access, err);
 }
 
-atmi_status_t atmi_ke_init() {
-  // create and fill in the global structure needed for device enqueue
-  // fill in gpu queues
-  hsa_status_t err;
-  std::vector<hsa_queue_t *> gpu_queues;
-  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
-  for (int gpu = 0; gpu < gpu_count; gpu++) {
-    int num_queues = 0;
-    atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
-    ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    std::vector<hsa_queue_t *> qs = proc.queues();
-    num_queues = qs.size();
-    gpu_queues.insert(gpu_queues.end(), qs.begin(), qs.end());
-    // TODO(ashwinma): how to handle queues from multiple devices? keep them
-    // separate?
-    // Currently, first N queues correspond to GPU0, next N queues map to GPU1
-    // and so on.
-  }
-  g_ke_args.num_gpu_queues = gpu_queues.size();
-  void *gpu_queue_ptr = NULL;
-  if (g_ke_args.num_gpu_queues > 0) {
-    err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool, sizeof(hsa_queue_t *) * g_ke_args.num_gpu_queues,
-        0, &gpu_queue_ptr);
-    ErrorCheck(Allocating GPU queue pointers, err);
-    allow_access_to_all_gpu_agents(gpu_queue_ptr);
-    for (int gpuq = 0; gpuq < gpu_queues.size(); gpuq++) {
-      (reinterpret_cast<hsa_queue_t **>(gpu_queue_ptr))[gpuq] =
-          gpu_queues[gpuq];
-    }
-  }
-  g_ke_args.gpu_queue_ptr = gpu_queue_ptr;
-
-  // fill in cpu queues
-  std::vector<hsa_queue_t *> cpu_queues;
-  int cpu_count = g_atl_machine.processorCount<ATLCPUProcessor>();
-  for (int cpu = 0; cpu < cpu_count; cpu++) {
-    int num_queues = 0;
-    atmi_place_t place = ATMI_PLACE_CPU(0, cpu);
-    ATLCPUProcessor &proc = get_processor<ATLCPUProcessor>(place);
-    std::vector<hsa_queue_t *> qs = proc.queues();
-    num_queues = qs.size();
-    cpu_queues.insert(cpu_queues.end(), qs.begin(), qs.end());
-    // TODO(ashwinma): how to handle queues from multiple devices? keep them
-    // separate?
-    // Currently, first N queues correspond to CPU0, next N queues map to CPU1
-    // and so on.
-  }
-  g_ke_args.num_cpu_queues = cpu_queues.size();
-  void *cpu_queue_ptr = NULL;
-  if (g_ke_args.num_cpu_queues > 0) {
-    err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool, sizeof(hsa_queue_t *) * g_ke_args.num_cpu_queues,
-        0, &cpu_queue_ptr);
-    ErrorCheck(Allocating CPU queue pointers, err);
-    allow_access_to_all_gpu_agents(cpu_queue_ptr);
-    for (int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
-      (reinterpret_cast<hsa_queue_t **>(cpu_queue_ptr))[cpuq] =
-          cpu_queues[cpuq];
-    }
-  }
-  g_ke_args.cpu_queue_ptr = cpu_queue_ptr;
-
-  void *cpu_worker_signals = NULL;
-  if (g_ke_args.num_cpu_queues > 0) {
-    err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool, sizeof(hsa_signal_t) * g_ke_args.num_cpu_queues,
-        0, &cpu_worker_signals);
-    ErrorCheck(Allocating CPU queue iworker signals, err);
-    allow_access_to_all_gpu_agents(cpu_worker_signals);
-    for (int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
-      (reinterpret_cast<hsa_signal_t *>(cpu_worker_signals))[cpuq] =
-          *(get_worker_sig(cpu_queues[cpuq]));
-    }
-  }
-  g_ke_args.cpu_worker_signals = cpu_worker_signals;
-
-  void *kernarg_template_ptr = NULL;
-  int max_kernel_types = core::Runtime::getInstance().getMaxKernelTypes();
-  if (max_kernel_types > 0) {
-    // Allocate template space for shader kernels
-    err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool,
-        sizeof(atmi_kernel_enqueue_template_t) * max_kernel_types, 0,
-        &kernarg_template_ptr);
-    ErrorCheck(Allocating kernel argument template pointer, err);
-    allow_access_to_all_gpu_agents(kernarg_template_ptr);
-  }
-  g_ke_args.kernarg_template_ptr = kernarg_template_ptr;
-  g_ke_args.kernel_counter = 0;
-  return ATMI_STATUS_SUCCESS;
-}
-
 atmi_status_t Runtime::Initialize(atmi_devtype_t devtype) {
   if (atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
 
@@ -352,8 +258,6 @@ atmi_status_t Runtime::Initialize(atmi_devtype_t devtype) {
   atmi_taskgroup_handle_t tghandle;
   ATMIErrorCheck(Create default taskgroup, TaskGroupCreate(&tghandle));
 
-  ATMIErrorCheck(Device enqueue init, atmi_ke_init());
-
   atl_set_atmi_initialized();
   return ATMI_STATUS_SUCCESS;
 }
@@ -363,17 +267,6 @@ atmi_status_t Runtime::Finalize() {
   // regions
   hsa_status_t err;
   finalize_hsa();
-  // free up the kernel enqueue related data
-  for (int i = 0; i < g_ke_args.kernel_counter; i++) {
-    atmi_kernel_enqueue_template_t *ke_template =
-        &(reinterpret_cast<atmi_kernel_enqueue_template_t *>(
-            g_ke_args.kernarg_template_ptr))[i];
-    hsa_memory_free(ke_template->kernarg_regions);
-  }
-  hsa_memory_free(g_ke_args.kernarg_template_ptr);
-  hsa_memory_free(g_ke_args.cpu_queue_ptr);
-  hsa_memory_free(g_ke_args.cpu_worker_signals);
-  hsa_memory_free(g_ke_args.gpu_queue_ptr);
   for (int i = 0; i < g_executables.size(); i++) {
     err = hsa_executable_destroy(g_executables[i]);
     ErrorCheck(Destroying executable, err);

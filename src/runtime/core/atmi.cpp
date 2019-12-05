@@ -4,16 +4,27 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 #include <rt.h>
+#ifdef BUILD_WITH_DEVICE_RT
+#include "device_rt.h"
+#endif
 
 /*
  * Initialize/Finalize
  */
 atmi_status_t atmi_init(atmi_devtype_t devtype) {
+#ifdef BUILD_WITH_DEVICE_RT
+  return core::DeviceRuntime::getInstance().Initialize(devtype);
+#else
   return core::Runtime::getInstance().Initialize(devtype);
+#endif
 }
 
 atmi_status_t atmi_finalize() {
+#ifdef BUILD_WITH_DEVICE_RT
+  return core::DeviceRuntime::getInstance().Finalize();
+#else
   return core::Runtime::getInstance().Finalize();
+#endif
 }
 
 /*
@@ -49,13 +60,22 @@ atmi_status_t atmi_kernel_create(atmi_kernel_t *atmi_kernel, const int num_args,
                                  ...) {
   va_list arguments;
   va_start(arguments, num_impls);
+#ifdef BUILD_WITH_DEVICE_RT
+  return core::DeviceRuntime::getInstance().CreateKernel(
+      atmi_kernel, num_args, arg_sizes, num_impls, arguments);
+#else
   return core::Runtime::getInstance().CreateKernel(
       atmi_kernel, num_args, arg_sizes, num_impls, arguments);
+#endif
   va_end(arguments);
 }
 
 atmi_status_t atmi_kernel_release(atmi_kernel_t atmi_kernel) {
+#ifdef BUILD_WITH_DEVICE_RT
+  return core::DeviceRuntime::getInstance().ReleaseKernel(atmi_kernel);
+#else
   return core::Runtime::getInstance().ReleaseKernel(atmi_kernel);
+#endif
 }
 
 atmi_status_t atmi_kernel_create_empty(atmi_kernel_t *atmi_kernel,

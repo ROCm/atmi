@@ -80,7 +80,7 @@ if(ROCM_FOUND)
                 ${ROCM_LIBRARIES}
                 -L${ROCM_LIBRARIES_DIR}/../hsa/lib -L${ROCM_LIBRARIES_DIR}
                 -Wl,--enable-new-dtags
-                -Wl,-rpath,\$ORIGIN/../../hsa/lib -Wl,-rpath,\$ORIGIN/../../lib
+                -Wl,-rpath,\$ORIGIN/../hsa/lib -Wl,-rpath,\$ORIGIN/../lib
             )
        else()
             libatmi_runtime_say("Not building ATMI C Extension: GCC Plugin not found.")

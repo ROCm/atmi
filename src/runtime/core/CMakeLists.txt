@@ -126,6 +126,7 @@ target_link_libraries(
   -Wl,--enable-new-dtags
   -Wl,-rpath,\$ORIGIN/../../hsa/lib
   -Wl,-rpath,\$ORIGIN/../../lib
+  -Wl,-rpath,\$ORIGIN
 )
 
 # set output dir for .h files

@@ -6,7 +6,6 @@
 
 # Enable support for C++11.
 add_definitions(-std=c++11)
-
 # Find clang
 find_package(LLVM QUIET CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
@@ -120,9 +119,9 @@ target_link_libraries(
   -L${ROCM_LIBRARIES_DIR}
   -L${CMAKE_INSTALL_PREFIX}/lib -lamd_hostcall -Wl,-rpath,${CMAKE_INSTALL_PREFIX}/lib
   -Wl,--enable-new-dtags
+  -Wl,-rpath,\$ORIGIN
   -Wl,-rpath,\$ORIGIN/../../hsa/lib
   -Wl,-rpath,\$ORIGIN/../../lib
-  -Wl,-rpath,\$ORIGIN
 )
 
 # set output dir for .h files

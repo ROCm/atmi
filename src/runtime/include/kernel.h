@@ -68,7 +68,6 @@ class GPUKernelImpl : public KernelImpl {
   ~GPUKernelImpl();
 
   // accessors
-  virtual atmi_devtype_t devtype() const { return ATMI_DEVTYPE_GPU; }
 
  public:
   // size of the below vectors should equal the number of
@@ -90,7 +89,6 @@ class CPUKernelImpl : public KernelImpl {
   ~CPUKernelImpl();
 
   // accessors
-  virtual atmi_devtype_t devtype() const { return ATMI_DEVTYPE_CPU; }
   atmi_generic_fp function() const { return function_; }
 
  private:

@@ -13,19 +13,25 @@
 
 namespace core {
 
+#define DEFAULT_MAX_SIGNALS 1024
+#define DEFAULT_MAX_KERNEL_TYPES 32
+#define DEFAULT_NUM_GPU_QUEUES -1  // computed in code
+#define DEFAULT_NUM_CPU_QUEUES -1  // computed in code
+#define DEFAULT_DEBUG_MODE 0
+#define DEFAULT_PROFILE_MODE 0
 class Environment {
  public:
   Environment()
-      : max_signals_(24),
-        max_kernel_types_(32),
-        num_gpu_queues_(-1),
-        num_cpu_queues_(-1),
-        debug_mode_(0),
-        profile_mode_(0) {
+      : max_signals_(DEFAULT_MAX_SIGNALS),
+        max_kernel_types_(DEFAULT_MAX_KERNEL_TYPES),
+        num_gpu_queues_(DEFAULT_NUM_GPU_QUEUES),
+        num_cpu_queues_(DEFAULT_NUM_CPU_QUEUES),
+        debug_mode_(DEFAULT_DEBUG_MODE),
+        profile_mode_(DEFAULT_PROFILE_MODE) {
     GetEnvAll();
   }
 
-  virtual ~Environment() {}
+  ~Environment() {}
 
   void GetEnvAll();
 
@@ -77,7 +83,7 @@ class Runtime {
                                const int);
   // kernels
   virtual atmi_status_t CreateKernel(atmi_kernel_t *, const int, const size_t *,
-                             const int, va_list);
+                                     const int, va_list);
   virtual atmi_status_t ReleaseKernel(atmi_kernel_t);
   atmi_status_t CreateEmptyKernel(atmi_kernel_t *, const int, const size_t *);
   atmi_status_t AddGPUKernelImpl(atmi_kernel_t, const char *,
@@ -119,7 +125,7 @@ class Runtime {
   // TODO(ashwinma): int may change to enum if we have more profile modes
   int getProfileMode() const { return env_.getProfileMode(); }
 
-  #if 0
+#if 0
   bool initialized() const { return initialized_; }
   void set_initialized(const bool val) { initialized_ = val; }
 
@@ -135,16 +141,17 @@ class Runtime {
   bool tasks_initialized() const { return tasks_initialized_; }
   void set_tasks_initialized(const bool val) { tasks_initialized_ = val; }
 #endif
+
  protected:
   Runtime() = default;
   ~Runtime() = default;
   Runtime(const Runtime &) = delete;
   Runtime &operator=(const Runtime &) = delete;
-  //bool initialized_;
-  //bool hsa_initialized_;
-  //bool cpu_initialized_;
-  //bool gpu_initialized_;
-  //bool tasks_initialized_;
+  // bool initialized_;
+  // bool hsa_initialized_;
+  // bool cpu_initialized_;
+  // bool gpu_initialized_;
+  // bool tasks_initialized_;
 
  protected:
   // variable to track environment variables

@@ -91,12 +91,12 @@ typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
 
 /*  All global values go in this global structure */
 typedef struct atl_context_s {
-  int struct_initialized;
-  int g_cpu_initialized;
-  int g_hsa_initialized;
-  int g_gpu_initialized;
-  int g_tasks_initialized;
-  int g_mutex_dag_initialized;
+  bool struct_initialized;
+  bool g_cpu_initialized;
+  bool g_hsa_initialized;
+  bool g_gpu_initialized;
+  bool g_tasks_initialized;
+  bool g_mutex_dag_initialized;
 } atl_context_t;
 extern atl_context_t atlc;
 extern atl_context_t *atlc_p;

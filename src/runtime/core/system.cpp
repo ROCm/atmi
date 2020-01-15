@@ -204,7 +204,7 @@ int context_init_time_init = 0;
 
 */
 
-atl_context_t atlc = {.struct_initialized = 0};
+atl_context_t atlc = {.struct_initialized = false};
 atl_context_t *atlc_p = NULL;
 
 hsa_signal_t IdentityORSignal;
@@ -271,9 +271,9 @@ atmi_status_t Runtime::Finalize() {
     err = hsa_executable_destroy(g_executables[i]);
     ErrorCheck(Destroying executable, err);
   }
-  if (atlc.g_cpu_initialized == 1) {
+  if (atlc.g_cpu_initialized == true) {
     agent_fini();
-    atlc.g_cpu_initialized = 0;
+    atlc.g_cpu_initialized = false;
   }
 
   for (int i = 0; i < SymbolInfoTable.size(); i++) {
@@ -318,11 +318,11 @@ atmi_status_t Runtime::Finalize() {
 
 void atmi_init_context_structs() {
   atlc_p = &atlc;
-  atlc.struct_initialized = 1; /* This only gets called one time */
-  atlc.g_cpu_initialized = 0;
-  atlc.g_hsa_initialized = 0;
-  atlc.g_gpu_initialized = 0;
-  atlc.g_tasks_initialized = 0;
+  atlc.struct_initialized = true; /* This only gets called one time */
+  atlc.g_cpu_initialized = false;
+  atlc.g_hsa_initialized = false;
+  atlc.g_gpu_initialized = false;
+  atlc.g_tasks_initialized = false;
 }
 
 atmi_status_t atl_init_context() {
@@ -738,7 +738,7 @@ hsa_status_t init_comute_and_memory() {
 }
 
 hsa_status_t init_hsa() {
-  if (atlc.g_hsa_initialized == 0) {
+  if (atlc.g_hsa_initialized == false) {
     DEBUG_PRINT("Initializing HSA...");
     hsa_status_t err = hsa_init();
     ErrorCheck(Initializing the hsa runtime, err);
@@ -752,7 +752,7 @@ hsa_status_t init_hsa() {
     SymbolInfoTable.clear();
     for (int i = 0; i < KernelInfoTable.size(); i++) KernelInfoTable[i].clear();
     KernelInfoTable.clear();
-    atlc.g_hsa_initialized = 1;
+    atlc.g_hsa_initialized = true;
     DEBUG_PRINT("done\n");
   }
   return HSA_STATUS_SUCCESS;
@@ -761,7 +761,7 @@ hsa_status_t init_hsa() {
 hsa_status_t finalize_hsa() { return HSA_STATUS_SUCCESS; }
 
 void init_tasks() {
-  if (atlc.g_tasks_initialized != 0) return;
+  if (atlc.g_tasks_initialized != false) return;
   hsa_status_t err;
   int task_num;
   std::vector<hsa_agent_t> gpu_agents;
@@ -795,11 +795,12 @@ void init_tasks() {
   err = hsa_signal_create(0, 0, NULL, &IdentityCopySignal);
   ErrorCheck(Creating a HSA signal, err);
   DEBUG_PRINT("Signal Pool Size: %lu\n", FreeSignalPool.size());
-  atlc.g_tasks_initialized = 1;
+  atlc.g_tasks_initialized = true;
 }
 
 hsa_status_t callbackEvent(const hsa_amd_event_t *event, void *data) {
-#if (ROCM_VERSION_MAJOR >= 3) || (ROCM_VERSION_MAJOR >= 2 && ROCM_VERSION_MINOR >= 3)
+#if (ROCM_VERSION_MAJOR >= 3) || \
+    (ROCM_VERSION_MAJOR >= 2 && ROCM_VERSION_MINOR >= 3)
   if (event->event_type == HSA_AMD_GPU_MEMORY_FAULT_EVENT) {
 #else
   if (event->event_type == GPU_MEMORY_FAULT_EVENT) {
@@ -838,8 +839,8 @@ hsa_status_t callbackEvent(const hsa_amd_event_t *event, void *data) {
 }
 
 atmi_status_t atl_init_gpu_context() {
-  if (atlc.struct_initialized == 0) atmi_init_context_structs();
-  if (atlc.g_gpu_initialized != 0) return ATMI_STATUS_SUCCESS;
+  if (atlc.struct_initialized == false) atmi_init_context_structs();
+  if (atlc.g_gpu_initialized != false) return ATMI_STATUS_SUCCESS;
 
   hsa_status_t err;
   err = init_hsa();
@@ -866,14 +867,14 @@ atmi_status_t atl_init_gpu_context() {
     ErrorCheck(Registering the system for memory faults, err);
 
     init_tasks();
-    atlc.g_gpu_initialized = 1;
+    atlc.g_gpu_initialized = true;
     return ATMI_STATUS_SUCCESS;
 }
 
 atmi_status_t atl_init_cpu_context() {
-  if (atlc.struct_initialized == 0) atmi_init_context_structs();
+  if (atlc.struct_initialized == false) atmi_init_context_structs();
 
-  if (atlc.g_cpu_initialized != 0) return ATMI_STATUS_SUCCESS;
+  if (atlc.g_cpu_initialized != false) return ATMI_STATUS_SUCCESS;
 
   hsa_status_t err;
   err = init_hsa();
@@ -897,7 +898,7 @@ atmi_status_t atl_init_cpu_context() {
   }
 
   init_tasks();
-  atlc.g_cpu_initialized = 1;
+  atlc.g_cpu_initialized = true;
   return ATMI_STATUS_SUCCESS;
 }
 
@@ -1848,4 +1849,3 @@ atmi_status_t Runtime::RegisterModule(const char **filenames,
   return status;
 }
 }  // namespace core
-

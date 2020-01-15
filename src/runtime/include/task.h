@@ -18,7 +18,7 @@ using TaskImplVecTy = std::vector<TaskImpl *>;
 class TaskImpl {
  public:
   TaskImpl();
-  ~TaskImpl();
+  virtual ~TaskImpl();
 
   virtual atl_task_type_t type() const = 0;
   void set_state(const atmi_state_t state);
@@ -119,7 +119,7 @@ class ComputeTaskImpl : public TaskImpl {
   // and activation.
   explicit ComputeTaskImpl(Kernel *kernel);
   ComputeTaskImpl(atmi_lparm_t *lparm, Kernel *kernel, int kernel_id);
-  ~ComputeTaskImpl();
+  ~ComputeTaskImpl() {}
 
   atl_task_type_t type() const override { return ATL_KERNEL_EXECUTION; };
 
@@ -157,7 +157,7 @@ class DataTaskImpl : public TaskImpl {
  public:
   DataTaskImpl(atmi_cparm_t *lparm, void *dest, const void *src,
                const size_t size);
-  ~DataTaskImpl();
+  ~DataTaskImpl() {}
 
   atl_task_type_t type() const override { return ATL_DATA_MOVEMENT; };
 

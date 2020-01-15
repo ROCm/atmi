@@ -455,18 +455,18 @@ void DataTaskImpl::acquireAqlPacket() {
   void *temp_host_ptr;
   const void *src_ptr = src;
   void *dest_ptr = dest;
-  volatile unsigned type;
+  volatile Direction type;
   if (is_src_host && is_dest_host) {
-    type = ATMI_H2H;
+    type = Direction::ATMI_H2H;
   } else if (src_data && !dest_data) {
-    type = ATMI_D2H;
+    type = Direction::ATMI_D2H;
   } else if (!src_data && dest_data) {
-    type = ATMI_H2D;
+    type = Direction::ATMI_H2D;
   } else {
-    type = ATMI_D2D;
+    type = Direction::ATMI_D2D;
   }
 
-  if (type == ATMI_H2D || type == ATMI_D2H)
+  if (type == Direction::ATMI_H2D || type == Direction::ATMI_D2H)
     hsa_signal_add_acq_rel(signal_, 2);
   else
     hsa_signal_add_acq_rel(signal_, 1);
@@ -531,27 +531,27 @@ atmi_status_t DataTaskImpl::dispatch() {
   void *temp_host_ptr;
   const void *src_ptr = src;
   void *dest_ptr = dest;
-  volatile unsigned type;
+  volatile Direction type;
   if (is_src_host && is_dest_host) {
-    type = ATMI_H2H;
+    type = Direction::ATMI_H2H;
     src_agent = cpu_agent;
     dest_agent = cpu_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else if (src_data && !dest_data) {
-    type = ATMI_D2H;
+    type = Direction::ATMI_D2H;
     src_agent = get_mem_agent(src_data->place());
     dest_agent = src_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else if (!src_data && dest_data) {
-    type = ATMI_H2D;
+    type = Direction::ATMI_H2D;
     dest_agent = get_mem_agent(dest_data->place());
     src_agent = dest_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else {
-    type = ATMI_D2D;
+    type = Direction::ATMI_D2D;
     src_agent = get_mem_agent(src_data->place());
     dest_agent = get_mem_agent(dest_data->place());
     src_ptr = src;
@@ -560,7 +560,7 @@ atmi_status_t DataTaskImpl::dispatch() {
   DEBUG_PRINT("Memcpy source agent: %lu\n", src_agent.handle);
   DEBUG_PRINT("Memcpy dest agent: %lu\n", dest_agent.handle);
 
-  if (type == ATMI_H2D || type == ATMI_D2H) {
+  if (type == Direction::ATMI_H2D || type == Direction::ATMI_D2H) {
     if (groupable_ == ATMI_TRUE) {
       lock(&(taskgroup_obj->group_mutex_));
       // barrier pkt already sets the signal values when the signal resource
@@ -574,7 +574,7 @@ atmi_status_t DataTaskImpl::dispatch() {
     // for H2H copy to setup the device copy.
     std::thread(
         [](void *dst, const void *src, size_t size, hsa_agent_t agent,
-           unsigned type, atmi_mem_place_t cpu, hsa_signal_t signal,
+           Direction type, atmi_mem_place_t cpu, hsa_signal_t signal,
            std::vector<hsa_signal_t> dep_signals, TaskImpl *task) {
           atmi_status_t ret;
           hsa_status_t err;
@@ -584,7 +584,7 @@ atmi_status_t DataTaskImpl::dispatch() {
           const void *src_ptr = src;
           void *dest_ptr = dst;
           ret = atmi_malloc(&temp_host_ptr, size, cpu);
-          if (type == ATMI_H2D) {
+          if (type == Direction::ATMI_H2D) {
             memcpy(temp_host_ptr, src, size);
             src_ptr = (const void *)temp_host_ptr;
             dest_ptr = dst;
@@ -610,7 +610,7 @@ atmi_status_t DataTaskImpl::dispatch() {
           hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 1,
                                   UINT64_MAX, ATMI_WAIT_STATE);
           // cleanup for D2H and H2D
-          if (type == ATMI_D2H) {
+          if (type == Direction::ATMI_D2H) {
             memcpy(dst, temp_host_ptr, size);
           }
           atmi_free(temp_host_ptr);
@@ -681,9 +681,9 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
   void *temp_host_ptr;
   const void *src_ptr = src;
   void *dest_ptr = dest;
-  volatile unsigned type;
+  volatile Direction type;
   if (src_data && !dest_data) {
-    type = ATMI_D2H;
+    type = Direction::ATMI_D2H;
     src_agent = get_mem_agent(src_data->place());
     dest_agent = src_agent;
     // dest_agent = cpu_agent; // FIXME: can the two agents be the GPU agent
@@ -694,7 +694,7 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     src_ptr = src;
     dest_ptr = temp_host_ptr;
   } else if (!src_data && dest_data) {
-    type = ATMI_H2D;
+    type = Direction::ATMI_H2D;
     dest_agent = get_mem_agent(dest_data->place());
     // src_agent = cpu_agent; // FIXME: can the two agents be the GPU agent
     // itself?
@@ -708,13 +708,13 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     src_ptr = (const void *)temp_host_ptr;
     dest_ptr = dest;
   } else if (!src_data && !dest_data) {
-    type = ATMI_H2H;
+    type = Direction::ATMI_H2H;
     src_agent = cpu_agent;
     dest_agent = cpu_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else {
-    type = ATMI_D2D;
+    type = Direction::ATMI_D2D;
     src_agent = get_mem_agent(src_data->place());
     dest_agent = get_mem_agent(dest_data->place());
     src_ptr = src;
@@ -731,10 +731,10 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
                           UINT64_MAX, ATMI_WAIT_STATE);
 
   // cleanup for D2H and H2D
-  if (type == ATMI_D2H) {
+  if (type == Direction::ATMI_D2H) {
     memcpy(dest, temp_host_ptr, size);
     ret = atmi_free(temp_host_ptr);
-  } else if (type == ATMI_H2D) {
+  } else if (type == Direction::ATMI_H2D) {
     ret = atmi_free(temp_host_ptr);
   }
   if (err != HSA_STATUS_SUCCESS || ret != ATMI_STATUS_SUCCESS)

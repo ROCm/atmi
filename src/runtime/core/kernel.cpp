@@ -138,13 +138,18 @@ atmi_status_t Runtime::AddCPUKernelImpl(atmi_kernel_t atmi_kernel,
 }
 
 KernelImpl::KernelImpl(unsigned int id, const std::string &name,
-                       atmi_platform_type_t platform_type, const Kernel &kernel)
-    : id_(id), name_(name), platform_type_(platform_type), kernel_(kernel) {}
+                       atmi_platform_type_t platform_type, const Kernel &kernel,
+                       atmi_devtype_t devtype = ATMI_DEVTYPE_ALL)
+    : id_(id),
+      name_(name),
+      platform_type_(platform_type),
+      kernel_(kernel),
+      devtype_(devtype) {}
 
 GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
                              atmi_platform_type_t platform_type,
                              const Kernel &kernel)
-    : KernelImpl(id, name, platform_type, kernel) {
+    : KernelImpl(id, name, platform_type, kernel, ATMI_DEVTYPE_GPU) {
   std::vector<ATLGPUProcessor> &gpu_procs =
       g_atl_machine.processors<ATLGPUProcessor>();
   int gpu_count = gpu_procs.size();
@@ -220,7 +225,8 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
 CPUKernelImpl::CPUKernelImpl(unsigned int id, const std::string &name,
                              atmi_platform_type_t platform_type,
                              atmi_generic_fp function, const Kernel &kernel)
-    : KernelImpl(id, name, platform_type, kernel), function_(function) {
+    : KernelImpl(id, name, platform_type, kernel, ATMI_DEVTYPE_CPU),
+      function_(function) {
   /* create kernarg memory */
   uint32_t kernarg_size = 0;
   // extract arg offsets out and pass as arg to KernelImpl constructor or
@@ -314,7 +320,7 @@ int Kernel::getKernelImplId(atmi_lparm_t *lparm) {
     }
     if (kernel_id == -1) {
       fprintf(stderr,
-              "ERROR: Kernel/PIF %lu doesn't have any implementations\n", id_);
+              "ERROR: Kernel/PIF %lu doesn't have any implementations\n", id());
       return -1;
     }
   } else {

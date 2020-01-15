@@ -19,11 +19,12 @@ class KernelImpl {
  public:
   // constructor/destructor
   KernelImpl(unsigned int id, const std::string& name,
-             atmi_platform_type_t platform_type, const Kernel& kernel);
+             atmi_platform_type_t platform_type, const Kernel& kernel,
+             atmi_devtype_t devtype);
   virtual ~KernelImpl();
 
   // accessors
-  virtual atmi_devtype_t devtype() const { return ATMI_DEVTYPE_ALL; }
+  atmi_devtype_t devtype() const { return devtype_; }
   unsigned int id() const { return id_; }
   std::string name() const { return name_; }
   atmi_platform_type_t platform_type() const { return platform_type_; }
@@ -46,6 +47,7 @@ class KernelImpl {
   // user-specified ID from the impls index?
   unsigned int id_;
   std::string name_;
+  atmi_devtype_t devtype_;
   atmi_platform_type_t platform_type_;
   // reference to parent kernel
   const Kernel& kernel_;
@@ -111,6 +113,7 @@ class Kernel {
                                   atmi_generic_fp fn);
   */
   // accessors
+  uint64_t id() const { return id_; }
   int num_args() const { return num_args_; }
   std::vector<size_t>& arg_sizes() { return arg_sizes_; }
   const std::vector<size_t>& arg_sizes() const { return arg_sizes_; }
@@ -123,10 +126,10 @@ class Kernel {
   int getKernelIdMapIndex(unsigned int kernel_id);
   int getKernelImplId(atmi_lparm_t* lparm);
 
+ private:
   // ID
   uint64_t id_;
 
- private:
   int num_args_;
   std::vector<size_t> arg_sizes_;
   std::vector<KernelImpl*> impls_;

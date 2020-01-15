@@ -81,10 +81,17 @@ class TaskgroupImpl {
   hsa_signal_t group_signal_;
   std::atomic<unsigned int> task_count_;
   pthread_mutex_t group_mutex_;
+  // the below vectors are collections of tasks of
+  // a certain type (grouped or ordered).
+  // TODO(ashwinma): check if some of the below containers
+  // can be removed
   std::deque<TaskImpl *> running_ordered_tasks_;
   std::vector<TaskImpl *> running_default_tasks_;
   std::vector<TaskImpl *> running_groupable_tasks_;
 
+  // the below vectors are needed by task dependency
+  // resolution logic where tasks are moved from one
+  // queue to another depending on their execution state
   std::deque<TaskImpl *> created_tasks_;
   std::vector<TaskImpl *> dispatched_tasks_;
   std::set<TaskImpl *> dispatched_sink_tasks_;

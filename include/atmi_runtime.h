@@ -18,22 +18,6 @@
  * @{
  */
 /**
- * @brief Opaque handle representing an ATMI Kernel.
- *
- * @details ATMI kernels are instantiated in two steps. First, an empty kernel
- * is
- * created. Next, architecture specific implementations are added. Each kernel
- * can have several implementations, but should have at least one implementation
- *
- */
-typedef struct atmi_kernel_s {
-  /**
-   * Opaque handle.
-   */
-  uint64_t handle;
-} atmi_kernel_t;
-
-/**
  * @brief A generic function pointer representing CPU tasks.
  */
 typedef void (*atmi_generic_fp)(void);
@@ -176,6 +160,20 @@ atmi_machine_t *atmi_machine_get_info();
 /** \defgroup kernel ATMI Kernel and Implementation
  * @{
  */
+/**
+ * @brief Opaque handle representing an ATMI Kernel.
+ *
+ * @details ATMI kernels can have several architecture-specific implementations,
+ * but should have at least one implementation.
+ *
+ */
+typedef struct atmi_kernel_s {
+  /**
+   * Opaque handle.
+   */
+  uint64_t handle;
+} atmi_kernel_t;
+
 /**
  * @brief Create an kernel opaque structure with all its architecture
  * specific implementations.

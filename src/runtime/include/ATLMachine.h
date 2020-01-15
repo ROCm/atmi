@@ -15,8 +15,9 @@ class ATLMemory;
 
 class ATLProcessor {
  public:
-  explicit ATLProcessor(hsa_agent_t agent)
-      : next_best_queue_id_(0), agent_(agent) {
+  explicit ATLProcessor(hsa_agent_t agent,
+                        atmi_devtype_t type = ATMI_DEVTYPE_ALL)
+      : next_best_queue_id_(0), agent_(agent), type_(type) {
     queues_.clear();
     memories_.clear();
   }
@@ -26,7 +27,7 @@ class ATLProcessor {
   // just once in the program?
   // void removeMemory(ATLMemory &p);
   const std::vector<ATLMemory> &memories() const;
-  virtual atmi_devtype_t type() { return ATMI_DEVTYPE_ALL; }
+  atmi_devtype_t type() const { return type_; }
 
   virtual void createQueues(const int count) {}
   virtual void destroyQueues();
@@ -38,6 +39,7 @@ class ATLProcessor {
 
  protected:
   hsa_agent_t agent_;
+  atmi_devtype_t type_;
   std::vector<hsa_queue_t *> queues_;
   // schedule queues by setting this to best queue ID
   unsigned int next_best_queue_id_;
@@ -46,10 +48,10 @@ class ATLProcessor {
 
 class ATLCPUProcessor : public ATLProcessor {
  public:
-  explicit ATLCPUProcessor(hsa_agent_t agent) : ATLProcessor(agent) {
+  explicit ATLCPUProcessor(hsa_agent_t agent)
+      : ATLProcessor(agent, ATMI_DEVTYPE_CPU) {
     thread_agents_.clear();
   }
-  atmi_devtype_t type() const { return ATMI_DEVTYPE_CPU; }
   void createQueues(const int count);
 
   thread_agent_t *getThreadAgentAt(const int index);
@@ -67,20 +69,14 @@ class ATLGPUProcessor : public ATLProcessor {
  public:
   explicit ATLGPUProcessor(hsa_agent_t agent,
                            atmi_devtype_t type = ATMI_DEVTYPE_dGPU)
-      : ATLProcessor(agent) {
-    type_ = type;
-  }
-  atmi_devtype_t type() const { return type_; }
+      : ATLProcessor(agent, type) {}
   void createQueues(const int count);
-
- private:
-  atmi_devtype_t type_;
 };
 
 class ATLDSPProcessor : public ATLProcessor {
  public:
-  explicit ATLDSPProcessor(hsa_agent_t agent) : ATLProcessor(agent) {}
-  atmi_devtype_t type() const { return ATMI_DEVTYPE_DSP; }
+  explicit ATLDSPProcessor(hsa_agent_t agent)
+      : ATLProcessor(agent, ATMI_DEVTYPE_DSP) {}
   void createQueues(const int count);
 };
 

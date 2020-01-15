@@ -19,6 +19,8 @@
 // Until then, we maintain our own mapping of device addr to a user specified
 // data object
 namespace core {
+// Internal representation of any data that is created and managed by ATMI.
+// Data can be located on any device memory or host memory.
 class ATLData {
  public:
   ATLData(void *ptr, size_t size, atmi_mem_place_t place, atmi_arg_type_t type)
@@ -58,7 +60,8 @@ struct ATLMemoryRange {
   const void *end_pointer;
   ATLMemoryRange(const void *bp, size_t size_bytes)
       : base_pointer(bp),
-        end_pointer((const unsigned char *)bp + size_bytes - 1) {}
+        end_pointer(reinterpret_cast<const unsigned char *>(bp) + size_bytes -
+                    1) {}
 };
 
 // Functor to compare ranges:
@@ -96,7 +99,7 @@ class ATLPointerTracker {
 extern ATLPointerTracker g_data_map;  // Track all am pointer allocations.
 #endif
 
-enum { ATMI_H2D = 0, ATMI_D2H = 1, ATMI_D2D = 2, ATMI_H2H = 3 };
+enum class Direction { ATMI_H2D, ATMI_D2H, ATMI_D2D, ATMI_H2H };
 
 hsa_agent_t get_mem_agent(atmi_mem_place_t place);
 hsa_agent_t get_compute_agent(atmi_place_t place);

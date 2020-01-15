@@ -3,12 +3,13 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
+#include "device_rt.h"
+#include <map>
+#include <vector>
+#include "ATLMachine.h"
 #include "atl_internal.h"
 #include "atmi_kl.h"
-#include "device_rt.h"
 #include "kernel.h"
-#include "ATLMachine.h"
-#include <vector>
 
 extern ATLMachine g_atl_machine;
 extern std::map<uint64_t, core::Kernel *> KernelImplMap;
@@ -146,8 +147,10 @@ atmi_status_t DeviceRuntime::Finalize() {
 }
 
 atmi_status_t DeviceRuntime::CreateKernel(atmi_kernel_t *atmi_kernel,
-                                    const int num_args, const size_t *arg_sizes,
-                                    const int num_impls, va_list arguments) {
+                                          const int num_args,
+                                          const size_t *arg_sizes,
+                                          const int num_impls,
+                                          va_list arguments) {
   va_list dup_arguments;
   va_copy(dup_arguments, arguments);
   atmi_status_t status = Runtime::CreateKernel(atmi_kernel, num_args, arg_sizes,
@@ -165,7 +168,7 @@ atmi_status_t DeviceRuntime::CreateKernel(atmi_kernel_t *atmi_kernel,
     atmi_devtype_t devtype = (atmi_devtype_t)va_arg(arguments, int);
     if (devtype == ATMI_DEVTYPE_GPU) {
       has_gpu_impl = true;
-    } 
+    }
     size_t this_kernarg_segment_size =
         kernel->impls()[impl_id]->kernarg_segment_size();
     if (this_kernarg_segment_size > max_kernarg_segment_size)

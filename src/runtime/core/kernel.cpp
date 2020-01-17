@@ -247,6 +247,12 @@ CPUKernelImpl::CPUKernelImpl(unsigned int id, const std::string &name,
 }
 
 KernelImpl::~KernelImpl() {
+  // wait for all task instances of all kernel_impl of this kernel
+  for (auto &task : launched_tasks_) {
+    if (task->state() < ATMI_COMPLETED) task->wait();
+  }
+  launched_tasks_.clear();
+
   arg_offsets_.clear();
   clear_container(&free_kernarg_segments_);
 }

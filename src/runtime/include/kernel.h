@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include "atl_internal.h"
+#include "task.h"
 
 namespace core {
 class Kernel;
@@ -41,6 +42,8 @@ class KernelImpl {
   pthread_mutex_t& mutex() { return mutex_; }
 
   std::vector<uint64_t>& arg_offsets() { return arg_offsets_; }
+
+  std::vector<TaskImpl*>& launched_tasks() { return launched_tasks_; }
   // functions
  protected:
   // FIXME: would anyone need to reverse engineer the
@@ -58,7 +61,11 @@ class KernelImpl {
   void* kernarg_region_;
   std::queue<int> free_kernarg_segments_;
   uint32_t kernarg_segment_size_;  // differs for CPU vs GPU
-};                                 // class KernelImpl
+
+  // potential running tasks that may need to be waited upon for
+  // completion so that we can reclaim all their resources cleanly
+  std::vector<TaskImpl*> launched_tasks_;
+};  // class KernelImpl
 
 class GPUKernelImpl : public KernelImpl {
  public:

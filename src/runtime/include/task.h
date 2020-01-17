@@ -22,6 +22,7 @@ class TaskImpl {
 
   virtual atl_task_type_t type() const = 0;
   void set_state(const atmi_state_t state);
+  atmi_state_t state() const { return state_; }
   void updateMetrics();
   void wait();
 

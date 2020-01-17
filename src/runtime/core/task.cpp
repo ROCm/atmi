@@ -1407,6 +1407,10 @@ bool TaskImpl::tryDispatchBarrierPacket(void **args, TaskImpl **returned_task) {
       task->signal_ = taskgroup_obj_->signal();
     }
     if (compute_task) {
+      // add itself to its kernel implementation's list of tasks
+      // so that it can be waited upon for completion when the kernel
+      // is terminated
+      kernel_impl->launched_tasks().push_back(compute_task);
       // get kernarg resource
       uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size();
       int free_idx = kernel_impl->free_kernarg_segments().front();
@@ -1676,6 +1680,10 @@ bool TaskImpl::tryDispatchHostCallback(void **args) {
       // unlock(&mutex_readyq_);
     }
     if (compute_task) {
+      // add itself to its kernel implementation's list of tasks
+      // so that it can be waited upon for completion when the kernel
+      // is terminated
+      kernel_impl->launched_tasks().push_back(compute_task);
       // get kernarg resource
       uint32_t kernarg_segment_size = kernel_impl->kernarg_segment_size();
       int free_idx = kernel_impl->free_kernarg_segments().front();

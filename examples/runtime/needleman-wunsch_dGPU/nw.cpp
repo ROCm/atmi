@@ -465,7 +465,6 @@ int main(int argc, char **argv){
     }
   }
   ErrorCheck(atmi_task_wait(nw_tasks[last_task_index]));
-  //SYNC_STREAM(NULL);
   /* end of timing point */
   stopwatch_stop(&sw);
   printf("Time consumed(ms): %lf\n", 1000*get_interval_by_sec(&sw));

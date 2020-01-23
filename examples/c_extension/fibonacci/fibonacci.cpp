@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <string.h>
-#include "atmi.h"
+#include "atmi_c_ext.h"
 
 using namespace std;
 

@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <unistd.h>
-#include "atmi.h"
+#include "atmi_c_ext.h"
 using namespace std;
 typedef int TYPE;
 

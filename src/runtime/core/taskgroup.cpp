@@ -1,7 +1,7 @@
 #include "taskgroup.h"
-#include "RealTimerClass.h"
 #include <cassert>
-using namespace Global;
+#include "RealTimerClass.h"
+using core::RealTimer;
 extern RealTimer TaskWaitTimer;
 
 /* Taskgroup specific globals */
@@ -15,29 +15,29 @@ namespace core {
  * pool of tasks for synchronization if need be */
 std::vector<core::TaskgroupImpl *> AllTaskgroups;
 
-TaskgroupImpl *get_taskgroup_impl(atmi_taskgroup_handle_t t) {
-    TaskgroupImpl *taskgroup_obj = NULL;
-    lock(&mutex_all_tasks_);
-    if(t < AllTaskgroups.size()) {
-      taskgroup_obj = AllTaskgroups[t];
-    }
-    unlock(&mutex_all_tasks_);
-    return taskgroup_obj;
+TaskgroupImpl *getTaskgroupImpl(atmi_taskgroup_handle_t t) {
+  TaskgroupImpl *taskgroup_obj = NULL;
+  lock(&mutex_all_tasks_);
+  if (t < AllTaskgroups.size()) {
+    taskgroup_obj = AllTaskgroups[t];
+  }
+  unlock(&mutex_all_tasks_);
+  return taskgroup_obj;
 }
 
 atmi_status_t Runtime::TaskGroupCreate(atmi_taskgroup_handle_t *group_handle,
-                              bool ordered,
-                              atmi_place_t place) {
+                                       bool ordered, atmi_place_t place) {
   atmi_status_t status = ATMI_STATUS_ERROR;
-  if(group_handle) {
+  if (group_handle) {
     TaskgroupImpl *taskgroup_obj = new TaskgroupImpl(ordered, place);
     // add to global taskgroup vector
     lock(&mutex_all_tasks_);
     AllTaskgroups.push_back(taskgroup_obj);
     // the below assert is always true because we insert into the
     // vector but dont delete that slot upon release.
-    assert((AllTaskgroups.size()-1)==taskgroup_obj->_id && "Taskgroup ID and vec size mismatch");
-    *group_handle = taskgroup_obj->_id;
+    assert((AllTaskgroups.size() - 1) == taskgroup_obj->id_ &&
+           "Taskgroup ID and vec size mismatch");
+    *group_handle = taskgroup_obj->id_;
     unlock(&mutex_all_tasks_);
     status = ATMI_STATUS_SUCCESS;
   }
@@ -46,8 +46,8 @@ atmi_status_t Runtime::TaskGroupCreate(atmi_taskgroup_handle_t *group_handle,
 
 atmi_status_t Runtime::TaskGroupRelease(atmi_taskgroup_handle_t group_handle) {
   atmi_status_t status = ATMI_STATUS_ERROR;
-  TaskgroupImpl *taskgroup_obj = get_taskgroup_impl(group_handle);
-  if(taskgroup_obj) {
+  TaskgroupImpl *taskgroup_obj = getTaskgroupImpl(group_handle);
+  if (taskgroup_obj) {
     lock(&mutex_all_tasks_);
     delete taskgroup_obj;
     AllTaskgroups[group_handle] = NULL;
@@ -58,54 +58,56 @@ atmi_status_t Runtime::TaskGroupRelease(atmi_taskgroup_handle_t group_handle) {
 }
 
 atmi_status_t Runtime::TaskGroupSync(atmi_taskgroup_handle_t group_handle) {
-  TaskgroupImpl *taskgroup_obj = get_taskgroup_impl(group_handle);
-  TaskWaitTimer.Start();
-  if(taskgroup_obj)
+  TaskgroupImpl *taskgroup_obj = getTaskgroupImpl(group_handle);
+  TaskWaitTimer.start();
+  if (taskgroup_obj)
     taskgroup_obj->sync();
   else
     DEBUG_PRINT("Waiting for invalid task group signal!\n");
-  TaskWaitTimer.Stop();
+  TaskWaitTimer.stop();
   return ATMI_STATUS_SUCCESS;
 }
 
 void TaskgroupImpl::sync() {
-  DEBUG_PRINT("Waiting for %u group tasks to complete\n", _task_count.load());
+  DEBUG_PRINT("Waiting for %u group tasks to complete\n", task_count_.load());
   // if tasks are groupable
-  while(_task_count.load() != 0) {}
-
-  if(_ordered == ATMI_TRUE) {
-    // if tasks are ordered, just wait for the last launched/created task in this group
-    atl_task_wait(_last_task);
-    lock(&(_group_mutex));
-    _last_task = NULL;
-    unlock(&(_group_mutex));
+  while (task_count_.load() != 0) {
   }
-  else {
-    // if tasks are neither groupable or ordered, wait for every task in the taskgroup
-    for(atl_task_t *task : _running_default_tasks) {
-      atl_task_wait(task);
+
+  if (ordered_ == ATMI_TRUE) {
+    // if tasks are ordered, just wait for the last launched/created task in
+    // this group
+    last_task_->wait();
+    lock(&(group_mutex_));
+    last_task_ = NULL;
+    unlock(&(group_mutex_));
+  } else {
+    // if tasks are neither groupable or ordered, wait for every task in the
+    // taskgroup
+    for (auto task : running_default_tasks_) {
+      task->wait();
     }
   }
   clearSavedTasks();
 }
 
 atmi_status_t TaskgroupImpl::clearSavedTasks() {
-    lock(&_group_mutex);
-    _running_ordered_tasks.clear();
-    _running_default_tasks.clear();
-    _running_groupable_tasks.clear();
-    unlock(&_group_mutex);
-    return ATMI_STATUS_SUCCESS;
+  lock(&group_mutex_);
+  running_ordered_tasks_.clear();
+  running_default_tasks_.clear();
+  running_groupable_tasks_.clear();
+  unlock(&group_mutex_);
+  return ATMI_STATUS_SUCCESS;
 }
 
 int TaskgroupImpl::getBestQueueID(atmi_scheduler_t sched) {
   int ret = 0;
-  switch(sched) {
+  switch (sched) {
     case ATMI_SCHED_NONE:
-      ret = __atomic_load_n(&_next_best_queue_id, __ATOMIC_ACQUIRE);
+      ret = __atomic_load_n(&next_best_queue_id_, __ATOMIC_ACQUIRE);
       break;
     case ATMI_SCHED_RR:
-      ret = __atomic_fetch_add(&_next_best_queue_id, 1, __ATOMIC_ACQ_REL);
+      ret = __atomic_fetch_add(&next_best_queue_id_, 1, __ATOMIC_ACQ_REL);
       break;
   }
   return ret;
@@ -113,54 +115,56 @@ int TaskgroupImpl::getBestQueueID(atmi_scheduler_t sched) {
 
 /*
  * do not use the below because they will not work if we want to sort mutexes
-atmi_status_t get_taskgroup_mutex(atl_taskgroup_t *taskgroup_obj, pthread_mutex_t *m) {
+atmi_status_t get_taskgroup_mutex(atl_taskgroup_t *taskgroup_obj,
+pthread_mutex_t *m) {
     *m = taskgroup_obj->group_mutex;
     return ATMI_STATUS_SUCCESS;
 }
 
-atmi_status_t set_taskgroup_mutex(atl_taskgroup_t *taskgroup_obj, pthread_mutex_t *m) {
+atmi_status_t set_taskgroup_mutex(atl_taskgroup_t *taskgroup_obj,
+pthread_mutex_t *m) {
     taskgroup_obj->group_mutex = *m;
     return ATMI_STATUS_SUCCESS;
 }
 */
 
 // constructor
-core::TaskgroupImpl::TaskgroupImpl(bool ordered, atmi_place_t place) :
-  _ordered(ordered),
-  _place(place),
-  _next_best_queue_id(0),
-  _last_task(NULL),
-  _cpu_queue(NULL),
-  _gpu_queue(NULL)
-{
+core::TaskgroupImpl::TaskgroupImpl(bool ordered, atmi_place_t place)
+    : ordered_(ordered),
+      first_created_tasks_dispatched_(false),
+      place_(place),
+      next_best_queue_id_(0),
+      last_task_(NULL),
+      cpu_queue_(NULL),
+      gpu_queue_(NULL) {
   static unsigned int taskgroup_id = 0;
-  _id = taskgroup_id++;
+  id_ = taskgroup_id++;
 
-  _running_groupable_tasks.clear();
-  _running_ordered_tasks.clear();
-  _running_default_tasks.clear();
-  _and_successors.clear();
-  _task_count.store(0);
-  _callback_started.clear();
+  running_groupable_tasks_.clear();
+  running_ordered_tasks_.clear();
+  running_default_tasks_.clear();
+  and_successors_.clear();
+  task_count_.store(0);
+  callback_started_.clear();
 
-  pthread_mutex_init(&(_group_mutex), NULL);
+  pthread_mutex_init(&(group_mutex_), NULL);
 
   // create the group signal with initial value 0; task dispatch is
   // then responsible for incrementing this value before ringing the
   // doorbell.
-  hsa_status_t err = hsa_signal_create(0, 0, NULL, &_group_signal);
+  hsa_status_t err = hsa_signal_create(0, 0, NULL, &group_signal_);
   ErrorCheck(Taskgroup signal creation, err);
 }
 
 // destructor
 core::TaskgroupImpl::~TaskgroupImpl() {
-  hsa_status_t err = hsa_signal_destroy(_group_signal);
+  hsa_status_t err = hsa_signal_destroy(group_signal_);
   ErrorCheck(Taskgroup signal destruction, err);
 
-  _running_groupable_tasks.clear();
-  _running_ordered_tasks.clear();
-  _running_default_tasks.clear();
-  _and_successors.clear();
+  running_groupable_tasks_.clear();
+  running_ordered_tasks_.clear();
+  running_default_tasks_.clear();
+  and_successors_.clear();
 }
 
-} //namespace core
+}  // namespace core

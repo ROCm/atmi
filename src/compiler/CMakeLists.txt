@@ -69,6 +69,12 @@ if(ROCM_FOUND)
             else()
                 install(TARGETS atmi_cplugin LIBRARY DESTINATION "lib" COMPONENT cplugin )
             endif()
+            
+            INSTALL(FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_c_ext.h
+                DESTINATION "include"
+                COMPONENT cplugin
+            )
 
             ## CPack component info
             set(CPACK_COMPONENT_CPLUGIN_DISPLAY_NAME "ATMI C Plugin")

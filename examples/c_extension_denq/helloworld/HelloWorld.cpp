@@ -7,7 +7,7 @@
 #include <iostream>
 #include <stdio.h>
 using namespace std;
-#include "atmi.h"
+#include "atmi_c_ext.h"
 #include "atmi_kl.h"
 
 __kernel void mainTask_gpu(__global atmi_task_handle_t thisTask, int numTasks) __attribute__((atmi_kernel("mainTask", "gpu")));

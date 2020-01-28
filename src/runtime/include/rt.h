@@ -96,6 +96,7 @@ class Runtime {
   // print buffers/pipes
   atmi_status_t RegisterTaskInitBuffer(task_process_init_buffer_t);
   atmi_status_t RegisterTaskFiniBuffer(task_process_fini_buffer_t);
+  atmi_status_t RegisterTaskHostcallHandler(atmi_task_hostcall_handler_t fp);
   // tasks
   atmi_task_handle_t CreateTaskTemplate(atmi_kernel_t);
   atmi_task_handle_t ActivateTaskTemplate(atmi_task_handle_t, atmi_lparm_t *,

@@ -119,6 +119,10 @@ atmi_status_t atmi_register_task_fini_buffer(task_process_fini_buffer_t fp) {
   return core::Runtime::getInstance().RegisterTaskFiniBuffer(fp);
 }
 
+atmi_status_t atmi_register_task_hostcall_handler(
+    atmi_task_hostcall_handler_t fp) {
+  return core::Runtime::getInstance().RegisterTaskHostcallHandler(fp);
+}
 /*
  * Tasks
  */

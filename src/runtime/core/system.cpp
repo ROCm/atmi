@@ -17,7 +17,6 @@
 #include "ATLMachine.h"
 #include "RealTimerClass.h"
 #include "amd_comgr.h"
-#include "amd_hostcall.h"
 #include "atl_internal.h"
 #include "rt.h"
 using core::RealTimer;
@@ -159,8 +158,6 @@ hsa_ext_program_t atl_hsa_program;
 hsa_region_t atl_hsa_primary_region;
 hsa_region_t atl_gpu_kernarg_region;
 hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
-uint32_t atl_hostcall_minpackets;
-bool atl_hostcall_is_required;
 hsa_region_t atl_cpu_kernarg_region;
 hsa_agent_t atl_gpu_agent;
 hsa_profile_t atl_gpu_agent_profile;
@@ -269,8 +266,6 @@ atmi_status_t Runtime::Finalize() {
   // TODO(ashwinma): Finalize all processors, queues, signals, kernarg memory
   // regions
   hsa_status_t err;
-  if (atl_hostcall_is_required)
-    atmi_hostcall_terminate();
   finalize_hsa();
   for (int i = 0; i < g_executables.size(); i++) {
     err = hsa_executable_destroy(g_executables[i]);
@@ -397,15 +392,6 @@ static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
                                                &new_proc);
       ErrorCheck(Iterate all memory pools, err);
       g_atl_machine.addProcessor(new_proc);
-      uint32_t numCu;
-      err = hsa_agent_get_info(agent, (hsa_agent_info_t)
-          HSA_AMD_AGENT_INFO_COMPUTE_UNIT_COUNT, &numCu);
-      ErrorCheck(Could not get number of cus, err);
-      uint32_t waverPerCu;
-      err = hsa_agent_get_info(agent, (hsa_agent_info_t)
-          HSA_AMD_AGENT_INFO_MAX_WAVES_PER_CU, &waverPerCu);
-      ErrorCheck(Could not get number of waves per cu, err);
-      atl_hostcall_minpackets = numCu * waverPerCu;
     } break;
     case HSA_DEVICE_TYPE_DSP: {
       ;
@@ -881,9 +867,6 @@ atmi_status_t atl_init_gpu_context() {
     ErrorCheck(Registering the system for memory faults, err);
 
     init_tasks();
-    // Initiailze hostcall. Note: atl_gpu_agent was initialized by init_hsa
-    atl_hostcall_is_required = false;
-    err=atmi_hostcall_init();
     atlc.g_gpu_initialized = true;
     return ATMI_STATUS_SUCCESS;
 }
@@ -1723,8 +1706,6 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable,
     register_allocation(reinterpret_cast<void *>(info.addr), (size_t)info.size,
                         place);
     SymbolInfoTable[gpu][std::string(name)] = info;
-    if (strcmp(name,"needs_hostcall_buffer")==0)
-      atl_hostcall_is_required = true;
     free(name);
   } else {
     DEBUG_PRINT("Symbol is an indirect function\n");

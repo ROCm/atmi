@@ -20,7 +20,6 @@ typedef struct atmi_implicit_args_s {
   unsigned long offset_x;
   unsigned long offset_y;
   unsigned long offset_z;
-  unsigned long hostcall_ptr;
   unsigned long pipe_ptr;
   char num_gpu_queues;
   unsigned long gpu_queue_ptr;

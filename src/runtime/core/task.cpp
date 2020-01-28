@@ -27,7 +27,6 @@
 #include "RealTimerClass.h"
 #include "atl_bindthread.h"
 #include "atl_internal.h"
-#include "amd_hostcall.h"
 #include "kernel.h"
 #include "rt.h"
 #include "taskgroup.h"
@@ -50,9 +49,6 @@ void print_atl_kernel(const char *str, const int i);
 std::vector<TaskImpl *> AllTasks;
 std::queue<TaskImpl *> ReadyTaskQueue;
 std::queue<hsa_signal_t> FreeSignalPool;
-
-extern uint32_t atl_hostcall_minpackets;
-extern bool atl_hostcall_is_required;
 
 std::map<uint64_t, Kernel *> KernelImplMap;
 // std::map<uint64_t, std::vector<std::string> > ModuleMap;
@@ -1067,27 +1063,6 @@ atmi_status_t ComputeTaskImpl::dispatch() {
     impl_args->offset_y = 0;
     impl_args->offset_z = 0;
     // char *pipe_ptr = impl_args->pipe_ptr;
-
-    // assign a hostcall buffer for the selected Q
-    if (atl_hostcall_is_required) {
-      KernelImpl *kernel_impl = NULL;
-      if (kernel_) {
-        kernel_impl = kernel_->getKernelImpl(kernel_id_);
-        // printf("Task Id: %lu, kernel name: %s\n", id_,
-        // kernel_impl->kernel_name.c_str());
-        char *kargs = reinterpret_cast<char *>(kernarg_region_);
-        if (type() == ATL_KERNEL_EXECUTION && devtype_ == ATMI_DEVTYPE_GPU &&
-            kernel_impl->platform_type() == AMDGCN) {
-          atmi_implicit_args_t *impl_args =
-            reinterpret_cast<atmi_implicit_args_t *>(
-                kargs +
-                (kernarg_region_size_ - sizeof(atmi_implicit_args_t)));
-
-          impl_args->hostcall_ptr = atmi_hostcall_assign_buffer(atl_hostcall_minpackets,
-              this_Q, proc_id);
-        }
-      }
-    }
 
     // initialize printf buffer
     {

@@ -17,11 +17,11 @@ typedef short int int16_t;
 typedef int int32_t;
 typedef long int int64_t;
 
-/*#include <stddef.h> *//* size_t */
-/*#include <stdint.h> *//* uintXX_t */
+/*#include <stddef.h> */ /* size_t */
+/*#include <stdint.h> */ /* uintXX_t */
 /*#ifndef __cplusplus*/
 /*#include <stdbool.h>*/
-/*#endif *//* __cplusplus */
+/*#endif */ /* __cplusplus */
 
 // Placeholder for calling convention and import macros
 #define HSA_CALL
@@ -192,8 +192,8 @@ typedef enum {
  * @retval ::HSA_STATUS_ERROR_INVALID_ARGUMENT @p status is an invalid
  * status code, or @p status_string is NULL.
  */
-hsa_status_t HSA_API
-    hsa_status_string(hsa_status_t status, const char **status_string);
+hsa_status_t HSA_API hsa_status_string(hsa_status_t status,
+                                       const char **status_string);
 
 /** @} */
 
@@ -402,8 +402,8 @@ typedef enum {
  * @retval ::HSA_STATUS_ERROR_INVALID_ARGUMENT @p attribute is an invalid
  * system attribute, or @p value is NULL.
  */
-hsa_status_t HSA_API
-    hsa_system_get_info(hsa_system_info_t attribute, void *value);
+hsa_status_t HSA_API hsa_system_get_info(hsa_system_info_t attribute,
+                                         void *value);
 
 /**
  * @brief HSA extensions.
@@ -442,9 +442,10 @@ typedef enum {
  * @retval ::HSA_STATUS_ERROR_INVALID_ARGUMENT @p extension is not a valid
  * extension, or @p result is NULL.
  */
-hsa_status_t HSA_API
-    hsa_system_extension_supported(uint16_t extension, uint16_t version_major,
-                                   uint16_t version_minor, bool *result);
+hsa_status_t HSA_API hsa_system_extension_supported(uint16_t extension,
+                                                    uint16_t version_major,
+                                                    uint16_t version_minor,
+                                                    bool *result);
 
 /**
  * @brief Retrieve the function pointers corresponding to a given version of an
@@ -477,9 +478,10 @@ hsa_status_t HSA_API
  * @retval ::HSA_STATUS_ERROR_INVALID_ARGUMENT @p extension is not a valid
  * extension, or @p table is NULL.
  */
-hsa_status_t HSA_API
-    hsa_system_get_extension_table(uint16_t extension, uint16_t version_major,
-                                   uint16_t version_minor, void *table);
+hsa_status_t HSA_API hsa_system_get_extension_table(uint16_t extension,
+                                                    uint16_t version_major,
+                                                    uint16_t version_minor,
+                                                    void *table);
 
 /**
  * @brief Opaque handle representing an agent, a device that participates in
@@ -559,7 +561,7 @@ typedef enum {
  */
 
 /*typedef struct hsa_signal_s {*/
-/*  *//***/
+/*  */ /***/
 /** Opaque handle. The value 0 is reserved.*/
 /*   */
 /*uint64_t handle;*/
@@ -607,9 +609,10 @@ typedef int32_t hsa_signal_value_t;
  * num_consumers is greater than 0 but @p consumers is NULL, or @p consumers
  * contains duplicates.
  */
-hsa_status_t HSA_API
-    hsa_signal_create(hsa_signal_value_t initial_value, uint32_t num_consumers,
-                      const hsa_agent_t *consumers, hsa_signal_t *signal);
+hsa_status_t HSA_API hsa_signal_create(hsa_signal_value_t initial_value,
+                                       uint32_t num_consumers,
+                                       const hsa_agent_t *consumers,
+                                       hsa_signal_t *signal);
 
 /**
  * @brief Destroy a signal previous created by ::hsa_signal_create.
@@ -651,14 +654,14 @@ hsa_signal_value_t HSA_API hsa_signal_load_relaxed(hsa_signal_t signal);
  *
  * @param[in] value New signal value.
  */
-void HSA_API
-    hsa_signal_store_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_store_relaxed(hsa_signal_t signal,
+                                      hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_store_relaxed
  */
-void HSA_API
-    hsa_signal_store_release(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_store_release(hsa_signal_t signal,
+                                      hsa_signal_value_t value);
 
 /**
  * @brief Atomically set the value of a signal and return its previous value.
@@ -675,25 +678,25 @@ void HSA_API
  *
  */
 hsa_signal_value_t HSA_API
-    hsa_signal_exchange_acq_rel(hsa_signal_t signal, hsa_signal_value_t value);
+hsa_signal_exchange_acq_rel(hsa_signal_t signal, hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_exchange_acq_rel
  */
 hsa_signal_value_t HSA_API
-    hsa_signal_exchange_acquire(hsa_signal_t signal, hsa_signal_value_t value);
+hsa_signal_exchange_acquire(hsa_signal_t signal, hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_exchange_acq_rel
  */
 hsa_signal_value_t HSA_API
-    hsa_signal_exchange_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
+hsa_signal_exchange_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_exchange_acq_rel
  */
 hsa_signal_value_t HSA_API
-    hsa_signal_exchange_release(hsa_signal_t signal, hsa_signal_value_t value);
+hsa_signal_exchange_release(hsa_signal_t signal, hsa_signal_value_t value);
 
 /**
  * @brief Atomically set the value of a signal if the observed value is equal to
@@ -750,26 +753,26 @@ hsa_signal_value_t HSA_API hsa_signal_cas_release(hsa_signal_t signal,
  * @param[in] value Value to add to the value of the signal.
  *
  */
-void HSA_API
-    hsa_signal_add_acq_rel(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_add_acq_rel(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_add_acq_rel
  */
-void HSA_API
-    hsa_signal_add_acquire(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_add_acquire(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_add_acq_rel
  */
-void HSA_API
-    hsa_signal_add_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_add_relaxed(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_add_acq_rel
  */
-void HSA_API
-    hsa_signal_add_release(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_add_release(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @brief Atomically decrement the value of a signal by a given amount.
@@ -783,26 +786,26 @@ void HSA_API
  * @param[in] value Value to subtract from the value of the signal.
  *
  */
-void HSA_API
-    hsa_signal_subtract_acq_rel(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_subtract_acq_rel(hsa_signal_t signal,
+                                         hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_subtract_acq_rel
  */
-void HSA_API
-    hsa_signal_subtract_acquire(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_subtract_acquire(hsa_signal_t signal,
+                                         hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_subtract_acq_rel
  */
-void HSA_API
-    hsa_signal_subtract_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_subtract_relaxed(hsa_signal_t signal,
+                                         hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_subtract_acq_rel
  */
-void HSA_API
-    hsa_signal_subtract_release(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_subtract_release(hsa_signal_t signal,
+                                         hsa_signal_value_t value);
 
 /**
  * @brief Atomically perform a bitwise AND operation between the value of a
@@ -817,26 +820,26 @@ void HSA_API
  * @param[in] value Value to AND with the value of the signal.
  *
  */
-void HSA_API
-    hsa_signal_and_acq_rel(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_and_acq_rel(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_and_acq_rel
  */
-void HSA_API
-    hsa_signal_and_acquire(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_and_acquire(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_and_acq_rel
  */
-void HSA_API
-    hsa_signal_and_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_and_relaxed(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_and_acq_rel
  */
-void HSA_API
-    hsa_signal_and_release(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_and_release(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @brief Atomically perform a bitwise OR operation between the value of a
@@ -850,26 +853,26 @@ void HSA_API
  *
  * @param[in] value Value to OR with the value of the signal.
  */
-void HSA_API
-    hsa_signal_or_acq_rel(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_or_acq_rel(hsa_signal_t signal,
+                                   hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_or_acq_rel
  */
-void HSA_API
-    hsa_signal_or_acquire(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_or_acquire(hsa_signal_t signal,
+                                   hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_or_acq_rel
  */
-void HSA_API
-    hsa_signal_or_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_or_relaxed(hsa_signal_t signal,
+                                   hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_or_acq_rel
  */
-void HSA_API
-    hsa_signal_or_release(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_or_release(hsa_signal_t signal,
+                                   hsa_signal_value_t value);
 
 /**
  * @brief Atomically perform a bitwise XOR operation between the value of a
@@ -884,26 +887,26 @@ void HSA_API
  * @param[in] value Value to XOR with the value of the signal.
  *
  */
-void HSA_API
-    hsa_signal_xor_acq_rel(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_xor_acq_rel(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_xor_acq_rel
  */
-void HSA_API
-    hsa_signal_xor_acquire(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_xor_acquire(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_xor_acq_rel
  */
-void HSA_API
-    hsa_signal_xor_relaxed(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_xor_relaxed(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @copydoc hsa_signal_xor_acq_rel
  */
-void HSA_API
-    hsa_signal_xor_release(hsa_signal_t signal, hsa_signal_value_t value);
+void HSA_API hsa_signal_xor_release(hsa_signal_t signal,
+                                    hsa_signal_value_t value);
 
 /**
  * @brief Wait condition operator.
@@ -981,22 +984,17 @@ typedef enum {
  *
  */
 hsa_signal_value_t HSA_API
-    hsa_signal_wait_acquire(hsa_signal_t signal,
-                            hsa_signal_condition_t condition,
-                            hsa_signal_value_t compare_value,
-                            uint64_t timeout_hint,
-                            hsa_wait_state_t wait_state_hint);
+hsa_signal_wait_acquire(hsa_signal_t signal, hsa_signal_condition_t condition,
+                        hsa_signal_value_t compare_value, uint64_t timeout_hint,
+                        hsa_wait_state_t wait_state_hint);
 
 /**
  * @copydoc hsa_signal_wait_acquire
  */
 hsa_signal_value_t HSA_API
-    hsa_signal_wait_relaxed(hsa_signal_t signal,
-                            hsa_signal_condition_t condition,
-                            hsa_signal_value_t compare_value,
-                            uint64_t timeout_hint,
-                            hsa_wait_state_t wait_state_hint);
-
+hsa_signal_wait_relaxed(hsa_signal_t signal, hsa_signal_condition_t condition,
+                        hsa_signal_value_t compare_value, uint64_t timeout_hint,
+                        hsa_wait_state_t wait_state_hint);
 
 /**
  * @brief Queue type. Intended to be used for dynamic queue protocol
@@ -1012,7 +1010,6 @@ typedef enum {
    */
   HSA_QUEUE_TYPE_SINGLE = 1
 } hsa_queue_type_t;
-
 
 /**
  * @brief User mode queue.
@@ -1172,26 +1169,26 @@ uint64_t HSA_API hsa_queue_cas_write_index_release(const hsa_queue_t *queue,
  *
  * @return Previous value of the write index.
  */
-uint64_t HSA_API
-    hsa_queue_add_write_index_acq_rel(const hsa_queue_t *queue, uint64_t value);
+uint64_t HSA_API hsa_queue_add_write_index_acq_rel(const hsa_queue_t *queue,
+                                                   uint64_t value);
 
 /**
  * @copydoc hsa_queue_add_write_index_acq_rel
  */
-uint64_t HSA_API
-    hsa_queue_add_write_index_acquire(const hsa_queue_t *queue, uint64_t value);
+uint64_t HSA_API hsa_queue_add_write_index_acquire(const hsa_queue_t *queue,
+                                                   uint64_t value);
 
 /**
  * @copydoc hsa_queue_add_write_index_acq_rel
  */
-uint64_t HSA_API
-    hsa_queue_add_write_index_relaxed(const hsa_queue_t *queue, uint64_t value);
+uint64_t HSA_API hsa_queue_add_write_index_relaxed(const hsa_queue_t *queue,
+                                                   uint64_t value);
 
 /**
  * @copydoc hsa_queue_add_write_index_acq_rel
  */
-uint64_t HSA_API
-    hsa_queue_add_write_index_release(const hsa_queue_t *queue, uint64_t value);
+uint64_t HSA_API hsa_queue_add_write_index_release(const hsa_queue_t *queue,
+                                                   uint64_t value);
 
 /**
  * @brief Atomically set the read index of a queue.
@@ -1610,7 +1607,6 @@ int hsa_atomic_max_system(int *p, int val);
 int hsa_atomic_min_system(int *p, int val);
 int hsa_atomic_cas_system(int *p, int val1, int val2);
 
-
 /* System-wide atomic ops for 64bit */
 long hsa_atomic_load_system_long(long *p);
 long hsa_atomic_and_system_long(long *p, long val);
@@ -1622,7 +1618,6 @@ long hsa_atomic_sub_system_long(long *p, long val);
 long hsa_atomic_max_system_long(long *p, long val);
 long hsa_atomic_min_system_long(long *p, long val);
 long hsa_atomic_cas_system_long(long *p, long val1, long val2);
-
 
 #ifdef __cplusplus
 }  // end extern "C" block

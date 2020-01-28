@@ -44,6 +44,12 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(ppc64le)|(aarch64)$")
    add_definitions(-DLITTLEENDIAN_CPU=1)
 endif()
 
+string( TOLOWER "${ATMI_DEVICE_RUNTIME}" ATMI_DEVICE_RUNTIME_VAR )
+if(ATMI_DEVICE_RUNTIME_VAR MATCHES on )
+  add_definitions(-DBUILD_WITH_DEVICE_RT)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../device_runtime)
+endif()
+
 # If building this library in debug mode, we define a macro to enable
 # dumping progress messages at runtime.
 string( TOLOWER "${CMAKE_BUILD_TYPE}" ATMI_CMAKE_BUILD_TYPE)
@@ -85,7 +91,7 @@ add_library(atmi_runtime SHARED
     system.cpp
     atl_bindthread.c
     atl_cputask.c
-    atl_profile.c
+    kernel.cpp
     task.cpp
     taskgroup.cpp
     atl_synckernel.c
@@ -103,7 +109,6 @@ include_directories(${ROCM_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
-include_directories(${CMAKE_INSTALL_PREFIX}/include)
 
 ## CPack component info
 set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "ATMI Runtime Library")
@@ -117,7 +122,6 @@ target_link_libraries(
   ${ROCM_LIBRARIES}
   -L${ROCM_LIBRARIES_DIR}/../hsa/lib
   -L${ROCM_LIBRARIES_DIR}
-  -L${CMAKE_INSTALL_PREFIX}/lib -lamd_hostcall -Wl,-rpath,${CMAKE_INSTALL_PREFIX}/lib
   -Wl,--enable-new-dtags
   -Wl,-rpath,\$ORIGIN
   -Wl,-rpath,\$ORIGIN/../../hsa/lib

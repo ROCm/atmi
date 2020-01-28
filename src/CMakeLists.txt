@@ -47,7 +47,11 @@ endif()
 if(ROCM_DIR)
   set(ROC_DIR ${ROCM_DIR})
 else()
-  set(ROC_DIR "/opt/rocm")
+  if(HSA_DIR)
+    set(ROC_DIR ${HSA_DIR})
+  else()
+    set(ROC_DIR "/opt/rocm")
+  endif()
 endif()
 
 # Find ROCm

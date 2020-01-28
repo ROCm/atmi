@@ -277,6 +277,8 @@ if [ -z $ROCMDEVICE ]; then
   BCFILES="$BCFILES $DEVICELIB/lib/ocml.amdgcn.bc"
   BCFILES="$BCFILES $DEVICELIB/lib/ockl.amdgcn.bc"
   BCFILES="$BCFILES $DEVICELIB/lib/oclc_isa_version_${gpunum}.amdgcn.bc"
+  BCFILES="$BCFILES $DEVICELIB/lib/oclc_correctly_rounded_sqrt_on.amdgcn.bc"
+  BCFILES="$BCFILES $DEVICELIB/lib/oclc_daz_opt_on.amdgcn.bc"
   if [ "$ROCMVERSION" -lt "2" ] ; then
     BCFILES="$BCFILES $DEVICELIB/lib/irif.amdgcn.bc"
   fi

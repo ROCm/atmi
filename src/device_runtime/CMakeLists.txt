@@ -180,6 +180,14 @@ foreach(mcpu ${mcpus})
 
   add_bc_library(atmi ${CMAKE_CURRENT_SOURCE_DIR} ${sources})
 
+  target_sources(atmi_runtime PUBLIC
+    ${PROJECT_SOURCE_DIR}/device_runtime/device_rt.cpp 
+    )
+  include_directories(${ROCM_INCLUDE_DIRS})
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../include)
+
   install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
     DESTINATION include COMPONENT device_runtime)

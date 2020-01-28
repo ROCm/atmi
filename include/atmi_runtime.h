@@ -13,6 +13,10 @@
 #include <stdbool.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \defgroup kernel Kernel Handles
  * This module includes all kernel-related classes, structs and functions.
  * @{
@@ -21,6 +25,14 @@
  * @brief A generic function pointer representing CPU tasks.
  */
 typedef void (*atmi_generic_fp)(void);
+
+typedef unsigned long (*atmi_task_hostcall_handler_t)(void *, uint32_t);
+/**
+ * @brief Register a callback that performs hostcall buffer processing
+ * functions with a task.
+ */
+atmi_status_t atmi_register_task_hostcall_handler(
+    atmi_task_hostcall_handler_t fp);
 
 typedef void (*task_process_init_buffer_t)(void *, int);
 /**
@@ -34,9 +46,6 @@ typedef void (*task_process_fini_buffer_t)(void *, int);
  */
 atmi_status_t atmi_register_task_fini_buffer(task_process_fini_buffer_t fp);
 /** @} */
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /** \defgroup context_functions ATMI Context Setup and Finalize
  *  @{
@@ -499,7 +508,7 @@ atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
 #else
                                     bool ordered, atmi_place_t place
 #endif
-                                    );
+);
 
 /**
  * @brief Release the task group structure, which could be a group of compute

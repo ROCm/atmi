@@ -10,6 +10,10 @@
 #include "hsa.h"
 #include "hsa_ext_amd.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \defgroup interop_hsa_functions ATMI-HSA Interop
  *  @{
  */
@@ -120,5 +124,9 @@ atmi_status_t atmi_interop_hsa_get_kernel_info(
     atmi_mem_place_t place, const char *kernel_name,
     hsa_executable_symbol_info_t info, uint32_t *value);
 /** @} */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // INCLUDE_ATMI_INTEROP_HSA_H_

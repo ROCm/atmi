@@ -92,6 +92,7 @@ void Environment::GetEnvAll() {
                  "ATMI_SYNC_BARRIER_PKT"
               << std::endl
               << "ATMI_MAX_HSA_SIGNALS : positive integer" << std::endl
+              << "ATMI_MAX_HSA_QUEUE_SIZE : positive integer" << std::endl
               << "ATMI_MAX_KERNEL_TYPES : positive integer" << std::endl
               << "ATMI_DEVICE_GPU_WORKERS : positive integer" << std::endl
               << "ATMI_DEVICE_CPU_WORKERS : positive integer" << std::endl
@@ -111,6 +112,9 @@ void Environment::GetEnvAll() {
 
   var = GetEnv("ATMI_MAX_HSA_SIGNALS");
   if (!var.empty()) max_signals_ = std::stoi(var);
+
+  var = GetEnv("ATMI_MAX_HSA_QUEUE_SIZE");
+  if (!var.empty()) max_queue_size_ = std::stoi(var);
 
   var = GetEnv("ATMI_MAX_KERNEL_TYPES");
   if (!var.empty()) max_kernel_types_ = std::stoi(var);

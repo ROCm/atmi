@@ -14,6 +14,7 @@
 namespace core {
 
 #define DEFAULT_MAX_SIGNALS 1024
+#define DEFAULT_MAX_QUEUE_SIZE 1024
 #define DEFAULT_MAX_KERNEL_TYPES 32
 #define DEFAULT_NUM_GPU_QUEUES -1  // computed in code
 #define DEFAULT_NUM_CPU_QUEUES -1  // computed in code
@@ -23,6 +24,7 @@ class Environment {
  public:
   Environment()
       : max_signals_(DEFAULT_MAX_SIGNALS),
+        max_queue_size_(DEFAULT_MAX_QUEUE_SIZE),
         max_kernel_types_(DEFAULT_MAX_KERNEL_TYPES),
         num_gpu_queues_(DEFAULT_NUM_GPU_QUEUES),
         num_cpu_queues_(DEFAULT_NUM_CPU_QUEUES),
@@ -37,6 +39,7 @@ class Environment {
 
   int getDepSyncType() const { return dep_sync_type_; }
   int getMaxSignals() const { return max_signals_; }
+  int getMaxQueueSize() const { return max_queue_size_; }
   int getMaxKernelTypes() const { return max_kernel_types_; }
   int getNumGPUQueues() const { return num_gpu_queues_; }
   int getNumCPUQueues() const { return num_cpu_queues_; }
@@ -57,6 +60,7 @@ class Environment {
 
   int dep_sync_type_;
   int max_signals_;
+  int max_queue_size_;
   int max_kernel_types_;
   int num_gpu_queues_;
   int num_cpu_queues_;
@@ -116,6 +120,7 @@ class Runtime {
   const Environment &getEnvironment() const { return env_; }
   int getDepSyncType() const { return env_.getDepSyncType(); }
   int getMaxSignals() const { return env_.getMaxSignals(); }
+  int getMaxQueueSize() const { return env_.getMaxQueueSize(); }
   int getMaxKernelTypes() const { return env_.getMaxKernelTypes(); }
   int getNumGPUQueues() const { return env_.getNumGPUQueues(); }
   int getNumCPUQueues() const { return env_.getNumCPUQueues(); }

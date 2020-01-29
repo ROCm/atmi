@@ -94,8 +94,6 @@ class Runtime {
   atmi_status_t TaskGroupSync(atmi_taskgroup_handle_t);
   atmi_status_t TaskWait(atmi_task_handle_t);
   // print buffers/pipes
-  atmi_status_t RegisterTaskInitBuffer(task_process_init_buffer_t);
-  atmi_status_t RegisterTaskFiniBuffer(task_process_fini_buffer_t);
   atmi_status_t RegisterTaskHostcallHandler(atmi_task_hostcall_handler_t fp);
   // tasks
   atmi_task_handle_t CreateTaskTemplate(atmi_kernel_t);

@@ -246,9 +246,6 @@ void allow_access_to_all_gpu_agents(void *ptr) {
 atmi_status_t Runtime::Initialize(atmi_devtype_t devtype) {
   if (atl_is_atmi_initialized()) return ATMI_STATUS_SUCCESS;
 
-  task_process_init_buffer = NULL;
-  task_process_fini_buffer = NULL;
-
   if (devtype == ATMI_DEVTYPE_ALL || devtype & ATMI_DEVTYPE_GPU)
     ATMIErrorCheck(GPU context init, atl_init_gpu_context());
 

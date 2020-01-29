@@ -246,7 +246,7 @@ KernelImpl::~KernelImpl() {
 
 GPUKernelImpl::~GPUKernelImpl() {
   lock(&mutex_);
-  hsa_memory_free(kernarg_region_);
+  ErrorCheck(Memory pool free, hsa_amd_memory_pool_free(kernarg_region_));
   kernel_objects_.clear();
   group_segment_sizes_.clear();
   private_segment_sizes_.clear();

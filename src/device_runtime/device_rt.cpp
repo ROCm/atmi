@@ -136,12 +136,17 @@ atmi_status_t DeviceRuntime::Finalize() {
     atmi_kernel_enqueue_template_t *ke_template =
         &(reinterpret_cast<atmi_kernel_enqueue_template_t *>(
             g_ke_args.kernarg_template_ptr))[i];
-    hsa_memory_free(ke_template->kernarg_regions);
+    ErrorCheck(Memory pool free,
+               hsa_amd_memory_pool_free(ke_template->kernarg_regions));
   }
-  hsa_memory_free(g_ke_args.kernarg_template_ptr);
-  hsa_memory_free(g_ke_args.cpu_queue_ptr);
-  hsa_memory_free(g_ke_args.cpu_worker_signals);
-  hsa_memory_free(g_ke_args.gpu_queue_ptr);
+  ErrorCheck(Memory pool free,
+             hsa_amd_memory_pool_free(g_ke_args.kernarg_template_ptr));
+  ErrorCheck(Memory pool free,
+             hsa_amd_memory_pool_free(g_ke_args.cpu_queue_ptr));
+  ErrorCheck(Memory pool free,
+             hsa_amd_memory_pool_free(g_ke_args.cpu_worker_signals));
+  ErrorCheck(Memory pool free,
+             hsa_amd_memory_pool_free(g_ke_args.gpu_queue_ptr));
   Runtime::Finalize();
   return ATMI_STATUS_SUCCESS;
 }

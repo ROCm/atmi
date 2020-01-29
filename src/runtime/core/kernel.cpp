@@ -176,12 +176,6 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
 
   /* create kernarg memory */
   kernarg_region_ = NULL;
-#ifdef MEMORY_REGION
-  hsa_status_t err = hsa_memory_allocate(
-      atl_gpu_kernarg_region, kernarg_segment_size_ * MAX_NUM_KERNELS,
-      &kernarg_region_);
-    ErrorCheck(Allocating memory for the executable-kernel, err);
-#else
   if (kernarg_segment_size_ > 0) {
     DEBUG_PRINT("New kernarg segment size: %u\n", kernarg_segment_size_);
     hsa_status_t err = hsa_amd_memory_pool_allocate(
@@ -202,11 +196,10 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
       }
   }
 
-#endif
-    for (int i = 0; i < MAX_NUM_KERNELS; i++) {
-      free_kernarg_segments_.push(i);
-    }
-    pthread_mutex_init(&mutex_, NULL);
+  for (int i = 0; i < MAX_NUM_KERNELS; i++) {
+    free_kernarg_segments_.push(i);
+  }
+  pthread_mutex_init(&mutex_, NULL);
 }
 
 CPUKernelImpl::CPUKernelImpl(unsigned int id, const std::string &name,

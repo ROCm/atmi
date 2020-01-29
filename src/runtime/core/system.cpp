@@ -478,47 +478,7 @@ static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void *data) {
 
 hsa_status_t init_comute_and_memory() {
   hsa_status_t err;
-#ifdef MEMORY_REGION
-  err = hsa_iterate_agents(get_gpu_agent, &atl_gpu_agent);
-  if (err == HSA_STATUS_INFO_BREAK) {
-    err = HSA_STATUS_SUCCESS;
-  }
-  ErrorCheck(Getting a gpu agent, err);
 
-  /* Query the name of the agent.  */
-  // char name[64] = { 0 };
-  // err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_NAME, name);
-  // ErrorCheck(Querying the agent name, err);
-  /* printf("The agent name is %s.\n", name); */
-  err = hsa_agent_get_info(atl_gpu_agent, HSA_AGENT_INFO_PROFILE,
-                           &atl_gpu_agent_profile);
-  ErrorCheck(Query the agent profile, err);
-  DEBUG_PRINT("Agent Profile: %d\n", atl_gpu_agent_profile);
-
-  /* Find a memory region that supports kernel arguments.  */
-  atl_gpu_kernarg_region.handle = (uint64_t)-1;
-  hsa_agent_iterate_regions(atl_gpu_agent, get_kernarg_memory_region,
-                            &atl_gpu_kernarg_region);
-  err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR
-                                                        : HSA_STATUS_SUCCESS;
-  ErrorCheck(Finding a kernarg memory region, err);
-
-  err = hsa_iterate_agents(get_cpu_agent, &atl_cpu_agent);
-  if (err == HSA_STATUS_INFO_BREAK) {
-    err = HSA_STATUS_SUCCESS;
-  }
-  ErrorCheck(Getting a gpu agent, err);
-
-  atl_cpu_kernarg_region.handle = (uint64_t)-1;
-  err = hsa_agent_iterate_regions(atl_cpu_agent, get_fine_grained_region,
-                                  &atl_cpu_kernarg_region);
-  if (err == HSA_STATUS_INFO_BREAK) {
-    err = HSA_STATUS_SUCCESS;
-  }
-  err = (atl_cpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR
-                                                        : HSA_STATUS_SUCCESS;
-  ErrorCheck(Finding a CPU kernarg memory region handle, err);
-#else
   /* Iterate over the agents and pick the gpu agent */
   err = hsa_iterate_agents(get_agent_info, NULL);
   if (err == HSA_STATUS_INFO_BREAK) {
@@ -732,7 +692,6 @@ hsa_status_t init_comute_and_memory() {
     return HSA_STATUS_SUCCESS;
   else
     return HSA_STATUS_ERROR_NOT_INITIALIZED;
-#endif
 }
 
 hsa_status_t init_hsa() {
@@ -1670,14 +1629,6 @@ hsa_status_t create_kernarg_memory(hsa_executable_t executable,
     // assign it back to the kernel info table
     KernelInfoTable[gpu][kernelName] = info;
     free(name);
-
-    /*
-       void *thisKernargAddress = NULL;
-    // create a memory segment for this kernel's arguments
-    err = hsa_memory_allocate(atl_gpu_kernarg_region, info.kernel_segment_size *
-    MAX_NUM_KERNELS, &thisKernargAddress);
-    ErrorCheck(Allocating memory for the executable-kernel, err);
-    */
   } else if (type == HSA_SYMBOL_KIND_VARIABLE) {
     err = hsa_executable_symbol_get_info(
         symbol, HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH, &name_length);

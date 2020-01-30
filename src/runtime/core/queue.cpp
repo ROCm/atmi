@@ -3,7 +3,7 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#include "ATLQueue.h"
+#include "queue.h"
 #include "atmi.h"
 #include "hsa_ext_amd.h"
 

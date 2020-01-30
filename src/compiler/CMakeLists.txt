@@ -12,6 +12,7 @@ endif()
 
 if(ROCM_FOUND)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)|(aarch64)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
+        set (CMAKE_C_COMPILER g++)
         set (EXECUTE_COMMAND ${CMAKE_C_COMPILER} -print-file-name=plugin)
         execute_process(COMMAND ${EXECUTE_COMMAND} RESULT_VARIABLE rv OUTPUT_VARIABLE ov)
         # run the command <GCC C compiler> -print-file-name=plugin to determine
@@ -56,6 +57,7 @@ if(ROCM_FOUND)
 
             add_library(atmi_cplugin SHARED
                 atl_pifgen_plugin.c
+                atl_synckernel.c
                 )
 
             include_directories(${ROCM_INCLUDE_DIRS})

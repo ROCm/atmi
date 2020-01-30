@@ -5,8 +5,8 @@
  *===------------------------------------------------------------------------*/
 
 #include "kernel.h"
-#include "ATLMachine.h"
-#include "atl_internal.h"
+#include "internal.h"
+#include "machine.h"
 
 extern hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
 extern std::map<uint64_t, core::Kernel *> KernelImplMap;

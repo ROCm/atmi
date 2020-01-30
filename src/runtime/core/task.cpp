@@ -21,18 +21,17 @@
 #include <map>
 #include <set>
 #include <vector>
-#include "ATLData.h"
-#include "ATLMachine.h"
-#include "ATLQueue.h"
-#include "RealTimerClass.h"
-#include "atl_bindthread.h"
-#include "atl_internal.h"
+#include "data.h"
+#include "internal.h"
 #include "kernel.h"
+#include "machine.h"
+#include "queue.h"
+#include "realtimer.h"
 #include "rt.h"
 #include "taskgroup.h"
-using core::RealTimer;
 using core::Kernel;
 using core::KernelImpl;
+using core::RealTimer;
 using core::TaskImpl;
 
 pthread_mutex_t mutex_all_tasks_;

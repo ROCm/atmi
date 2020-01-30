@@ -6,10 +6,10 @@
 #include "device_rt.h"
 #include <map>
 #include <vector>
-#include "ATLMachine.h"
-#include "atl_internal.h"
 #include "atmi_kl.h"
+#include "internal.h"
 #include "kernel.h"
+#include "machine.h"
 
 extern ATLMachine g_atl_machine;
 extern std::map<uint64_t, core::Kernel *> KernelImplMap;

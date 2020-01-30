@@ -3,15 +3,15 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#include "ATLMachine.h"
+#include "machine.h"
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <cassert>
 #include <vector>
-#include "atl_internal.h"
 #include "atmi_runtime.h"
+#include "internal.h"
 extern ATLMachine g_atl_machine;
 extern hsa_region_t atl_cpu_kernarg_region;
 
@@ -158,7 +158,7 @@ void ATLGPUProcessor::createQueues(const int count) {
   uint32_t queue_size = 0;
   err = hsa_agent_get_info(agent_, HSA_AGENT_INFO_QUEUE_MAX_SIZE, &queue_size);
   ErrorCheck(Querying the agent maximum queue size, err);
-  if(queue_size > core::Runtime::getInstance().getMaxQueueSize()) {
+  if (queue_size > core::Runtime::getInstance().getMaxQueueSize()) {
     queue_size = core::Runtime::getInstance().getMaxQueueSize();
   }
   /* printf("The maximum queue size is %u.\n", (unsigned int) queue_size);  */

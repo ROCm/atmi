@@ -89,15 +89,13 @@ set ( LIB_VERSION_STRING "${LIB_VERSION_MAJOR}.${LIB_VERSION_MINOR}.${LIB_VERSIO
 
 add_library(atmi_runtime SHARED
     system.cpp
-    atl_bindthread.c
-    atl_cputask.c
+    cputask.cpp
     kernel.cpp
     task.cpp
     taskgroup.cpp
-    atl_synckernel.c
-    ATLData.cpp
-    ATLMachine.cpp
-    ATLQueue.cpp
+    data.cpp
+    machine.cpp
+    queue.cpp
     atmi.cpp
     utils.cpp
     )

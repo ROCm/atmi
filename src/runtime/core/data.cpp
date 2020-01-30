@@ -3,7 +3,7 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#include "ATLData.h"
+#include "data.h"
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 #include <stdio.h>
@@ -12,15 +12,15 @@
 #include <iostream>
 #include <thread>
 #include <vector>
-#include "ATLMachine.h"
-#include "atl_internal.h"
 #include "atmi_runtime.h"
+#include "internal.h"
+#include "machine.h"
 #include "rt.h"
 #include "task.h"
 #include "taskgroup.h"
 
-using core::TaskImpl;
 using core::DataTaskImpl;
+using core::TaskImpl;
 extern ATLMachine g_atl_machine;
 extern hsa_signal_t IdentityCopySignal;
 

@@ -3,8 +3,8 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef SRC_RUNTIME_INCLUDE_ATLDATA_H_
-#define SRC_RUNTIME_INCLUDE_ATLDATA_H_
+#ifndef SRC_RUNTIME_INCLUDE_DATA_H_
+#define SRC_RUNTIME_INCLUDE_DATA_H_
 #include <hsa.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,4 +104,4 @@ enum class Direction { ATMI_H2D, ATMI_D2H, ATMI_D2D, ATMI_H2H };
 hsa_agent_t get_mem_agent(atmi_mem_place_t place);
 hsa_agent_t get_compute_agent(atmi_place_t place);
 }  // namespace core
-#endif  // SRC_RUNTIME_INCLUDE_ATLDATA_H_
+#endif  // SRC_RUNTIME_INCLUDE_DATA_H_

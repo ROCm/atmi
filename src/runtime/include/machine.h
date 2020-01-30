@@ -3,13 +3,13 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef SRC_RUNTIME_INCLUDE_ATLMACHINE_H_
-#define SRC_RUNTIME_INCLUDE_ATLMACHINE_H_
+#ifndef SRC_RUNTIME_INCLUDE_MACHINE_H_
+#define SRC_RUNTIME_INCLUDE_MACHINE_H_
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 #include <vector>
-#include "atl_internal.h"
 #include "atmi.h"
+#include "internal.h"
 
 class ATLMemory;
 
@@ -124,6 +124,6 @@ class ATLMachine {
 hsa_amd_memory_pool_t get_memory_pool(const ATLProcessor &proc,
                                       const int mem_id);
 
-#include "ATLMachine.tcc"
+#include "machine.tcc"
 
-#endif  // SRC_RUNTIME_INCLUDE_ATLMACHINE_H_
+#endif  // SRC_RUNTIME_INCLUDE_MACHINE_H_

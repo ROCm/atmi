@@ -4,8 +4,8 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 
-#ifndef SRC_RUNTIME_INCLUDE_REALTIMERCLASS_H_
-#define SRC_RUNTIME_INCLUDE_REALTIMERCLASS_H_
+#ifndef SRC_RUNTIME_INCLUDE_REALTIMER_H_
+#define SRC_RUNTIME_INCLUDE_REALTIMER_H_
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -181,4 +181,4 @@ inline void RealTimer::bufPrint(std::ostream& o, const std::string& str) const {
 #endif
 }
 }  // namespace core
-#endif  //  SRC_RUNTIME_INCLUDE_REALTIMERCLASS_H_
+#endif  //  SRC_RUNTIME_INCLUDE_REALTIMER_H_

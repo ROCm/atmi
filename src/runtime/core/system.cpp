@@ -14,10 +14,10 @@
 #include <set>
 #include <string>
 
-#include "ATLMachine.h"
-#include "RealTimerClass.h"
 #include "amd_comgr.h"
-#include "atl_internal.h"
+#include "internal.h"
+#include "machine.h"
+#include "realtimer.h"
 #include "rt.h"
 using core::RealTimer;
 
@@ -275,13 +275,13 @@ atmi_status_t Runtime::Finalize() {
   }
 
   // Finalize queues
-  for(auto &p : g_atl_machine.processors<ATLCPUProcessor>()) {
+  for (auto &p : g_atl_machine.processors<ATLCPUProcessor>()) {
     p.destroyQueues();
   }
-  for(auto &p : g_atl_machine.processors<ATLGPUProcessor>()) {
+  for (auto &p : g_atl_machine.processors<ATLGPUProcessor>()) {
     p.destroyQueues();
   }
-  for(auto &p : g_atl_machine.processors<ATLDSPProcessor>()) {
+  for (auto &p : g_atl_machine.processors<ATLDSPProcessor>()) {
     p.destroyQueues();
   }
 

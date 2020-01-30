@@ -4,11 +4,11 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 #include "atmi_interop_hsa.h"
-#include "atl_internal.h"
 #include "atmi_kl.h"
+#include "internal.h"
 using core::atl_is_atmi_initialized;
-using core::get_memory_pool_by_mem_place;
 using core::get_compute_agent;
+using core::get_memory_pool_by_mem_place;
 
 atmi_status_t atmi_interop_hsa_get_agent(atmi_place_t proc,
                                          hsa_agent_t *agent) {

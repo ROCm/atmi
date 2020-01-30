@@ -264,7 +264,7 @@ atmi_status_t Runtime::Finalize() {
   // TODO(ashwinma): Finalize all processors, queues, signals, kernarg memory
   // regions
   hsa_status_t err;
-  finalize_hsa();
+
   for (int i = 0; i < g_executables.size(); i++) {
     err = hsa_executable_destroy(g_executables[i]);
     ErrorCheck(Destroying executable, err);
@@ -272,6 +272,17 @@ atmi_status_t Runtime::Finalize() {
   if (atlc.g_cpu_initialized == true) {
     agent_fini();
     atlc.g_cpu_initialized = false;
+  }
+
+  // Finalize queues
+  for(auto &p : g_atl_machine.processors<ATLCPUProcessor>()) {
+    p.destroyQueues();
+  }
+  for(auto &p : g_atl_machine.processors<ATLGPUProcessor>()) {
+    p.destroyQueues();
+  }
+  for(auto &p : g_atl_machine.processors<ATLDSPProcessor>()) {
+    p.destroyQueues();
   }
 
   for (int i = 0; i < SymbolInfoTable.size(); i++) {
@@ -714,8 +725,6 @@ hsa_status_t init_hsa() {
   }
   return HSA_STATUS_SUCCESS;
 }
-
-hsa_status_t finalize_hsa() { return HSA_STATUS_SUCCESS; }
 
 void init_tasks() {
   if (atlc.g_tasks_initialized != false) return;

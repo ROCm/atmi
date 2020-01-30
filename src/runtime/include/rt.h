@@ -14,7 +14,7 @@
 namespace core {
 
 #define DEFAULT_MAX_SIGNALS 1024
-#define DEFAULT_MAX_QUEUE_SIZE 1024
+#define DEFAULT_MAX_QUEUE_SIZE 4096
 #define DEFAULT_MAX_KERNEL_TYPES 32
 #define DEFAULT_NUM_GPU_QUEUES -1  // computed in code
 #define DEFAULT_NUM_CPU_QUEUES -1  // computed in code

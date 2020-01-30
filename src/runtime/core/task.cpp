@@ -1994,6 +1994,8 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
     //  TaskWaitTimer.stop();
     // std::cout << "Task Wait Interim Timer " << TaskWaitTimer << std::endl;
     // std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
+    // Done with dispatch, do not dispatch more.
+    should_dispatch = false;
   }
   return should_dispatch;
 }

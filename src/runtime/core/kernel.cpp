@@ -5,8 +5,8 @@
  *===------------------------------------------------------------------------*/
 
 #include "kernel.h"
-#include "ATLMachine.h"
-#include "atl_internal.h"
+#include "internal.h"
+#include "machine.h"
 
 extern hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
 extern std::map<uint64_t, core::Kernel *> KernelImplMap;
@@ -176,12 +176,6 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
 
   /* create kernarg memory */
   kernarg_region_ = NULL;
-#ifdef MEMORY_REGION
-  hsa_status_t err = hsa_memory_allocate(
-      atl_gpu_kernarg_region, kernarg_segment_size_ * MAX_NUM_KERNELS,
-      &kernarg_region_);
-    ErrorCheck(Allocating memory for the executable-kernel, err);
-#else
   if (kernarg_segment_size_ > 0) {
     DEBUG_PRINT("New kernarg segment size: %u\n", kernarg_segment_size_);
     hsa_status_t err = hsa_amd_memory_pool_allocate(
@@ -190,36 +184,22 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
       ErrorCheck(Allocating memory for the executable-kernel, err);
       allow_access_to_all_gpu_agents(kernarg_region_);
 
-      void *pipe_ptrs;
-      // allocate pipe memory in the kernarg memory pool
-      // TODO(ashwinma): may be possible to allocate this on device specific
-      // memory but data movement will have to be done later by
-      // post-processing kernel on destination agent.
-      err = hsa_amd_memory_pool_allocate(
-          atl_gpu_kernarg_pool, MAX_PIPE_SIZE * MAX_NUM_KERNELS, 0, &pipe_ptrs);
-      ErrorCheck(Allocating pipe memory region, err);
-      DEBUG_PRINT("Allocating pipe ptr: %p\n", pipe_ptrs);
-      allow_access_to_all_gpu_agents(pipe_ptrs);
-
       for (int k = 0; k < MAX_NUM_KERNELS; k++) {
         atmi_implicit_args_t *impl_args =
             reinterpret_cast<atmi_implicit_args_t *>(
                 reinterpret_cast<char *>(kernarg_region_) +
                 (((k + 1) * kernarg_segment_size_) -
                  sizeof(atmi_implicit_args_t)));
-        impl_args->pipe_ptr = (uint64_t)(reinterpret_cast<char *>(pipe_ptrs) +
-                                         (k * MAX_PIPE_SIZE));
         impl_args->offset_x = 0;
         impl_args->offset_y = 0;
         impl_args->offset_z = 0;
       }
   }
 
-#endif
-    for (int i = 0; i < MAX_NUM_KERNELS; i++) {
-      free_kernarg_segments_.push(i);
-    }
-    pthread_mutex_init(&mutex_, NULL);
+  for (int i = 0; i < MAX_NUM_KERNELS; i++) {
+    free_kernarg_segments_.push(i);
+  }
+  pthread_mutex_init(&mutex_, NULL);
 }
 
 CPUKernelImpl::CPUKernelImpl(unsigned int id, const std::string &name,
@@ -259,18 +239,7 @@ KernelImpl::~KernelImpl() {
 
 GPUKernelImpl::~GPUKernelImpl() {
   lock(&mutex_);
-  // free the pipe_ptrs data
-  // We create the pipe_ptrs region for all kernel instances
-  // combined, and each instance of the kernel
-  // invocation takes a piece of it. So, the first kernel instance
-  // (k=0) will have the pointer to the entire pipe region itself.
-  atmi_implicit_args_t *impl_args = reinterpret_cast<atmi_implicit_args_t *>(
-      reinterpret_cast<char *>(kernarg_region_) + kernarg_segment_size_ -
-      sizeof(atmi_implicit_args_t));
-  void *pipe_ptrs = reinterpret_cast<void *>(impl_args->pipe_ptr);
-  DEBUG_PRINT("Freeing pipe ptr: %p\n", pipe_ptrs);
-  hsa_memory_free(pipe_ptrs);
-  hsa_memory_free(kernarg_region_);
+  ErrorCheck(Memory pool free, hsa_amd_memory_pool_free(kernarg_region_));
   kernel_objects_.clear();
   group_segment_sizes_.clear();
   private_segment_sizes_.clear();

@@ -5,27 +5,26 @@
  *===------------------------------------------------------------------------*/
 
 /* This file contains logic for CPU tasking in ATMI */
-#include <RealTimerClass.h>
 #include <assert.h>
 #include <climits>
 #include <iostream>
 #include <thread>
-#include "ATLMachine.h"
-#include "atl_bindthread.h"
-#include "atl_internal.h"
+#include "internal.h"
 #include "kernel.h"
+#include "machine.h"
+#include "realtimer.h"
 #include "task.h"
 
-using core::TaskImpl;
 using core::ComputeTaskImpl;
-using core::Kernel;
 using core::CPUKernelImpl;
-using core::lock;
-using core::unlock;
 using core::create_header;
-using core::packet_store_release;
-using core::getTaskImpl;
 using core::get_nanosecs;
+using core::getTaskImpl;
+using core::Kernel;
+using core::lock;
+using core::packet_store_release;
+using core::TaskImpl;
+using core::unlock;
 
 extern struct timespec context_init_time;
 extern atmi_machine_t g_atmi_machine;

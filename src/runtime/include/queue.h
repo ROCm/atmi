@@ -3,8 +3,8 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef SRC_RUNTIME_INCLUDE_ATLQUEUE_H_
-#define SRC_RUNTIME_INCLUDE_ATLQUEUE_H_
+#ifndef SRC_RUNTIME_INCLUDE_QUEUE_H_
+#define SRC_RUNTIME_INCLUDE_QUEUE_H_
 
 #include "atmi.h"
 #include "hsa.h"
@@ -36,4 +36,4 @@ class ATLGPUQueue : public ATLQueue {
   hsa_status_t set_place(atmi_place_t place);
 };
 
-#endif  // SRC_RUNTIME_INCLUDE_ATLQUEUE_H_
+#endif  // SRC_RUNTIME_INCLUDE_QUEUE_H_

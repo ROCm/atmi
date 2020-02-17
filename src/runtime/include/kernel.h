@@ -11,7 +11,7 @@
 #include <queue>
 #include <string>
 #include <vector>
-#include "atl_internal.h"
+#include "internal.h"
 #include "task.h"
 
 namespace core {

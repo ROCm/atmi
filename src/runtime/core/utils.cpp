@@ -3,8 +3,24 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#include "atl_internal.h"
+#include "internal.h"
 #include "rt.h"
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
+#include <errno.h>
+#include <pthread.h>
+#include <sched.h>
+#include <stdio.h>
+
+#define handle_error_en(en, msg) \
+  do {                           \
+    errno = en;                  \
+    perror(msg);                 \
+    exit(EXIT_FAILURE);          \
+  } while (0)
 
 /*
  * Helper functions
@@ -81,6 +97,49 @@ const char *get_error_string(hsa_status_t err) {
   }
 }
 
+int cpu_bindthread(int cpu_index) {
+  cpu_set_t cpuset;
+  int err;
+
+  CPU_ZERO(&cpuset);
+  CPU_SET(cpu_index + 1, &cpuset);
+  err = sched_setaffinity(0, sizeof(cpuset), &cpuset);
+  if (err != 0) {
+    return err;
+  } else {
+    DEBUG_PRINT("cpu %d bind correctly\n", cpu_index);
+    return 0;
+  }
+}
+
+atmi_status_t set_thread_affinity(int id) {
+  int s, j;
+  cpu_set_t cpuset;
+  pthread_t thread;
+
+  thread = pthread_self();
+
+  /* Set affinity mask to include CPUs 0 to 7 */
+
+  CPU_ZERO(&cpuset);
+  CPU_SET(id, &cpuset);
+
+  s = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+  if (s != 0) handle_error_en(s, "pthread_setaffinity_np");
+
+  /* Check the actual affinity mask
+   * assigned to the thread */
+  s = pthread_getaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+  if (s != 0) handle_error_en(s, "pthread_getaffinity_np");
+
+  /*printf("Set returned by pthread_getaffinity_np() contained:\n");
+  for (j = 0; j < CPU_SETSIZE; j++)
+      if (CPU_ISSET(j, &cpuset))
+          printf("    CPU %d\n", j);
+  */
+  return ATMI_STATUS_SUCCESS;
+}
+
 namespace core {
 /*
  * Environment variables
@@ -92,6 +151,7 @@ void Environment::GetEnvAll() {
                  "ATMI_SYNC_BARRIER_PKT"
               << std::endl
               << "ATMI_MAX_HSA_SIGNALS : positive integer" << std::endl
+              << "ATMI_MAX_HSA_QUEUE_SIZE : positive integer" << std::endl
               << "ATMI_MAX_KERNEL_TYPES : positive integer" << std::endl
               << "ATMI_DEVICE_GPU_WORKERS : positive integer" << std::endl
               << "ATMI_DEVICE_CPU_WORKERS : positive integer" << std::endl
@@ -111,6 +171,9 @@ void Environment::GetEnvAll() {
 
   var = GetEnv("ATMI_MAX_HSA_SIGNALS");
   if (!var.empty()) max_signals_ = std::stoi(var);
+
+  var = GetEnv("ATMI_MAX_HSA_QUEUE_SIZE");
+  if (!var.empty()) max_queue_size_ = std::stoi(var);
 
   var = GetEnv("ATMI_MAX_KERNEL_TYPES");
   if (!var.empty()) max_kernel_types_ = std::stoi(var);

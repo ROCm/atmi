@@ -109,20 +109,13 @@ atmi_status_t atmi_task_wait(atmi_task_handle_t task) {
 }
 
 /*
- * [Experimental] print buffers/pipes
+ * [AOMP hostcall] print buffers/pipes
  */
-atmi_status_t atmi_register_task_init_buffer(task_process_init_buffer_t fp) {
-  return core::Runtime::getInstance().RegisterTaskInitBuffer(fp);
-}
-
-atmi_status_t atmi_register_task_fini_buffer(task_process_fini_buffer_t fp) {
-  return core::Runtime::getInstance().RegisterTaskFiniBuffer(fp);
-}
-
 atmi_status_t atmi_register_task_hostcall_handler(
     atmi_task_hostcall_handler_t fp) {
   return core::Runtime::getInstance().RegisterTaskHostcallHandler(fp);
 }
+
 /*
  * Tasks
  */

@@ -3,8 +3,8 @@
  *
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
-#ifndef SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H_
-#define SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H_
+#ifndef SRC_RUNTIME_INCLUDE_INTERNAL_H_
+#define SRC_RUNTIME_INCLUDE_INTERNAL_H_
 #include <inttypes.h>
 #include <pthread.h>
 #include <stddef.h>
@@ -25,10 +25,10 @@
 #include "hsa_ext_amd.h"
 #include "hsa_ext_finalize.h"
 
-#include "RealTimerClass.h"
 #include "atmi.h"
 #include "atmi_kl.h"
 #include "atmi_runtime.h"
+#include "realtimer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -105,7 +105,6 @@ extern atl_context_t *atlc_p;
 }
 #endif
 
-#define MAX_PIPE_SIZE (1024)
 /* ---------------------------------------------------------------------------------
  * Simulated CPU Data Structures and API
  * ---------------------------------------------------------------------------------
@@ -194,7 +193,7 @@ class TaskgroupImpl;
 class TaskImpl;
 class Kernel;
 class KernelImpl;
-}
+}  // namespace core
 
 extern std::vector<core::TaskgroupImpl *> AllTaskgroups;
 // atmi_task_table_t TaskTable[SNK_MAX_TASKS];
@@ -211,8 +210,8 @@ atmi_status_t atl_init_gpu_context();
 hsa_status_t init_hsa();
 hsa_status_t finalize_hsa();
 /*
-* Generic utils
-*/
+ * Generic utils
+ */
 template <typename T>
 inline T alignDown(T value, size_t alignment) {
   return (T)(value & ~(alignment - 1));
@@ -255,9 +254,6 @@ void init_dag_scheduler();
 bool handle_signal(hsa_signal_value_t value, void *arg);
 bool handle_group_signal(hsa_signal_value_t value, void *arg);
 
-extern task_process_init_buffer_t task_process_init_buffer;
-extern task_process_fini_buffer_t task_process_fini_buffer;
-
 void enqueue_barrier_tasks(std::vector<TaskImpl *> tasks);
 hsa_signal_t enqueue_barrier_async(TaskImpl *task, hsa_queue_t *queue,
                                    const int dep_task_count,
@@ -288,6 +284,8 @@ hsa_signal_t *get_worker_sig(hsa_queue_t *queue);
 
 const char *get_error_string(hsa_status_t err);
 const char *get_atmi_error_string(atmi_status_t err);
+int cpu_bindthread(int cpu_index);
+atmi_status_t set_thread_affinity(int id);
 #define ATMIErrorCheck(msg, status)                             \
   if (status != ATMI_STATUS_SUCCESS) {                          \
     printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__, #msg, \
@@ -330,4 +328,4 @@ const char *get_atmi_error_string(atmi_status_t err);
     /*  printf("%s succeeded.\n", #msg);*/                           \
   }
 
-#endif  // SRC_RUNTIME_INCLUDE_ATL_INTERNAL_H_
+#endif  // SRC_RUNTIME_INCLUDE_INTERNAL_H_

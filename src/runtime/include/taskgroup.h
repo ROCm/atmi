@@ -14,9 +14,9 @@
 #include <set>
 #include <vector>
 
-#include "ATLMachine.h"
-#include "atl_internal.h"
 #include "atmi.h"
+#include "internal.h"
+#include "machine.h"
 #include "task.h"
 
 namespace core {

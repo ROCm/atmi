@@ -21,18 +21,17 @@
 #include <map>
 #include <set>
 #include <vector>
-#include "ATLData.h"
-#include "ATLMachine.h"
-#include "ATLQueue.h"
-#include "RealTimerClass.h"
-#include "atl_bindthread.h"
-#include "atl_internal.h"
+#include "data.h"
+#include "internal.h"
 #include "kernel.h"
+#include "machine.h"
+#include "queue.h"
+#include "realtimer.h"
 #include "rt.h"
 #include "taskgroup.h"
-using core::RealTimer;
 using core::Kernel;
 using core::KernelImpl;
+using core::RealTimer;
 using core::TaskImpl;
 
 pthread_mutex_t mutex_all_tasks_;
@@ -414,8 +413,6 @@ void TaskImpl::updateMetrics() {
   }
 }
 // function pointers
-task_process_init_buffer_t task_process_init_buffer;
-task_process_fini_buffer_t task_process_fini_buffer;
 atmi_task_hostcall_handler_t task_process_hostcall_handler = NULL;
 
 atmi_status_t Runtime::RegisterTaskHostcallHandler(
@@ -432,20 +429,6 @@ atmi_status_t Runtime::RegisterTaskHostcallHandler(
   }
 
   return status;
-}
-
-atmi_status_t Runtime::RegisterTaskInitBuffer(task_process_init_buffer_t fp) {
-  // printf("register function pointer \n");
-  task_process_init_buffer = fp;
-
-  return ATMI_STATUS_SUCCESS;
-}
-
-atmi_status_t Runtime::RegisterTaskFiniBuffer(task_process_fini_buffer_t fp) {
-  // printf("register function pointer \n");
-  task_process_fini_buffer = fp;
-
-  return ATMI_STATUS_SUCCESS;
 }
 
 pthread_mutex_t sort_mutex_2(pthread_mutex_t *addr1, pthread_mutex_t *addr2,
@@ -504,31 +487,6 @@ void handle_signal_callback(TaskImpl *task) {
   // tasks without atmi_task handle should not be added to callbacks anyway
   assert(task->groupable_ != ATMI_TRUE);
   ComputeTaskImpl *compute_task = dynamic_cast<ComputeTaskImpl *>(task);
-
-  // process printf buffer
-  {
-    KernelImpl *kernel_impl = NULL;
-    if (task_process_fini_buffer) {
-      if (compute_task) {
-        kernel_impl =
-            compute_task->kernel_->getKernelImpl(compute_task->kernel_id_);
-        // printf("Task Id: %lu, kernel name: %s\n", compute_task->id_,
-        // kernel_impl->kernel_name.c_str());
-        char *kargs = reinterpret_cast<char *>(compute_task->kernarg_region_);
-        if (compute_task->type() == ATL_KERNEL_EXECUTION &&
-            compute_task->devtype_ == ATMI_DEVTYPE_GPU &&
-            kernel_impl->platform_type() == AMDGCN) {
-          atmi_implicit_args_t *impl_args =
-              reinterpret_cast<atmi_implicit_args_t *>(
-                  kargs + (compute_task->kernarg_region_size_ -
-                           sizeof(atmi_implicit_args_t)));
-
-          (*task_process_fini_buffer)(
-              reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
-        }
-      }
-    }
-  }
 
   lock(&(task->mutex_));
   task->set_state(ATMI_EXECUTED);
@@ -614,31 +572,6 @@ void handle_signal_barrier_pkt(TaskImpl *task,
   for (auto task : dispatched_tasks) {
     assert(task->groupable_ != ATMI_TRUE);
     ComputeTaskImpl *compute_task = dynamic_cast<ComputeTaskImpl *>(task);
-
-    // process printf buffer
-    {
-      KernelImpl *kernel_impl = NULL;
-      if (task_process_fini_buffer) {
-        if (compute_task) {
-          kernel_impl =
-              compute_task->kernel_->getKernelImpl(compute_task->kernel_id_);
-          // printf("Task Id: %lu, kernel name: %s\n", compute_task->id_,
-          // kernel_impl->kernel_name.c_str());
-          char *kargs = reinterpret_cast<char *>(compute_task->kernarg_region_);
-          if (compute_task->type() == ATL_KERNEL_EXECUTION &&
-              compute_task->devtype_ == ATMI_DEVTYPE_GPU &&
-              kernel_impl->platform_type() == AMDGCN) {
-            atmi_implicit_args_t *impl_args =
-                reinterpret_cast<atmi_implicit_args_t *>(
-                    kargs + (compute_task->kernarg_region_size_ -
-                             sizeof(atmi_implicit_args_t)));
-
-            (*task_process_fini_buffer)(
-                reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
-          }
-        }
-      }
-    }
 
     // This dispatched task is now executed
     lock(&(task->mutex_));
@@ -784,28 +717,6 @@ bool handle_group_signal(hsa_signal_value_t value, void *arg) {
       kernel = compute_task->kernel_;
       kernel_impl = kernel->getKernelImpl(compute_task->kernel_id_);
       mutexes.insert(&(kernel_impl->mutex()));
-
-      // process printf buffer
-      {
-        if (task_process_fini_buffer) {
-          if (compute_task->kernel_) {
-            // printf("Task Id: %lu, kernel name: %s\n", compute_task->id_,
-            // kernel_impl->kernel_name.c_str());
-            char *kargs =
-                reinterpret_cast<char *>(compute_task->kernarg_region_);
-            if (compute_task->type() == ATL_KERNEL_EXECUTION &&
-                compute_task->devtype_ == ATMI_DEVTYPE_GPU &&
-                kernel_impl->platform_type() == AMDGCN) {
-              atmi_implicit_args_t *impl_args =
-                  reinterpret_cast<atmi_implicit_args_t *>(
-                      kargs + (compute_task->kernarg_region_size_ -
-                               sizeof(atmi_implicit_args_t)));
-              (*task_process_fini_buffer)(
-                  reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
-            }
-          }
-        }
-      }
     }
     if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
       for (auto &t : task->and_predecessors_) {
@@ -1081,7 +992,6 @@ atmi_status_t ComputeTaskImpl::dispatch() {
     impl_args->offset_x = 0;
     impl_args->offset_y = 0;
     impl_args->offset_z = 0;
-    // char *pipe_ptr = impl_args->pipe_ptr;
 
     // assign a hostcall buffer for the selected Q
     {
@@ -1101,30 +1011,6 @@ atmi_status_t ComputeTaskImpl::dispatch() {
 
             impl_args->hostcall_ptr =
                 (*task_process_hostcall_handler)(this_Q, proc_id);
-          }
-        }
-      }
-    }
-
-    // initialize printf buffer
-    {
-      KernelImpl *kernel_impl = NULL;
-      if (task_process_init_buffer) {
-        if (kernel_) {
-          kernel_impl = kernel_->getKernelImpl(kernel_id_);
-          // printf("Task Id: %lu, kernel name: %s\n", id_,
-          // kernel_impl->kernel_name.c_str());
-          char *kargs = reinterpret_cast<char *>(kernarg_region_);
-          if (type() == ATL_KERNEL_EXECUTION && devtype_ == ATMI_DEVTYPE_GPU &&
-              kernel_impl->platform_type() == AMDGCN) {
-            atmi_implicit_args_t *impl_args =
-                reinterpret_cast<atmi_implicit_args_t *>(
-                    kargs +
-                    (kernarg_region_size_ - sizeof(atmi_implicit_args_t)));
-
-            // initalize printf buffer
-            (*task_process_init_buffer)(
-                reinterpret_cast<void *>(impl_args->pipe_ptr), MAX_PIPE_SIZE);
           }
         }
       }
@@ -2107,6 +1993,8 @@ bool TaskImpl::tryDispatch(void **args, bool isCallback) {
     //  TaskWaitTimer.stop();
     // std::cout << "Task Wait Interim Timer " << TaskWaitTimer << std::endl;
     // std::cout << "Launch Time: " << TryLaunchTimer << std::endl;
+    // Done with dispatch, do not dispatch more.
+    should_dispatch = false;
   }
   return should_dispatch;
 }

@@ -290,22 +290,22 @@ void enqueue_barrier(TaskImpl *task, hsa_queue_t *queue,
 
 extern void TaskImpl::wait() {
   TaskWaitTimer.start();
-  // if task is not yet ready, then it has not gotten all resources yet, so we
-  // wait
-  // for resources and then issue a callback; only then we can wait for the
-  // task to
-  // complete
   if (g_dep_sync_type == ATL_SYNC_BARRIER_PKT) {
+    // if task is not yet ready, then it has not gotten all resources yet, so
+    // we wait for resources and then issue a callback; only then we can wait
+    // for the task to complete.
+    // Also, if the callback thread is already active (check the
+    // first_created_tasks_dispatched_ flag), then we do not issue the
+    // callback.
     while (state_ < ATMI_DISPATCHED) {
     }
-    if (state_ < ATMI_EXECUTED) {
+    if (state_ < ATMI_EXECUTED &&
+         !taskgroup_obj_->first_created_tasks_dispatched_.load()) {
       // Now, this task has the resources, so it can get dispatched any time.
       // So, create a barrier packet for current sink tasks and add async
-      // handler
-      // for its completion.
+      // handler for its completion.
       // All dispatched tasks get signal from device-only signal pool. All
-      // async
-      // handlers are registered to interruptible signals
+      // async handlers are registered to interruptible signals
       lock(&mutex_readyq_);
       TaskImplVecTy tasks;
       TaskImplVecTy *dispatched_tasks_ptr = NULL;

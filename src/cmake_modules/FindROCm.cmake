@@ -19,11 +19,11 @@ find_path(
     hsa.h
   HINTS
     ${ROC_DIR}/include
-    ${ROCR_DIR}/include
-    ${ROCR_DIR}/include/hsa
-    ${ROCR_DIR}/hsa/include
-    ${ROCR_DIR}/hsa/include/hsa
-    ${ROCR_DIR}
+    ${ROC_DIR}/include/hsa
+    ${ROC_DIR}/hsa/include
+    ${ROC_DIR}/hsa/include/hsa
+    ${ROC_DIR}/hsa
+    ${ROC_DIR}
     /opt/rocm/include
     /opt/rocm/hsa/include
     /usr/local/include
@@ -37,8 +37,7 @@ find_library(
     hsa-runtime64
   HINTS
     ${ROC_DIR}/lib
-    ${ROCR_DIR}/lib
-    ${ROCR_DIR}
+    ${ROC_DIR}
     /opt/rocm/lib
     /opt/rocm/hsa/lib
     /usr/local/lib
@@ -52,8 +51,7 @@ find_library(
     hsakmt
   HINTS
     ${ROC_DIR}/lib
-    ${ROCT_DIR}/lib
-    ${ROCT_DIR}
+    ${ROC_DIR}
     /opt/rocm/lib
     /opt/rocm/hsa/lib
     /usr/local/lib

@@ -768,10 +768,12 @@ hsa_status_t init_hsa() {
     if (err != HSA_STATUS_SUCCESS) return err;
     ErrorCheck(After initializing compute and memory, err);
     init_dag_scheduler();
+
+    int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
+    KernelInfoTable.resize(gpu_count);
+    SymbolInfoTable.resize(gpu_count);
     for (int i = 0; i < SymbolInfoTable.size(); i++) SymbolInfoTable[i].clear();
-    SymbolInfoTable.clear();
     for (int i = 0; i < KernelInfoTable.size(); i++) KernelInfoTable[i].clear();
-    KernelInfoTable.clear();
     atlc.g_hsa_initialized = true;
     DEBUG_PRINT("done\n");
   }
@@ -1726,104 +1728,115 @@ hsa_status_t create_kernarg_memory_agent(hsa_executable_t executable,
 atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
                                                 size_t *module_sizes,
                                                 atmi_platform_type_t *types,
-                                                const int num_modules) {
+                                                const int num_modules,
+                                                atmi_place_t place) {
   hsa_status_t err;
-  int some_success = 0;
-  std::vector<std::string> modules_str;
-  for (int i = 0; i < num_modules; i++) {
-    modules_str.push_back(std::string(reinterpret_cast<char *>(modules[i])));
+  int gpu = place.device_id;
+  if (gpu == -1) {
+    // user is asking runtime to pick a device
+    // TODO(ashwinma): best device of this type? pick 0 for now
+    gpu = 0;
   }
 
-  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
+  DEBUG_PRINT("Trying to load module to GPU-%d\n", gpu);
+  ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
+  hsa_agent_t agent = proc.agent();
+  hsa_executable_t executable = {0};
+  hsa_profile_t agent_profile;
 
-  KernelInfoTable.resize(gpu_count);
-  SymbolInfoTable.resize(gpu_count);
+  err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
+  ErrorCheck(Query the agent profile, err);
+  // FIXME: Assume that every profile is FULL until we understand how to build
+  // GCN with base profile
+  agent_profile = HSA_PROFILE_FULL;
+  /* Create the empty executable.  */
+  err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "",
+                              &executable);
+  ErrorCheck(Create the executable, err);
 
-  for (int gpu = 0; gpu < gpu_count; gpu++) {
-    DEBUG_PRINT("Trying to load module to GPU-%d\n", gpu);
-    atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
-    ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    hsa_agent_t agent = proc.agent();
-    hsa_executable_t executable = {0};
-    hsa_profile_t agent_profile;
+  // clear symbol set for every executable
+  SymbolSet.clear();
+  bool module_load_success = false;
+  for (int i = 0; i < num_modules; i++) {
+    void *module_bytes = modules[i];
+    size_t module_size = module_sizes[i];
+    if (types[i] == AMDGCN) {
+      // Some metadata info is not available through ROCr API, so use custom
+      // code object metadata parsing to collect such metadata info
+      void *tmp_module = malloc(module_size);
+      memcpy(tmp_module, module_bytes, module_size);
+      err = get_code_object_custom_metadata(types[i], tmp_module, module_size,
+                                            gpu);
+      ErrorCheckAndContinue(Getting custom code object metadata, err);
+      free(tmp_module);
 
-    err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
-    ErrorCheckAndContinue(Query the agent profile, err);
-    // FIXME: Assume that every profile is FULL until we understand how to build
-    // GCN with base profile
-    agent_profile = HSA_PROFILE_FULL;
-    /* Create the empty executable.  */
-    err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN,
-                                "", &executable);
-    ErrorCheckAndContinue(Create the executable, err);
+      // Deserialize code object.
+      hsa_code_object_t code_object = {0};
+      err = hsa_code_object_deserialize(module_bytes, module_size, NULL,
+                                        &code_object);
+      ErrorCheckAndContinue(Code Object Deserialization, err);
+      assert(0 != code_object.handle);
 
-    // clear symbol set for every executable
-    SymbolSet.clear();
-    int module_load_success = 0;
-    for (int i = 0; i < num_modules; i++) {
-      void *module_bytes = modules[i];
-      size_t module_size = module_sizes[i];
-      if (types[i] == AMDGCN) {
-        // Some metadata info is not available through ROCr API, so use custom
-        // code object metadata parsing to collect such metadata info
-        void *tmp_module = malloc(module_size);
-        memcpy(tmp_module, module_bytes, module_size);
-        err = get_code_object_custom_metadata(types[i], tmp_module, module_size,
-                                              gpu);
-        ErrorCheckAndContinue(Getting custom code object metadata, err);
-        free(tmp_module);
+      err = hsa_code_object_iterate_symbols(code_object, validate_code_object,
+                                            &gpu);
+      ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-        // Deserialize code object.
-        hsa_code_object_t code_object = {0};
-        err = hsa_code_object_deserialize(module_bytes, module_size, NULL,
-                                          &code_object);
-        ErrorCheckAndContinue(Code Object Deserialization, err);
-        assert(0 != code_object.handle);
+      /* Load the code object.  */
+      err =
+          hsa_executable_load_code_object(executable, agent, code_object, NULL);
+      ErrorCheckAndContinue(Loading the code object, err);
 
-        err = hsa_code_object_iterate_symbols(code_object, validate_code_object,
-                                              &gpu);
-          ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+      // cannot iterate over symbols until executable is frozen
+      // err = hsa_executable_iterate_agent_symbols(executable, agent,
+      //    create_kernarg_memory_agent, &gpu);
+      // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-          /* Load the code object.  */
-          err = hsa_executable_load_code_object(executable, agent, code_object,
-                                                NULL);
-          ErrorCheckAndContinue(Loading the code object, err);
-
-          // cannot iterate over symbols until executable is frozen
-          // err = hsa_executable_iterate_agent_symbols(executable, agent,
-          //    create_kernarg_memory_agent, &gpu);
-          // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
-
-      } else {
-        ErrorCheckAndContinue(Loading non - AMDGCN code object,
-                              HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
-      }
-      module_load_success = 1;
+    } else {
+      ErrorCheckAndContinue(Loading non - AMDGCN code object,
+                            HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
     }
-    if (!module_load_success) continue;
-
+    module_load_success = true;
+  }
+  DEBUG_PRINT("Modules loaded successful? %d\n", module_load_success);
+  if (module_load_success) {
     /* Freeze the executable; it can now be queried for symbols.  */
     err = hsa_executable_freeze(executable, "");
-    ErrorCheckAndContinue(Freeze the executable, err);
+    ErrorCheck(Freeze the executable, err);
 
     err =
         hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu);
-      ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+    ErrorCheck(Iterating over symbols for execuatable, err);
 
-      // err = hsa_executable_iterate_program_symbols(executable,
-      // iterate_program_symbols, &gpu);
-      // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+    // err = hsa_executable_iterate_program_symbols(executable,
+    // iterate_program_symbols, &gpu);
+    // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-      // err = hsa_executable_iterate_agent_symbols(executable,
-      // iterate_agent_symbols, &gpu);
-      // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+    // err = hsa_executable_iterate_agent_symbols(executable,
+    // iterate_agent_symbols, &gpu);
+    // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-      // save the executable and destroy during finalize
-      g_executables.push_back(executable);
-      some_success = 1;
+    // save the executable and destroy during finalize
+    g_executables.push_back(executable);
+    return ATMI_STATUS_SUCCESS;
+  } else {
+    return ATMI_STATUS_ERROR;
   }
-  DEBUG_PRINT("Modules loaded successful? %d\n", some_success);
-  // ModuleMap[executable.handle] = modules_str;
+}
+
+atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
+                                                size_t *module_sizes,
+                                                atmi_platform_type_t *types,
+                                                const int num_modules) {
+  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
+  int some_success = 0;
+  atmi_status_t status;
+  for (int gpu = 0; gpu < gpu_count; gpu++) {
+    atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
+    status = core::Runtime::getInstance().RegisterModuleFromMemory(
+        modules, module_sizes, types, num_modules, place);
+    if (status == ATMI_STATUS_SUCCESS) some_success = 1;
+  }
+
   return (some_success) ? ATMI_STATUS_SUCCESS : ATMI_STATUS_ERROR;
 }
 
@@ -1840,8 +1853,34 @@ atmi_status_t Runtime::RegisterModule(const char **filenames,
     module_sizes.push_back(module_size);
   }
 
-  atmi_status_t status = atmi_module_register_from_memory(
+  atmi_status_t status = core::Runtime::getInstance().RegisterModuleFromMemory(
       &modules[0], &module_sizes[0], types, num_modules);
+
+  // memory space got by
+  // void *raw_code_object = malloc(size);
+  for (int i = 0; i < num_modules; i++) {
+    free(modules[i]);
+  }
+
+  return status;
+}
+
+atmi_status_t Runtime::RegisterModule(const char **filenames,
+                                      atmi_platform_type_t *types,
+                                      const int num_modules,
+                                      atmi_place_t place) {
+  std::vector<void *> modules;
+  std::vector<size_t> module_sizes;
+  for (int i = 0; i < num_modules; i++) {
+    size_t module_size;
+    void *module_bytes = atl_read_binary_from_file(filenames[i], &module_size);
+    if (!module_bytes) return ATMI_STATUS_ERROR;
+    modules.push_back(module_bytes);
+    module_sizes.push_back(module_size);
+  }
+
+  atmi_status_t status = core::Runtime::getInstance().RegisterModuleFromMemory(
+      &modules[0], &module_sizes[0], types, num_modules, place);
 
   // memory space got by
   // void *raw_code_object = malloc(size);

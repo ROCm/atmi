@@ -74,6 +74,77 @@ atmi_status_t atmi_finalize();
  * @{
  */
 /**
+ * @brief Register the ATMI code module from file on to a specific place
+ * (device).
+ *
+ * @detail Currently, only GPU devices need explicit module registration because
+ * of their specific ISAs that require a separate compilation phase. On the
+ * other
+ * hand, CPU devices execute regular x86 functions that are compiled with the
+ * host program.
+ *
+ * @param[in] filenames A collection of files that contain the GPU modules
+ * targeting ::AMDGCN platform types. Value cannot be NULL.
+ *
+ * @param[in] types A collection of platform types corresponding to the files.
+ * Value cannot be NULL.
+ *
+ * @param[in] num_modules Size of @p filenames and @p types. Value should be
+ * greater than 0.
+ *
+ * @param[in] place Denotes the execution place (device) on which the module
+ * should be registered and loaded.
+ *
+ * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
+ *
+ * @retval ::ATMI_STATUS_ERROR The function encountered errors.
+ *
+ * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
+ *
+ */
+atmi_status_t atmi_module_register_to_place(const char **filenames,
+                                            atmi_platform_type_t *types,
+                                            const int num_modules,
+                                            atmi_place_t place);
+
+/**
+ * @brief Register the ATMI code module from memory on to a specific place
+ * (device).
+ *
+ * @detail Currently, only GPU devices need explicit module registration because
+ * of their specific ISAs that require a separate compilation phase. On the
+ * other
+ * hand, CPU devices execute regular x86 functions that are compiled with the
+ * host program.
+ *
+ * @param[in] modules A collection of memory regions that contain the GPU
+ * modules
+ * targeting ::AMDGCN platform types. Value cannot be NULL.
+ *
+ * @param[in] module_sizes Sizes of each module region in @p modules. Value
+ * cannot be NULL.
+ *
+ * @param[in] types A collection of platform types corresponding to the modules.
+ * Value cannot be NULL.
+ *
+ * @param[in] num_modules Size of @p modules. @p module_sizes and @p types.
+ * Value should be greater than 0.
+ *
+ * @param[in] place Denotes the execution place (device) on which the module
+ * should be registered and loaded.
+ *
+ * @retval ::ATMI_STATUS_SUCCESS The function has executed successfully.
+ *
+ * @retval ::ATMI_STATUS_ERROR The function encountered errors.
+ *
+ * @retval ::ATMI_STATUS_UNKNOWN The function encountered errors.
+ *
+ */
+atmi_status_t atmi_module_register_from_memory_to_place(
+    void **modules, size_t *module_sizes, atmi_platform_type_t *types,
+    const int num_modules, atmi_place_t place);
+
+/**
  * @brief Register the ATMI code module from file.
  *
  * @detail Currently, only GPU devices need explicit module registration because
@@ -497,7 +568,7 @@ atmi_status_t atmi_taskgroup_create(atmi_taskgroup_handle_t *group_handle,
 #else
                                     bool ordered, atmi_place_t place
 #endif
-);
+                                    );
 
 /**
  * @brief Release the task group structure, which could be a group of compute

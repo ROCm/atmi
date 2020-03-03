@@ -52,7 +52,6 @@ std::queue<hsa_signal_t> FreeSignalPool;
 extern bool g_atmi_hostcall_required;
 
 std::map<uint64_t, Kernel *> KernelImplMap;
-// std::map<uint64_t, std::vector<std::string> > ModuleMap;
 bool setCallbackToggle = false;
 
 static atl_dep_sync_t g_dep_sync_type =

@@ -31,16 +31,21 @@ typedef struct {
   uint32_t n_type;   /* Type of note. */
 } Elf_Note;
 
-#include "llvm/Support/AMDGPUMetadata.h"
-
-typedef llvm::AMDGPU::HSAMD::Metadata CodeObjectMD;
-typedef llvm::AMDGPU::HSAMD::Kernel::Metadata KernelMD;
-typedef llvm::AMDGPU::HSAMD::Kernel::Arg::Metadata KernelArgMD;
-
-using llvm::AMDGPU::HSAMD::AccessQualifier;
-using llvm::AMDGPU::HSAMD::AddressSpaceQualifier;
-using llvm::AMDGPU::HSAMD::ValueKind;
-using llvm::AMDGPU::HSAMD::ValueType;
+// The following include file and following structs/enums
+// have been replicated on a per-use basis below. For example,
+// llvm::AMDGPU::HSAMD::Kernel::Metadata has several fields,
+// but we may care only about kernargSegmentSize_ for now, so
+// we just include that field in our KernelMD implementation. We
+// chose this approach to replicate in order to avoid forcing
+// a dependency on LLVM_INCLUDE_DIR just to compile the runtime.
+// #include "llvm/Support/AMDGPUMetadata.h"
+// typedef llvm::AMDGPU::HSAMD::Metadata CodeObjectMD;
+// typedef llvm::AMDGPU::HSAMD::Kernel::Metadata KernelMD;
+// typedef llvm::AMDGPU::HSAMD::Kernel::Arg::Metadata KernelArgMD;
+// using llvm::AMDGPU::HSAMD::AccessQualifier;
+// using llvm::AMDGPU::HSAMD::AddressSpaceQualifier;
+// using llvm::AMDGPU::HSAMD::ValueKind;
+// using llvm::AMDGPU::HSAMD::ValueType;
 
 enum class ArgField : uint8_t {
   Name = 0,
@@ -86,38 +91,85 @@ static const std::map<std::string, ArgField> ArgFieldMap = {
     {".value_type", ArgField::ValueType},
     {".name", ArgField::Name}};
 
-static const std::map<std::string, ValueKind> ArgValueKind = {
-    {"ByValue", ValueKind::ByValue},
-    {"GlobalBuffer", ValueKind::GlobalBuffer},
-    {"DynamicSharedPointer", ValueKind::DynamicSharedPointer},
-    {"Sampler", ValueKind::Sampler},
-    {"Image", ValueKind::Image},
-    {"Pipe", ValueKind::Pipe},
-    {"Queue", ValueKind::Queue},
-    {"HiddenGlobalOffsetX", ValueKind::HiddenGlobalOffsetX},
-    {"HiddenGlobalOffsetY", ValueKind::HiddenGlobalOffsetY},
-    {"HiddenGlobalOffsetZ", ValueKind::HiddenGlobalOffsetZ},
-    {"HiddenNone", ValueKind::HiddenNone},
-    {"HiddenPrintfBuffer", ValueKind::HiddenPrintfBuffer},
-    {"HiddenDefaultQueue", ValueKind::HiddenDefaultQueue},
-    {"HiddenCompletionAction", ValueKind::HiddenCompletionAction},
-    // {"HiddenMultiGridSyncArg",  ValueKind::HiddenMultiGridSyncArg},
+class KernelArgMD {
+ public:
+  enum class ValueKind {
+    HiddenGlobalOffsetX,
+    HiddenGlobalOffsetY,
+    HiddenGlobalOffsetZ,
+    HiddenNone,
+    HiddenPrintfBuffer,
+    HiddenDefaultQueue,
+    HiddenCompletionAction,
+    HiddenMultiGridSyncArg,
+    HiddenHostcallBuffer,
+    Unknown
+  };
+
+  KernelArgMD()
+      : name_(std::string()),
+        typeName_(std::string()),
+        size_(0),
+        offset_(0),
+        align_(0),
+        valueKind_(ValueKind::Unknown) {}
+
+  // fields
+  std::string name_;
+  std::string typeName_;
+  uint32_t size_;
+  uint32_t offset_;
+  uint32_t align_;
+  ValueKind valueKind_;
+};
+
+class KernelMD {
+ public:
+  KernelMD() : kernargSegmentSize_(0ull) {}
+
+  // fields
+  uint64_t kernargSegmentSize_;
+};
+
+static const std::map<std::string, KernelArgMD::ValueKind> ArgValueKind = {
+    //    Including only those fields that are relevant to the runtime.
+    //    {"ByValue", KernelArgMD::ValueKind::ByValue},
+    //    {"GlobalBuffer", KernelArgMD::ValueKind::GlobalBuffer},
+    //    {"DynamicSharedPointer",
+    //    KernelArgMD::ValueKind::DynamicSharedPointer},
+    //    {"Sampler", KernelArgMD::ValueKind::Sampler},
+    //    {"Image", KernelArgMD::ValueKind::Image},
+    //    {"Pipe", KernelArgMD::ValueKind::Pipe},
+    //    {"Queue", KernelArgMD::ValueKind::Queue},
+    {"HiddenGlobalOffsetX", KernelArgMD::ValueKind::HiddenGlobalOffsetX},
+    {"HiddenGlobalOffsetY", KernelArgMD::ValueKind::HiddenGlobalOffsetY},
+    {"HiddenGlobalOffsetZ", KernelArgMD::ValueKind::HiddenGlobalOffsetZ},
+    {"HiddenNone", KernelArgMD::ValueKind::HiddenNone},
+    {"HiddenPrintfBuffer", KernelArgMD::ValueKind::HiddenPrintfBuffer},
+    {"HiddenDefaultQueue", KernelArgMD::ValueKind::HiddenDefaultQueue},
+    {"HiddenCompletionAction", KernelArgMD::ValueKind::HiddenCompletionAction},
+    {"HiddenMultiGridSyncArg", KernelArgMD::ValueKind::HiddenMultiGridSyncArg},
+    {"HiddenHostcallBuffer", KernelArgMD::ValueKind::HiddenHostcallBuffer},
     // v3
-    {"by_value", ValueKind::ByValue},
-    {"global_buffer", ValueKind::GlobalBuffer},
-    {"dynamic_shared_pointer", ValueKind::DynamicSharedPointer},
-    {"sampler", ValueKind::Sampler},
-    {"image", ValueKind::Image},
-    {"pipe", ValueKind::Pipe},
-    {"queue", ValueKind::Queue},
-    {"hidden_global_offset_x", ValueKind::HiddenGlobalOffsetX},
-    {"hidden_global_offset_y", ValueKind::HiddenGlobalOffsetY},
-    {"hidden_global_offset_z", ValueKind::HiddenGlobalOffsetZ},
-    {"hidden_none", ValueKind::HiddenNone},
-    {"hidden_printf_buffer", ValueKind::HiddenPrintfBuffer},
-    {"hidden_default_queue", ValueKind::HiddenDefaultQueue},
-    {"hidden_completion_action", ValueKind::HiddenCompletionAction}
-    // ,{"hidden_multigrid_sync_arg", ValueKind::HiddenMultiGridSyncArg}
+    //    {"by_value", KernelArgMD::ValueKind::ByValue},
+    //    {"global_buffer", KernelArgMD::ValueKind::GlobalBuffer},
+    //    {"dynamic_shared_pointer",
+    //    KernelArgMD::ValueKind::DynamicSharedPointer},
+    //    {"sampler", KernelArgMD::ValueKind::Sampler},
+    //    {"image", KernelArgMD::ValueKind::Image},
+    //    {"pipe", KernelArgMD::ValueKind::Pipe},
+    //    {"queue", KernelArgMD::ValueKind::Queue},
+    {"hidden_global_offset_x", KernelArgMD::ValueKind::HiddenGlobalOffsetX},
+    {"hidden_global_offset_y", KernelArgMD::ValueKind::HiddenGlobalOffsetY},
+    {"hidden_global_offset_z", KernelArgMD::ValueKind::HiddenGlobalOffsetZ},
+    {"hidden_none", KernelArgMD::ValueKind::HiddenNone},
+    {"hidden_printf_buffer", KernelArgMD::ValueKind::HiddenPrintfBuffer},
+    {"hidden_default_queue", KernelArgMD::ValueKind::HiddenDefaultQueue},
+    {"hidden_completion_action",
+     KernelArgMD::ValueKind::HiddenCompletionAction},
+    {"hidden_multigrid_sync_arg",
+     KernelArgMD::ValueKind::HiddenMultiGridSyncArg},
+    {"hidden_hostcall_buffer", KernelArgMD::ValueKind::HiddenHostcallBuffer},
 };
 
 enum class CodePropField : uint8_t {
@@ -716,10 +768,12 @@ hsa_status_t init_hsa() {
     if (err != HSA_STATUS_SUCCESS) return err;
     ErrorCheck(After initializing compute and memory, err);
     init_dag_scheduler();
+
+    int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
+    KernelInfoTable.resize(gpu_count);
+    SymbolInfoTable.resize(gpu_count);
     for (int i = 0; i < SymbolInfoTable.size(); i++) SymbolInfoTable[i].clear();
-    SymbolInfoTable.clear();
     for (int i = 0; i < KernelInfoTable.size(); i++) KernelInfoTable[i].clear();
-    KernelInfoTable.clear();
     atlc.g_hsa_initialized = true;
     DEBUG_PRINT("done\n");
   }
@@ -894,16 +948,17 @@ void *atl_read_binary_from_file(const char *module, size_t *module_size) {
   return raw_code_object;
 }
 
-bool isImplicit(ValueKind value_kind) {
+bool isImplicit(KernelArgMD::ValueKind value_kind) {
   switch (value_kind) {
-    case ValueKind::HiddenGlobalOffsetX:
-    case ValueKind::HiddenGlobalOffsetY:
-    case ValueKind::HiddenGlobalOffsetZ:
-    case ValueKind::HiddenNone:
-    case ValueKind::HiddenPrintfBuffer:
-    case ValueKind::HiddenDefaultQueue:
-    case ValueKind::HiddenCompletionAction:
-      // case ValueKind::HiddenMultiGridSyncArg:
+    case KernelArgMD::ValueKind::HiddenGlobalOffsetX:
+    case KernelArgMD::ValueKind::HiddenGlobalOffsetY:
+    case KernelArgMD::ValueKind::HiddenGlobalOffsetZ:
+    case KernelArgMD::ValueKind::HiddenNone:
+    case KernelArgMD::ValueKind::HiddenPrintfBuffer:
+    case KernelArgMD::ValueKind::HiddenDefaultQueue:
+    case KernelArgMD::ValueKind::HiddenCompletionAction:
+    case KernelArgMD::ValueKind::HiddenMultiGridSyncArg:
+    case KernelArgMD::ValueKind::HiddenHostcallBuffer:
       return true;
     default:
       return false;
@@ -990,29 +1045,28 @@ static amd_comgr_status_t populateArgs(const amd_comgr_metadata_node_t key,
 
   switch (itArgField->second) {
     case ArgField::Name:
-      lcArg->mName = buf;
+      lcArg->name_ = buf;
       break;
     case ArgField::TypeName:
-      lcArg->mTypeName = buf;
+      lcArg->typeName_ = buf;
       break;
     case ArgField::Size:
-      lcArg->mSize = atoi(buf.c_str());
+      lcArg->size_ = atoi(buf.c_str());
       break;
     case ArgField::Align:
-      lcArg->mAlign = atoi(buf.c_str());
+      // v2 has align field and not offset field
+      lcArg->align_ = atoi(buf.c_str());
       break;
     case ArgField::Offset:
-      // FIXME: KernelArgMD does not have the mOffset field; until that changes,
-      // we use
-      // mAlign to store the offset; minor "workaround"
-      lcArg->mAlign = atoi(buf.c_str());
+      // v3 has offset field and not align field
+      lcArg->offset_ = atoi(buf.c_str());
       break;
     case ArgField::ValueKind: {
       auto itValueKind = ArgValueKind.find(buf);
       if (itValueKind == ArgValueKind.end()) {
         return AMD_COMGR_STATUS_ERROR;
       }
-      lcArg->mValueKind = itValueKind->second;
+      lcArg->valueKind_ = itValueKind->second;
     } break;
 // TODO(ashwinma): If we are interested in parsing other fields, then uncomment
 // them from
@@ -1108,7 +1162,7 @@ static amd_comgr_status_t populateCodeProps(
   KernelMD *kernelMD = static_cast<KernelMD *>(data);
   switch (itCodePropField->second) {
     case CodePropField::KernargSegmentSize:
-      kernelMD->mCodeProps.mKernargSegmentSize = atoi(buf.c_str());
+      kernelMD->kernargSegmentSize_ = atoi(buf.c_str());
       break;
 // TODO(ashwinma): If we are interested in parsing other fields, then uncomment
 // them from
@@ -1211,13 +1265,10 @@ hsa_status_t get_code_object_custom_metadata_v2(atmi_platform_type_t platform,
     comgrErrorCheck(COMGR kernel name lookup in name metadata, status);
 
     // For v3, the kernel symbol name is different from the kernel name itself,
-    // so there
-    // is a need for a kernel symbol->name map. However, for v2, the symbol and
-    // kernel
-    // names are the same. But, to be consistent with v3's implementation, we
-    // still use
-    // the kernel symbol->name map, but the key for v2 will be the kernel name
-    // itself.
+    // so there is a need for a kernel symbol->name map. However, for v2, the
+    // symbol and kernel names are the same. But, to be consistent with v3's
+    // implementation, we still use the kernel symbol->name map, but the key
+    // for v2 will be the kernel name itself.
     KernelNameMap[kernelName] = kernelName;
 
     atl_kernel_info_t info;
@@ -1231,7 +1282,7 @@ hsa_status_t get_code_object_custom_metadata_v2(atmi_platform_type_t platform,
     status = amd_comgr_iterate_map_metadata(codePropsMeta, populateCodeProps,
                                             static_cast<void *>(&kernelObj));
     comgrErrorCheck(COMGR code props iterate, status);
-    kernel_segment_size = kernelObj.mCodeProps.mKernargSegmentSize;
+    kernel_segment_size = kernelObj.kernargSegmentSize_;
 
     bool hasHiddenArgs = false;
     if (kernel_segment_size > 0) {
@@ -1280,21 +1331,22 @@ hsa_status_t get_code_object_custom_metadata_v2(atmi_platform_type_t platform,
         // TODO(ashwinma): should the below population actions be done only for
         // non-implicit args?
         // populate info with num args, their sizes and alignments
-        info.arg_sizes.push_back(lcArg.mSize);
-        info.arg_alignments.push_back(lcArg.mAlign);
+        info.arg_sizes.push_back(lcArg.size_);
+        // v2 has align field and not offset field
+        info.arg_alignments.push_back(lcArg.align_);
         //  use offset with/instead of alignment
-        size_t new_offset = core::alignUp(offset, lcArg.mAlign);
+        size_t new_offset = core::alignUp(offset, lcArg.align_);
         size_t padding = new_offset - offset;
         offset = new_offset;
         info.arg_offsets.push_back(offset);
         DEBUG_PRINT("[%s:%lu] \"%s\" (%u, %lu)\n", kernelName.c_str(), i,
-                    lcArg.mName.c_str(), lcArg.mSize, offset);
-        offset += lcArg.mSize;
+                    lcArg.name_.c_str(), lcArg.size_, offset);
+        offset += lcArg.size_;
 
         // check if the arg is a hidden/implicit arg
         // this logic assumes that all hidden args are 8-byte aligned
-        if (!isImplicit(lcArg.mValueKind)) {
-          kernel_explicit_args_size += lcArg.mSize;
+        if (!isImplicit(lcArg.valueKind_)) {
+          kernel_explicit_args_size += lcArg.size_;
         } else {
           hasHiddenArgs = true;
         }
@@ -1306,13 +1358,11 @@ hsa_status_t get_code_object_custom_metadata_v2(atmi_platform_type_t platform,
     // add size of implicit args, e.g.: offset x, y and z and pipe pointer, but
     // in ATMI, do not count the compiler set implicit args, but set your own
     // implicit args by discounting the compiler set implicit args
-    info.kernel_segment_size =
-        (hasHiddenArgs ? kernel_explicit_args_size
-                       : kernelObj.mCodeProps.mKernargSegmentSize) +
-        sizeof(atmi_implicit_args_t);
+    info.kernel_segment_size = (hasHiddenArgs ? kernel_explicit_args_size
+                                              : kernelObj.kernargSegmentSize_) +
+                               sizeof(atmi_implicit_args_t);
     DEBUG_PRINT("[%s: kernarg seg size] (%lu --> %u)\n", kernelName.c_str(),
-                kernelObj.mCodeProps.mKernargSegmentSize,
-                info.kernel_segment_size);
+                kernelObj.kernargSegmentSize_, info.kernel_segment_size);
 
     // kernel received, now add it to the kernel info table
     KernelInfoTable[gpu][kernelName] = info;
@@ -1458,25 +1508,20 @@ hsa_status_t get_code_object_custom_metadata_v3(atmi_platform_type_t platform,
         // TODO(ashwinma): should the below population actions be done only for
         // non-implicit args?
         // populate info with sizes and offsets
-        info.arg_sizes.push_back(lcArg.mSize);
-        // FIXME: KernelArgMD does not have the mOffset field; until that
-        // changes, we use
-        // mAlign to store the offset; minor "workaround"
-        // info.arg_alignments.push_back(lcArg.mAlign);
-        //  use offset with/instead of alignment
-        // offset = lcArg.mAlign;
-        size_t new_offset = lcArg.mAlign;
+        info.arg_sizes.push_back(lcArg.size_);
+        // v3 has offset field and not align field
+        size_t new_offset = lcArg.offset_;
         size_t padding = new_offset - offset;
         offset = new_offset;
-        info.arg_offsets.push_back(lcArg.mAlign);
-        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %u)\n", i, lcArg.mName.c_str(),
-                    lcArg.mSize, lcArg.mAlign);
-        offset += lcArg.mSize;
+        info.arg_offsets.push_back(lcArg.offset_);
+        DEBUG_PRINT("Arg[%lu] \"%s\" (%u, %u)\n", i, lcArg.name_.c_str(),
+                    lcArg.size_, lcArg.offset_);
+        offset += lcArg.size_;
 
         // check if the arg is a hidden/implicit arg
         // this logic assumes that all hidden args are 8-byte aligned
-        if (!isImplicit(lcArg.mValueKind)) {
-          kernel_explicit_args_size += lcArg.mSize;
+        if (!isImplicit(lcArg.valueKind_)) {
+          kernel_explicit_args_size += lcArg.size_;
         } else {
           hasHiddenArgs = true;
         }
@@ -1683,104 +1728,115 @@ hsa_status_t create_kernarg_memory_agent(hsa_executable_t executable,
 atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
                                                 size_t *module_sizes,
                                                 atmi_platform_type_t *types,
-                                                const int num_modules) {
+                                                const int num_modules,
+                                                atmi_place_t place) {
   hsa_status_t err;
-  int some_success = 0;
-  std::vector<std::string> modules_str;
-  for (int i = 0; i < num_modules; i++) {
-    modules_str.push_back(std::string(reinterpret_cast<char *>(modules[i])));
+  int gpu = place.device_id;
+  if (gpu == -1) {
+    // user is asking runtime to pick a device
+    // TODO(ashwinma): best device of this type? pick 0 for now
+    gpu = 0;
   }
 
-  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
+  DEBUG_PRINT("Trying to load module to GPU-%d\n", gpu);
+  ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
+  hsa_agent_t agent = proc.agent();
+  hsa_executable_t executable = {0};
+  hsa_profile_t agent_profile;
 
-  KernelInfoTable.resize(gpu_count);
-  SymbolInfoTable.resize(gpu_count);
+  err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
+  ErrorCheck(Query the agent profile, err);
+  // FIXME: Assume that every profile is FULL until we understand how to build
+  // GCN with base profile
+  agent_profile = HSA_PROFILE_FULL;
+  /* Create the empty executable.  */
+  err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "",
+                              &executable);
+  ErrorCheck(Create the executable, err);
 
-  for (int gpu = 0; gpu < gpu_count; gpu++) {
-    DEBUG_PRINT("Trying to load module to GPU-%d\n", gpu);
-    atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
-    ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(place);
-    hsa_agent_t agent = proc.agent();
-    hsa_executable_t executable = {0};
-    hsa_profile_t agent_profile;
+  // clear symbol set for every executable
+  SymbolSet.clear();
+  bool module_load_success = false;
+  for (int i = 0; i < num_modules; i++) {
+    void *module_bytes = modules[i];
+    size_t module_size = module_sizes[i];
+    if (types[i] == AMDGCN) {
+      // Some metadata info is not available through ROCr API, so use custom
+      // code object metadata parsing to collect such metadata info
+      void *tmp_module = malloc(module_size);
+      memcpy(tmp_module, module_bytes, module_size);
+      err = get_code_object_custom_metadata(types[i], tmp_module, module_size,
+                                            gpu);
+      ErrorCheckAndContinue(Getting custom code object metadata, err);
+      free(tmp_module);
 
-    err = hsa_agent_get_info(agent, HSA_AGENT_INFO_PROFILE, &agent_profile);
-    ErrorCheckAndContinue(Query the agent profile, err);
-    // FIXME: Assume that every profile is FULL until we understand how to build
-    // GCN with base profile
-    agent_profile = HSA_PROFILE_FULL;
-    /* Create the empty executable.  */
-    err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN,
-                                "", &executable);
-    ErrorCheckAndContinue(Create the executable, err);
+      // Deserialize code object.
+      hsa_code_object_t code_object = {0};
+      err = hsa_code_object_deserialize(module_bytes, module_size, NULL,
+                                        &code_object);
+      ErrorCheckAndContinue(Code Object Deserialization, err);
+      assert(0 != code_object.handle);
 
-    // clear symbol set for every executable
-    SymbolSet.clear();
-    int module_load_success = 0;
-    for (int i = 0; i < num_modules; i++) {
-      void *module_bytes = modules[i];
-      size_t module_size = module_sizes[i];
-      if (types[i] == AMDGCN) {
-        // Some metadata info is not available through ROCr API, so use custom
-        // code object metadata parsing to collect such metadata info
-        void *tmp_module = malloc(module_size);
-        memcpy(tmp_module, module_bytes, module_size);
-        err = get_code_object_custom_metadata(types[i], tmp_module, module_size,
-                                              gpu);
-        ErrorCheckAndContinue(Getting custom code object metadata, err);
-        free(tmp_module);
+      err = hsa_code_object_iterate_symbols(code_object, validate_code_object,
+                                            &gpu);
+      ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-        // Deserialize code object.
-        hsa_code_object_t code_object = {0};
-        err = hsa_code_object_deserialize(module_bytes, module_size, NULL,
-                                          &code_object);
-        ErrorCheckAndContinue(Code Object Deserialization, err);
-        assert(0 != code_object.handle);
+      /* Load the code object.  */
+      err =
+          hsa_executable_load_code_object(executable, agent, code_object, NULL);
+      ErrorCheckAndContinue(Loading the code object, err);
 
-        err = hsa_code_object_iterate_symbols(code_object, validate_code_object,
-                                              &gpu);
-          ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+      // cannot iterate over symbols until executable is frozen
+      // err = hsa_executable_iterate_agent_symbols(executable, agent,
+      //    create_kernarg_memory_agent, &gpu);
+      // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-          /* Load the code object.  */
-          err = hsa_executable_load_code_object(executable, agent, code_object,
-                                                NULL);
-          ErrorCheckAndContinue(Loading the code object, err);
-
-          // cannot iterate over symbols until executable is frozen
-          // err = hsa_executable_iterate_agent_symbols(executable, agent,
-          //    create_kernarg_memory_agent, &gpu);
-          // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
-
-      } else {
-        ErrorCheckAndContinue(Loading non - AMDGCN code object,
-                              HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
-      }
-      module_load_success = 1;
+    } else {
+      ErrorCheckAndContinue(Loading non - AMDGCN code object,
+                            HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
     }
-    if (!module_load_success) continue;
-
+    module_load_success = true;
+  }
+  DEBUG_PRINT("Modules loaded successful? %d\n", module_load_success);
+  if (module_load_success) {
     /* Freeze the executable; it can now be queried for symbols.  */
     err = hsa_executable_freeze(executable, "");
-    ErrorCheckAndContinue(Freeze the executable, err);
+    ErrorCheck(Freeze the executable, err);
 
     err =
         hsa_executable_iterate_symbols(executable, create_kernarg_memory, &gpu);
-      ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+    ErrorCheck(Iterating over symbols for execuatable, err);
 
-      // err = hsa_executable_iterate_program_symbols(executable,
-      // iterate_program_symbols, &gpu);
-      // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+    // err = hsa_executable_iterate_program_symbols(executable,
+    // iterate_program_symbols, &gpu);
+    // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-      // err = hsa_executable_iterate_agent_symbols(executable,
-      // iterate_agent_symbols, &gpu);
-      // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+    // err = hsa_executable_iterate_agent_symbols(executable,
+    // iterate_agent_symbols, &gpu);
+    // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
-      // save the executable and destroy during finalize
-      g_executables.push_back(executable);
-      some_success = 1;
+    // save the executable and destroy during finalize
+    g_executables.push_back(executable);
+    return ATMI_STATUS_SUCCESS;
+  } else {
+    return ATMI_STATUS_ERROR;
   }
-  DEBUG_PRINT("Modules loaded successful? %d\n", some_success);
-  // ModuleMap[executable.handle] = modules_str;
+}
+
+atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
+                                                size_t *module_sizes,
+                                                atmi_platform_type_t *types,
+                                                const int num_modules) {
+  int gpu_count = g_atl_machine.processorCount<ATLGPUProcessor>();
+  int some_success = 0;
+  atmi_status_t status;
+  for (int gpu = 0; gpu < gpu_count; gpu++) {
+    atmi_place_t place = ATMI_PLACE_GPU(0, gpu);
+    status = core::Runtime::getInstance().RegisterModuleFromMemory(
+        modules, module_sizes, types, num_modules, place);
+    if (status == ATMI_STATUS_SUCCESS) some_success = 1;
+  }
+
   return (some_success) ? ATMI_STATUS_SUCCESS : ATMI_STATUS_ERROR;
 }
 
@@ -1797,8 +1853,34 @@ atmi_status_t Runtime::RegisterModule(const char **filenames,
     module_sizes.push_back(module_size);
   }
 
-  atmi_status_t status = atmi_module_register_from_memory(
+  atmi_status_t status = core::Runtime::getInstance().RegisterModuleFromMemory(
       &modules[0], &module_sizes[0], types, num_modules);
+
+  // memory space got by
+  // void *raw_code_object = malloc(size);
+  for (int i = 0; i < num_modules; i++) {
+    free(modules[i]);
+  }
+
+  return status;
+}
+
+atmi_status_t Runtime::RegisterModule(const char **filenames,
+                                      atmi_platform_type_t *types,
+                                      const int num_modules,
+                                      atmi_place_t place) {
+  std::vector<void *> modules;
+  std::vector<size_t> module_sizes;
+  for (int i = 0; i < num_modules; i++) {
+    size_t module_size;
+    void *module_bytes = atl_read_binary_from_file(filenames[i], &module_size);
+    if (!module_bytes) return ATMI_STATUS_ERROR;
+    modules.push_back(module_bytes);
+    module_sizes.push_back(module_size);
+  }
+
+  atmi_status_t status = core::Runtime::getInstance().RegisterModuleFromMemory(
+      &modules[0], &module_sizes[0], types, num_modules, place);
 
   // memory space got by
   // void *raw_code_object = malloc(size);

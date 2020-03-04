@@ -6,15 +6,6 @@
 
 # Enable support for C++11.
 add_definitions(-std=c++11)
-# Find clang
-find_package(LLVM QUIET CONFIG PATHS ${LLVM_DIR} NO_DEFAULT_PATH)
-list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
-include(AddLLVM)
-add_definitions(${LLVM_DEFINITIONS})
-include_directories(${LLVM_INCLUDE_DIRS})
-if(NOT LLVM_FOUND)
-  libatmi_runtime_say_and_exit("LLVM library required to build ATMI to load the HSA code object")
-endif()
 
 # Find libelf
 find_package(LibElf REQUIRED)

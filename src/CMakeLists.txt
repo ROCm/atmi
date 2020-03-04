@@ -6,6 +6,8 @@
 
 cmake_minimum_required (VERSION 2.8 FATAL_ERROR)
 
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+
 list ( APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules" )
 include ( utils )
 

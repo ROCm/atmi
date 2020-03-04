@@ -51,7 +51,7 @@ atmi_status_t atmi_ke_init() {
   void *gpu_queue_ptr = NULL;
   if (g_ke_args.num_gpu_queues > 0) {
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool, sizeof(hsa_queue_t *) * g_ke_args.num_gpu_queues,
+        atl_gpu_kernarg_pools[0], sizeof(hsa_queue_t *) * g_ke_args.num_gpu_queues,
         0, &gpu_queue_ptr);
     ErrorCheck(Allocating GPU queue pointers, err);
     allow_access_to_all_gpu_agents(gpu_queue_ptr);
@@ -81,7 +81,7 @@ atmi_status_t atmi_ke_init() {
   void *cpu_queue_ptr = NULL;
   if (g_ke_args.num_cpu_queues > 0) {
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool, sizeof(hsa_queue_t *) * g_ke_args.num_cpu_queues,
+        atl_gpu_kernarg_pools[0], sizeof(hsa_queue_t *) * g_ke_args.num_cpu_queues,
         0, &cpu_queue_ptr);
     ErrorCheck(Allocating CPU queue pointers, err);
     allow_access_to_all_gpu_agents(cpu_queue_ptr);
@@ -95,7 +95,7 @@ atmi_status_t atmi_ke_init() {
   void *cpu_worker_signals = NULL;
   if (g_ke_args.num_cpu_queues > 0) {
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool, sizeof(hsa_signal_t) * g_ke_args.num_cpu_queues,
+        atl_gpu_kernarg_pools[0], sizeof(hsa_signal_t) * g_ke_args.num_cpu_queues,
         0, &cpu_worker_signals);
     ErrorCheck(Allocating CPU queue iworker signals, err);
     allow_access_to_all_gpu_agents(cpu_worker_signals);
@@ -111,7 +111,7 @@ atmi_status_t atmi_ke_init() {
   if (max_kernel_types > 0) {
     // Allocate template space for shader kernels
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool,
+        atl_gpu_kernarg_pools[0],
         sizeof(atmi_kernel_enqueue_template_t) * max_kernel_types, 0,
         &kernarg_template_ptr);
     ErrorCheck(Allocating kernel argument template pointer, err);
@@ -201,7 +201,7 @@ atmi_status_t DeviceRuntime::CreateKernel(atmi_kernel_t *atmi_kernel,
     void *ke_kernarg_region;
     // first 4 bytes store the current index of the kernel arg region
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool,
+        atl_gpu_kernarg_pools[0],
         sizeof(int) + max_kernarg_segment_size * MAX_NUM_KERNELS, 0,
         &ke_kernarg_region);
       ErrorCheck(Allocating memory for the executable-kernel, err);

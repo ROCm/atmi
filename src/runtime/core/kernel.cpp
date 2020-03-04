@@ -8,7 +8,7 @@
 #include "internal.h"
 #include "machine.h"
 
-extern hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
+extern std::vector<hsa_amd_memory_pool_t> atl_gpu_kernarg_pools;
 extern std::map<uint64_t, core::Kernel *> KernelImplMap;
 
 namespace core {
@@ -187,7 +187,7 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
   if (kernarg_segment_size_ > 0) {
     DEBUG_PRINT("New kernarg segment size: %u\n", kernarg_segment_size_);
     hsa_status_t err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pool, kernarg_segment_size_ * MAX_NUM_KERNELS, 0,
+        atl_gpu_kernarg_pools[0], kernarg_segment_size_ * MAX_NUM_KERNELS, 0,
         &kernarg_region_);
       ErrorCheck(Allocating memory for the executable-kernel, err);
       allow_access_to_all_gpu_agents(kernarg_region_);

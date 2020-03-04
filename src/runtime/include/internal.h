@@ -200,7 +200,7 @@ extern std::vector<core::TaskgroupImpl *> AllTaskgroups;
 extern std::vector<core::TaskImpl *> AllTasks;
 extern std::queue<core::TaskImpl *> ReadyTaskQueue;
 extern std::queue<hsa_signal_t> FreeSignalPool;
-extern hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
+extern std::vector<hsa_amd_memory_pool_t> atl_gpu_kernarg_pools;
 
 namespace core {
 atmi_status_t atl_init_context();

@@ -209,7 +209,7 @@ hsa_agent_t atl_cpu_agent;
 hsa_ext_program_t atl_hsa_program;
 hsa_region_t atl_hsa_primary_region;
 hsa_region_t atl_gpu_kernarg_region;
-hsa_amd_memory_pool_t atl_gpu_kernarg_pool;
+std::vector<hsa_amd_memory_pool_t> atl_gpu_kernarg_pools;
 hsa_region_t atl_cpu_kernarg_region;
 hsa_agent_t atl_gpu_agent;
 hsa_profile_t atl_gpu_agent_profile;
@@ -415,7 +415,7 @@ static hsa_status_t get_memory_pool_info(hsa_amd_memory_pool_t memory_pool,
       proc->addMemory(new_mem);
       if (HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_KERNARG_INIT & global_flag) {
         DEBUG_PRINT("GPU kernel args pool handle: %lu\n", memory_pool.handle);
-        atl_gpu_kernarg_pool = memory_pool;
+        atl_gpu_kernarg_pools.push_back(memory_pool);
       }
     } else {
       ATLMemory new_mem(memory_pool, *proc, ATMI_MEMTYPE_COARSE_GRAINED);

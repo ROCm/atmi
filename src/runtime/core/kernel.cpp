@@ -158,21 +158,29 @@ GPUKernelImpl::GPUKernelImpl(unsigned int id, const std::string &name,
   group_segment_sizes_.reserve(gpu_count);
   private_segment_sizes_.reserve(gpu_count);
   int max_kernarg_segment_size = 0;
+  arg_offsets_.reserve(kernel.num_args());
+  bool args_offsets_set = false;
   for (int gpu = 0; gpu < gpu_count; gpu++) {
-    atl_kernel_info_t info = KernelInfoTable[gpu][name_];
-    kernel_objects_[gpu] = info.kernel_object;
-    group_segment_sizes_[gpu] = info.group_segment_size;
-    private_segment_sizes_[gpu] = info.private_segment_size;
-    if (max_kernarg_segment_size < info.kernel_segment_size)
-      max_kernarg_segment_size = info.kernel_segment_size;
+    if (KernelInfoTable[gpu].find(name_) != KernelInfoTable[gpu].end()) {
+      atl_kernel_info_t info = KernelInfoTable[gpu][name_];
+      // save the rest of the kernel info metadata
+      kernel_objects_[gpu] = info.kernel_object;
+      group_segment_sizes_[gpu] = info.group_segment_size;
+      private_segment_sizes_[gpu] = info.private_segment_size;
+      if (max_kernarg_segment_size < info.kernel_segment_size)
+        max_kernarg_segment_size = info.kernel_segment_size;
+
+      // cache this value to retrieve arg offsets
+      // TODO(ashwinma): will arg offsets change per device?
+      if (!args_offsets_set) {
+        for (int i = 0; i < kernel.num_args(); i++) {
+          arg_offsets_[i] = info.arg_offsets[i];
+        }
+        args_offsets_set = true;
+      }
+    }
   }
   kernarg_segment_size_ = max_kernarg_segment_size;
-
-  arg_offsets_.reserve(kernel.num_args());
-  atl_kernel_info_t any_gpu_info = KernelInfoTable[0][name_];
-  for (int i = 0; i < kernel.num_args(); i++) {
-    arg_offsets_[i] = any_gpu_info.arg_offsets[i];
-  }
 
   /* create kernarg memory */
   kernarg_region_ = NULL;

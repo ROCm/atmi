@@ -82,6 +82,11 @@ class Runtime {
   atmi_machine_t *GetMachineInfo();
   // modules
   atmi_status_t RegisterModuleFromMemory(void **, size_t *,
+                                         atmi_platform_type_t *, const int,
+                                         atmi_place_t);
+  atmi_status_t RegisterModule(const char **, atmi_platform_type_t *, const int,
+                               atmi_place_t);
+  atmi_status_t RegisterModuleFromMemory(void **, size_t *,
                                          atmi_platform_type_t *, const int);
   atmi_status_t RegisterModule(const char **, atmi_platform_type_t *,
                                const int);

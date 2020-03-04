@@ -124,6 +124,7 @@ target_link_libraries(
   -Wl,-rpath,\$ORIGIN
   -Wl,-rpath,\$ORIGIN/../../hsa/lib
   -Wl,-rpath,\$ORIGIN/../../lib
+  -Wl,-rpath,\$ORIGIN/../../lib64
 )
 
 # set output dir for .h files

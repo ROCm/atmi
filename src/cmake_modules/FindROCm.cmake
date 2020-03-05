@@ -24,6 +24,11 @@ find_path(
     ${ROC_DIR}/hsa/include/hsa
     ${ROC_DIR}/hsa
     ${ROC_DIR}
+    ${ROCR_DIR}/include
+    ${ROCR_DIR}/include/hsa
+    ${ROCR_DIR}/hsa/include
+    ${ROCR_DIR}/hsa/include/hsa
+    ${ROCR_DIR}
     /opt/rocm/include
     /opt/rocm/hsa/include
     /usr/local/include
@@ -38,6 +43,8 @@ find_library(
   HINTS
     ${ROC_DIR}/lib
     ${ROC_DIR}
+    ${ROCR_DIR}/lib
+    ${ROCR_DIR}
     /opt/rocm/lib
     /opt/rocm/hsa/lib
     /usr/local/lib
@@ -52,6 +59,8 @@ find_library(
   HINTS
     ${ROC_DIR}/lib
     ${ROC_DIR}
+    ${ROCT_DIR}/lib
+    ${ROCT_DIR}
     /opt/rocm/lib
     /opt/rocm/hsa/lib
     /usr/local/lib

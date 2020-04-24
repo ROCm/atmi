@@ -1549,22 +1549,19 @@ hsa_status_t get_code_object_custom_metadata_v3(atmi_platform_type_t platform,
   return HSA_STATUS_SUCCESS;
 }
 
-hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
-                                             void *binary, size_t binSize,
-                                             int gpu) {
-  int code_object_ver = 0;
+// 2 or 3 on success, -1 on failure
+static int get_code_object_version(void *binary, size_t binSize) {
+  const int failure = -1;
   // Get the code object version by looking int the runtime metadata note
   // Begin the Elf image from memory
   Elf *e = elf_memory(reinterpret_cast<char *>(binary), binSize);
   if (elf_kind(e) != ELF_K_ELF) {
-    ELFErrorReturn(Error while reading the ELF program binary,
-                   HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+    return failure;
   }
 
   size_t numpHdrs;
   if (elf_getphdrnum(e, &numpHdrs) != 0) {
-    ELFErrorReturn(Error while reading the ELF program binary,
-                   HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+    return failure;
   }
 
   for (size_t i = 0; i < numpHdrs; ++i) {
@@ -1584,25 +1581,17 @@ hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
         address desc = name + core::alignUp(note->n_namesz, sizeof(int));
 
         if (note->n_type == 7 || note->n_type == 8) {
-          ELFErrorReturn(Error
-                         : object code with old metadata is not supported,
-                           HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+          return failure;
         } else if (note->n_type == 10 /* NT_AMD_AMDGPU_HSA_METADATA */ &&
                    note->n_namesz == sizeof "AMD" &&
                    !memcmp(name, "AMD", note->n_namesz)) {
           // code object v2
-          code_object_ver = 2;
-          // We've found the code object version, exit the
-          // note record loop now.
-          break;
+          return 2;
         } else if (note->n_type == 32 /* NT_AMDGPU_METADATA */ &&
                    note->n_namesz == sizeof "AMDGPU" &&
                    !memcmp(name, "AMDGPU", note->n_namesz)) {
           // code object v3
-          code_object_ver = 3;
-          // We've found the code object version, exit the
-          // note record loop now.
-          break;
+          return 3;
         }
         ptr += sizeof(*note) + core::alignUp(note->n_namesz, sizeof(int)) +
                core::alignUp(note->n_descsz, sizeof(int));
@@ -1610,14 +1599,22 @@ hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
     }
   }
 
+  return failure;
+}
+
+hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
+                                             void *binary, size_t binSize,
+                                             int gpu) {
+  int code_object_ver = get_code_object_version(binary, binSize);
+
   if (code_object_ver == 2)
     return get_code_object_custom_metadata_v2(platform, binary, binSize, gpu);
   else if (code_object_ver == 3)
     return get_code_object_custom_metadata_v3(platform, binary, binSize, gpu);
   else
-    ELFErrorReturn(Error
-                   : Code object version invalid,
-                     HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
+    ELFErrorReturn(
+        Error while finding code object version from the ELF program binary,
+        HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
 }
 
 hsa_status_t populate_InfoTables(hsa_executable_t executable,

@@ -8,7 +8,7 @@
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #
-PROGVERSION="0.7-7"
+PROGVERSION="11.5-0"
 #
 # Copyright (c) 2018 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -72,10 +72,10 @@ function usage(){
     -cl12     Use OpenCL 1.2 instead of default OpenCL 2.0
 
    Options with values:
-    -aomp      <path>           $AOMP or /data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp
+    -aomp      <path>           $AOMP or /src/out/ubuntu-16.04/16.04/aomp
     -libgcn    <path>           $DEVICELIB or $AOMP/lib
     -cuda-path <path>           $CUDA_PATH or /usr/local/cuda
-    -atmipath  <path>           $ATMI_PATH or /data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp
+    -atmipath  <path>           $ATMI_PATH or /src/out/ubuntu-16.04/16.04/aomp
     -mcpu      <cputype>        Default= value returned by mygpu
     -bclib     <bcfile>         Add a bc library for llvm-link
     -clopts    <compiler opts>  Addtional options for cl frontend
@@ -226,9 +226,9 @@ fi
 cdir=$(getdname $0)
 [ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
 
-AOMP=${AOMP:-/data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp}
+AOMP=${AOMP:-/src/out/ubuntu-16.04/16.04/aomp}
 if [ ! -d $AOMP ] ; then
-   AOMP="/data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp"
+   AOMP="/src/out/ubuntu-16.04/16.04/aomp"
 fi
 if [ ! -d $AOMP ] ; then
    echo "ERROR: AOMP not found at $AOMP"
@@ -236,10 +236,10 @@ if [ ! -d $AOMP ] ; then
    exit 1
 fi
 
-DEVICELIB=${DEVICELIB:-$AOMP/lib}
+DEVICELIB=${DEVICELIB:-$AOMP/../lib}
 TARGET_TRIPLE=${TARGET_TRIPLE:-amdgcn-amd-amdhsa}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
-ATMI_PATH=${ATMI_PATH:-/data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp}
+ATMI_PATH=${ATMI_PATH:-/src/out/ubuntu-16.04/16.04/aomp}
 
 # Determine which gfx processor to use, default to Vega (gfx900)
 if [ ! $LC_MCPU ] ; then 
@@ -259,6 +259,11 @@ if [ $VV ]  ; then
 fi
 
 BCFILES=""
+
+ROCMVERSION=${ROCMVERSION:-3.5}
+if [ -d /opt/rocm/.info ]; then
+  ROCMVERSION=`cat /opt/rocm/.info/version* | cut -d'.' -f1,2,3`
+fi
 
 if [ -f $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc ]; then
   BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc"
@@ -311,11 +316,16 @@ if [ $CUDACLANG ] ; then
 else
   INCLUDES="-I ${DEVICELIB}/include ${INCLUDES}"
   if [ $CL12 ] ; then
-     CMD_CLC=${CMD_CLC:-clang -c -emit-llvm -target $TARGET_TRIPLE -x cl -D__AMD__=1 -D__$LC_MCPU__=1  -D__OPENCL_VERSION__=120 -D__IMAGE_SUPPORT__=1 -O3 -m64 -cl-kernel-arg-info -cl-std=CL1.2 -mllvm -amdgpu-early-inline-all -Xclang -target-feature -Xclang -cl-ext=+cl_khr_fp64,+cl_khr_global_int32_base_atomics,+cl_khr_global_int32_extended_atomics,+cl_khr_local_int32_base_atomics,+cl_khr_local_int32_extended_atomics,+cl_khr_int64_base_atomics,+cl_khr_int64_extended_atomics,+cl_khr_3d_image_writes,+cl_khr_byte_addressable_store,+cl_khr_gl_sharing,+cl_amd_media_ops,+cl_amd_media_ops2,+cl_khr_subgroups -include $AOMP/lib/clang/9.0.1/include/opencl-c.h $CLOPTS $LINKOPTS}
+     CMD_CLC=${CMD_CLC:-clang -c -mcpu=$LC_MCPU -emit-llvm -target $TARGET_TRIPLE -x cl -D__AMD__=1 -D__$LC_MCPU__=1  -D__OPENCL_VERSION__=120 -D__IMAGE_SUPPORT__=1 -O3 -m64 -cl-kernel-arg-info -cl-std=CL1.2 -mllvm -amdgpu-early-inline-all -Xclang -target-feature -Xclang -cl-ext=+cl_khr_fp64,+cl_khr_global_int32_base_atomics,+cl_khr_global_int32_extended_atomics,+cl_khr_local_int32_base_atomics,+cl_khr_local_int32_extended_atomics,+cl_khr_int64_base_atomics,+cl_khr_int64_extended_atomics,+cl_khr_3d_image_writes,+cl_khr_byte_addressable_store,+cl_khr_gl_sharing,+cl_amd_media_ops,+cl_amd_media_ops2,+cl_khr_subgroups $CLOPTS $LINKOPTS}
   else
-     CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include $AOMP/lib/clang/9.0.1/include/opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
+     CMD_CLC=${CMD_CLC:-clang -c -mcpu=$LC_MCPU -emit-llvm -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
 
    fi
+  if [[ "$ROCMVERSION" > "3.4" ]]; then
+    CMD_CLC+=" --rocm-path=$AOMP -include $AOMP/lib/clang/11.0.0/include/opencl-c.h -nogpulib"
+  else
+    CMD_CLC+=" -include $AOMP/lib/clang/9.0.1/include/opencl-c.h"
+  fi
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}
@@ -427,7 +437,7 @@ rc=0
       else 
          [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Compile cl	cl --> bc ..."
-         runcmd "$AOMP/bin/$CMD_CLC -c -emit-llvm -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
+         runcmd "$AOMP/bin/$CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
       fi
 
       if [ $GENLL ] ; then

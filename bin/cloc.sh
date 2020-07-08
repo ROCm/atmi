@@ -8,7 +8,7 @@
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #
-PROGVERSION="0.6-0"
+PROGVERSION="3.3-0"
 #
 # Copyright (c) 2018 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -69,12 +69,13 @@ function usage(){
     -n        Dryrun, do nothing, show commands that would execute
     -h        Print this help message
     -k        Keep temporary files
+    -cl12     Use OpenCL 1.2 instead of default OpenCL 2.0
 
    Options with values:
-    -aomp      <path>           $AOMP, $HOME/rocm/aomp, or /opt/rocm/aomp
-    -libgcn    <path>           $DEVICELIB or $AOMP/lib/libdevice
+    -aomp      <path>           $AOMP or _AOMP_INSTALL_DIR_
+    -libgcn    <path>           $DEVICELIB or $AOMP/lib
     -cuda-path <path>           $CUDA_PATH or /usr/local/cuda
-    -atmipath  <path>           $ATMI_PATH or /opt/rocm/atmi
+    -atmipath  <path>           $ATMI_PATH or _AOMP_INSTALL_DIR_
     -mcpu      <cputype>        Default= value returned by mygpu
     -bclib     <bcfile>         Add a bc library for llvm-link
     -clopts    <compiler opts>  Addtional options for cl frontend
@@ -95,7 +96,7 @@ function usage(){
 
    Command line options will take precedence over environment variables. 
 
-   Copyright (c) 2017 ADVANCED MICRO DEVICES, INC.
+   Copyright (c) 2019 ADVANCED MICRO DEVICES, INC.
 
 EOF
    exit 0 
@@ -176,6 +177,7 @@ while [ $# -gt 0 ] ; do
       -ll) 		GENLL=true;;
       -s) 		GENASM=true;;
       -noqp) 		NOQP=true;;
+      -cl12) 		CL12=true;;
       -noshared) 	NOSHARED=true;;
       -clopts) 		CLOPTS=$2; shift ;; 
       -cuopts) 		CUOPTS=$2; shift ;; 
@@ -186,7 +188,6 @@ while [ $# -gt 0 ] ; do
       -bclib)		EXTRABCLIB=$2; shift ;; 
       -mcpu)            LC_MCPU=$2; shift ;;
       -aomp)            AOMP=$2; shift ;;
-      -hcc2)            AOMP=$2; shift ;;
       -triple)          TARGET_TRIPLE=$2; shift ;;
       -libgcn)          DEVICELIB=$2; shift ;;
       -atmipath)        ATMI_PATH=$2; shift ;;
@@ -225,9 +226,10 @@ fi
 cdir=$(getdname $0)
 [ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
 
-AOMP=${AOMP:-$HOME/rocm/aomp}
+_AOMP_INSTALL_DIR_=${_AOMP_INSTALL_DIR_:-/opt/rocm/aomp}
+AOMP=${AOMP:-_AOMP_INSTALL_DIR_}
 if [ ! -d $AOMP ] ; then
-   AOMP="/opt/rocm/aomp"
+   AOMP="_AOMP_INSTALL_DIR_"
 fi
 if [ ! -d $AOMP ] ; then
    echo "ERROR: AOMP not found at $AOMP"
@@ -235,15 +237,16 @@ if [ ! -d $AOMP ] ; then
    exit 1
 fi
 
-DEVICELIB=${DEVICELIB:-$AOMP/lib/libdevice}
+DEVICELIB=${DEVICELIB:-$AOMP/lib}
+AMDGCNDEVICELIB=${AMDGCNDEVICELIB:-$AOMP/amdgcn/bitcode}
 TARGET_TRIPLE=${TARGET_TRIPLE:-amdgcn-amd-amdhsa}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
-ATMI_PATH=${ATMI_PATH:-/opt/rocm/atmi}
+ATMI_PATH=${ATMI_PATH:-_AOMP_INSTALL_DIR_}
 
-# Determine which gfx processor to use, default to Fiji (gfx803)
+# Determine which gfx processor to use, default to Vega (gfx900)
 if [ ! $LC_MCPU ] ; then 
    # Use the mygpu in pair with this script, no the pre-installed one.
-   LC_MCPU=`$cdir/mygpu`
+   LC_MCPU=`$cdir/mygpu -d gfx900`
    if [ "$LC_MCPU" == "" ] ; then 
       LC_MCPU="gfx803"
    fi
@@ -251,7 +254,7 @@ fi
 
 LLVMOPT=${LLVMOPT:-2}
 
-CUOPTS=${CUOPTS:- -fcuda-rdc --cuda-device-only -Wno-unused-value --hip-auto-headers=cuda_open -O$LLVMOPT --cuda-gpu-arch=$LC_MCPU}
+CUOPTS=${CUOPTS:- -x hip -fcuda-rdc --cuda-device-only -Wno-unused-value -O$LLVMOPT --cuda-gpu-arch=$LC_MCPU}
 
 if [ $VV ]  ; then 
    VERBOSE=true
@@ -259,39 +262,17 @@ fi
 
 BCFILES=""
 
-ROCMDEVICE=`echo $DEVICELIB | grep amdgcn`
-ROCMVERSION=${ROCMVERSION:-2}
-rocm_ver_var=`cat /opt/rocm/.info/version* | cut -d'.' -f1`
-rc=$?
-if [ $rc == 0 ] ; then
-  ROCMVERSION=$rocm_ver_var
-fi
 
-if [ -z $ROCMDEVICE ]; then
-  #This is a temporary setting
-  if [ -f $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc ]; then
-    BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc"
-  fi
-  gpunum=`$cdir/mygpu -n`
-  BCFILES="$BCFILES $DEVICELIB/lib/opencl.amdgcn.bc"
-  BCFILES="$BCFILES $DEVICELIB/lib/ocml.amdgcn.bc"
-  BCFILES="$BCFILES $DEVICELIB/lib/ockl.amdgcn.bc"
-  BCFILES="$BCFILES $DEVICELIB/lib/oclc_isa_version_${gpunum}.amdgcn.bc"
-  BCFILES="$BCFILES $DEVICELIB/lib/oclc_correctly_rounded_sqrt_on.amdgcn.bc"
-  BCFILES="$BCFILES $DEVICELIB/lib/oclc_daz_opt_on.amdgcn.bc"
-  if [ "$ROCMVERSION" -lt "2" ] ; then
-    BCFILES="$BCFILES $DEVICELIB/lib/irif.amdgcn.bc"
-  fi
-else
-BCFILES="$BCFILES $DEVICELIB/cuda2gcn.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/hip.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/hc.amdgcn.bc"
+if [ -f $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc ]; then
+  BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc"
+fi
+gpunum=`$cdir/mygpu -n`
 BCFILES="$BCFILES $DEVICELIB/opencl.amdgcn.bc"
 BCFILES="$BCFILES $DEVICELIB/ocml.amdgcn.bc"
 BCFILES="$BCFILES $DEVICELIB/ockl.amdgcn.bc"
-if [ $ROCMVERSION -lt 2 ] ; then
-  BCFILES="$BCFILES $DEVICELIB/irif.amdgcn.bc"
-fi
+BCFILES="$BCFILES $DEVICELIB/oclc_isa_version_${gpunum}.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_correctly_rounded_sqrt_on.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_daz_opt_on.amdgcn.bc"
 if [ -f $ATMI_PATH/lib/libdevice/libatmi.bc ]; then
     BCFILES="$BCFILES $ATMI_PATH/lib/libdevice/libatmi.bc"
 else 
@@ -299,10 +280,9 @@ else
     BCFILES="$BCFILES $DEVICELIB/libatmi.bc"
   fi
 fi
-fi
 
-if [ $EXTRABCLIB ] ; then 
-   if [ -f $EXTRABCLIB ] ; then 
+if [ $EXTRABCLIB ] ; then
+   if [ -f $EXTRABCLIB ] ; then
 #     EXTRABCFILE will force QP off so LINKOPTS not used.
       BCFILES="$EXTRABCLIB $BCFILES"
    else
@@ -320,8 +300,7 @@ if [ "$filetype" != "cl" ]  ; then
    else
       CUDACLANG=true
       if [ ! -d $CUDA_PATH ] ; then 
-         echo "ERROR:  No CUDA_PATH directory at $CUDA_PATH "
-         exit $DEADRC
+         echo "WARNING:  No CUDA_PATH directory at $CUDA_PATH "
       fi
    fi
 fi
@@ -329,16 +308,27 @@ fi
 #  Define the subcomands
 if [ $CUDACLANG ] ; then 
    INCLUDES="-I $CUDA_PATH/include ${INCLUDES}"
-   CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
+   CMD_CLC=${CMD_CLC:-clang++ -c -std=c++11 $CUOPTS $INCLUDES}
 else
   INCLUDES="-I ${DEVICELIB}/include ${INCLUDES}"
-  CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
+  if [ $CL12 ] ; then
+     CMD_CLC=${CMD_CLC:-clang -c -mcpu=$LC_MCPU -emit-llvm -target $TARGET_TRIPLE -x cl -D__AMD__=1 -D__$LC_MCPU__=1  -D__OPENCL_VERSION__=120 -D__IMAGE_SUPPORT__=1 -O3 -m64 -cl-kernel-arg-info -cl-std=CL1.2 -mllvm -amdgpu-early-inline-all -Xclang -target-feature -Xclang -cl-ext=+cl_khr_fp64,+cl_khr_global_int32_base_atomics,+cl_khr_global_int32_extended_atomics,+cl_khr_local_int32_base_atomics,+cl_khr_local_int32_extended_atomics,+cl_khr_int64_base_atomics,+cl_khr_int64_extended_atomics,+cl_khr_3d_image_writes,+cl_khr_byte_addressable_store,+cl_khr_gl_sharing,+cl_amd_media_ops,+cl_amd_media_ops2,+cl_khr_subgroups -include $AOMP/lib/clang/9.0.1/include/opencl-c.h $CLOPTS $LINKOPTS}
+  else
+     CMD_CLC=${CMD_CLC:-clang -c -mcpu=$LC_MCPU -emit-llvm -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include $AOMP/lib/clang/9.0.1/include/opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
+
+   fi
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}
 CMD_LLL=${CMD_LLL:-llvm-link}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -mcpu=$LC_MCPU -amdgpu-annotate-kernel-features}
-CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -filetype=obj -mattr=-code-object-v3 -mcpu=$LC_MCPU}
+
+#cl files require code-object-v2
+if [ "$filetype" == "cl" ]  ; then
+  CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -filetype=obj -mattr=-code-object-v3 -mcpu=$LC_MCPU}
+else
+  CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -filetype=obj -mattr=+code-object-v3 -mcpu=$LC_MCPU}
+fi
 
 RUNDATE=`date`
 
@@ -444,7 +434,7 @@ rc=0
       else 
          [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Compile cl	cl --> bc ..."
-         runcmd "$AOMP/bin/$CMD_CLC -c -emit-llvm -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
+         runcmd "$AOMP/bin/$CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
       fi
 
       if [ $GENLL ] ; then

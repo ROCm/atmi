@@ -5,7 +5,7 @@
 #
 # Written by Greg Rodgers Gregory.Rodgers@amd.com
 
-PROGVERSION=0.6-0
+PROGVERSION=3.3-0
 
 # Copyright (c) 2018 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -61,6 +61,7 @@ function usage(){
 
    Options without values:
     -h        Print this help message
+    -d        If GPU is unknown, set to this default device
     -version  Print the version of mymcpu and mygpu
 
    Options with values:
@@ -134,13 +135,21 @@ function code2gpu(){
       ;;
       "vega")    gpuname="gfx900"
       ;;
+      "RavenRidge")  gpuname="gfx902"
+      ;;
       "vega20")   gpuname="gfx906"
+      ;;
+      "NRAXJ")   gpuname="gfx908"
+      ;;
+      "gfx1010")   gpuname="gfx1010"
       ;;
       "sm_30")   gpuname="sm_30"
       ;;
       "k4000")   gpuname="sm_30"
       ;;
       "k4200")   gpuname="sm_30"
+      ;;
+      "gtx960m")   gpuname="sm_50"
       ;;
       "gtx980")   gpuname="sm_35"
       ;;
@@ -160,7 +169,7 @@ function code2gpu(){
       ;;
       "")  gpuname="sm_35"
       ;;
-      *) gpuname="unknown" 
+      *) gpuname=$unknown_value
       ;;
    esac
    echo $gpuname
@@ -190,6 +199,10 @@ function gpu2code(){
       ;;
       "gfx906") codename="vega20"
       ;;
+      "gfx908") codename="NRAXJ"
+      ;;
+      "gfx1010") codename="gfx1010"
+      ;;
 # sm_ numbers do not map to specific gpus so just return the sm number
       *) codename="$1"
       ;;
@@ -200,16 +213,18 @@ function gpu2code(){
 function getmycodename()
 {
 thisdir=$(getdname $0)
-[ ! -L "$thisdir/mymcpu" ] || thisdir=$(getdname `readlink "$thisdir/mymcpu"`)
-GPUTABLE_FILE=${GPUTABLE_FILE:-$thisdir/gputable.txt}
-if [ -f /sbin/lspci ] ; then
-  _LSPCI="/sbin/lspci"
-else
-  _LSPCI="lspci"
+if [ -L "$thisdir/mymcpu" ] ; then
+   linkfile=`readlink "$thisdir/mymcpu"`
+   if [ "${linkfile%%/*}" == ".." ] ; then
+      linkfile=$thisdir/$linkfile
+   fi
+   thisdir=$(getdname $linkfile)
 fi
+GPUTABLE_FILE=${GPUTABLE_FILE:-$thisdir/gputable.txt}
 local _found=0
 if [ -f $GPUTABLE_FILE ] ; then
-   for gpuid in `$_LSPCI -n -m | awk '{print $3 ":" $4}' | tr -d '"' | grep -E '1002|10de'` ; do
+   for sysfsname in `find -L /sys/bus/pci/devices -maxdepth 2 -name uevent | xargs grep -l -E 'DRIVER=amdgpu|DRIVER=nvidia'` ; do
+      gpuid=`cat $sysfsname | grep 'PCI_ID=' | cut -d"=" -f2 | tr '[:upper:]' '[:lower:]'`
       if [ $_found == 0  ] ; then
          entry=`grep -m1 "^$gpuid" $GPUTABLE_FILE`
          if [ $? == 0 ] ; then
@@ -230,6 +245,7 @@ fi
 TYPERUN=${0##*\/}
 MODE=
 
+unknown_value="unknown"
 #  process args
 while [ $# -gt 0 ] ; do 
    case "$1" in 
@@ -237,6 +253,7 @@ while [ $# -gt 0 ] ; do
       -getcodename)     INPUT_GPUNAME=$2; shift ;;
       -n) 	        MODE=num; shift ;;
       -h) 	        usage ;; 
+      -d) 	        unknown_value=$2; shift ;;
       -help) 	        usage ;; 
       --help) 	        usage ;; 
       -version) 	version ;; 

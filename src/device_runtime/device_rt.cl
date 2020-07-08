@@ -8,7 +8,7 @@
 #include "atmi.h"
 //#include "ockl/inc/ockl_hsa.h"
 //#include "irif/inc/irif.h"
-#include "atmi_kl.h"
+#include "device_rt_internal.h"
 
 atmi_taskgroup_handle_t ATMI_DEFAULT_TASKGROUP_HANDLE = {0ull};
 

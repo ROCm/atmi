@@ -26,7 +26,6 @@
 #include "hsa_ext_finalize.h"
 
 #include "atmi.h"
-#include "atmi_kl.h"
 #include "atmi_runtime.h"
 #include "realtimer.h"
 
@@ -86,7 +85,9 @@ extern "C" {
 #endif
 
 #ifndef HSA_RUNTIME_INC_HSA_H_
-typedef struct hsa_signal_s { uint64_t handle; } hsa_signal_t;
+typedef struct hsa_signal_s {
+  uint64_t handle;
+} hsa_signal_t;
 #endif
 
 /*  All global values go in this global structure */

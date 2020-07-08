@@ -5,6 +5,7 @@
  *===------------------------------------------------------------------------*/
 
 #include "kernel.h"
+#include "device_rt_internal.h"
 #include "internal.h"
 #include "machine.h"
 

@@ -1057,12 +1057,9 @@ atmi_status_t ComputeTaskImpl::dispatch() {
     // hsa_queue_store_write_index_relaxed(this_Q, index+1);
     hsa_signal_store_relaxed(this_Q->doorbell_signal, index);
   } else if (devtype_ == ATMI_DEVTYPE_CPU) {
-    int thread_count = gridDim_[0] * gridDim_[1] * gridDim_[2];
-    std::vector<hsa_queue_t *> this_queues = get_cpu_queues(place_);
-    int q_count = this_queues.size();
     struct timespec dispatch_time;
     clock_gettime(CLOCK_MONOTONIC_RAW, &dispatch_time);
-    /* this "virtual" task encompasses thread_count number of ATMI CPU tasks
+    /* this "virtual" task encompasses packets_.size() number of ATMI CPU tasks
      * performing
      * data parallel SPMD style of processing
      */
@@ -1071,7 +1068,8 @@ atmi_status_t ComputeTaskImpl::dispatch() {
       taskgroup_obj->running_groupable_tasks_.push_back(this);
       unlock(&(taskgroup_obj->group_mutex_));
     }
-    for (int tid = 0; tid < thread_count; tid++) {
+    // packets_ size will equal number of threads allocated for this task
+    for (int tid = 0; tid < packets_.size(); tid++) {
       hsa_agent_dispatch_packet_t *this_aql = NULL;
       uint64_t index = 0ull;
       hsa_queue_t *this_Q = packets_[tid].first;
@@ -1123,14 +1121,14 @@ atmi_status_t ComputeTaskImpl::dispatch() {
     // FIXME: in the current logic, multiple CPU threads are round-robin
     // scheduled across queues from Q0. So, just ring the doorbell on only
     // the queues that are touched and leave the other queues alone
-    int doorbell_count = (q_count < thread_count) ? q_count : thread_count;
-    for (int q = 0; q < doorbell_count; q++) {
+    for (auto& packet : packets_) {
       /* fetch write index and ring doorbell on one lesser value
        * (because the add index call will have incremented it already by
        * 1 and dispatch the kernel.  */
-      uint64_t index = hsa_queue_load_write_index_acquire(this_queues[q]) - 1;
-      hsa_signal_store_relaxed(this_queues[q]->doorbell_signal, index);
-      signal_worker(this_queues[q], PROCESS_PKT);
+      hsa_queue_t *this_queue = packet.first;
+      uint64_t index = hsa_queue_load_write_index_acquire(this_queue) - 1;
+      hsa_signal_store_relaxed(this_queue->doorbell_signal, index);
+      signal_worker(this_queue, PROCESS_PKT);
     }
   }
   TryDispatchTimer.stop();

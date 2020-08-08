@@ -86,11 +86,14 @@ if(ROCM_FOUND)
             target_link_libraries(
                 atmi_cplugin
                 ${ROCM_LIBRARIES}
-                -L${ROCM_LIBRARIES_DIR}/../hsa/lib -L${ROCM_LIBRARIES_DIR}
+                -L${ROCM_LIBRARIES_DIR}
                 -Wl,--enable-new-dtags
-                -Wl,-rpath,\$ORIGIN
-                -Wl,-rpath,\$ORIGIN/../../hsa/lib -Wl,-rpath,\$ORIGIN/../../lib
             )
+
+            if (NOT CMAKE_INSTALL_RPATH)
+              set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../../hsa/lib;$ORIGIN/../../lib;$ORIGIN/../../lib64;$ORIGIN/../lib64")
+            endif ()
+
        else()
             libatmi_runtime_say("Not building ATMI C Extension: GCC Plugin not found.")
        endif()

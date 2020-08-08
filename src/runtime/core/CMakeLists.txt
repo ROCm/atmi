@@ -109,7 +109,6 @@ target_link_libraries(
   ${amd_comgr_LIBRARIES}
   ${LIBELF_LIBRARIES}
   ${ROCM_LIBRARIES}
-  -L${ROCM_LIBRARIES_DIR}/../hsa/lib
   -L${ROCM_LIBRARIES_DIR}
   -Wl,--enable-new-dtags
 )

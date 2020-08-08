@@ -112,10 +112,11 @@ target_link_libraries(
   -L${ROCM_LIBRARIES_DIR}/../hsa/lib
   -L${ROCM_LIBRARIES_DIR}
   -Wl,--enable-new-dtags
-  -Wl,-rpath,\$ORIGIN
-  -Wl,-rpath,\$ORIGIN/../../hsa/lib
-  -Wl,-rpath,\$ORIGIN/../../lib
 )
+
+if (NOT CMAKE_INSTALL_RPATH)
+  set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../../hsa/lib;$ORIGIN/../../lib;$ORIGIN/../../lib64;$ORIGIN/../lib64")
+endif ()
 
 # set output dir for .h files
 set (OUTPUT_INC_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../include)

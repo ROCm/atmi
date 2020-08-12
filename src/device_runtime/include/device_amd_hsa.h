@@ -24,12 +24,13 @@ typedef unsigned long uint64_t;
 #define DEVICE_COMPILER
 #define LITTLEENDIAN_CPU
 #include "hsa.h"
-#include "amd_hsa_common.h"
-#include "amd_hsa_elf.h"
-#include "amd_hsa_kernel_code.h"
-#include "amd_hsa_queue.h"
-#include "amd_hsa_signal.h"
-#include "device_amd_hsa.h"
+// below includes are unnecessary for ATMI
+//#include "amd_hsa_common.h"
+//#include "amd_hsa_elf.h"
+//#include "amd_hsa_kernel_code.h"
+//#include "amd_hsa_queue.h"
+//#include "amd_hsa_signal.h"
+//#include "device_amd_hsa.h"
 #undef DEVICE_COMPILER
 
-#endif // DEVICE_AMD_HSA_H
+#endif  // DEVICE_AMD_HSA_H

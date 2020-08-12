@@ -6,10 +6,12 @@
 #ifndef SRC_RUNTIME_INCLUDE_DEVICE_RT_INTERNAL_H_
 #define SRC_RUNTIME_INCLUDE_DEVICE_RT_INTERNAL_H_
 
-#include <hsa.h>
 #ifdef __OPENCL_C_VERSION__
-#include "ockl_hsa.h"
+#include "device_amd_hsa.h"
+#else
+#include <hsa.h>
 #endif
+
 #define MAX_NUM_KERNELS (1024 * 16)
 /*typedef struct atmi_task_impl_s {
     unsigned long int signal;

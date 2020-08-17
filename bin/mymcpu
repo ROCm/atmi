@@ -5,7 +5,7 @@
 #
 # Written by Greg Rodgers Gregory.Rodgers@amd.com
 
-PROGVERSION=3.3-0
+PROGVERSION=0.7-7
 
 # Copyright (c) 2018 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -141,8 +141,6 @@ function code2gpu(){
       ;;
       "NRAXJ")   gpuname="gfx908"
       ;;
-      "gfx1010")   gpuname="gfx1010"
-      ;;
       "sm_30")   gpuname="sm_30"
       ;;
       "k4000")   gpuname="sm_30"
@@ -201,8 +199,6 @@ function gpu2code(){
       ;;
       "gfx908") codename="NRAXJ"
       ;;
-      "gfx1010") codename="gfx1010"
-      ;;
 # sm_ numbers do not map to specific gpus so just return the sm number
       *) codename="$1"
       ;;
@@ -221,10 +217,14 @@ if [ -L "$thisdir/mymcpu" ] ; then
    thisdir=$(getdname $linkfile)
 fi
 GPUTABLE_FILE=${GPUTABLE_FILE:-$thisdir/gputable.txt}
+if [ -f /sbin/lspci ] ; then
+  _LSPCI="/sbin/lspci"
+else
+  _LSPCI="lspci"
+fi
 local _found=0
 if [ -f $GPUTABLE_FILE ] ; then
-   for sysfsname in `find -L /sys/bus/pci/devices -maxdepth 2 -name uevent | xargs grep -l -E 'DRIVER=amdgpu|DRIVER=nvidia'` ; do
-      gpuid=`cat $sysfsname | grep 'PCI_ID=' | cut -d"=" -f2 | tr '[:upper:]' '[:lower:]'`
+   for gpuid in `$_LSPCI -n -m | awk '{print $3 ":" $4}' | tr -d '"' | grep -E '1002|10de'` ; do
       if [ $_found == 0  ] ; then
          entry=`grep -m1 "^$gpuid" $GPUTABLE_FILE`
          if [ $? == 0 ] ; then

@@ -8,7 +8,7 @@
 #
 #  Written by Greg Rodgers  Gregory.Rodgers@amd.com
 #
-PROGVERSION="3.3-0"
+PROGVERSION="0.7-7"
 #
 # Copyright (c) 2018 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -72,10 +72,10 @@ function usage(){
     -cl12     Use OpenCL 1.2 instead of default OpenCL 2.0
 
    Options with values:
-    -aomp      <path>           $AOMP or _AOMP_INSTALL_DIR_
+    -aomp      <path>           $AOMP or /data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp
     -libgcn    <path>           $DEVICELIB or $AOMP/lib
     -cuda-path <path>           $CUDA_PATH or /usr/local/cuda
-    -atmipath  <path>           $ATMI_PATH or _AOMP_INSTALL_DIR_
+    -atmipath  <path>           $ATMI_PATH or /data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp
     -mcpu      <cputype>        Default= value returned by mygpu
     -bclib     <bcfile>         Add a bc library for llvm-link
     -clopts    <compiler opts>  Addtional options for cl frontend
@@ -226,10 +226,9 @@ fi
 cdir=$(getdname $0)
 [ ! -L "$cdir/cloc.sh" ] || cdir=$(getdname `readlink "$cdir/cloc.sh"`)
 
-_AOMP_INSTALL_DIR_=${_AOMP_INSTALL_DIR_:-/opt/rocm/aomp}
-AOMP=${AOMP:-_AOMP_INSTALL_DIR_}
+AOMP=${AOMP:-/data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp}
 if [ ! -d $AOMP ] ; then
-   AOMP="_AOMP_INSTALL_DIR_"
+   AOMP="/data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp"
 fi
 if [ ! -d $AOMP ] ; then
    echo "ERROR: AOMP not found at $AOMP"
@@ -238,10 +237,9 @@ if [ ! -d $AOMP ] ; then
 fi
 
 DEVICELIB=${DEVICELIB:-$AOMP/lib}
-AMDGCNDEVICELIB=${AMDGCNDEVICELIB:-$AOMP/amdgcn/bitcode}
 TARGET_TRIPLE=${TARGET_TRIPLE:-amdgcn-amd-amdhsa}
 CUDA_PATH=${CUDA_PATH:-/usr/local/cuda}
-ATMI_PATH=${ATMI_PATH:-_AOMP_INSTALL_DIR_}
+ATMI_PATH=${ATMI_PATH:-/data/jenkins-workspace/compute-rocm-rel-3.3/out/ubuntu-16.04/16.04/aomp}
 
 # Determine which gfx processor to use, default to Vega (gfx900)
 if [ ! $LC_MCPU ] ; then 
@@ -262,17 +260,18 @@ fi
 
 BCFILES=""
 
-
 if [ -f $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc ]; then
   BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc"
 fi
-gpunum=`$cdir/mygpu -n`
 BCFILES="$BCFILES $DEVICELIB/opencl.amdgcn.bc"
 BCFILES="$BCFILES $DEVICELIB/ocml.amdgcn.bc"
 BCFILES="$BCFILES $DEVICELIB/ockl.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/oclc_isa_version_${gpunum}.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/oclc_correctly_rounded_sqrt_on.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_correctly_rounded_sqrt_off.amdgcn.bc"
 BCFILES="$BCFILES $DEVICELIB/oclc_daz_opt_on.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_finite_only_off.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_unsafe_math_off.amdgcn.bc"
+#BCFILES="$BCFILES $DEVICELIB/libdevice/libm-amdgcn-$LC_MCPU.bc"
+
 if [ -f $ATMI_PATH/lib/libdevice/libatmi.bc ]; then
     BCFILES="$BCFILES $ATMI_PATH/lib/libdevice/libatmi.bc"
 else 
@@ -308,13 +307,13 @@ fi
 #  Define the subcomands
 if [ $CUDACLANG ] ; then 
    INCLUDES="-I $CUDA_PATH/include ${INCLUDES}"
-   CMD_CLC=${CMD_CLC:-clang++ -c -std=c++11 $CUOPTS $INCLUDES}
+   CMD_CLC=${CMD_CLC:-clang++ $CUOPTS $INCLUDES} 
 else
   INCLUDES="-I ${DEVICELIB}/include ${INCLUDES}"
   if [ $CL12 ] ; then
-     CMD_CLC=${CMD_CLC:-clang -c -mcpu=$LC_MCPU -emit-llvm -target $TARGET_TRIPLE -x cl -D__AMD__=1 -D__$LC_MCPU__=1  -D__OPENCL_VERSION__=120 -D__IMAGE_SUPPORT__=1 -O3 -m64 -cl-kernel-arg-info -cl-std=CL1.2 -mllvm -amdgpu-early-inline-all -Xclang -target-feature -Xclang -cl-ext=+cl_khr_fp64,+cl_khr_global_int32_base_atomics,+cl_khr_global_int32_extended_atomics,+cl_khr_local_int32_base_atomics,+cl_khr_local_int32_extended_atomics,+cl_khr_int64_base_atomics,+cl_khr_int64_extended_atomics,+cl_khr_3d_image_writes,+cl_khr_byte_addressable_store,+cl_khr_gl_sharing,+cl_amd_media_ops,+cl_amd_media_ops2,+cl_khr_subgroups -include $AOMP/lib/clang/9.0.1/include/opencl-c.h $CLOPTS $LINKOPTS}
+     CMD_CLC=${CMD_CLC:-clang -c -emit-llvm -target $TARGET_TRIPLE -x cl -D__AMD__=1 -D__$LC_MCPU__=1  -D__OPENCL_VERSION__=120 -D__IMAGE_SUPPORT__=1 -O3 -m64 -cl-kernel-arg-info -cl-std=CL1.2 -mllvm -amdgpu-early-inline-all -Xclang -target-feature -Xclang -cl-ext=+cl_khr_fp64,+cl_khr_global_int32_base_atomics,+cl_khr_global_int32_extended_atomics,+cl_khr_local_int32_base_atomics,+cl_khr_local_int32_extended_atomics,+cl_khr_int64_base_atomics,+cl_khr_int64_extended_atomics,+cl_khr_3d_image_writes,+cl_khr_byte_addressable_store,+cl_khr_gl_sharing,+cl_amd_media_ops,+cl_amd_media_ops2,+cl_khr_subgroups -include $AOMP/lib/clang/9.0.1/include/opencl-c.h $CLOPTS $LINKOPTS}
   else
-     CMD_CLC=${CMD_CLC:-clang -c -mcpu=$LC_MCPU -emit-llvm -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include $AOMP/lib/clang/9.0.1/include/opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
+     CMD_CLC=${CMD_CLC:-clang -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -include $AOMP/lib/clang/9.0.1/include/opencl-c.h -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
 
    fi
 fi
@@ -322,13 +321,7 @@ CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}
 CMD_LLL=${CMD_LLL:-llvm-link}
 CMD_OPT=${CMD_OPT:-opt -O$LLVMOPT -mcpu=$LC_MCPU -amdgpu-annotate-kernel-features}
-
-#cl files require code-object-v2
-if [ "$filetype" == "cl" ]  ; then
-  CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -filetype=obj -mattr=-code-object-v3 -mcpu=$LC_MCPU}
-else
-  CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -filetype=obj -mattr=+code-object-v3 -mcpu=$LC_MCPU}
-fi
+CMD_LLC=${CMD_LLC:-llc -mtriple ${TARGET_TRIPLE} -filetype=obj -mattr=-code-object-v3 -mcpu=$LC_MCPU}
 
 RUNDATE=`date`
 
@@ -434,7 +427,7 @@ rc=0
       else 
          [ $VV ] && echo 
          [ $VERBOSE ] && echo "#Step:  Compile cl	cl --> bc ..."
-         runcmd "$AOMP/bin/$CMD_CLC -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
+         runcmd "$AOMP/bin/$CMD_CLC -c -emit-llvm -o $TMPDIR/$FNAME.bc $INDIR/$FILENAME"
       fi
 
       if [ $GENLL ] ; then

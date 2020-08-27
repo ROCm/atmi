@@ -22,6 +22,7 @@
 #include <set>
 #include <vector>
 #include "data.h"
+#include "device_rt_internal.h"
 #include "internal.h"
 #include "kernel.h"
 #include "machine.h"
@@ -299,7 +300,7 @@ extern void TaskImpl::wait() {
     while (state_ < ATMI_DISPATCHED) {
     }
     if (state_ < ATMI_EXECUTED &&
-         !taskgroup_obj_->first_created_tasks_dispatched_.load()) {
+        !taskgroup_obj_->first_created_tasks_dispatched_.load()) {
       // Now, this task has the resources, so it can get dispatched any time.
       // So, create a barrier packet for current sink tasks and add async
       // handler for its completion.
@@ -1151,8 +1152,9 @@ void ComputeTaskImpl::updateKernargRegion(void **args) {
     memcpy(thisKernargAddress + kernel_impl->arg_offsets()[i], args[i],
            kernel_->arg_sizes()[i]);
     // hsa_memory_register(thisKernargAddress, ???
-    DEBUG_PRINT("Arg[%d] = %p\n", i, *(void **)((char *)thisKernargAddress +
-                                                kernel_impl->arg_offsets()[i]));
+    DEBUG_PRINT(
+        "Arg[%d] = %p\n", i,
+        *(void **)((char *)thisKernargAddress + kernel_impl->arg_offsets()[i]));
   }
 }
 

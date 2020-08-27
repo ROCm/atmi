@@ -4,16 +4,32 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 
-#include "ockl_hsa.h"
 #include "atmi.h"
-//#include "ockl/inc/ockl_hsa.h"
-//#include "irif/inc/irif.h"
-#include "atmi_kl.h"
+#include "device_amd_hsa.h"
+#include "device_rt_internal.h"
 
-atmi_taskgroup_handle_t ATMI_DEFAULT_TASKGROUP_HANDLE = {0ull};
+// ockl declarations
+typedef enum __ockl_memory_order_e {
+  __ockl_memory_order_relaxed = __ATOMIC_RELAXED,
+  __ockl_memory_order_acquire = __ATOMIC_ACQUIRE,
+  __ockl_memory_order_release = __ATOMIC_RELEASE,
+  __ockl_memory_order_acq_rel = __ATOMIC_ACQ_REL,
+  __ockl_memory_order_seq_cst = __ATOMIC_SEQ_CST,
+} __ockl_memory_order;
 
+extern ulong __ockl_hsa_queue_add_write_index(__global hsa_queue_t *queue,
+                                              ulong value,
+                                              __ockl_memory_order mem_order);
+extern void __ockl_hsa_signal_add(hsa_signal_t sig, long value,
+                                  __ockl_memory_order mem_order);
+extern void __ockl_hsa_signal_store(hsa_signal_t sig, long value,
+                                    __ockl_memory_order mem_order);
+
+// llvm intrinsics declarations
 extern __attribute__((const)) __constant void *__llvm_amdgcn_dispatch_ptr(void) __asm("llvm.amdgcn.dispatch.ptr");
 extern __attribute__((const)) __constant void *__llvm_amdgcn_implicitarg_ptr(void) __asm("llvm.amdgcn.implicitarg.ptr");
+
+atmi_taskgroup_handle_t ATMI_DEFAULT_TASKGROUP_HANDLE = {0ull};
 
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 #pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable

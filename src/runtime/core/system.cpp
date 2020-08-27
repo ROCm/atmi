@@ -15,6 +15,7 @@
 #include <string>
 
 #include "amd_comgr.h"
+#include "device_rt_internal.h"
 #include "internal.h"
 #include "machine.h"
 #include "realtimer.h"

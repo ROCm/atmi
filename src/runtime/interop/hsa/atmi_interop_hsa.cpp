@@ -4,7 +4,7 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 #include "atmi_interop_hsa.h"
-#include "atmi_kl.h"
+#include "device_rt_internal.h"
 #include "internal.h"
 using core::atl_is_atmi_initialized;
 using core::get_compute_agent;

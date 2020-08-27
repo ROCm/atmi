@@ -6,7 +6,7 @@
 #include "device_rt.h"
 #include <map>
 #include <vector>
-#include "atmi_kl.h"
+#include "device_rt_internal.h"
 #include "internal.h"
 #include "kernel.h"
 #include "machine.h"
@@ -51,8 +51,8 @@ atmi_status_t atmi_ke_init() {
   void *gpu_queue_ptr = NULL;
   if (g_ke_args.num_gpu_queues > 0) {
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pools[0], sizeof(hsa_queue_t *) * g_ke_args.num_gpu_queues,
-        0, &gpu_queue_ptr);
+        atl_gpu_kernarg_pools[0],
+        sizeof(hsa_queue_t *) * g_ke_args.num_gpu_queues, 0, &gpu_queue_ptr);
     ErrorCheck(Allocating GPU queue pointers, err);
     allow_access_to_all_gpu_agents(gpu_queue_ptr);
     for (int gpuq = 0; gpuq < gpu_queues.size(); gpuq++) {
@@ -81,8 +81,8 @@ atmi_status_t atmi_ke_init() {
   void *cpu_queue_ptr = NULL;
   if (g_ke_args.num_cpu_queues > 0) {
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pools[0], sizeof(hsa_queue_t *) * g_ke_args.num_cpu_queues,
-        0, &cpu_queue_ptr);
+        atl_gpu_kernarg_pools[0],
+        sizeof(hsa_queue_t *) * g_ke_args.num_cpu_queues, 0, &cpu_queue_ptr);
     ErrorCheck(Allocating CPU queue pointers, err);
     allow_access_to_all_gpu_agents(cpu_queue_ptr);
     for (int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {
@@ -95,8 +95,9 @@ atmi_status_t atmi_ke_init() {
   void *cpu_worker_signals = NULL;
   if (g_ke_args.num_cpu_queues > 0) {
     err = hsa_amd_memory_pool_allocate(
-        atl_gpu_kernarg_pools[0], sizeof(hsa_signal_t) * g_ke_args.num_cpu_queues,
-        0, &cpu_worker_signals);
+        atl_gpu_kernarg_pools[0],
+        sizeof(hsa_signal_t) * g_ke_args.num_cpu_queues, 0,
+        &cpu_worker_signals);
     ErrorCheck(Allocating CPU queue iworker signals, err);
     allow_access_to_all_gpu_agents(cpu_worker_signals);
     for (int cpuq = 0; cpuq < cpu_queues.size(); cpuq++) {

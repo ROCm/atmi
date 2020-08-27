@@ -69,14 +69,6 @@ if(ATMI_WITH_AOMP_VAR)
     )
   #message(STATUS "      GPU detected: ${MYGPU}")
   find_file (
-    ATMI_DE_DEP_LIBHSA_INCLUDE
-    ockl_hsa.h
-    PATHS
-    ${DEVICE_LIB_DIR}/include
-    ${CMAKE_INSTALL_PREFIX}/include
-    NO_DEFAULT_PATH
-    )
-  find_file (
     ATMI_DE_DEP_LIBHSA_LIBRARIES
     ockl.amdgcn.bc
     PATHS
@@ -85,15 +77,6 @@ if(ATMI_WITH_AOMP_VAR)
     NO_DEFAULT_PATH
     )
 else()
-  find_file (
-    ATMI_DE_DEP_LIBHSA_INCLUDE
-    ockl_hsa.h
-    PATHS
-    ${DEVICE_LIB_DIR}/include
-    /opt/rocm/include
-    /usr/local/include
-    NO_DEFAULT_PATH
-    )
   find_file (
     ATMI_DE_DEP_LIBHSA_LIBRARIES
     ockl.amdgcn.bc
@@ -105,13 +88,8 @@ else()
     )
 endif()
 
-get_filename_component (ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS ${ATMI_DE_DEP_LIBHSA_INCLUDE} DIRECTORY)
 get_filename_component (ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DE_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
-find_package_handle_standard_args(
-  ATMI_DE_DEP_INC
-  "One of these files not found: {ockl_hsa.h}"
-  ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS)
 find_package_handle_standard_args(
   ATMI_DE_DEP_LIB
   "One of these files not found: {ockl.amdgcn.bc}"
@@ -126,7 +104,6 @@ endif()
 
 # Build
 mark_as_advanced(
-  ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS
   ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
 
 get_filename_component (ROCM_DEVICE_PATH
@@ -156,7 +133,8 @@ add_custom_target(device_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi_kl.h)
 # append to the configure file
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDLLVM=${AMDLLVM}\n")
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_TARGET_TRIPLE}\n")
-file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}\n")
+# cloc assumes the /path/to/rocm/lib (with the /lib suffix in the path)
+file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}/lib\n")
 
 # create bc files
 foreach(mcpu ${mcpus})
@@ -185,8 +163,9 @@ foreach(mcpu ${mcpus})
     )
   include_directories(${ROCM_INCLUDE_DIRS})
   include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include)
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../include)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../runtime/include)
 
   install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h

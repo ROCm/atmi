@@ -12,10 +12,10 @@
 1002:131b 0000 0000 kaveri : Kaveri [Radeon R4 Graphics]
 1002:131c 0000 0000 kaveri : Kaveri [Radeon R7 Graphics]
 1002:131d 0000 0000 kaveri : Kaveri [Radeon R6 Graphics]
-1002:15dd 0000 0000 vega : Raven Ridge [Radeon Vega Series / Radeon Vega Mobile Series]
-1002:15dd 103c 83c6 vega : Radeon Vega 8 Mobile
-1002:15dd 1458 d000 vega : Radeon RX Vega 11
-1002:15ff 0000 0000 vega : Vega 11 [Radeon Vega 28 Mobile]
+1002:15dd 0000 0000 RavenRidge : Raven Ridge [Radeon Vega Series / Radeon Vega Mobile Series]
+1002:15dd 103c 83c6 RavenRidge : Radeon Vega 8 Mobile
+1002:15dd 1458 d000 RavenRidge : Radeon RX Vega 11
+1002:15ff 0000 0000 RavenRidge : Vega 11 [Radeon Vega 28 Mobile]
 1002:1714 0000 0000 beavercreek : BeaverCreek HDMI Audio [Radeon HD 6500D and 6400G-6600G series]
 1002:1714 103c 168b beavercreek : ProBook 4535s
 1002:3150 0000 0000 rv380/m24 : RV380/M24 [Mobility Radeon X600]
@@ -1864,6 +1864,7 @@
 1002:7300 1043 049e fiji : Radeon R9 FURY
 1002:7300 1043 04a0 fiji : Radeon R9 FURY X
 1002:7300 174b e329 fiji : Radeon R9 FURY
+1002:738c 0000 0000 NRAXJ : NRAXJ
 1002:7834 0000 0000 rs350 : RS350 [Radeon 9100 PRO/XT IGP]
 1002:7835 0000 0000 rs350m : RS350M [Mobility Radeon 9000 IGP]
 1002:7919 0000 0000 rs690 : RS690 HDMI Audio [Radeon Xpress 1200 Series]

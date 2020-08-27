@@ -67,7 +67,9 @@ macro(add_ocl_bc_library name dir)
     -mcpu=${mcpu}
     -I${ATMI_DE_DEP_LIBHSA_INCLUDE_DIRS}
     -I${CMAKE_CURRENT_SOURCE_DIR}
+    -I${CMAKE_CURRENT_SOURCE_DIR}/include
     -I${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    -I${CMAKE_CURRENT_SOURCE_DIR}/../runtime/include
     ${CLANG_OPTIONS_APPEND})
 
   set(ll_files)
@@ -82,7 +84,8 @@ macro(add_ocl_bc_library name dir)
 
     file(GLOB h_files 
       "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
-      "${CMAKE_CURRENT_SOURCE_DIR}/../../include/*.h")
+      "${CMAKE_CURRENT_SOURCE_DIR}/../../include/*.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/../runtime/include/*.h")
 
     add_custom_command(
       OUTPUT ${ll_filename}

@@ -74,12 +74,12 @@ typedef enum {
  * @brief Device Types.
  */
 typedef enum atmi_devtype_s {
-  ATMI_DEVTYPE_CPU = 0x0001,
-  ATMI_DEVTYPE_iGPU = 0x0010,                                // Integrated GPU
-  ATMI_DEVTYPE_dGPU = 0x0100,                                // Discrete GPU
+  ATMI_DEVTYPE_CPU = (1 << 0),
+  ATMI_DEVTYPE_iGPU = (1 << 1),                              // Integrated GPU
+  ATMI_DEVTYPE_dGPU = (1 << 2),                              // Discrete GPU
   ATMI_DEVTYPE_GPU = ATMI_DEVTYPE_iGPU | ATMI_DEVTYPE_dGPU,  // Any GPU
-  ATMI_DEVTYPE_DSP = 0x1000,
-  ATMI_DEVTYPE_ALL = 0x1111  // Union of all device types
+  ATMI_DEVTYPE_DSP = (1 << 3),
+  ATMI_DEVTYPE_ALL = ((1 << 4) - 1)  // Union of all device types
 } atmi_devtype_t;
 
 /**

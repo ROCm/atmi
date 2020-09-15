@@ -178,10 +178,6 @@ macro(add_bc_library name dir)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_finite_only_off.amdgcn.bc)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_isa_version_${GFXNUM}.amdgcn.bc)
     list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_unsafe_math_off.amdgcn.bc)
-    if(${ROCM_VERSION} VERSION_LESS "2.0.0")
-      # this file is no longer linked from ROCm 2.0 onwards
-      list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/irif.amdgcn.bc)
-    endif()
   endif()
 
   add_custom_command(

@@ -75,24 +75,28 @@ set(ROCM_LIBRARIES ${ROCR_LIBRARY} ${ROCT_LIBRARY})
 #message(STATUS "ROCm libraries dir: ${ROCM_LIBRARIES_DIR}")
 
 if(NOT ROCM_VERSION)
-  file(GLOB version_files
-      LIST_DIRECTORIES false
-      /opt/rocm/.info/version*
-      )
-  list(GET version_files 0 version_file)
-  # Compute the version
-  execute_process(
-      COMMAND cat ${version_file}
-      OUTPUT_VARIABLE _rocm_version
-      ERROR_VARIABLE _rocm_error
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_STRIP_TRAILING_WHITESPACE
-      )
-  if(NOT _rocm_error)
-    set(ROCM_VERSION ${_rocm_version} CACHE STRING "Version of ROCm as found in /opt/rocm/.info/version*")
-  else()
-    set(ROCM_VERSION "0.0.0" CACHE STRING "Version of ROCm set to default")
-  endif()
+# Do not use the metapackage version number because it is error-prone.
+# Use ROCr version number directly if there is a way to infer it.
+# Until then, set the ROCm version to 0.0.0 as default.
+#   file(GLOB version_files
+#       LIST_DIRECTORIES false
+#       /opt/rocm/.info/version*
+#       )
+#   list(GET version_files 0 version_file)
+#   # Compute the version
+#   execute_process(
+#       COMMAND cat ${version_file}
+#       OUTPUT_VARIABLE _rocm_version
+#       ERROR_VARIABLE _rocm_error
+#       OUTPUT_STRIP_TRAILING_WHITESPACE
+#       ERROR_STRIP_TRAILING_WHITESPACE
+#       )
+#   if(NOT _rocm_error)
+#     set(ROCM_VERSION ${_rocm_version} CACHE STRING "Version of ROCm as found in /opt/rocm/.info/version*")
+#   else()
+#     set(ROCM_VERSION "0.0.0" CACHE STRING "Version of ROCm set to default")
+#   endif()
+  set(ROCM_VERSION "0.0.0" CACHE STRING "Version of ROCm set to default")
   mark_as_advanced(ROCM_VERSION)
 endif()
 

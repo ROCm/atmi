@@ -101,7 +101,7 @@ set ( CPACK_PACKAGE_VERSION_MINOR ${BUILD_VERSION_MINOR} )
 set ( CPACK_PACKAGE_VERSION_PATCH ${BUILD_VERSION_PATCH} )
 set ( CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}" )
 set ( CPACK_PACKAGE_CONTACT "Ashwin Aji <ashwin.aji@amd.com>" )
-set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "ATMI: Asynchronous Task and Memory Interface" )
+set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Asynchronous Task and Memory Interface" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" )
 if ( NOT DEFINED CPACK_PACKAGING_INSTALL_PREFIX )
     set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm/atmi )
@@ -110,8 +110,11 @@ set ( CPACK_GENERATOR "RPM;DEB")
 # Debian package specific variables
 set ( CPACK_DEBIAN_PACKAGE_DEPENDS "hsa-rocr-dev" )
 set ( CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RadeonOpenCompute/atmi" )
+set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Asynchronous Task and Memory Interface, or ATMI, is a runtime framework
+ for efficient task management in heterogeneous CPU-GPU systems." )
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/postinst;${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/prerm"
 )
+set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON )
 set ( CPACK_DEB_COMPONENT_INSTALL ON)
 
 ## RPM package specific variables

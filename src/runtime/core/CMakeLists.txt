@@ -93,6 +93,7 @@ add_library(atmi_runtime SHARED
 
 set_property ( TARGET atmi_runtime PROPERTY VERSION "${LIB_VERSION_STRING}" )
 set_property ( TARGET atmi_runtime PROPERTY SOVERSION "${LIB_VERSION_MAJOR}" )
+set_property ( TARGET atmi_runtime PROPERTY LINK_FLAGS_RELEASE -s )
 
 include_directories(${ROCM_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})

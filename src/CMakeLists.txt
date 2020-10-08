@@ -114,7 +114,7 @@ set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Asynchronous Task and Memory Interface, 
  for efficient task management in heterogeneous CPU-GPU systems." )
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/postinst;${CMAKE_CURRENT_SOURCE_DIR}/DEBIAN/prerm"
 )
-set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON )
+# set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON )
 set ( CPACK_DEB_COMPONENT_INSTALL ON)
 
 ## RPM package specific variables

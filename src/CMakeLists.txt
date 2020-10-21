@@ -108,7 +108,7 @@ if ( NOT DEFINED CPACK_PACKAGING_INSTALL_PREFIX )
 endif()
 set ( CPACK_GENERATOR "RPM;DEB")
 # Debian package specific variables
-set ( CPACK_DEBIAN_PACKAGE_DEPENDS "hsa-rocr-dev" )
+set ( CPACK_DEBIAN_PACKAGE_DEPENDS "hsa-rocr-dev, libc6" )
 set ( CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RadeonOpenCompute/atmi" )
 set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Asynchronous Task and Memory Interface, or ATMI, is a runtime framework
  for efficient task management in heterogeneous CPU-GPU systems." )

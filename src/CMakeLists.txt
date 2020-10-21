@@ -56,7 +56,7 @@ endif()
 
 # Find ROCm
 find_package(ROCm REQUIRED)
-libatmi_runtime_say("ROCm version: ${ROCM_VERSION_STRING}")
+# libatmi_runtime_say("ROCm version: ${ROCM_VERSION_STRING}")
 set(ATMI_RUNTIME_PATH ${CMAKE_CURRENT_BINARY_DIR})
 
 # create configure file

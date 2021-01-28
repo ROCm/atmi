@@ -168,17 +168,14 @@ macro(add_bc_library name dir)
   endif()
 
   set(device_libs)
-  if(ATMI_WITH_AOMP_VAR)
-  else()
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/opencl.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/ocml.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/ockl.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_correctly_rounded_sqrt_off.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_daz_opt_off.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_finite_only_off.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_isa_version_${GFXNUM}.amdgcn.bc)
-    list(APPEND device_libs ${ROCM_DEVICE_PATH}/lib/oclc_unsafe_math_off.amdgcn.bc)
-  endif()
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/opencl.bc)
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/ocml.bc)
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/ockl.bc)
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_correctly_rounded_sqrt_off.bc)
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_daz_opt_off.bc)
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_finite_only_off.bc)
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_isa_version_${GFXNUM}.bc)
+  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_unsafe_math_off.bc)
 
   add_custom_command(
     OUTPUT linkout.${mcpu}.bc
@@ -191,20 +188,11 @@ macro(add_bc_library name dir)
     DEPENDS linkout.${mcpu}.bc
     )
 
-  if(ATMI_WITH_AOMP_VAR)
-    add_custom_command(
-      OUTPUT lib${name}-${mcpu}.bc
-      COMMAND ${CLANG_BINDIR}/prepare-builtins optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
-      DEPENDS optout.${mcpu}.bc
-    )
-    add_custom_target(lib${name}-${mcpu} ALL DEPENDS lib${name}-${mcpu}.bc)
-  else()
-    add_custom_command(
-      OUTPUT ${name}-${mcpu}.amdgcn.bc
-      COMMAND /bin/cp optout.${mcpu}.bc ${ATMI_RUNTIME_PATH}/lib/${name}-${mcpu}.amdgcn.bc
-      DEPENDS optout.${mcpu}.bc
-    )
-    add_custom_target(${name}-${mcpu}.amdgcn ALL DEPENDS ${name}-${mcpu}.amdgcn.bc)
-  endif()
+  add_custom_command(
+    OUTPUT ${name}-${mcpu}.bc
+    COMMAND /bin/cp optout.${mcpu}.bc ${ATMI_RUNTIME_PATH}/lib/${name}-${mcpu}.bc
+    DEPENDS optout.${mcpu}.bc
+  )
+  add_custom_target(${name}-${mcpu} ALL DEPENDS ${name}-${mcpu}.bc)
 endmacro()
 

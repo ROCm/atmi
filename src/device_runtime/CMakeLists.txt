@@ -61,38 +61,23 @@ else()
 endif()
 separate_arguments(mcpus)
 
-#device runtime
-if(ATMI_WITH_AOMP_VAR)
-  execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../bin/mygpu
-    OUTPUT_VARIABLE MYGPU
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-  #message(STATUS "      GPU detected: ${MYGPU}")
-  find_file (
-    ATMI_DE_DEP_LIBHSA_LIBRARIES
-    ockl.amdgcn.bc
-    PATHS
-    ${DEVICE_LIB_DIR}/lib
-    ${CMAKE_INSTALL_PATH}/lib/libdevice/${MYGPU}
-    NO_DEFAULT_PATH
-    )
-else()
-  find_file (
-    ATMI_DE_DEP_LIBHSA_LIBRARIES
-    ockl.amdgcn.bc
-    PATHS
-    ${DEVICE_LIB_DIR}/lib
-    /opt/rocm/lib
-    /usr/local/lib
-    NO_DEFAULT_PATH
-    )
-endif()
+# Find AMD device libs needed for device runtime
+find_package(AMDDeviceLibs REQUIRED CONFIG PATHS ${ROC_DIR})
+find_path(ATMI_DE_DEP_LIBHSA_LIBRARIES
+  NAMES
+    "ockl.bc"
+    "ockl.amdgcn.bc"
+  PATHS
+    "${AMD_DEVICE_LIBS_PREFIX}/amdgcn/bitcode"
+    "${AMD_DEVICE_LIBS_PREFIX}/lib/bitcode"
+    "${AMD_DEVICE_LIBS_PREFIX}/lib"
+  NO_DEFAULT_PATH)
 
 get_filename_component (ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS ${ATMI_DE_DEP_LIBHSA_LIBRARIES} DIRECTORY)
 
 find_package_handle_standard_args(
   ATMI_DE_DEP_LIB
-  "One of these files not found: {ockl.amdgcn.bc}"
+  "One of these files not found: {ockl.bc}"
   ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
 
 if(ATMI_DE_DEP_LIB_FOUND)
@@ -134,7 +119,7 @@ add_custom_target(device_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi_kl.h)
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDLLVM=${AMDLLVM}\n")
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_TARGET_TRIPLE}\n")
 # cloc assumes the /path/to/rocm/lib (with the /lib suffix in the path)
-file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}/lib\n")
+file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}/amdgcn/bitcode\n")
 
 # create bc files
 foreach(mcpu ${mcpus})
@@ -147,11 +132,7 @@ foreach(mcpu ${mcpus})
   set(optimization_level 2)
 
   # set output dir for .bc files
-  if(ATMI_WITH_AOMP_VAR)
-    set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib/libdevice)
-  else()
-    set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib)
-  endif()
+  set(OUTPUTDIR ${ATMI_RUNTIME_PATH}/lib)
 
   # create output dir for include files
   execute_process(COMMAND "/bin/mkdir" "-p" "${OUTPUTDIR}")
@@ -171,28 +152,16 @@ foreach(mcpu ${mcpus})
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
     DESTINATION include COMPONENT device_runtime)
 
-  if(ATMI_WITH_AOMP_VAR)
-    if(CMAKE_BUILD_TYPE MATCHES Debug)
-      install(FILES
-        ${OUTPUTDIR}/libatmi-${mcpu}.bc
-        DESTINATION lib-debug/libdevice COMPONENT device_runtime)
-    else()
-      install(FILES
-        ${OUTPUTDIR}/libatmi-${mcpu}.bc
-        DESTINATION lib/libdevice COMPONENT device_runtime)
-    endif()
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    install(FILES
+      ${OUTPUTDIR}/atmi-${mcpu}.bc
+      DESTINATION lib-debug COMPONENT device_runtime
+      )
   else()
-    if(CMAKE_BUILD_TYPE MATCHES Debug)
-      install(FILES
-        ${OUTPUTDIR}/atmi-${mcpu}.amdgcn.bc
-        DESTINATION lib-debug COMPONENT device_runtime
-        )
-    else()
-      install(FILES
-        ${OUTPUTDIR}/atmi-${mcpu}.amdgcn.bc
-        DESTINATION lib COMPONENT device_runtime
-        )
-    endif()
+    install(FILES
+      ${OUTPUTDIR}/atmi-${mcpu}.bc
+      DESTINATION lib COMPONENT device_runtime
+      )
   endif()
 endforeach()
 

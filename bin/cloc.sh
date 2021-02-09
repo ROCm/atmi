@@ -260,21 +260,16 @@ fi
 
 BCFILES=""
 
-ROCMVERSION=${ROCMVERSION:-3.5}
-if [ -d /opt/rocm/.info ]; then
-  ROCMVERSION=`cat /opt/rocm/.info/version* | cut -d'.' -f1,2,3`
+if [ -f $ATMI_PATH/lib/atmi-$LC_MCPU.bc ]; then
+  BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.bc"
 fi
-
-if [ -f $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc ]; then
-  BCFILES="$BCFILES $ATMI_PATH/lib/atmi-$LC_MCPU.amdgcn.bc"
-fi
-BCFILES="$BCFILES $DEVICELIB/opencl.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/ocml.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/ockl.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/oclc_correctly_rounded_sqrt_off.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/oclc_daz_opt_on.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/oclc_finite_only_off.amdgcn.bc"
-BCFILES="$BCFILES $DEVICELIB/oclc_unsafe_math_off.amdgcn.bc"
+BCFILES="$BCFILES $DEVICELIB/opencl.bc"
+BCFILES="$BCFILES $DEVICELIB/ocml.bc"
+BCFILES="$BCFILES $DEVICELIB/ockl.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_correctly_rounded_sqrt_off.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_daz_opt_on.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_finite_only_off.bc"
+BCFILES="$BCFILES $DEVICELIB/oclc_unsafe_math_off.bc"
 #BCFILES="$BCFILES $DEVICELIB/libdevice/libm-amdgcn-$LC_MCPU.bc"
 
 if [ -f $ATMI_PATH/lib/libdevice/libatmi.bc ]; then
@@ -321,11 +316,7 @@ else
      CMD_CLC=${CMD_CLC:-clang -c -mcpu=$LC_MCPU -emit-llvm -x cl -Xclang -cl-std=CL2.0 $CLOPTS $LINKOPTS $INCLUDES -Dcl_clang_storage_class_specifiers -Dcl_khr_fp64 -target ${TARGET_TRIPLE}}
 
    fi
-  if [[ "$ROCMVERSION" > "3.4" ]]; then
-    CMD_CLC+=" --rocm-path=$AOMP -include $AOMP/lib/clang/11.0.0/include/opencl-c.h -nogpulib"
-  else
-    CMD_CLC+=" -include $AOMP/lib/clang/9.0.1/include/opencl-c.h"
-  fi
+  CMD_CLC+=" --rocm-path=$AOMP -include $AOMP/lib/clang/12.0.0/include/opencl-c.h -nogpulib"
 fi
 CMD_LLA=${CMD_LLA:-llvm-dis}
 CMD_ASM=${CMD_ASM:-llvm-as}

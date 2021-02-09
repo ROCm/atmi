@@ -152,14 +152,12 @@ INSTALL(FILES
         COMPONENT runtime
        )
 
-if(NOT ATMI_WITH_AOMP_VAR)
-  INSTALL(FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/cloc.sh
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mymcpu
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/gputable.txt
-        PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        DESTINATION "bin"
-        COMPONENT runtime
-       )
-endif()
+INSTALL(FILES
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/cloc.sh
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mymcpu
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/gputable.txt
+      PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+      DESTINATION "bin"
+      COMPONENT runtime
+     )

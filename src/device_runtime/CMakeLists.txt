@@ -121,6 +121,9 @@ file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_
 # cloc assumes the /path/to/rocm/lib (with the /lib suffix in the path)
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}/amdgcn/bitcode\n")
 
+target_sources(atmi_runtime PRIVATE
+  ${PROJECT_SOURCE_DIR}/device_runtime/device_rt.cpp
+  )
 # create bc files
 foreach(mcpu ${mcpus})
   execute_process(COMMAND /bin/bash "-c" "/bin/echo ${mcpu} | /bin/sed 's/gfx//'"
@@ -139,9 +142,6 @@ foreach(mcpu ${mcpus})
 
   add_bc_library(atmi ${CMAKE_CURRENT_SOURCE_DIR} ${sources})
 
-  target_sources(atmi_runtime PUBLIC
-    ${PROJECT_SOURCE_DIR}/device_runtime/device_rt.cpp 
-    )
   include_directories(${ROCM_INCLUDE_DIRS})
   include_directories(${CMAKE_CURRENT_SOURCE_DIR})
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)

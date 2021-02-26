@@ -5,7 +5,7 @@
 # ===--------------------------------------------------------------------------
 
 libatmi_runtime_say("Preparing to build runtime/interop/hsa")
-target_sources(atmi_runtime PUBLIC
+target_sources(atmi_runtime PRIVATE
     ${PROJECT_SOURCE_DIR}/runtime/interop/hsa/atmi_interop_hsa.cpp 
     )
 

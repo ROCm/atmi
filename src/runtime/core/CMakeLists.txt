@@ -20,12 +20,14 @@ find_path (amd_comgr_INCLUDE_DIRS
     amd_comgr.h
     PATHS
     ${ROCM_INCLUDE_DIRS}
+    ${ROC_DIR}
     ${ROC_COMGR_INCLUDE_DIR}
     ${ROC_COMGR_INCLUDE_DIR}/include
     /opt/rocm/include
     /usr/include
     /usr/local/include
-    ENV CPATH)
+    ENV CPATH
+    PATH_SUFFIXES include)
 
 set(amd_comgr_LIBRARIES amd_comgr)
 include_directories(${amd_comgr_INCLUDE_DIRS})

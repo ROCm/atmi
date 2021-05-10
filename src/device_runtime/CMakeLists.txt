@@ -80,9 +80,7 @@ find_package_handle_standard_args(
   "One of these files not found: {ockl.bc}"
   ATMI_DE_DEP_LIBHSA_LIBRARIES_DIRS)
 
-if(ATMI_DE_DEP_LIB_FOUND)
-  libatmi_runtime_say("Preparing to build device_runtime with GFX_VER=${GFX_VER}")
-else()
+if(NOT ATMI_DE_DEP_LIB_FOUND)
   libatmi_runtime_say("Not building ATMI Device Runtime: ROCm Device Libs not found.")
   return()
 endif()

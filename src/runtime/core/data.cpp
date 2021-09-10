@@ -505,10 +505,10 @@ atmi_status_t DataTaskImpl::dispatch() {
   hsa_amd_pointer_info_t dest_ptr_info;
   src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
   dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-  err = hsa_amd_pointer_info(reinterpret_cast<void *>(src), &src_ptr_info,
-                             NULL,  /* alloc fn ptr */
-                             NULL,  /* num_agents_accessible */
-                             NULL); /* accessible agents */
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(const_cast<void *>(src)),
+                             &src_ptr_info, NULL, /* alloc fn ptr */
+                             NULL,                /* num_agents_accessible */
+                             NULL);               /* accessible agents */
   ErrorCheck(Checking src pointer info, err);
   err = hsa_amd_pointer_info(reinterpret_cast<void *>(dest), &dest_ptr_info,
                              NULL,  /* alloc fn ptr */
@@ -541,13 +541,17 @@ atmi_status_t DataTaskImpl::dispatch() {
   } else if (src_data && !dest_data) {
     type = Direction::ATMI_D2H;
     src_agent = get_mem_agent(src_data->place());
-    dest_agent = src_agent;
+    dest_agent = cpu_agent;
+    // TODO(ashwin): can the two agents be the GPU agent itself? ROCr team: no
+    // dest_agent = src_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else if (!src_data && dest_data) {
     type = Direction::ATMI_H2D;
     dest_agent = get_mem_agent(dest_data->place());
-    src_agent = dest_agent;
+    src_agent = cpu_agent;
+    // TODO(ashwin): can the two agents be the GPU agent itself? ROCr team: no
+    // src_agent = dest_agent;
     src_ptr = src;
     dest_ptr = dest;
   } else {
@@ -648,7 +652,7 @@ atmi_status_t DataTaskImpl::dispatch() {
 }
 
 atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
-  atmi_status_t ret;
+  atmi_status_t ret = ATMI_STATUS_SUCCESS;
   hsa_status_t err;
 
 #ifndef USE_ROCR_PTR_INFO
@@ -659,10 +663,10 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
   hsa_amd_pointer_info_t dest_ptr_info;
   src_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
   dest_ptr_info.size = sizeof(hsa_amd_pointer_info_t);
-  err = hsa_amd_pointer_info(reinterpret_cast<void *>(src), &src_ptr_info,
-                             NULL,  /* alloc fn ptr */
-                             NULL,  /* num_agents_accessible */
-                             NULL); /* accessible agents */
+  err = hsa_amd_pointer_info(reinterpret_cast<void *>(const_cast<void *>(src)),
+                             &src_ptr_info, NULL, /* alloc fn ptr */
+                             NULL,                /* num_agents_accessible */
+                             NULL);               /* accessible agents */
   ErrorCheck(Checking src pointer info, err);
   err = hsa_amd_pointer_info(reinterpret_cast<void *>(dest), &dest_ptr_info,
                              NULL,  /* alloc fn ptr */
@@ -685,9 +689,9 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
   if (src_data && !dest_data) {
     type = Direction::ATMI_D2H;
     src_agent = get_mem_agent(src_data->place());
-    dest_agent = src_agent;
-    // dest_agent = cpu_agent; // FIXME: can the two agents be the GPU agent
-    // itself?
+    dest_agent = cpu_agent;
+    // TODO(ashwin): can the two agents be the GPU agent itself? ROCr team: no
+    // dest_agent = src_agent;
     ret = atmi_malloc(&temp_host_ptr, size, cpu);
     // err = hsa_amd_agents_allow_access(1, &src_agent, NULL, temp_host_ptr);
     // ErrorCheck(Allow access to ptr, err);
@@ -696,10 +700,11 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
   } else if (!src_data && dest_data) {
     type = Direction::ATMI_H2D;
     dest_agent = get_mem_agent(dest_data->place());
-    // src_agent = cpu_agent; // FIXME: can the two agents be the GPU agent
-    // itself?
-    src_agent = dest_agent;
+    src_agent = cpu_agent;
+    // TODO(ashwin): can the two agents be the GPU agent itself? ROCr team: no
+    // src_agent = dest_agent;
     ret = atmi_malloc(&temp_host_ptr, size, cpu);
+    assert(ret == ATMI_STATUS_SUCCESS && "temp atmi_malloc");
     memcpy(temp_host_ptr, src, size);
     // FIXME: ideally lock would be the better approach, but we need to try to
     // understand why the h2d copy segfaults if we dont have the below lines
@@ -722,20 +727,22 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
   }
   DEBUG_PRINT("Memcpy source agent: %lu\n", src_agent.handle);
   DEBUG_PRINT("Memcpy dest agent: %lu\n", dest_agent.handle);
-  hsa_signal_store_release(IdentityCopySignal, 1);
+  hsa_signal_store_screlease(IdentityCopySignal, 1);
   // hsa_signal_add_acq_rel(IdentityCopySignal, 1);
   err = hsa_amd_memory_async_copy(dest_ptr, dest_agent, src_ptr, src_agent,
                                   size, 0, NULL, IdentityCopySignal);
   ErrorCheck(Copy async between memory pools, err);
-  hsa_signal_wait_acquire(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0,
+  hsa_signal_wait_relaxed(IdentityCopySignal, HSA_SIGNAL_CONDITION_EQ, 0,
                           UINT64_MAX, ATMI_WAIT_STATE);
 
   // cleanup for D2H and H2D
   if (type == Direction::ATMI_D2H) {
     memcpy(dest, temp_host_ptr, size);
     ret = atmi_free(temp_host_ptr);
+    assert(ret == ATMI_STATUS_SUCCESS && "temp atmi_free");
   } else if (type == Direction::ATMI_H2D) {
     ret = atmi_free(temp_host_ptr);
+    assert(ret == ATMI_STATUS_SUCCESS && "temp atmi_free");
   }
   if (err != HSA_STATUS_SUCCESS || ret != ATMI_STATUS_SUCCESS)
     ret = ATMI_STATUS_ERROR;

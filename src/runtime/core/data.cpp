@@ -577,9 +577,10 @@ atmi_status_t DataTaskImpl::dispatch() {
     // signal count = 2 (one for actual host-device copy and another
     // for H2H copy to setup the device copy.
     std::thread(
-        [](void *dst, const void *src, size_t size, hsa_agent_t agent,
-           Direction type, atmi_mem_place_t cpu, hsa_signal_t signal,
-           std::vector<hsa_signal_t> dep_signals, TaskImpl *task) {
+        [](void *dst, const void *src, size_t size, hsa_agent_t src_agent,
+           hsa_agent_t dest_agent, Direction type, atmi_mem_place_t cpu,
+           hsa_signal_t signal, std::vector<hsa_signal_t> dep_signals,
+           TaskImpl *task) {
           atmi_status_t ret;
           hsa_status_t err;
           atl_dep_sync_t dep_sync_type =
@@ -600,19 +601,20 @@ atmi_status_t DataTaskImpl::dispatch() {
           if (dep_sync_type == ATL_SYNC_BARRIER_PKT && !dep_signals.empty()) {
             DEBUG_PRINT("SDMA-host for %p (%lu) with %lu dependencies\n", task,
                         task->id_, dep_signals.size());
-            err = hsa_amd_memory_async_copy(dest_ptr, agent, src_ptr, agent,
-                                            size, dep_signals.size(),
-                                            &(dep_signals[0]), signal);
+            err = hsa_amd_memory_async_copy(dest_ptr, dest_agent, src_ptr,
+                                            src_agent, size, dep_signals.size(),
+                                            dep_signals.data(), signal);
             ErrorCheck(Copy async between memory pools, err);
           } else {
             DEBUG_PRINT("SDMA-host for %p (%lu)\n", task, task->id_);
-            err = hsa_amd_memory_async_copy(dest_ptr, agent, src_ptr, agent,
-                                            size, 0, NULL, signal);
+            err = hsa_amd_memory_async_copy(dest_ptr, dest_agent, src_ptr,
+                                            src_agent, size, 0, NULL, signal);
             ErrorCheck(Copy async between memory pools, err);
           }
           task->set_state(ATMI_DISPATCHED);
           hsa_signal_wait_acquire(signal, HSA_SIGNAL_CONDITION_EQ, 1,
                                   UINT64_MAX, ATMI_WAIT_STATE);
+
           // cleanup for D2H and H2D
           if (type == Direction::ATMI_D2H) {
             memcpy(dst, temp_host_ptr, size);
@@ -620,7 +622,8 @@ atmi_status_t DataTaskImpl::dispatch() {
           atmi_free(temp_host_ptr);
           hsa_signal_subtract_acq_rel(signal, 1);
         },
-        dest, src, size, src_agent, type, cpu, signal_, dep_signals, this)
+        dest, src, size, src_agent, dest_agent, type, cpu, signal_, dep_signals,
+        this)
         .detach();
   } else {
     if (groupable_ == ATMI_TRUE) {
@@ -639,7 +642,7 @@ atmi_status_t DataTaskImpl::dispatch() {
                   dep_signals.size());
       err = hsa_amd_memory_async_copy(dest_ptr, dest_agent, src_ptr, src_agent,
                                       size, dep_signals.size(),
-                                      &(dep_signals[0]), signal_);
+                                      dep_signals.data(), signal_);
       ErrorCheck(Copy async between memory pools, err);
     } else {
       DEBUG_PRINT("SDMA for %p (%lu)\n", this, id_);

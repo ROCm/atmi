@@ -589,6 +589,7 @@ atmi_status_t DataTaskImpl::dispatch() {
           const void *src_ptr = src;
           void *dest_ptr = dst;
           ret = atmi_malloc(&temp_host_ptr, size, cpu);
+          assert(ret == ATMI_STATUS_SUCCESS && "temp atmi_malloc");
           if (type == Direction::ATMI_H2D) {
             memcpy(temp_host_ptr, src, size);
             src_ptr = (const void *)temp_host_ptr;
@@ -619,7 +620,8 @@ atmi_status_t DataTaskImpl::dispatch() {
           if (type == Direction::ATMI_D2H) {
             memcpy(dst, temp_host_ptr, size);
           }
-          atmi_free(temp_host_ptr);
+          ret = atmi_free(temp_host_ptr);
+          assert(ret == ATMI_STATUS_SUCCESS && "temp atmi_free");
           hsa_signal_subtract_acq_rel(signal, 1);
         },
         dest, src, size, src_agent, dest_agent, type, cpu, signal_, dep_signals,
@@ -696,6 +698,7 @@ atmi_status_t Runtime::Memcpy(void *dest, const void *src, size_t size) {
     // TODO(ashwin): can the two agents be the GPU agent itself? ROCr team: no
     // dest_agent = src_agent;
     ret = atmi_malloc(&temp_host_ptr, size, cpu);
+    assert(ret == ATMI_STATUS_SUCCESS && "temp atmi_malloc");
     // err = hsa_amd_agents_allow_access(1, &src_agent, NULL, temp_host_ptr);
     // ErrorCheck(Allow access to ptr, err);
     src_ptr = src;

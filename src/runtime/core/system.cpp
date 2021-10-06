@@ -960,42 +960,6 @@ bool isImplicit(KernelArgMD::ValueKind value_kind) {
   }
 }
 
-hsa_status_t validate_code_object(hsa_code_object_t code_object,
-                                  hsa_code_symbol_t symbol, void *data) {
-  hsa_status_t retVal = HSA_STATUS_SUCCESS;
-  std::set<std::string> *SymbolSet = static_cast<std::set<std::string> *>(data);
-  hsa_symbol_kind_t type;
-
-  uint32_t name_length;
-  hsa_status_t err;
-  err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_TYPE, &type);
-  ErrorCheck(Symbol info extraction, err);
-  DEBUG_PRINT("Exec Symbol type: %d\n", type);
-
-  if (type == HSA_SYMBOL_KIND_VARIABLE) {
-    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME_LENGTH,
-                                   &name_length);
-    ErrorCheck(Symbol info extraction, err);
-    char *name = reinterpret_cast<char *>(malloc(name_length + 1));
-    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME, name);
-    ErrorCheck(Symbol info extraction, err);
-    name[name_length] = 0;
-
-    if (SymbolSet->find(std::string(name)) != SymbolSet->end()) {
-      // Symbol already found. Return Error
-      DEBUG_PRINT("Symbol %s already found!\n", name);
-      retVal = HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED;
-    } else {
-      SymbolSet->insert(std::string(name));
-    }
-
-    free(name);
-  } else {
-    DEBUG_PRINT("Symbol is an indirect function\n");
-  }
-  return retVal;
-}
-
 static amd_comgr_status_t getMetaBuf(const amd_comgr_metadata_node_t meta,
                                      std::string *str) {
   size_t size = 0;
@@ -1747,9 +1711,6 @@ atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
                                   HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL,
                                   &executable);
   ErrorCheck(Create the executable, err);
-
-  // initially empty symbol set for every executable
-  std::set<std::string> SymbolSet;
 
   bool module_load_success = false;
   for (int i = 0; i < num_modules; i++) {

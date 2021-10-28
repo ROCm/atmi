@@ -291,7 +291,7 @@ void allow_access_to_all_gpu_agents(void *ptr) {
   for (int i = 0; i < gpu_procs.size(); i++) {
     agents.push_back(gpu_procs[i].agent());
   }
-  err = hsa_amd_agents_allow_access(agents.size(), &agents[0], NULL, ptr);
+  err = hsa_amd_agents_allow_access(agents.size(), agents.data(), NULL, ptr);
   ErrorCheck(Allow agents ptr access, err);
 }
 
@@ -960,42 +960,6 @@ bool isImplicit(KernelArgMD::ValueKind value_kind) {
   }
 }
 
-hsa_status_t validate_code_object(hsa_code_object_t code_object,
-                                  hsa_code_symbol_t symbol, void *data) {
-  hsa_status_t retVal = HSA_STATUS_SUCCESS;
-  std::set<std::string> *SymbolSet = static_cast<std::set<std::string> *>(data);
-  hsa_symbol_kind_t type;
-
-  uint32_t name_length;
-  hsa_status_t err;
-  err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_TYPE, &type);
-  ErrorCheck(Symbol info extraction, err);
-  DEBUG_PRINT("Exec Symbol type: %d\n", type);
-
-  if (type == HSA_SYMBOL_KIND_VARIABLE) {
-    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME_LENGTH,
-                                   &name_length);
-    ErrorCheck(Symbol info extraction, err);
-    char *name = reinterpret_cast<char *>(malloc(name_length + 1));
-    err = hsa_code_symbol_get_info(symbol, HSA_CODE_SYMBOL_INFO_NAME, name);
-    ErrorCheck(Symbol info extraction, err);
-    name[name_length] = 0;
-
-    if (SymbolSet->find(std::string(name)) != SymbolSet->end()) {
-      // Symbol already found. Return Error
-      DEBUG_PRINT("Symbol %s already found!\n", name);
-      retVal = HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED;
-    } else {
-      SymbolSet->insert(std::string(name));
-    }
-
-    free(name);
-  } else {
-    DEBUG_PRINT("Symbol is an indirect function\n");
-  }
-  return retVal;
-}
-
 static amd_comgr_status_t getMetaBuf(const amd_comgr_metadata_node_t meta,
                                      std::string *str) {
   size_t size = 0;
@@ -1613,7 +1577,7 @@ hsa_status_t get_code_object_custom_metadata(atmi_platform_type_t platform,
         HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
 }
 
-hsa_status_t populate_InfoTables(hsa_executable_t executable,
+hsa_status_t populate_InfoTables(hsa_executable_t executable, hsa_agent_t agent,
                                  hsa_executable_symbol_t symbol, void *data) {
   int gpu = *static_cast<int *>(data);
   hsa_symbol_kind_t type;
@@ -1685,6 +1649,14 @@ hsa_status_t populate_InfoTables(hsa_executable_t executable,
     ErrorCheck(Symbol info extraction, err);
     name[name_length] = 0;
 
+    if (SymbolInfoTable[gpu].find(std::string(name)) !=
+        SymbolInfoTable[gpu].end()) {
+      // Symbol already found. Return Error
+      DEBUG_PRINT("Symbol %s already found!\n", name);
+      ErrorCheck(Symbol variable already defined check,
+                 HSA_STATUS_ERROR_VARIABLE_ALREADY_DEFINED);
+    }
+
     atl_symbol_info_t info;
 
     err = hsa_executable_symbol_get_info(
@@ -1735,12 +1707,10 @@ atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
   // GCN with base profile
   agent_profile = HSA_PROFILE_FULL;
   /* Create the empty executable.  */
-  err = hsa_executable_create(agent_profile, HSA_EXECUTABLE_STATE_UNFROZEN, "",
-                              &executable);
+  err = hsa_executable_create_alt(agent_profile,
+                                  HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, NULL,
+                                  &executable);
   ErrorCheck(Create the executable, err);
-
-  // initially empty symbol set for every executable
-  std::set<std::string> SymbolSet;
 
   bool module_load_success = false;
   for (int i = 0; i < num_modules; i++) {
@@ -1756,24 +1726,19 @@ atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
       ErrorCheckAndContinue(Getting custom code object metadata, err);
       free(tmp_module);
 
-      // Deserialize code object.
-      hsa_code_object_t code_object = {0};
-      err = hsa_code_object_deserialize(module_bytes, module_size, NULL,
-                                        &code_object);
-      ErrorCheckAndContinue(Code Object Deserialization, err);
-      assert(0 != code_object.handle);
-
-      err = hsa_code_object_iterate_symbols(code_object, validate_code_object,
-                                            static_cast<void *>(&SymbolSet));
-      ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
+      // Read code object.
+      hsa_code_object_reader_t code_obj_reader = {0};
+      err = hsa_code_object_reader_create_from_memory(module_bytes, module_size,
+                                                      &code_obj_reader);
+      ErrorCheck(Create the code object reader, err);
+      assert(0 != code_obj_reader.handle);
 
       /* Load the code object.  */
-      err =
-          hsa_executable_load_code_object(executable, agent, code_object, NULL);
+      err = hsa_executable_load_agent_code_object(executable, agent,
+                                                  code_obj_reader, NULL, NULL);
       ErrorCheckAndContinue(Loading the code object, err);
 
       // cannot iterate over symbols until executable is frozen
-
     } else {
       ErrorCheckAndContinue(Loading non - AMDGCN code object,
                             HSA_STATUS_ERROR_INVALID_CODE_OBJECT);
@@ -1783,20 +1748,23 @@ atmi_status_t Runtime::RegisterModuleFromMemory(void **modules,
   DEBUG_PRINT("Modules loaded successful? %d\n", module_load_success);
   if (module_load_success) {
     /* Freeze the executable; it can now be queried for symbols.  */
-    err = hsa_executable_freeze(executable, "");
+    err = hsa_executable_freeze(executable, NULL);
     ErrorCheck(Freeze the executable, err);
 
-    err = hsa_executable_iterate_symbols(executable, populate_InfoTables,
-                                         static_cast<void *>(&gpu));
+    // DEPRECATED API
+    // err = hsa_executable_iterate_symbols(executable, populate_InfoTables,
+    //                                     static_cast<void *>(&gpu));
+    // ErrorCheck(Iterating over symbols for execuatable, err);
+
+    // TODO(ashwin): find out the difference between the below two iterator
+    // APIs. err = hsa_executable_iterate_program_symbols(executable,
+    //       populate_InfoTables,
+    //       static_cast<void *>(&gpu));
+    // ErrorCheck(Iterating over symbols for execuatable, err);
+
+    err = hsa_executable_iterate_agent_symbols(
+        executable, agent, populate_InfoTables, static_cast<void *>(&gpu));
     ErrorCheck(Iterating over symbols for execuatable, err);
-
-    // err = hsa_executable_iterate_program_symbols(executable,
-    // iterate_program_symbols, &gpu);
-    // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
-
-    // err = hsa_executable_iterate_agent_symbols(executable,
-    // iterate_agent_symbols, &gpu);
-    // ErrorCheckAndContinue(Iterating over symbols for execuatable, err);
 
     // save the executable and destroy during finalize
     g_executables.push_back(executable);

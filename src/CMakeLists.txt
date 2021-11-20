@@ -31,7 +31,7 @@ set (atmi_VERSION_MINOR 5)
 ################################################################################
 if ( NOT DEFINED CMAKE_INSTALL_PREFIX )
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set (CMAKE_INSTALL_PREFIX "/opt/rocm/atmi" CACHE PATH "default install path" FORCE )
+  set (CMAKE_INSTALL_PREFIX "/opt/rocm" CACHE PATH "default install path" FORCE )
 endif()
 endif()
 ################################################################################
@@ -99,7 +99,7 @@ set ( CPACK_PACKAGE_CONTACT "ATMI Support <atmi.support@amd.com>" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Asynchronous Task and Memory Interface" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" )
 if ( NOT DEFINED CPACK_PACKAGING_INSTALL_PREFIX )
-    set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm/atmi )
+    set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm )
 endif()
 set ( CPACK_GENERATOR "RPM;DEB" CACHE STRING "CPACK Generator to use, e.g. DEB;RPM")
 

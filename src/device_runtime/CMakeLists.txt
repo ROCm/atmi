@@ -68,6 +68,7 @@ find_path(ATMI_DE_DEP_LIBHSA_LIBRARIES
     "ockl.bc"
     "ockl.amdgcn.bc"
   PATHS
+    "${AMD_DEVICE_LIBS_PREFIX}/share/amdgcn/bitcode"
     "${AMD_DEVICE_LIBS_PREFIX}/amdgcn/bitcode"
     "${AMD_DEVICE_LIBS_PREFIX}/lib/bitcode"
     "${AMD_DEVICE_LIBS_PREFIX}/lib"
@@ -117,7 +118,7 @@ add_custom_target(device_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi_kl.h)
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDLLVM=${AMDLLVM}\n")
 file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "AMDGPU_TARGET_TRIPLE=${AMDGPU_TARGET_TRIPLE}\n")
 # cloc assumes the /path/to/rocm/lib (with the /lib suffix in the path)
-file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}/amdgcn/bitcode\n")
+file(APPEND ${ATMI_RUNTIME_PATH}/atmi-config.mak "ROCM_DEVICE_PATH=${ROCM_DEVICE_PATH}/share/amdgcn/bitcode\n")
 
 target_sources(atmi_runtime PRIVATE
   ${PROJECT_SOURCE_DIR}/device_runtime/device_rt.cpp

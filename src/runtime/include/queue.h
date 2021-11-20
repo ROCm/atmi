@@ -7,7 +7,7 @@
 #define SRC_RUNTIME_INCLUDE_QUEUE_H_
 
 #include "atmi.h"
-#include "hsa.h"
+#include "hsa/hsa.h"
 class ATLQueue {
  public:
   explicit ATLQueue(hsa_queue_t *q, atmi_place_t p = ATMI_PLACE_ANY(0))

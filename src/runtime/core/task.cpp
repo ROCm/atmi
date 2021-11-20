@@ -40,7 +40,7 @@ pthread_mutex_t mutex_readyq_;
 #define NANOSECS 1000000000L
 
 //  set NOTCOHERENT needs this include
-#include "hsa_ext_amd.h"
+#include "hsa/hsa_ext_amd.h"
 
 extern bool handle_signal(hsa_signal_value_t value, void *arg);
 

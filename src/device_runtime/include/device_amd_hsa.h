@@ -23,7 +23,7 @@ typedef unsigned long uint64_t;
 #define __LP64__
 #define DEVICE_COMPILER
 #define LITTLEENDIAN_CPU
-#include "hsa.h"
+#include "hsa/hsa.h"
 // below includes are unnecessary for ATMI
 //#include "amd_hsa_common.h"
 //#include "amd_hsa_elf.h"

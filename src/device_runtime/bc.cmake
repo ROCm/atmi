@@ -166,16 +166,29 @@ macro(add_bc_library name dir)
   else()
     #message(STATUS "No CUDA source.")
   endif()
+    # Support building with new and old device-lib paths
+    # New layout installed to /opt/rocm/share/amdgcn/bitcode
+  find_path(BC_DIR NAMES "opencl.bc"
+      PATHS
+        "${ROCM_DEVICE_PATH}/share/amdgcn/bitcode"
+        "${ROCM_DEVICE_PATH}/amdgcn/bitcode"
+      NO_DEFAULT_PATH)
 
+  set(BITCODE_DIR "${BC_DIR}" CACHE STRING "")
+  if(NOT EXISTS "${BITCODE_DIR}")
+      message(SEND_ERROR "Device libs is not found.")
+  endif()
+
+  #message(STATUS "Device libs found at ${BITCODE_DIR}")
   set(device_libs)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/opencl.bc)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/ocml.bc)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/ockl.bc)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_correctly_rounded_sqrt_off.bc)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_daz_opt_off.bc)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_finite_only_off.bc)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_isa_version_${GFXNUM}.bc)
-  list(APPEND device_libs ${ROCM_DEVICE_PATH}/amdgcn/bitcode/oclc_unsafe_math_off.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/opencl.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/ocml.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/ockl.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/oclc_correctly_rounded_sqrt_off.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/oclc_daz_opt_off.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/oclc_finite_only_off.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/oclc_isa_version_${GFXNUM}.bc)
+  list(APPEND device_libs ${BITCODE_DIR}/oclc_unsafe_math_off.bc)
 
   add_custom_command(
     OUTPUT linkout.${mcpu}.bc

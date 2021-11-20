@@ -13,24 +13,10 @@ include_directories(${LIBELF_INCLUDE_DIRS})
 # libatmi_runtime_say("LIBELF: ${LIBELF_INCLUDE_DIRS} ${LIBELF_LIBRARIES} and ${LIBELF_FOUND}")
 
 # Find comgr
-find_package(amd_comgr REQUIRED CONFIG
-             HINTS ${ROC_DIR} ${ROC_COMGR_CONFIG_DIR})
-find_path (amd_comgr_INCLUDE_DIRS
-    NAMES
-    amd_comgr.h
-    PATHS
-    ${ROCM_INCLUDE_DIRS}
-    ${ROC_DIR}
-    ${ROC_COMGR_INCLUDE_DIR}
-    ${ROC_COMGR_INCLUDE_DIR}/include
-    /opt/rocm/include
-    /usr/include
-    /usr/local/include
-    ENV CPATH
-    PATH_SUFFIXES include)
+find_package(amd_comgr REQUIRED)
 
 set(amd_comgr_LIBRARIES amd_comgr)
-include_directories(${amd_comgr_INCLUDE_DIRS})
+
 # libatmi_runtime_say("amd_comgr: ${amd_comgr_INCLUDE_DIRS} ${amd_comgr_LIBRARIES} and ${amd_comgr_FOUND}")
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(ppc64le)|(aarch64)$")
@@ -150,7 +136,7 @@ endif()
 INSTALL(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h
-        DESTINATION "include"
+        DESTINATION "include/atmi"
         COMPONENT runtime
        )
 
@@ -160,6 +146,6 @@ INSTALL(FILES
       ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
       ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/gputable.txt
       PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-      DESTINATION "bin"
+      DESTINATION "bin/atmi"
       COMPONENT runtime
      )

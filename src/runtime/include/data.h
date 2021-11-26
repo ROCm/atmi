@@ -5,7 +5,7 @@
  *===------------------------------------------------------------------------*/
 #ifndef SRC_RUNTIME_INCLUDE_DATA_H_
 #define SRC_RUNTIME_INCLUDE_DATA_H_
-#include <hsa/hsa.h>
+#include <hsa.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>

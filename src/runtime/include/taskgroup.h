@@ -7,7 +7,7 @@
 #ifndef SRC_RUNTIME_INCLUDE_TASKGROUP_H_
 #define SRC_RUNTIME_INCLUDE_TASKGROUP_H_
 
-#include <hsa/hsa.h>
+#include <hsa.h>
 
 #include <deque>
 #include <queue>

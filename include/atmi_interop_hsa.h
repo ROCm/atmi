@@ -7,8 +7,8 @@
 #define INCLUDE_ATMI_INTEROP_HSA_H_
 
 #include "atmi_runtime.h"
-#include "hsa/hsa.h"
-#include "hsa/hsa_ext_amd.h"
+#include "hsa.h"
+#include "hsa_ext_amd.h"
 
 #ifdef __cplusplus
 extern "C" {

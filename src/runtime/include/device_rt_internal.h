@@ -9,7 +9,7 @@
 #ifdef __OPENCL_C_VERSION__
 #include "device_amd_hsa.h"
 #else
-#include <hsa/hsa.h>
+#include <hsa.h>
 #endif
 
 #define MAX_NUM_KERNELS (1024 * 16)

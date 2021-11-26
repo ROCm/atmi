@@ -31,7 +31,7 @@ PLUGIN_LIB  = ${ATMI_RUNTIME_PATH}/lib/atmi_pifgen.so
 
 CC=g++
 CFLAGS=-O3 -g
-INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/include -I. 
+INC_FLAGS=-I${ATMI_INC} -I${HSA_RUNTIME_PATH}/hsa/include -I. 
 
 LIBS=-latmi_runtime 
 LIB_FLAGS=-L${ATMI_RUNTIME_PATH}/lib -L${HSA_RUNTIME_PATH}/lib

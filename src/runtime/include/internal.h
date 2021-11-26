@@ -21,9 +21,9 @@
 #include <utility>
 #include <vector>
 
-#include "hsa/hsa.h"
-#include "hsa/hsa_ext_amd.h"
-#include "hsa/hsa_ext_finalize.h"
+#include "hsa.h"
+#include "hsa_ext_amd.h"
+#include "hsa_ext_finalize.h"
 
 #include "atmi.h"
 #include "atmi_runtime.h"

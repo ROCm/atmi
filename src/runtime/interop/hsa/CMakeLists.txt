@@ -30,7 +30,7 @@ add_custom_target(interop_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi_intero
 
 INSTALL(FILES 
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../../include/atmi_interop_hsa.h
-        DESTINATION "include/atmi"
+        DESTINATION "include"
         COMPONENT runtime
        )
 

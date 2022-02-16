@@ -150,7 +150,7 @@ endif()
 INSTALL(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h
-        DESTINATION "include"
+        DESTINATION "include/atmi"
         COMPONENT runtime
        )
 
@@ -160,6 +160,6 @@ INSTALL(FILES
       ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
       ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/gputable.txt
       PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-      DESTINATION "bin"
+     DESTINATION "libexec/atmi"
       COMPONENT runtime
      )

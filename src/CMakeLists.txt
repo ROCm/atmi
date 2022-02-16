@@ -31,8 +31,15 @@ set (atmi_VERSION_MINOR 5)
 ################################################################################
 if ( NOT DEFINED CMAKE_INSTALL_PREFIX )
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set (CMAKE_INSTALL_PREFIX "/opt/rocm/atmi" CACHE PATH "default install path" FORCE )
+  set (CMAKE_INSTALL_PREFIX "/opt/rocm" CACHE PATH "default install path" FORCE )
 endif()
+endif()
+
+option(FILE_REORG_BACKWARD_COMPATIBILITY "Enable File Reorg with backward compatibility" ON)
+#TODO: The string replace statements can be removed once build scripts changes are merged
+if(FILE_REORG_BACKWARD_COMPATIBILITY)
+  string(REPLACE "/atmi" "" CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+  string(REPLACE "/atmi" "" CPACK_PACKAGING_INSTALL_PREFIX ${CPACK_PACKAGING_INSTALL_PREFIX})
 endif()
 ################################################################################
 # Looking for ROCM...
@@ -61,6 +68,9 @@ add_subdirectory(runtime)
 add_subdirectory(compiler)
 add_subdirectory(device_runtime)
 
+if(FILE_REORG_BACKWARD_COMPATIBILITY)
+  include(atmi-backward-compat.cmake)
+endif()
 # make examples available in local build
 add_custom_command(
   OUTPUT examples
@@ -101,7 +111,7 @@ set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" )
 install( FILES ${CPACK_RESOURCE_FILE_LICENSE} DESTINATION share/doc/atmi COMPONENT runtime )
 
 if ( NOT DEFINED CPACK_PACKAGING_INSTALL_PREFIX )
-    set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm/atmi )
+    set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm )
 endif()
 set ( CPACK_GENERATOR "RPM;DEB" CACHE STRING "CPACK Generator to use, e.g. DEB;RPM")
 

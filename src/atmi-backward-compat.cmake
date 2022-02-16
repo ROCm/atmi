@@ -83,16 +83,14 @@ endfunction()
 #function to create symlink to binaries
 function(create_binary_symlink)
   file(MAKE_DIRECTORY ${ATMI_WRAPPER_BIN_DIR})
- # ${CMAKE_CURRENT_SOURCE_DIR}/../bin
   file(GLOB binaries ${CMAKE_CURRENT_SOURCE_DIR}/../bin/*)
-  #file(GLOB binaries ${ATMI_BUILD_DIR}/bin/*)
   foreach(binary_file ${binaries})
-      get_filename_component(file_name ${binary_file} NAME)
-      add_custom_target(link_${file_name} ALL
+    get_filename_component(file_name ${binary_file} NAME)
+    add_custom_target(link_${file_name} ALL
                     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
                     COMMAND ${CMAKE_COMMAND} -E create_symlink
                     ../../libexec/${PROJECT_NAME}/${file_name} ${ATMI_WRAPPER_BIN_DIR}/${file_name})
-   endforeach()
+  endforeach()
 endfunction()
 
 function(create_library_symlink)
@@ -122,9 +120,11 @@ create_header_template()
 #Use template header file and generater wrapper header files
 generate_wrapper_header()
 install(DIRECTORY ${ATMI_WRAPPER_INC_DIR} DESTINATION ${PROJECT_NAME} COMPONENT runtime)
+#Commenting this , since atmi binaries are conflicting with aomp and hipfort
+#AOMP-Extras package will provide the binaries
 # Create symlink to binaries
-create_binary_symlink()
-install(DIRECTORY ${ATMI_WRAPPER_BIN_DIR}  DESTINATION ${PROJECT_NAME} COMPONENT runtime)
+#create_binary_symlink()
+#install(DIRECTORY ${ATMI_WRAPPER_BIN_DIR}  DESTINATION ${PROJECT_NAME} COMPONENT runtime)
 # Create symlink to libraries
 create_library_symlink()
 install(DIRECTORY ${ATMI_WRAPPER_LIB_DIR}  DESTINATION ${PROJECT_NAME} COMPONENT runtime)

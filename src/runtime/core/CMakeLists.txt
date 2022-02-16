@@ -150,16 +150,17 @@ endif()
 INSTALL(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h
-        DESTINATION "include"
+        DESTINATION "include/atmi"
         COMPONENT runtime
        )
-
-INSTALL(FILES
-      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/cloc.sh
-      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mymcpu
-      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
-      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/gputable.txt
-      PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-      DESTINATION "bin"
-      COMPONENT runtime
-     )
+#Since the binaries are conflicting with aomp-extras and hipfort
+#removing from ATMI. aomp-extras will provide the same
+#INSTALL(FILES
+#      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/cloc.sh
+#      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mymcpu
+#      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
+#      ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/gputable.txt
+#      PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+#     DESTINATION "libexec/atmi"
+#      COMPONENT runtime
+#     )

@@ -1,4 +1,4 @@
-# Copyright (c) 2016 - 2021 Advanced Micro Devices, Inc. All Rights Reserved.
+# Copyright (c) 2022 Advanced Micro Devices, Inc. All Rights Reserved.
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -39,7 +39,7 @@ set(PUBLIC_HEADERS
 #Function to generate header template file
 function(create_header_template)
     file(WRITE ${ATMI_WRAPPER_DIR}/header.hpp.in "/*
-    Copyright (c) 2015 - 2021 Advanced Micro Devices, Inc. All rights reserved.
+    Copyright (c) 2022 Advanced Micro Devices, Inc. All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the \"Software\"), to deal
@@ -58,9 +58,8 @@ function(create_header_template)
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
    THE SOFTWARE.
-   */\n\n#ifndef @include_guard@\n#define @include_guard@ \n\n\#warning This file is deprecated. Use file from include path /opt/rocm-ver/include/ and prefix with atmi\n@include_statements@ \n\n#endif")
+   */\n\n#ifndef @include_guard@\n#define @include_guard@ \n\n\#pragma message(\"This file is deprecated. Use file from include path /opt/rocm-ver/include/ and prefix with atmi\")\n@include_statements@ \n\n#endif")
 endfunction()
-
 
 #use header template file and generate wrapper header files
 function(generate_wrapper_header)

@@ -119,11 +119,9 @@ create_header_template()
 #Use template header file and generater wrapper header files
 generate_wrapper_header()
 install(DIRECTORY ${ATMI_WRAPPER_INC_DIR} DESTINATION ${PROJECT_NAME} COMPONENT runtime)
-#Commenting this , since atmi binaries are conflicting with aomp and hipfort
-#AOMP-Extras package will provide the binaries
 # Create symlink to binaries
-#create_binary_symlink()
-#install(DIRECTORY ${ATMI_WRAPPER_BIN_DIR}  DESTINATION ${PROJECT_NAME} COMPONENT runtime)
+create_binary_symlink()
+install(DIRECTORY ${ATMI_WRAPPER_BIN_DIR}  DESTINATION ${PROJECT_NAME} COMPONENT runtime)
 # Create symlink to libraries
 create_library_symlink()
 install(DIRECTORY ${ATMI_WRAPPER_LIB_DIR}  DESTINATION ${PROJECT_NAME} COMPONENT runtime)

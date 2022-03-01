@@ -38,8 +38,12 @@ endif()
 option(FILE_REORG_BACKWARD_COMPATIBILITY "Enable File Reorg with backward compatibility" ON)
 #TODO: The string replace statements can be removed once build scripts changes are merged
 if(FILE_REORG_BACKWARD_COMPATIBILITY)
-  string(REPLACE "/atmi" "" CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
-  string(REPLACE "/atmi" "" CPACK_PACKAGING_INSTALL_PREFIX ${CPACK_PACKAGING_INSTALL_PREFIX})
+  if(CMAKE_INSTALL_PREFIX)
+    string(REPLACE "/atmi" "" CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+  endif()
+  if(CPACK_PACKAGING_INSTALL_PREFIX)
+    string(REPLACE "/atmi" "" CPACK_PACKAGING_INSTALL_PREFIX ${CPACK_PACKAGING_INSTALL_PREFIX})
+  endif()
 endif()
 ################################################################################
 # Looking for ROCM...

@@ -69,12 +69,12 @@ if(ROCM_FOUND)
             if(CMAKE_BUILD_TYPE MATCHES Debug)
                 install(TARGETS atmi_cplugin LIBRARY DESTINATION "lib-debug" COMPONENT cplugin )
             else()
-                install(TARGETS atmi_cplugin LIBRARY DESTINATION "lib" COMPONENT cplugin )
+                install(TARGETS atmi_cplugin LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT cplugin )
             endif()
             
             INSTALL(FILES
                 ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_c_ext.h
-                DESTINATION "include"
+                DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
                 COMPONENT cplugin
             )
 

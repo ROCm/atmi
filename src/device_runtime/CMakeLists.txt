@@ -148,7 +148,7 @@ foreach(mcpu ${mcpus})
 
   install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/atmi_kl.h
-    DESTINATION include COMPONENT device_runtime)
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT device_runtime)
 
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     install(FILES
@@ -158,7 +158,7 @@ foreach(mcpu ${mcpus})
   else()
     install(FILES
       ${OUTPUTDIR}/atmi-${mcpu}.bc
-      DESTINATION lib COMPONENT device_runtime
+      DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT device_runtime
       )
   endif()
 endforeach()

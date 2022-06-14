@@ -144,13 +144,13 @@ add_custom_target(core_header ALL DEPENDS ${OUTPUT_INC_DIRECTORY}/atmi.h ${OUTPU
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   install(TARGETS atmi_runtime LIBRARY DESTINATION "lib-debug" COMPONENT runtime )
 else()
-  install(TARGETS atmi_runtime LIBRARY DESTINATION "lib" COMPONENT runtime )
+  install(TARGETS atmi_runtime LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT runtime )
 endif()
 
 INSTALL(FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi.h
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/atmi_runtime.h
-        DESTINATION "include/atmi"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/atmi"
         COMPONENT runtime
        )
 INSTALL(FILES
@@ -159,6 +159,6 @@ INSTALL(FILES
       ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/mygpu
       ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin/gputable.txt
       PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-      DESTINATION "libexec/atmi"
+      DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}/atmi"
       COMPONENT runtime
      )

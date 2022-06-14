@@ -14,6 +14,9 @@ include (FindPackageHandleStandardArgs)
 
 project (atmi)
 
+# Set default libdir to be "lib" for ROCm, distros will override this anyway:
+set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "Library install directory")
+include(GNUInstallDirs)
 macro(libatmi_runtime_say_and_exit message_to_user)
   message(FATAL_ERROR "ATMI: ${message_to_user}")
 endmacro()
@@ -112,7 +115,7 @@ set ( CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERS
 set ( CPACK_PACKAGE_CONTACT "ATMI Support <atmi.support@amd.com>" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Asynchronous Task and Memory Interface" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" )
-install( FILES ${CPACK_RESOURCE_FILE_LICENSE} DESTINATION share/doc/atmi COMPONENT runtime )
+install( FILES ${CPACK_RESOURCE_FILE_LICENSE} DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT runtime )
 
 if ( NOT DEFINED CPACK_PACKAGING_INSTALL_PREFIX )
     set ( CPACK_PACKAGING_INSTALL_PREFIX /opt/rocm )

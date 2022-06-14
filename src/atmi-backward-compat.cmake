@@ -24,11 +24,13 @@ set(ATMI_WRAPPER_DIR ${ATMI_BUILD_DIR}/wrapper_dir)
 set(ATMI_WRAPPER_INC_DIR ${ATMI_WRAPPER_DIR}/include)
 set(ATMI_WRAPPER_BIN_DIR ${ATMI_WRAPPER_DIR}/bin)
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  set(ATMI_LIB_NAME "lib-debug")
+  set(ATMI_LIB_DIR "lib-debug")
+  set(ROCM_LIB_DIR "lib-debug")
 else()
-  set(ATMI_LIB_NAME "lib")
+  set(ATMI_LIB_DIR "lib")
+  set(ROCM_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
 endif()
-set(ATMI_WRAPPER_LIB_DIR ${ATMI_WRAPPER_DIR}/${ATMI_LIB_NAME})
+set(ATMI_WRAPPER_LIB_DIR ${ATMI_WRAPPER_DIR}/${ATMI_LIB_DIR})
 
 set(PUBLIC_HEADERS
     atmi.h
@@ -72,7 +74,7 @@ function(generate_wrapper_header)
     set(include_guard "${include_guard}ATMI_WRAPPER_INCLUDE_${INC_GAURD_NAME}_H")
     get_filename_component(file_name ${header_file} NAME)
     #set include statements
-    set(include_statements "${include_statements}#include \"../../include/${PROJECT_NAME}/${file_name}\"\n")
+    set(include_statements "${include_statements}#include \"../../${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/${file_name}\"\n")
     configure_file(${ATMI_WRAPPER_DIR}/header.hpp.in ${ATMI_WRAPPER_INC_DIR}/${file_name})
     unset(include_statements)
   endforeach()
@@ -88,7 +90,7 @@ function(create_binary_symlink)
     add_custom_target(link_${file_name} ALL
                     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
                     COMMAND ${CMAKE_COMMAND} -E create_symlink
-                    ../../libexec/${PROJECT_NAME}/${file_name} ${ATMI_WRAPPER_BIN_DIR}/${file_name})
+                    ../../${CMAKE_INSTALL_LIBEXECDIR}/${PROJECT_NAME}/${file_name} ${ATMI_WRAPPER_BIN_DIR}/${file_name})
   endforeach()
 endfunction()
 
@@ -110,7 +112,7 @@ function(create_library_symlink)
      add_custom_target(link_${file_name} ALL
                   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
                   COMMAND ${CMAKE_COMMAND} -E create_symlink
-                  ../../${ATMI_LIB_NAME}/${file_name} ${ATMI_WRAPPER_LIB_DIR}/${file_name})
+                  ../../${ROCM_LIB_DIR}/${file_name} ${ATMI_WRAPPER_LIB_DIR}/${file_name})
   endforeach()
 endfunction()
 

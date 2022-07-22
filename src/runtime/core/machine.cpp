@@ -4,8 +4,8 @@
  * This file is distributed under the MIT License. See LICENSE.txt for details.
  *===------------------------------------------------------------------------*/
 #include "machine.h"
-#include <hsa.h>
-#include <hsa_ext_amd.h>
+#include <hsa/hsa.h>
+#include <hsa/hsa_ext_amd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <cassert>

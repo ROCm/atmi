@@ -5,7 +5,7 @@
  *===------------------------------------------------------------------------*/
 #include "queue.h"
 #include "atmi.h"
-#include "hsa_ext_amd.h"
+#include "hsa/hsa_ext_amd.h"
 
 bool equalsPlace(const atmi_place_t &l, const atmi_place_t &r) {
   bool val = false;

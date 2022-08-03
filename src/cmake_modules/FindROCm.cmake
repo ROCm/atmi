@@ -16,25 +16,12 @@
 
 find_path(
   ROCM_INCLUDE_DIRS
-    hsa.h
+    hsa/hsa.h
   HINTS
     ${ROC_DIR}/include
-    ${ROC_DIR}/include/hsa
-    ${ROC_DIR}/hsa/include
-    ${ROC_DIR}/hsa/include/hsa
-    ${ROC_DIR}/hsa
-    ${ROC_DIR}
     ${ROCR_DIR}/include
-    ${ROCR_DIR}/include/hsa
-    ${ROCR_DIR}/hsa/include
-    ${ROCR_DIR}/hsa/include/hsa
-    ${ROCR_DIR}
     /opt/rocm/include
-    /opt/rocm/hsa/include
-    /usr/local/include
     ENV CPATH
-  PATH_SUFFIXES
-    hsa
 )
 
 find_library(
@@ -46,7 +33,6 @@ find_library(
     ${ROCR_DIR}/lib
     ${ROCR_DIR}
     /opt/rocm/lib
-    /opt/rocm/hsa/lib
     /usr/local/lib
     /usr/lib/x86_64-linux-gnu
     /usr/lib
@@ -62,7 +48,6 @@ find_library(
     ${ROCT_DIR}/lib
     ${ROCT_DIR}
     /opt/rocm/lib
-    /opt/rocm/hsa/lib
     /usr/local/lib
     /usr/lib/x86_64-linux-gnu
     /usr/lib

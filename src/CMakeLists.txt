@@ -14,8 +14,6 @@ include (FindPackageHandleStandardArgs)
 
 project (atmi)
 
-# Set default libdir to be "lib" for ROCm, distros will override this anyway:
-set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "Library install directory")
 include(GNUInstallDirs)
 macro(libatmi_runtime_say_and_exit message_to_user)
   message(FATAL_ERROR "ATMI: ${message_to_user}")

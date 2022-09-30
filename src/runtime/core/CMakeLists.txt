@@ -117,7 +117,14 @@ target_link_libraries(
 )
 
 if (NOT CMAKE_INSTALL_RPATH)
-  set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../../hsa/lib;$ORIGIN/../../lib;$ORIGIN/../../lib64;$ORIGIN/../lib64")
+set_target_properties(atmi_runtime
+    PROPERTIES
+        SKIP_BUILD_RPATH            FALSE
+        BUILD_WITH_INSTALL_RPATH    FALSE
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+        BUILD_RPATH               "\$ORIGIN;\$ORIGIN/../../hsa/lib;\$ORIGIN/../../lib;\$ORIGIN/../../lib64;\$ORIGIN/../lib64"
+        INSTALL_RPATH             "\$ORIGIN;\$ORIGIN/../../hsa/lib;\$ORIGIN/../../lib;\$ORIGIN/../../lib64;\$ORIGIN/../lib64"
+  )
 endif ()
 
 # set output dir for .h files

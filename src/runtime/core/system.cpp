@@ -14,7 +14,7 @@
 #include <set>
 #include <string>
 
-#include "amd_comgr.h"
+#include "amd_comgr/amd_comgr.h"
 #include "device_rt_internal.h"
 #include "internal.h"
 #include "machine.h"

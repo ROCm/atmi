@@ -65,10 +65,10 @@ function(create_header_template)
 #ifndef @include_guard@
 #define @include_guard@
 
-#if defined(_MSC_VER)
+#if defined(__GNUC__)
+#error \"This file is deprecated. Use file from include path /opt/rocm-ver/include/ and prefix with atmi\"
+#else
 #pragma message(\"This file is deprecated. Use file from include path /opt/rocm-ver/include/ and prefix with atmi\")
-#elif defined(__GNUC__)
-#warning \"This file is deprecated. Use file from include path /opt/rocm-ver/include/ and prefix with atmi\"
 #endif
 
 @include_statements@

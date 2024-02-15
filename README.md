@@ -9,6 +9,10 @@ graph and individual task configurations, will perform task scheduling and memor
 user interface so that the end user can relinquish scheduling to the runtime (default behavior) or take full control of scheduling and
 mapping, if desired. The target audience for ATMI is application programmers or middleware developers for high-level languages.
 
+## Deprecation Notice ##
+ATMI is not being released as part of AMD ROCm software after ROCm 5.6. Previously released branches are still available for reference. 
+ATMI will henceforth be maintained as a separate research project at https://github.com/AMDResearch/atmi.
+
 ## ATMI (v0.7) Feature List
 - ATMI-RT: host runtime library to manage tasks
 - ATMI-DEVRT: device runtime library for managing task enqueue from the GPU to both the CPU and other GPUs in the system

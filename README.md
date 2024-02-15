@@ -10,7 +10,8 @@ user interface so that the end user can relinquish scheduling to the runtime (de
 mapping, if desired. The target audience for ATMI is application programmers or middleware developers for high-level languages.
 
 ## Deprecation Notice ##
-ATMI is not being used for active development after ROCm 5.6. Previously released branches are still available for reference.
+ATMI is not being released as part of AMD ROCm software after ROCm 5.6. Previously released branches are still available for reference. 
+ATMI will henceforth be maintained as a separate research project at https://github.com/AMDResearch/atmi.
 
 ## ATMI (v0.7) Feature List
 - ATMI-RT: host runtime library to manage tasks
